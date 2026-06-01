@@ -111,6 +111,7 @@ export default async function AulasPage() {
                     bookings={studentBookings.filter((b) =>
                       classSessions.some((s) => s.id === b.session_id),
                     )}
+                    showCancelButton={true}
                   />
                 </div>
               </div>
