@@ -1,0 +1,325 @@
+'use client'
+// app/(admin)/alunos/[id]/StudentProfileClient.tsx
+
+import { useState, useTransition } from 'react'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import type { StudentLevel, Enrollment, Class } from '@/types'
+import {
+  updateStudentLevel,
+  enrollStudentInClass,
+  cancelEnrollment,
+  addDependent,
+} from '@/features/aulas/adminActions'
+
+const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
+
+interface EnrollmentWithClass extends Enrollment {
+  class: Pick<Class, 'id' | 'name' | 'level' | 'type' | 'day_of_week' | 'start_time' | 'end_time'>
+}
+
+interface AvailableClass {
+  id: string
+  name: string
+  level: string
+  type: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+}
+
+interface DependentSummary {
+  id: string
+  full_name: string
+  level: StudentLevel
+}
+
+interface StudentProfileClientProps {
+  studentId: string
+  currentLevel: StudentLevel
+  enrollments: EnrollmentWithClass[]
+  availableClasses: AvailableClass[]
+  dependents: DependentSummary[]
+  isDependent: boolean
+}
+
+const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+function formatTime(t: string) {
+  return t.slice(0, 5)
+}
+
+export function StudentProfileClient({
+  studentId,
+  currentLevel,
+  enrollments,
+  availableClasses,
+  dependents,
+  isDependent,
+}: StudentProfileClientProps) {
+  const [level, setLevel] = useState<StudentLevel>(currentLevel)
+  const [enrollmentList, setEnrollmentList] = useState(enrollments)
+  const [dependentList, setDependentList] = useState(dependents)
+
+  const [selectedClassId, setSelectedClassId] = useState('')
+  const [newDependentName, setNewDependentName] = useState('')
+  const [newDependentLevel, setNewDependentLevel] = useState<StudentLevel>('iniciante')
+
+  const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function notify(msg: string) {
+    setSuccessMsg(msg)
+    setTimeout(() => setSuccessMsg(null), 3000)
+  }
+
+  function handleLevelChange(newLevel: StudentLevel) {
+    setLevel(newLevel)
+    setError(null)
+    startTransition(async () => {
+      const result = await updateStudentLevel(studentId, newLevel)
+      if (result.error) {
+        setLevel(currentLevel)
+        setError(result.error)
+        return
+      }
+      notify('Nível atualizado.')
+    })
+  }
+
+  function handleEnroll() {
+    if (!selectedClassId) return
+    setError(null)
+    startTransition(async () => {
+      const result = await enrollStudentInClass(studentId, selectedClassId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      // Refresh — find class data from available classes
+      const cls = availableClasses.find((c) => c.id === selectedClassId)
+      if (cls) {
+        setEnrollmentList((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(), // temporary until page reload
+            student_id: studentId,
+            class_id: cls.id,
+            enrolled_at: new Date().toISOString(),
+            cancelled_at: null,
+            is_active: true,
+            class: cls as EnrollmentWithClass['class'],
+          },
+        ])
+      }
+      setSelectedClassId('')
+      notify('Matrícula criada.')
+    })
+  }
+
+  function handleCancelEnrollment(enrollmentId: string) {
+    setError(null)
+    startTransition(async () => {
+      const result = await cancelEnrollment(enrollmentId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setEnrollmentList((prev) => prev.filter((e) => e.id !== enrollmentId))
+      notify('Matrícula cancelada.')
+    })
+  }
+
+  function handleAddDependent() {
+    if (!newDependentName.trim()) return
+    setError(null)
+    startTransition(async () => {
+      const result = await addDependent(studentId, newDependentName, newDependentLevel)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setDependentList((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), full_name: newDependentName.trim(), level: newDependentLevel },
+      ])
+      setNewDependentName('')
+      setNewDependentLevel('iniciante')
+      notify('Dependente adicionado.')
+    })
+  }
+
+  // Filter out already enrolled classes
+  const enrolledClassIds = new Set(enrollmentList.map((e) => e.class_id))
+  const eligibleClasses = availableClasses.filter((c) => !enrolledClassIds.has(c.id))
+
+  return (
+    <div className="space-y-8">
+      {/* Feedback */}
+      {successMsg && (
+        <div className="text-green-400 text-sm bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-2">
+          {successMsg}
+        </div>
+      )}
+      {error && (
+        <div className="text-red-400 text-sm bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* Level */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">Nível</h2>
+        <div className="flex flex-wrap gap-2">
+          {LEVELS.map((l) => (
+            <button
+              key={l}
+              type="button"
+              disabled={isPending}
+              onClick={() => handleLevelChange(l)}
+              className={[
+                'px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                level === l
+                  ? 'bg-brand-600 border-brand-500 text-white'
+                  : 'bg-surface-card border-surface-border text-slate-400 hover:border-slate-400 hover:text-white',
+              ].join(' ')}
+            >
+              {l === 'iniciante' ? 'Iniciante' : `Nível ${l}`}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Fixed enrollments */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">Matrículas Fixas</h2>
+
+        {enrollmentList.length === 0 ? (
+          <p className="text-slate-500 text-sm mb-3">Nenhuma matrícula ativa.</p>
+        ) : (
+          <ul className="space-y-2 mb-4">
+            {enrollmentList.map((e) => {
+              const cls = Array.isArray(e.class) ? e.class[0] : e.class
+              return (
+                <li
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-card border border-surface-border rounded-xl"
+                >
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium truncate">{cls.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {DAY_ABBR[cls.day_of_week]} · {formatTime(cls.start_time)}–{formatTime(cls.end_time)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="level">{cls.level.toUpperCase()}</Badge>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={isPending}
+                      onClick={() => handleCancelEnrollment(e.id)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {/* Enroll in new class */}
+        {eligibleClasses.length > 0 && (
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-slate-400 mb-1">Matricular em turma</label>
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="">Selecione uma turma...</option>
+                {eligibleClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} — {DAY_ABBR[c.day_of_week]} {formatTime(c.start_time)} (Nível {c.level})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isPending}
+              onClick={handleEnroll}
+              disabled={!selectedClassId}
+            >
+              Matricular
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* Dependents (only for non-dependent adults) */}
+      {!isDependent && (
+        <section>
+          <h2 className="text-base font-semibold text-white mb-3">Dependentes (Kids)</h2>
+
+          {dependentList.length === 0 ? (
+            <p className="text-slate-500 text-sm mb-3">Nenhum dependente cadastrado.</p>
+          ) : (
+            <ul className="space-y-2 mb-4">
+              {dependentList.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex items-center justify-between px-4 py-2 bg-surface-card border border-surface-border rounded-xl"
+                >
+                  <span className="text-white text-sm">{d.full_name}</span>
+                  <Badge variant="kids">KIDS · {d.level.toUpperCase()}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Add dependent */}
+          <div className="space-y-2">
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Input
+                  label="Nome do dependente"
+                  placeholder="Nome completo..."
+                  value={newDependentName}
+                  onChange={(e) => setNewDependentName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Nível</label>
+                <select
+                  value={newDependentLevel}
+                  onChange={(e) => setNewDependentLevel(e.target.value as StudentLevel)}
+                  className="bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                >
+                  {LEVELS.map((l) => (
+                    <option key={l} value={l}>
+                      {l === 'iniciante' ? 'Iniciante' : l}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={isPending}
+                onClick={handleAddDependent}
+                disabled={!newDependentName.trim()}
+              >
+                Adicionar
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
