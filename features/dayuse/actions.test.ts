@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateDayUseSlot } from './actions'
+import { validateDayUseSlot } from './validation'
 
 describe('validateDayUseSlot', () => {
   it('rejeita quando end_time <= start_time', () => {

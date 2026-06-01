@@ -2,17 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { validateDayUseSlot } from './validation'
 
-// Validação pura — exportada para testes
-export function validateDayUseSlot(
-  startTime: string,
-  endTime: string,
-  capacity = 1,
-): { error?: string } {
-  if (startTime >= endTime) return { error: 'Horário de fim deve ser depois do início' }
-  if (capacity < 1) return { error: 'capacidade mínima é 1' }
-  return {}
-}
+export { validateDayUseSlot }
 
 export interface CreateDayUseSlotData {
   court: number
