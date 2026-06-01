@@ -37,3 +37,8 @@ next-env.d.ts
 .superpowers/
 
 .vercel
+
+.octogent
+
+# git worktrees
+.worktrees/
