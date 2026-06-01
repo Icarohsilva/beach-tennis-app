@@ -47,6 +47,7 @@ export interface Class {
   end_time: string
   max_students: number
   is_active: boolean
+  court: number
 }
 
 export interface ClassSession {
@@ -180,6 +181,28 @@ export interface Notification {
   body: string
   read: boolean
   created_at: string
+}
+
+export interface DayUseSlot {
+  id: string
+  court: number       // 1 ou 2
+  date: string        // YYYY-MM-DD
+  start_time: string  // HH:MM
+  end_time: string
+  capacity: number
+  notes: string | null
+  is_active: boolean
+  created_by: string
+  created_at: string
+}
+
+export interface DayUseBooking {
+  id: string
+  slot_id: string
+  student_id: string
+  status: 'confirmed' | 'cancelled'
+  booked_at: string
+  cancelled_at: string | null
 }
 
 // Joined types for UI
