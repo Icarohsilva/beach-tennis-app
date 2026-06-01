@@ -301,3 +301,47 @@ export async function markAttendance(
   if (upsertErr) return { error: 'Erro ao registrar presença.' }
   return {}
 }
+
+// ---------------------------------------------------------------------------
+// markAttendanceBulk (admin)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bulk upserts attendance for all students in a session and marks session as completed. Admin only.
+ */
+export async function markAttendanceBulk(
+  sessionId: string,
+  allStudentIds: string[],
+  presentIds: string[],
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const now = new Date().toISOString()
+  const presentSet = new Set(presentIds)
+
+  const rows = allStudentIds.map((studentId) => ({
+    session_id: sessionId,
+    student_id: studentId,
+    status: presentSet.has(studentId) ? 'present' : 'absent' as 'present' | 'absent',
+    source: 'manual' as const,
+    checked_in_at: now,
+  }))
+
+  const { error } = await adminClient
+    .from('attendance')
+    .upsert(rows, { onConflict: 'session_id,student_id' })
+
+  if (error) return { error: error.message }
+
+  await adminClient.from('class_sessions').update({ status: 'completed' }).eq('id', sessionId)
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath(`/admin/grade/${sessionId}`)
+  return {}
+}

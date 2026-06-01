@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/server'
 import { AttendanceSheet } from '@/features/aulas/AttendanceSheet'
+import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
@@ -90,6 +91,12 @@ export default async function SessionDetailPage({ params }: Props) {
         sessionId={params.sessionId}
         students={students}
         onMark={markAttendance}
+      />
+
+      <StartClassClient
+        sessionId={params.sessionId}
+        students={students}
+        isCompleted={typedSession.status === 'completed'}
       />
     </div>
   )
