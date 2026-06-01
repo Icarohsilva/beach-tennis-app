@@ -1,6 +1,7 @@
 'use server'
 // features/aulas/adminActions.ts — admin-only student management server actions
 
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { StudentLevel } from '@/types'
 
@@ -91,6 +92,8 @@ export async function enrollStudentInClass(
   })
 
   if (error) return { error: 'Erro ao criar matrícula.' }
+  revalidatePath(`/admin/alunos/${studentId}`)
+  revalidatePath('/admin/alunos')
   return {}
 }
 
@@ -105,12 +108,20 @@ export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: 
   const adminClient = createAdminClient()
   const now = new Date().toISOString()
 
+  const { data: enrollmentData } = await adminClient
+    .from('enrollments')
+    .select('student_id')
+    .eq('id', enrollmentId)
+    .single()
+
   const { error } = await adminClient
     .from('enrollments')
     .update({ is_active: false, cancelled_at: now })
     .eq('id', enrollmentId)
 
   if (error) return { error: 'Erro ao cancelar matrícula.' }
+  if (enrollmentData) revalidatePath(`/admin/alunos/${enrollmentData.student_id}`)
+  revalidatePath('/admin/alunos')
   return {}
 }
 
