@@ -1,0 +1,194 @@
+// types/index.ts
+
+export type UserRole = 'student' | 'admin'
+export type StudentLevel = 'A' | 'B' | 'C' | 'D' | 'iniciante'
+export type PaymentType = 'subscriber' | 'per_class' | 'wellhub' | 'totalpass'
+export type ClassType = 'kids' | 'adult'
+export type BookingStatus = 'confirmed' | 'cancelled'
+export type BookingType = 'extra' | 'makeup'
+export type AttendanceStatus = 'present' | 'absent' | 'late'
+export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass'
+export type SessionStatus = 'scheduled' | 'completed' | 'cancelled'
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
+export type PaymentTransactionType = 'subscription' | 'per_class' | 'trial'
+export type CreditTransactionType = 'renewed' | 'used' | 'refunded' | 'expired'
+export type TournamentFormat = 'super8'
+export type TournamentModality = 'dupla_fixa' | 'dupla_revezando'
+export type TournamentStatus = 'draft' | 'open' | 'in_progress' | 'finished'
+export type TrialStatus = 'pending' | 'attended' | 'no_show' | 'cancelled'
+
+export interface Profile {
+  id: string
+  full_name: string
+  avatar_url: string | null
+  phone: string | null
+  city: string | null
+  role: UserRole
+  level: StudentLevel
+  payment_type: PaymentType
+  is_dependent: boolean
+  parent_id: string | null
+  contract_active: boolean
+  credits_balance: number // cached; source of truth = credit_transactions
+  wellhub_id: string | null
+  totalpass_id: string | null
+  created_at: string
+}
+
+export interface Class {
+  id: string
+  name: string
+  description: string | null
+  level: StudentLevel
+  type: ClassType
+  day_of_week: number // 0=Sunday, 6=Saturday
+  start_time: string // HH:MM
+  end_time: string
+  max_students: number
+  is_active: boolean
+}
+
+export interface ClassSession {
+  id: string
+  class_id: string
+  session_date: string // YYYY-MM-DD
+  status: SessionStatus
+  notes: string | null
+}
+
+export interface Enrollment {
+  id: string
+  student_id: string
+  class_id: string
+  enrolled_at: string
+  cancelled_at: string | null
+  is_active: boolean
+}
+
+export interface SessionBooking {
+  id: string
+  student_id: string
+  session_id: string
+  type: BookingType
+  status: BookingStatus
+  from_enrollment: boolean
+  credit_used: boolean
+  booked_at: string
+  cancelled_at: string | null
+}
+
+export interface Attendance {
+  id: string
+  student_id: string
+  session_id: string
+  status: AttendanceStatus
+  source: AttendanceSource
+  checked_in_at: string
+}
+
+export interface CreditTransaction {
+  id: string
+  student_id: string
+  type: CreditTransactionType
+  amount: number
+  reason: string
+  session_id: string | null
+  subscription_id: string | null
+  expires_at: string | null // null = expires at month end; date = makeup credit (30 days)
+  created_at: string
+}
+
+export interface TrialBooking {
+  id: string
+  name: string
+  email: string
+  phone: string
+  session_id: string
+  status: TrialStatus
+  must_pay_next: boolean
+  created_at: string
+}
+
+export interface SubscriptionPlan {
+  id: string
+  name: string
+  description: string | null
+  classes_per_week: number
+  credits_per_month: number
+  price_monthly: number
+  price_quarterly: number
+  price_annual: number
+  is_active: boolean
+}
+
+export interface StudentSubscription {
+  id: string
+  student_id: string
+  payer_id: string
+  plan_id: string
+  status: SubscriptionStatus
+  starts_at: string
+  ends_at: string | null
+  next_billing_at: string
+  discount_pct: number
+  gateway_subscription_id: string | null
+}
+
+export interface Payment {
+  id: string
+  student_id: string
+  subscription_id: string | null
+  session_id: string | null
+  amount: number
+  currency: string
+  status: PaymentStatus
+  type: PaymentTransactionType
+  gateway_payment_id: string | null
+  gateway: string
+  paid_at: string | null
+  created_at: string
+}
+
+export interface Tournament {
+  id: string
+  name: string
+  date: string
+  format: TournamentFormat
+  modality: TournamentModality
+  level: StudentLevel
+  status: TournamentStatus
+  created_by: string
+}
+
+export interface Post {
+  id: string
+  author_id: string
+  content: string
+  image_urls: string[]
+  likes_count: number
+  session_id: string | null
+  tournament_id: string | null
+  created_at: string
+}
+
+export interface Notification {
+  id: string
+  user_id: string
+  type: string
+  title: string
+  body: string
+  read: boolean
+  created_at: string
+}
+
+// Joined types for UI
+export interface ClassWithSession extends Class {
+  sessions: ClassSession[]
+  enrolled_count: number
+}
+
+export interface SessionWithClass extends ClassSession {
+  class: Class
+  bookings_count: number
+}
