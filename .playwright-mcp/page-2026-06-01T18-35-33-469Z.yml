@@ -1,0 +1,9 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Aula Experimental" [level=1] [ref=e5]
+      - paragraph [ref=e6]: Gratuita na primeira vez. Sem precisar criar conta.
+    - generic [ref=e8]:
+      - paragraph [ref=e9]: Nenhuma sessão disponível nos próximos 30 dias.
+      - paragraph [ref=e10]: Entre em contato conosco para mais informações.
+  - alert [ref=e11]

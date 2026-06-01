@@ -1,0 +1,81 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+npm run dev          # start dev server on localhost:3000
+npm run build        # production build
+npm run lint         # ESLint via next lint
+npm run test         # vitest watch mode
+npm run test:run     # vitest single run (CI)
+
+# run a single test file
+npm run test:run -- lib/utils/levelAccess.test.ts
+```
+
+## Architecture
+
+**Stack:** Next.js 14 App Router · TypeScript · Tailwind CSS · Supabase · Vitest · Vercel
+
+Beach tennis academy management app (in Portuguese). Core module: class scheduling and attendance. Secondary: payments/subscriptions, social community, tournaments.
+
+### Route Groups
+
+| Route Group | Protection | Purpose |
+|---|---|---|
+| `app/(auth)/` | Public | Login, cadastro, recuperar-senha |
+| `app/(dashboard)/` | Authenticated (cookie) + server-side user check | Student-facing UI with `BottomNav` |
+| `app/(admin)/` | Authenticated + role=admin check | Admin panel with sidebar |
+| `app/experimental/` | Public | Trial class booking (no login needed) |
+
+**Two-tier route protection:** [middleware.ts](middleware.ts) is Edge Runtime — it checks for a `sb-*-auth-token` cookie only (no Supabase import, no async). Real auth validation happens in each layout Server Component via `createClient()`. Admin role check uses `createAdminClient()` (service role key, bypasses RLS).
+
+### Supabase Clients
+
+- [lib/supabase/client.ts](lib/supabase/client.ts) — `createClient()` for Client Components (uses `createBrowserClient`)
+- [lib/supabase/server.ts](lib/supabase/server.ts) — `createClient()` for Server Components/layouts; `createAdminClient()` for admin role checks and service-level writes (bypasses RLS)
+
+Never import `@supabase/supabase-js` directly — always use the wrappers above.
+
+### Business Logic Utilities
+
+| File | Purpose |
+|---|---|
+| [lib/utils/levelAccess.ts](lib/utils/levelAccess.ts) | `canStudentAttendLevel(studentLevel, classLevel)` — level hierarchy: iniciante < D < C < B < A |
+| [lib/utils/creditRules.ts](lib/utils/creditRules.ts) | `canCancelWithRefund()`, `getMakeupCreditExpiry()` — 5h cancellation window |
+| [lib/utils/dateHelpers.ts](lib/utils/dateHelpers.ts) | `getDatesForDayOfWeekInMonth()`, `formatDate()`, `formatTime()` (pt-BR locale via date-fns) |
+| [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |
+
+These have Vitest unit tests co-located (`.test.ts` files).
+
+### Data Model Key Points
+
+All types are in [types/index.ts](types/index.ts). Key invariants:
+
+- `profiles.credits_balance` is a **cached** value — source of truth is the `credit_transactions` table
+- `classes` = recurring schedule templates; `class_sessions` = specific dated instances of a class
+- `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
+- Students with `payment_type: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual)
+- Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
+
+Migrations live in `supabase/migrations/` and must be applied via `supabase db push`.
+
+### Design System
+
+Dark theme with orange brand. Key Tailwind tokens:
+
+```
+bg-surface        #0f172a  (page background)
+bg-surface-card   #1e293b  (cards/panels)
+border-surface-border  #334155
+text-brand-500    #f97316  (primary orange)
+bg-brand-600      #ea580c  (buttons/CTAs)
+```
+
+UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge`, `Input`, `BottomNav`. Always use these rather than raw HTML elements for consistency.
+
+### Planned but Not Yet Implemented
+
+The `features/` directory (aulas, financeiro, comunidade, torneios) and most dashboard pages are planned for Plan 2+. Most `app/(dashboard)/` pages currently show placeholder text. The spec is at [docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md](docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md).

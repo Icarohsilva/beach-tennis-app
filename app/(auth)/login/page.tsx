@@ -20,7 +20,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       if (error.message.toLowerCase().includes('email not confirmed')) {
         setError('Confirme seu email antes de entrar. Verifique sua caixa de entrada.')
@@ -32,7 +32,12 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/home')
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .single()
+    router.push(profile?.role === 'admin' ? '/admin/dashboard' : '/home')
     router.refresh()
   }
 

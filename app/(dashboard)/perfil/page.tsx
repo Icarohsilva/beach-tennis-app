@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PlanSelector } from '@/features/financeiro/PlanSelector'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
+import { MedicalForm } from '@/features/perfil/MedicalForm'
+import { LogoutButton } from '@/components/ui/LogoutButton'
 import type { StudentSubscription, SubscriptionPlan, Payment } from '@/types'
 
 export default async function PerfilPage() {
@@ -19,6 +21,12 @@ export default async function PerfilPage() {
     .select('credits_balance, payment_type, full_name')
     .eq('id', user.id)
     .single()
+
+  const { data: medicalProfile } = await adminClient
+    .from('medical_profiles')
+    .select('birth_date, blood_type, emergency_name, emergency_phone, health_notes')
+    .eq('profile_id', user.id)
+    .maybeSingle()
 
   // Fetch active subscription + plan
   const { data: subscriptionRaw } = await adminClient
@@ -140,6 +148,26 @@ export default async function PerfilPage() {
           <PaymentHistory payments={payments} />
         </section>
       )}
+
+      {/* Ficha Médica */}
+      <section>
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+          Ficha Médica
+        </h2>
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <p className="text-xs text-slate-500 mb-4">
+            Informações de saúde para uso em caso de emergência na quadra. Visível apenas para você e o professor.
+          </p>
+          <MedicalForm initial={medicalProfile ?? null} />
+        </div>
+      </section>
+
+      {/* Sair */}
+      <section className="pb-4">
+        <LogoutButton className="w-full text-center text-sm text-red-400 hover:text-red-300 py-3 border border-red-900/40 rounded-xl transition-colors">
+          Sair do aplicativo
+        </LogoutButton>
+      </section>
     </div>
   )
 }
