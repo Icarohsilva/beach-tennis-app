@@ -11,7 +11,7 @@ interface RegisterButtonProps {
   modality: TournamentModality
 }
 
-export function RegisterButton({ tournamentId, modality }: RegisterButtonProps) {
+export function RegisterButton({ tournamentId }: RegisterButtonProps) {
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()

@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic'
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
-import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { TrialBookingForm } from './TrialBookingForm'
 import type { ClassSession, Class } from '@/types'
 

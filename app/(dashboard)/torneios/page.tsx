@@ -1,7 +1,7 @@
 // app/(dashboard)/torneios/page.tsx
 import { createClient } from '@/lib/supabase/server'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
-import type { Tournament, StudentLevel } from '@/types'
+import type { Tournament } from '@/types'
 
 const LEVEL_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Todos os níveis' },
