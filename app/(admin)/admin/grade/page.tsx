@@ -82,7 +82,20 @@ export default async function GradePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Grade de Aulas</h1>
-        <span className="text-sm text-slate-400">{allClasses.length} turmas ativas</span>
+        <div className="flex gap-2">
+          <Link
+            href="/admin/grade/dayuse"
+            className="text-sm bg-surface-card border border-surface-border text-slate-300 hover:text-white px-3 py-1.5 rounded-md transition-colors"
+          >
+            Day Use
+          </Link>
+          <Link
+            href="/admin/grade/nova-turma"
+            className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-md transition-colors"
+          >
+            + Nova Turma
+          </Link>
+        </div>
       </div>
 
       {/* Today's sessions */}
