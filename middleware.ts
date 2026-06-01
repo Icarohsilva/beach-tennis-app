@@ -1,59 +1,35 @@
-import { createServerClient } from '@supabase/ssr'
+// middleware.ts
+// No Supabase import here — Edge Runtime has no __dirname.
+// Cookie check is enough for route guarding; real auth validation
+// happens in Server Component layouts (Node.js runtime) via createAdminClient.
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return request.cookies.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          )
-        },
-      },
-    },
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Public routes — no auth required
+  // Public routes — pass through immediately
   if (
+    pathname === '/' ||
     pathname.startsWith('/login') ||
     pathname.startsWith('/cadastro') ||
     pathname.startsWith('/recuperar-senha') ||
-    pathname.startsWith('/experimental') ||
-    pathname === '/'
+    pathname.startsWith('/experimental')
   ) {
-    return supabaseResponse
+    return NextResponse.next()
   }
 
-  // Must be authenticated for all other routes
-  if (!user) {
+  // Protected routes: require a Supabase session cookie.
+  // Supabase SSR sets cookies named sb-<project-ref>-auth-token.
+  const hasSession = request.cookies.getAll().some(
+    (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'),
+  )
+
+  if (!hasSession) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Admin routes require admin role
-  if (pathname.startsWith('/admin')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'admin') {
-      return NextResponse.redirect(new URL('/home', request.url))
-    }
-  }
-
-  return supabaseResponse
+  // Admin role check is handled by app/(admin)/layout.tsx (Server Component).
+  return NextResponse.next()
 }
 
 export const config = {
