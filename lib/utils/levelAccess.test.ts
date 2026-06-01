@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canStudentAttendLevel, LEVEL_HIERARCHY } from './levelAccess'
+import { canStudentAttendLevel } from './levelAccess'
 
 describe('canStudentAttendLevel', () => {
   it('allows student to attend their own level', () => {
