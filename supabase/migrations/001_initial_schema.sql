@@ -1,7 +1,7 @@
 -- supabase/migrations/001_initial_schema.sql
 
 -- Enable extensions
-create extension if not exists "uuid-ossp";
+-- uuid-ossp not needed; gen_random_uuid() is built-in since PostgreSQL 13
 
 -- Enums
 create type user_role as enum ('student', 'admin');
@@ -43,7 +43,7 @@ create table profiles (
 
 -- Classes (recurring schedule)
 create table classes (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
   level student_level not null,
@@ -57,7 +57,7 @@ create table classes (
 
 -- Class Sessions (specific date instances)
 create table class_sessions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   class_id uuid not null references classes(id) on delete cascade,
   session_date date not null,
   status session_status not null default 'scheduled',
@@ -67,7 +67,7 @@ create table class_sessions (
 
 -- Enrollments (fixed schedule)
 create table enrollments (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   class_id uuid not null references classes(id) on delete cascade,
   enrolled_at timestamptz not null default now(),
@@ -78,7 +78,7 @@ create table enrollments (
 
 -- Session Bookings (all bookings: auto-enrolled, extra, makeup)
 create table session_bookings (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   session_id uuid not null references class_sessions(id) on delete cascade,
   type booking_type not null default 'extra',
@@ -92,7 +92,7 @@ create table session_bookings (
 
 -- Attendance
 create table attendance (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   session_id uuid not null references class_sessions(id) on delete cascade,
   status attendance_status not null default 'present',
@@ -103,7 +103,7 @@ create table attendance (
 
 -- Credit Transactions
 create table credit_transactions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   type credit_transaction_type not null,
   amount int not null,
@@ -116,7 +116,7 @@ create table credit_transactions (
 
 -- Trial Bookings (public, no auth required)
 create table trial_bookings (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   email text not null,
   phone text not null,
@@ -128,7 +128,7 @@ create table trial_bookings (
 
 -- Subscription Plans
 create table subscription_plans (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
   classes_per_week int not null,
@@ -141,7 +141,7 @@ create table subscription_plans (
 
 -- Student Subscriptions
 create table student_subscriptions (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   payer_id uuid not null references profiles(id),
   plan_id uuid not null references subscription_plans(id),
@@ -160,7 +160,7 @@ alter table credit_transactions
 
 -- Payments
 create table payments (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   student_id uuid not null references profiles(id) on delete cascade,
   subscription_id uuid references student_subscriptions(id) on delete set null,
   session_id uuid references class_sessions(id) on delete set null,
@@ -191,7 +191,7 @@ insert into system_settings (key, value) values
 
 -- Tournaments
 create table tournaments (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   date date not null,
   format tournament_format not null default 'super8',
@@ -202,7 +202,7 @@ create table tournaments (
 );
 
 create table tournament_matches (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   tournament_id uuid not null references tournaments(id) on delete cascade,
   player1_id uuid not null references profiles(id),
   player2_id uuid not null references profiles(id),
@@ -216,7 +216,7 @@ create table tournament_matches (
 
 -- Social
 create table posts (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
   image_urls text[] not null default '{}',
@@ -234,7 +234,7 @@ create table post_likes (
 );
 
 create table post_comments (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   post_id uuid not null references posts(id) on delete cascade,
   author_id uuid not null references profiles(id) on delete cascade,
   content text not null,
@@ -243,7 +243,7 @@ create table post_comments (
 
 -- Notifications
 create table notifications (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
   type text not null,
   title text not null,
@@ -254,7 +254,7 @@ create table notifications (
 
 -- Wellhub / TotalPass check-ins
 create table wellhub_checkins (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   wellhub_user_id text not null,
   wellhub_member_id text,
   student_id uuid references profiles(id) on delete set null,
@@ -265,7 +265,7 @@ create table wellhub_checkins (
 );
 
 create table totalpass_checkins (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   totalpass_user_id text not null,
   student_id uuid references profiles(id) on delete set null,
   session_id uuid references class_sessions(id) on delete set null,
