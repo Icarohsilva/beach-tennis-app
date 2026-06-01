@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
+import { Logo } from '@/components/ui/Logo'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -22,7 +23,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-surface text-white flex">
       <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen p-4 hidden md:flex flex-col">
-        <h2 className="text-brand-500 font-bold text-lg mb-6">🎾 Admin</h2>
+        <div className="mb-6">
+          <Logo variant="full" size="sm" />
+          <span className="text-xs text-slate-500 mt-1 block">Painel Admin</span>
+        </div>
         <nav className="flex flex-col gap-1 text-sm text-slate-400 flex-1">
           <Link href="/admin/dashboard" className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">Dashboard</Link>
           <Link href="/admin/alunos" className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">Alunos</Link>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 52">
+  <defs>
+    <clipPath id="rc">
+      <ellipse cx="26" cy="22" rx="14" ry="15"/>
+    </clipPath>
+  </defs>
+
+  <!-- Racket handle -->
+  <rect x="23" y="34" width="6" height="15" rx="2.5" fill="#ea580c"/>
+
+  <!-- Racket face -->
+  <ellipse cx="26" cy="22" rx="14" ry="15" fill="#1e293b"/>
+
+  <!-- Strings -->
+  <g clip-path="url(#rc)" stroke="#f97316" stroke-width="1" opacity="0.5">
+    <line x1="12" y1="16" x2="40" y2="16"/>
+    <line x1="12" y1="22" x2="40" y2="22"/>
+    <line x1="12" y1="28" x2="40" y2="28"/>
+    <line x1="19" y1="7" x2="19" y2="37"/>
+    <line x1="26" y1="7" x2="26" y2="37"/>
+    <line x1="33" y1="7" x2="33" y2="37"/>
+  </g>
+
+  <!-- Racket border -->
+  <ellipse cx="26" cy="22" rx="14" ry="15" fill="none" stroke="#ea580c" stroke-width="2.5"/>
+
+  <!-- Ball -->
+  <circle cx="47" cy="10" r="6" fill="#f97316"/>
+  <path d="M42 7.5 Q45 10 42 12.5" stroke="#0f172a" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+  <path d="M52 7.5 Q49 10 52 12.5" stroke="#0f172a" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+
+  <!-- Wordmark -->
+  <text x="62" y="22" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="18" fill="#ffffff" letter-spacing="-0.5">Beach</text>
+  <text x="62" y="40" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="18" fill="#f97316" letter-spacing="-0.5">Tennis</text>
+</svg>
