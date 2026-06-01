@@ -1,5 +1,6 @@
 // app/(dashboard)/agendar/page.tsx
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
@@ -116,6 +117,17 @@ export default async function AgendarPage() {
         <h1 className="text-xl font-bold text-white">Agendar</h1>
         <span className="text-xs text-slate-400">Nível {studentProfile.level.toUpperCase()}</span>
       </div>
+
+      <Link
+        href="/agendar/dayuse"
+        className="flex items-center justify-between bg-green-900/20 border border-green-700/40 rounded-xl px-4 py-3 hover:bg-green-900/30 transition-colors"
+      >
+        <div>
+          <p className="text-green-300 text-sm font-medium">Day Use disponível</p>
+          <p className="text-green-500/80 text-xs mt-0.5">Reservar quadra sem usar créditos →</p>
+        </div>
+        <span className="text-2xl">🏖️</span>
+      </Link>
 
       {availableClasses.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
