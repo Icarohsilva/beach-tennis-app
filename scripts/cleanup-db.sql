@@ -27,7 +27,17 @@ WHERE p.full_name ILIKE '%hudson%' OR au.email ILIKE '%hudson%';
 
 -- O cascade de FK apaga automaticamente:
 --   profiles, enrollments, student_subscriptions,
---   session_bookings, credit_transactions, waitlists, payments, etc.
+--   session_bookings, credit_transactions, payments, attendance, notifications
+
+-- ============================================================
+-- ⚠️  WARNING: TOURNAMENT CASCADE
+-- ============================================================
+-- Deleting users will ALSO delete:
+--   - All tournaments created by those users (via created_by FK cascade)
+--   - All tournament_matches associated with those tournaments
+--
+-- If you need to preserve tournament data, back it up before running this script!
+-- Query: SELECT * FROM tournaments WHERE created_by IN (...deleted users...)
 
 -- ============================================================
 -- PASSO 4 (opcional): Limpar planos inativos
