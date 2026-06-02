@@ -65,6 +65,45 @@ export async function updatePlanPrice(
   }
 }
 
+export interface CreatePlanData {
+  name: string
+  description?: string
+  classes_per_week: number
+  credits_per_month: number
+  price_monthly: number
+  price_quarterly: number
+  price_annual: number
+}
+
+export async function createPlan(data: CreatePlanData): Promise<{ error?: string }> {
+  try {
+    const adminClient = await assertAdmin()
+
+    if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
+    if (data.credits_per_month < 1) return { error: 'Créditos por mês deve ser ≥ 1.' }
+    if (data.price_monthly < 0 || data.price_quarterly < 0 || data.price_annual < 0) {
+      return { error: 'Preço inválido.' }
+    }
+
+    const { error } = await adminClient.from('subscription_plans').insert({
+      name: data.name.trim(),
+      description: data.description?.trim() || null,
+      classes_per_week: data.classes_per_week,
+      credits_per_month: data.credits_per_month,
+      price_monthly: data.price_monthly,
+      price_quarterly: data.price_quarterly,
+      price_annual: data.price_annual,
+      is_active: true,
+    })
+
+    if (error) return { error: error.message }
+    revalidatePath('/admin/financeiro')
+    return {}
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
+  }
+}
+
 export async function applyDiscountAdmin(
   subscriptionId: string,
   discountPct: number,

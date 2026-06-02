@@ -1,11 +1,13 @@
 'use client'
 // app/(admin)/financeiro/PlansManager.tsx
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { togglePlanActive, updatePlanPrice } from './adminActions'
+import { togglePlanActive, updatePlanPrice, createPlan } from './adminActions'
+import type { CreatePlanData } from './adminActions'
 import type { SubscriptionPlan } from '@/types'
 
 interface PlansManagerProps {
@@ -18,13 +20,30 @@ interface EditState {
   price_annual: string
 }
 
+const emptyCreateForm: CreatePlanData = {
+  name: '',
+  description: '',
+  classes_per_week: 2,
+  credits_per_month: 8,
+  price_monthly: 0,
+  price_quarterly: 0,
+  price_annual: 0,
+}
+
 export function PlansManager({ plans: initialPlans }: PlansManagerProps) {
+  const router = useRouter()
   const [plans, setPlans] = useState(initialPlans)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<EditState>({ price_monthly: '', price_quarterly: '', price_annual: '' })
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  // Create plan form state
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [createForm, setCreateForm] = useState<CreatePlanData>(emptyCreateForm)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createPending, startCreateTransition] = useTransition()
 
   function startEdit(plan: SubscriptionPlan) {
     setEditingId(plan.id)
@@ -91,12 +110,137 @@ export function PlansManager({ plans: initialPlans }: PlansManagerProps) {
     })
   }
 
+  function handleCreatePlan() {
+    setCreateError(null)
+    startCreateTransition(async () => {
+      const result = await createPlan(createForm)
+      if (result.error) {
+        setCreateError(result.error)
+      } else {
+        setShowCreateForm(false)
+        setCreateForm(emptyCreateForm)
+        router.refresh()
+      }
+    })
+  }
+
+  function cancelCreate() {
+    setShowCreateForm(false)
+    setCreateForm(emptyCreateForm)
+    setCreateError(null)
+  }
+
   function formatCurrency(amount: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
   }
 
   return (
     <div className="space-y-3">
+      {/* "+ Novo Plano" button */}
+      {!showCreateForm && (
+        <div>
+          <Button size="sm" variant="primary" onClick={() => setShowCreateForm(true)}>
+            + Novo Plano
+          </Button>
+        </div>
+      )}
+
+      {/* Create plan form */}
+      {showCreateForm && (
+        <Card>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-3">Novo Plano</p>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Nome *</label>
+                <Input
+                  type="text"
+                  placeholder="Ex: Plano Básico"
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Descrição (opcional)</label>
+                <Input
+                  type="text"
+                  placeholder="Breve descrição"
+                  value={createForm.description ?? ''}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Aulas/semana</label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={createForm.classes_per_week}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Créditos/mês</label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={createForm.credits_per_month}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, credits_per_month: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Mensal (R$)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={createForm.price_monthly}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, price_monthly: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Trimestral (R$)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={createForm.price_quarterly}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, price_quarterly: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Anual (R$)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={createForm.price_annual}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, price_annual: parseFloat(e.target.value) || 0 }))}
+                />
+              </div>
+            </div>
+            {createError && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                {createError}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button size="sm" variant="primary" loading={createPending} onClick={handleCreatePlan}>
+                Criar Plano
+              </Button>
+              <Button size="sm" variant="ghost" onClick={cancelCreate} disabled={createPending}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {error && (
         <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
           {error}
@@ -210,7 +354,7 @@ export function PlansManager({ plans: initialPlans }: PlansManagerProps) {
         </Card>
       ))}
 
-      {plans.length === 0 && (
+      {plans.length === 0 && !showCreateForm && (
         <p className="text-sm text-slate-400">Nenhum plano cadastrado.</p>
       )}
     </div>
