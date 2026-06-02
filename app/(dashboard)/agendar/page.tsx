@@ -124,7 +124,7 @@ export default async function AgendarPage() {
       >
         <div>
           <p className="text-green-300 text-sm font-medium">Day Use disponível</p>
-          <p className="text-green-500/80 text-xs mt-0.5">Reservar quadra sem usar créditos →</p>
+          <p className="text-green-500/80 text-xs mt-0.5">Reserve uma quadra avulsa →</p>
         </div>
         <span className="text-2xl">🏖️</span>
       </Link>
