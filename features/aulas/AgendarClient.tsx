@@ -142,7 +142,7 @@ export function AgendarClient({
           return (
             <div key={s.id} className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
               <p className="text-xs text-slate-400">
-                {sessionLabel} — Fila: {entry.position}º de {waitlistCount}
+                {sessionLabel} — Na lista de espera ({waitlistCount} {waitlistCount === 1 ? 'pessoa' : 'pessoas'})
               </p>
               {err && <p className="text-xs text-red-400">{err}</p>}
               <button

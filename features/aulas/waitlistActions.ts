@@ -11,13 +11,12 @@ import type { WaitlistStatus } from '@/types'
 export async function offerWaitlistSpot(sessionId: string): Promise<void> {
   const adminClient = createAdminClient()
 
-  // Find next 'waiting' entry (lowest position, then earliest joined_at)
+  // Find next 'waiting' entry (earliest joined_at is source of truth for queue order)
   const { data: next } = await adminClient
     .from('waitlists')
     .select('id, student_id, session_id')
     .eq('session_id', sessionId)
     .eq('status', 'waiting')
-    .order('position', { ascending: true })
     .order('joined_at', { ascending: true })
     .limit(1)
     .maybeSingle()
