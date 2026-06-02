@@ -15,6 +15,7 @@ interface BookingFormProps {
   isDependent: boolean
   /** Number of confirmed bookings per session_date (to enforce ≤2/day) */
   dailyBookingCounts: Record<string, number>
+  sessionBookedCounts: Record<string, number>  // NEW
   onBook: (sessionId: string) => Promise<{ error?: string }>
 }
 
@@ -24,6 +25,7 @@ export function BookingForm({
   studentLevel,
   isDependent,
   dailyBookingCounts,
+  sessionBookedCounts,  // NEW
   onBook,
 }: BookingFormProps) {
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
@@ -37,6 +39,7 @@ export function BookingForm({
   const canBook = levelOk && kidsOk
 
   function getSessionWarning(session: ClassSession): string | null {
+    if ((sessionBookedCounts[session.id] ?? 0) >= c.max_students) return 'Lotada'
     const count = dailyBookingCounts[session.session_date] ?? 0
     if (count >= 2) return '2 aulas nesse dia'
     return null

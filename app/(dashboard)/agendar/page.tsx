@@ -155,6 +155,52 @@ export default async function AgendarPage() {
     }
   }
 
+  // Session confirmed booking counts — adminClient bypasses RLS
+  const { data: sessionBookedCountsRaw } =
+    sessionIds.length > 0
+      ? await adminClient
+          .from('session_bookings')
+          .select('session_id')
+          .in('session_id', sessionIds)
+          .eq('status', 'confirmed')
+      : { data: [] }
+
+  const sessionBookedCounts: Record<string, number> = {}
+  for (const b of (sessionBookedCountsRaw ?? []) as { session_id: string }[]) {
+    sessionBookedCounts[b.session_id] = (sessionBookedCounts[b.session_id] ?? 0) + 1
+  }
+
+  // Student's own waitlist entries — user-scoped client is sufficient
+  const { data: studentWaitlistRaw } =
+    sessionIds.length > 0
+      ? await supabase
+          .from('waitlists')
+          .select('id, session_id, position, status, notified_at')
+          .eq('student_id', user.id)
+          .in('session_id', sessionIds)
+          .in('status', ['waiting', 'offered'])
+      : { data: [] }
+
+  const studentWaitlist: Record<string, { id: string; position: number; status: 'waiting' | 'offered'; notified_at: string | null }> = {}
+  for (const w of (studentWaitlistRaw ?? []) as { id: string; session_id: string; position: number; status: 'waiting' | 'offered'; notified_at: string | null }[]) {
+    studentWaitlist[w.session_id] = w
+  }
+
+  // Waitlist counts per session — adminClient to see all students' entries
+  const { data: waitlistCountsRaw } =
+    sessionIds.length > 0
+      ? await adminClient
+          .from('waitlists')
+          .select('session_id')
+          .in('session_id', sessionIds)
+          .in('status', ['waiting', 'offered'])
+      : { data: [] }
+
+  const sessionWaitlistCounts: Record<string, number> = {}
+  for (const w of (waitlistCountsRaw ?? []) as { session_id: string }[]) {
+    sessionWaitlistCounts[w.session_id] = (sessionWaitlistCounts[w.session_id] ?? 0) + 1
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -194,6 +240,9 @@ export default async function AgendarPage() {
                     studentLevel={studentProfile.level}
                     isDependent={studentProfile.is_dependent}
                     dailyBookingCounts={dailyBookingCounts}
+                    sessionBookedCounts={sessionBookedCounts}
+                    studentWaitlist={studentWaitlist}
+                    sessionWaitlistCounts={sessionWaitlistCounts}
                     sessionAttendeesMap={sessionAttendeesMap}
                     classAttendeesMap={classAttendeesMap}
                   />
