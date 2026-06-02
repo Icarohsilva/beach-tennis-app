@@ -148,7 +148,7 @@ export interface Waitlist {
 1. Aluno acessa sessão cheia → botão "Entrar na lista de espera"
 2. Server action `joinWaitlist(sessionId)`:
    - Valida: sessão existe, está cheia, aluno não está já na fila nem tem booking
-   - Calcula `position = MAX(position) + 1` para a sessão
+   - Calcula `position = COUNT(*) + 1` para entradas não-canceladas da sessão (dentro de transação com `adminClient` para evitar race condition)
    - Valida capacidade: `position <= max_students`
    - Insere em `waitlists` com `status = 'waiting'`
 
@@ -211,7 +211,9 @@ export interface Waitlist {
 ## Item 5 — Créditos extras não-expiráveis
 
 ### Objetivo
-Aluno com matrícula fixa que cancela com 5h+ de antecedência recebe um crédito que não expira enquanto o contrato estiver ativo. Pode ser usado em qualquer sessão avulsa futura.
+Aluno **subscriber** com matrícula fixa que cancela com 5h+ de antecedência recebe um crédito que não expira enquanto o contrato estiver ativo. Pode ser usado em qualquer sessão avulsa futura.
+
+> Wellhub e Totalpass são gerenciados por webhook externo e não participam desta lógica.
 
 ### Comportamento atual (não muda)
 - Reserva avulsa com `credit_used = true` + cancelamento com 5h+ → crédito de reposição com `expires_at = now() + 30 dias`
@@ -223,9 +225,11 @@ Aluno com matrícula fixa que cancela com 5h+ de antecedência recebe um crédit
 
 Condição adicional após o cancelamento:
 
+A query de perfil em `cancelBooking` precisa incluir `payment_type` (atualmente busca só `credits_balance`).
+
 ```typescript
-// Crédito extra para cancelamento de aula fixa
-if (refundEligible && booking.from_enrollment) {
+// Crédito extra para cancelamento de aula fixa (somente subscribers)
+if (refundEligible && booking.from_enrollment && profile.payment_type === 'subscriber') {
   await adminClient.from('credit_transactions').insert({
     student_id: user.id,
     type: 'refunded',
