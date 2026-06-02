@@ -205,6 +205,19 @@ export interface DayUseBooking {
   cancelled_at: string | null
 }
 
+export type WaitlistStatus = 'waiting' | 'offered' | 'accepted' | 'expired' | 'cancelled'
+
+export interface Waitlist {
+  id: string
+  session_id: string
+  student_id: string
+  position: number
+  status: WaitlistStatus
+  joined_at: string
+  notified_at: string | null
+  created_at: string
+}
+
 // Joined types for UI
 export interface ClassWithSession extends Class {
   sessions: ClassSession[]
