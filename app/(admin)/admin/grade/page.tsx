@@ -159,20 +159,30 @@ export default async function GradePage() {
                   const spotsLeft = c.max_students - enrolled
                   return (
                     <Card key={c.id}>
+                      {/* Row 1: name + badges + edit link */}
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-white text-sm font-medium truncate">{c.name}</span>
-                        <div className="flex gap-1 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           {c.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
                           <Badge variant="level">{c.level.toUpperCase()}</Badge>
+                          <Link
+                            href={`/admin/grade/${c.id}/editar`}
+                            className="text-xs text-slate-400 hover:text-brand-500 ml-1"
+                          >
+                            Editar
+                          </Link>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-slate-400">
-                        <span>{formatTime(c.start_time)} – {formatTime(c.end_time)}</span>
-                        <span className={spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}>
-                          {enrolled}/{c.max_students}
-                        </span>
-                      </div>
+                      {/* Row 2: time */}
+                      <p className="text-xs text-slate-400 mb-1">
+                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                      </p>
+                      {/* Row 3: vagas */}
+                      <p className={`text-xs ${spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {enrolled}/{c.max_students} vagas
+                      </p>
                       <GenerateSessionsButton classId={c.id} />
+
                     </Card>
                   )
                 })}

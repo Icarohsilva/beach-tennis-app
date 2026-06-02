@@ -48,6 +48,22 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   return {}
 }
 
+export async function updateClass(
+  classId: string,
+  data: Partial<ClassFormData>,
+): Promise<{ error?: string }> {
+  if (data.name !== undefined && !data.name.trim()) return { error: 'Nome é obrigatório' }
+  if (data.start_time && data.end_time && data.start_time >= data.end_time) {
+    return { error: 'Horário de fim deve ser depois do início' }
+  }
+  const adminClient = createAdminClient()
+  const { error } = await adminClient.from('classes').update(data).eq('id', classId)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/grade')
+  revalidatePath(`/admin/grade/${classId}/editar`, 'page')
+  return {}
+}
+
 export async function deactivateClass(classId: string): Promise<{ error?: string }> {
   const adminClient = createAdminClient()
   const { error } = await adminClient
