@@ -1,7 +1,7 @@
 // app/(dashboard)/agendar/page.tsx
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import type { Class, ClassSession, Profile } from '@/types'
@@ -111,6 +111,50 @@ export default async function AgendarPage() {
     sessionsByClass.set(s.class_id, arr)
   }
 
+  const adminClient = createAdminClient()
+
+  // Fetch confirmed booking attendees per session (adminClient — bypasses RLS to see other students)
+  const { data: bookingAttendeesRaw } =
+    sessionIds.length > 0
+      ? await adminClient
+          .from('session_bookings')
+          .select('session_id, profiles(full_name)')
+          .in('session_id', sessionIds)
+          .eq('status', 'confirmed')
+      : { data: [] }
+
+  const sessionAttendeesMap: Record<string, string[]> = {}
+  for (const b of (bookingAttendeesRaw ?? []) as { session_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
+    const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
+    if (profile?.full_name) {
+      sessionAttendeesMap[b.session_id] = [
+        ...(sessionAttendeesMap[b.session_id] ?? []),
+        profile.full_name,
+      ]
+    }
+  }
+
+  // Enrollment fallback: fixed students per class (used when no explicit bookings yet)
+  const { data: enrollAttendeesRaw } =
+    classIds.length > 0
+      ? await adminClient
+          .from('enrollments')
+          .select('class_id, profiles(full_name)')
+          .in('class_id', classIds)
+          .eq('is_active', true)
+      : { data: [] }
+
+  const classAttendeesMap: Record<string, string[]> = {}
+  for (const e of (enrollAttendeesRaw ?? []) as { class_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
+    const profile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
+    if (profile?.full_name) {
+      classAttendeesMap[e.class_id] = [
+        ...(classAttendeesMap[e.class_id] ?? []),
+        profile.full_name,
+      ]
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -150,6 +194,8 @@ export default async function AgendarPage() {
                     studentLevel={studentProfile.level}
                     isDependent={studentProfile.is_dependent}
                     dailyBookingCounts={dailyBookingCounts}
+                    sessionAttendeesMap={sessionAttendeesMap}
+                    classAttendeesMap={classAttendeesMap}
                   />
                 )}
               </div>

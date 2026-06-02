@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { BookingForm } from './BookingForm'
 import { bookSession } from './actions'
+import { SessionAttendees } from './SessionAttendees'
 import { Button } from '@/components/ui/Button'
 import type { Class, ClassSession, StudentLevel } from '@/types'
 
@@ -14,6 +15,8 @@ interface AgendarClientProps {
   studentLevel: StudentLevel
   isDependent: boolean
   dailyBookingCounts: Record<string, number>
+  sessionAttendeesMap: Record<string, string[]>
+  classAttendeesMap: Record<string, string[]>
 }
 
 export function AgendarClient({
@@ -22,6 +25,8 @@ export function AgendarClient({
   studentLevel,
   isDependent,
   dailyBookingCounts,
+  sessionAttendeesMap,
+  classAttendeesMap,
 }: AgendarClientProps) {
   const [expanded, setExpanded] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -53,6 +58,21 @@ export function AgendarClient({
 
   return (
     <div className="px-1">
+      {/* Attendees per session (always visible, collapsed by default) */}
+      <div className="mb-2 space-y-1">
+        {sessions.map((s) => {
+          const attendees = sessionAttendeesMap[s.id] ?? classAttendeesMap[c.id] ?? []
+          return (
+            <SessionAttendees
+              key={s.id}
+              attendees={attendees}
+              totalSpots={c.max_students}
+              sessionDate={s.session_date}
+            />
+          )
+        })}
+      </div>
+
       {!expanded ? (
         <Button
           variant="secondary"
