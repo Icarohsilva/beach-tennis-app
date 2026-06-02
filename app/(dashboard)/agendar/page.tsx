@@ -155,19 +155,10 @@ export default async function AgendarPage() {
     }
   }
 
-  // Session confirmed booking counts — adminClient bypasses RLS
-  const { data: sessionBookedCountsRaw } =
-    sessionIds.length > 0
-      ? await adminClient
-          .from('session_bookings')
-          .select('session_id')
-          .in('session_id', sessionIds)
-          .eq('status', 'confirmed')
-      : { data: [] }
-
+  // Derive confirmed booking counts from already-fetched attendees data (no extra query)
   const sessionBookedCounts: Record<string, number> = {}
-  for (const b of (sessionBookedCountsRaw ?? []) as { session_id: string }[]) {
-    sessionBookedCounts[b.session_id] = (sessionBookedCounts[b.session_id] ?? 0) + 1
+  for (const [id, names] of Object.entries(sessionAttendeesMap)) {
+    sessionBookedCounts[id] = names.length
   }
 
   // Student's own waitlist entries — user-scoped client is sufficient

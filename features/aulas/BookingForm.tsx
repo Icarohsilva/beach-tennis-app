@@ -15,7 +15,7 @@ interface BookingFormProps {
   isDependent: boolean
   /** Number of confirmed bookings per session_date (to enforce ≤2/day) */
   dailyBookingCounts: Record<string, number>
-  sessionBookedCounts: Record<string, number>  // NEW
+  sessionBookedCounts: Record<string, number>
   onBook: (sessionId: string) => Promise<{ error?: string }>
 }
 
@@ -25,7 +25,7 @@ export function BookingForm({
   studentLevel,
   isDependent,
   dailyBookingCounts,
-  sessionBookedCounts,  // NEW
+  sessionBookedCounts,
   onBook,
 }: BookingFormProps) {
   const [selectedSession, setSelectedSession] = useState<string | null>(null)

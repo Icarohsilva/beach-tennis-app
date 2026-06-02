@@ -8,13 +8,10 @@ import { joinWaitlist, leaveWaitlist, acceptWaitlistSpot } from './waitlistActio
 import { SessionAttendees } from './SessionAttendees'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils/dateHelpers'
-import type { Class, ClassSession, StudentLevel } from '@/types'
+import type { Class, ClassSession, StudentLevel, Waitlist } from '@/types'
 
-interface WaitlistEntry {
-  id: string
-  position: number
+type WaitlistEntry = Pick<Waitlist, 'id' | 'position' | 'status' | 'notified_at'> & {
   status: 'waiting' | 'offered'
-  notified_at: string | null
 }
 
 interface AgendarClientProps {
