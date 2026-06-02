@@ -6,10 +6,9 @@ import { useState } from 'react'
 interface SessionAttendeesProps {
   attendees: string[]
   totalSpots: number
-  sessionDate: string
 }
 
-export function SessionAttendees({ attendees, totalSpots, sessionDate }: SessionAttendeesProps) {
+export function SessionAttendees({ attendees, totalSpots }: SessionAttendeesProps) {
   const [open, setOpen] = useState(false)
   const count = attendees.length
 
@@ -29,7 +28,7 @@ export function SessionAttendees({ attendees, totalSpots, sessionDate }: Session
             <li className="text-xs text-slate-500">Nenhum aluno confirmado ainda.</li>
           ) : (
             attendees.map((name, i) => (
-              <li key={i} className="text-xs text-slate-300">
+              <li key={`${name}-${i}`} className="text-xs text-slate-300">
                 {name}
               </li>
             ))
