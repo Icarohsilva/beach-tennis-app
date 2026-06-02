@@ -86,6 +86,25 @@ export default async function PerfilPage() {
 
   const payments: Payment[] = paymentsRaw ?? []
 
+  // Fetch credit transactions (refunded credits available to use)
+  const { data: creditTransactionsRaw } = await adminClient
+    .from('credit_transactions')
+    .select('id, type, amount, reason, created_at, expires_at')
+    .eq('student_id', user.id)
+    .eq('type', 'refunded')
+    .gt('amount', 0)
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  const creditTransactions = (creditTransactionsRaw ?? []) as {
+    id: string
+    type: string
+    amount: number
+    reason: string
+    created_at: string
+    expires_at: string | null
+  }[]
+
   const isWellhubOrTotalpass =
     profile?.payment_type === 'wellhub' || profile?.payment_type === 'totalpass'
 
@@ -137,6 +156,40 @@ export default async function PerfilPage() {
                 Renova todo mês com base no seu plano
               </p>
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Histórico de Créditos Extras */}
+      {!isWellhubOrTotalpass && creditTransactions.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Meus Créditos
+          </h2>
+          <div className="space-y-2">
+            {creditTransactions.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-card border border-surface-border rounded-xl text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="text-white text-sm truncate">{t.reason}</p>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-green-400 font-semibold">+{t.amount}</p>
+                  {t.expires_at ? (
+                    <p className="text-xs text-slate-500">
+                      Expira {new Date(t.expires_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-green-500">Sem vencimento</p>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}

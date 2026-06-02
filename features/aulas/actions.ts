@@ -184,7 +184,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   // Fetch booking
   const { data: booking, error: bookingErr } = await adminClient
     .from('session_bookings')
-    .select('id, student_id, session_id, status, credit_used')
+    .select('id, student_id, session_id, status, credit_used, from_enrollment')
     .eq('id', bookingId)
     .single()
 
@@ -219,39 +219,52 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
   if (cancelErr) return { error: 'Erro ao cancelar. Tente novamente.' }
 
-  // Refund credit if applicable
-  if (refundEligible && booking.credit_used) {
-    // Fetch credit_expiry_days from system_settings (default 30)
-    let expiryDays = 30
-    const { data: settings } = await adminClient
-      .from('system_settings')
-      .select('credit_expiry_days')
-      .single()
-    if (settings?.credit_expiry_days) expiryDays = settings.credit_expiry_days
-
-    const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
-
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'refunded',
-      amount: 1,
-      reason: `Cancelamento com reposição — sessão ${session.session_date}`,
-      session_id: booking.session_id,
-      expires_at: expiry.toISOString(),
-    })
-
-    // Update cached balance
+  // Credit logic: extra (non-expiring) for fixed enrollment; makeup (30 days) for paid avulso
+  if (refundEligible) {
     const { data: profile } = await adminClient
       .from('profiles')
-      .select('credits_balance')
+      .select('credits_balance, payment_type')
       .eq('id', user.id)
       .single()
 
     if (profile) {
-      await adminClient
-        .from('profiles')
-        .update({ credits_balance: profile.credits_balance + 1 })
-        .eq('id', user.id)
+      if (booking.from_enrollment && profile.payment_type === 'subscriber') {
+        // Extra credit: does not expire while contract is active
+        await adminClient.from('credit_transactions').insert({
+          student_id: user.id,
+          type: 'refunded',
+          amount: 1,
+          reason: `Cancelamento de aula fixa — crédito extra (${session.session_date})`,
+          session_id: booking.session_id,
+          expires_at: null,
+        })
+        await adminClient
+          .from('profiles')
+          .update({ credits_balance: profile.credits_balance + 1 })
+          .eq('id', user.id)
+      } else if (booking.credit_used) {
+        // Makeup credit for paid avulso booking: expires in N days
+        let expiryDays = 30
+        const { data: settings } = await adminClient
+          .from('system_settings')
+          .select('credit_expiry_days')
+          .single()
+        if (settings?.credit_expiry_days) expiryDays = settings.credit_expiry_days
+
+        const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
+        await adminClient.from('credit_transactions').insert({
+          student_id: user.id,
+          type: 'refunded',
+          amount: 1,
+          reason: `Cancelamento com reposição — sessão ${session.session_date}`,
+          session_id: booking.session_id,
+          expires_at: expiry.toISOString(),
+        })
+        await adminClient
+          .from('profiles')
+          .update({ credits_balance: profile.credits_balance + 1 })
+          .eq('id', user.id)
+      }
     }
   }
 
