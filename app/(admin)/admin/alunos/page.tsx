@@ -61,6 +61,22 @@ export default async function AlunosPage({ searchParams }: Props) {
     enrollCountMap.set(e.student_id, (enrollCountMap.get(e.student_id) ?? 0) + 1)
   }
 
+  // Fetch active plan name per subscriber student
+  const { data: subsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('student_subscriptions')
+          .select('student_id, plan:subscription_plans(name)')
+          .in('student_id', studentIds)
+          .eq('status', 'active')
+      : { data: [] }
+
+  const planNameMap = new Map<string, string>()
+  for (const s of (subsRaw ?? []) as { student_id: string; plan: { name: string } | { name: string }[] | null }[]) {
+    const planObj = Array.isArray(s.plan) ? s.plan[0] : s.plan
+    if (planObj?.name) planNameMap.set(s.student_id, planObj.name)
+  }
+
   const paymentLabel: Record<string, string> = {
     subscriber: 'Mensalista',
     per_class: 'Avulso',
@@ -142,7 +158,9 @@ export default async function AlunosPage({ searchParams }: Props) {
                     <div className="flex items-center justify-between">
                       <span>Plano</span>
                       <span className={student.contract_active ? 'text-green-400' : 'text-red-400'}>
-                        {paymentLabel[student.payment_type] ?? student.payment_type}
+                        {student.payment_type === 'subscriber'
+                          ? (planNameMap.get(student.id) ?? 'Mensalista (sem plano)')
+                          : (paymentLabel[student.payment_type] ?? student.payment_type)}
                         {!student.contract_active && ' (inativo)'}
                       </span>
                     </div>
