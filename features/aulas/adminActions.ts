@@ -3,6 +3,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { format } from 'date-fns'
+import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 
 async function requireAdmin(): Promise<{ userId: string; error?: string }> {
@@ -166,4 +168,53 @@ export async function addDependent(
 
   if (error) return { error: 'Erro ao criar dependente.' }
   return {}
+}
+
+// ---------------------------------------------------------------------------
+// generateSessionsForExistingClass — backfill sessions for next 90 days
+// ---------------------------------------------------------------------------
+
+/**
+ * Gera sessões para uma turma existente nos próximos 90 dias.
+ * Ignora datas que já têm sessão (upsert por class_id+session_date).
+ */
+export async function generateSessionsForExistingClass(
+  classId: string,
+): Promise<{ error?: string; count?: number }> {
+  const { error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+
+  const { data: cls } = await adminClient
+    .from('classes')
+    .select('day_of_week, is_active')
+    .eq('id', classId)
+    .single()
+
+  if (!cls) return { error: 'Turma não encontrada.' }
+  if (!cls.is_active) return { error: 'Turma inativa.' }
+
+  const today = new Date()
+  const end = new Date()
+  end.setDate(today.getDate() + 90)
+
+  const rows = buildSessionRows(
+    classId,
+    cls.day_of_week,
+    format(today, 'yyyy-MM-dd'),
+    format(end, 'yyyy-MM-dd'),
+  )
+
+  if (rows.length === 0) return { count: 0 }
+
+  // upsert — ignores conflicts on (class_id, session_date)
+  const { error } = await adminClient
+    .from('class_sessions')
+    .upsert(rows, { onConflict: 'class_id,session_date', ignoreDuplicates: true })
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/admin/grade')
+  return { count: rows.length }
 }

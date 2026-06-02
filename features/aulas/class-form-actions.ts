@@ -2,6 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { format } from 'date-fns'
+import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel, ClassType } from '@/types'
 
 export interface ClassFormData {
@@ -21,8 +23,27 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   if (data.start_time >= data.end_time) return { error: 'Horário de fim deve ser depois do início' }
 
   const adminClient = createAdminClient()
-  const { error } = await adminClient.from('classes').insert({ ...data, is_active: true })
+  const { data: newClass, error } = await adminClient
+    .from('classes')
+    .insert({ ...data, is_active: true })
+    .select('id')
+    .single()
   if (error) return { error: error.message }
+
+  // Auto-generate sessions for the next 90 days
+  const today = new Date()
+  const end = new Date()
+  end.setDate(today.getDate() + 90)
+  const rows = buildSessionRows(
+    newClass.id,
+    data.day_of_week,
+    format(today, 'yyyy-MM-dd'),
+    format(end, 'yyyy-MM-dd'),
+  )
+  if (rows.length > 0) {
+    await adminClient.from('class_sessions').insert(rows)
+  }
+
   revalidatePath('/admin/grade')
   return {}
 }

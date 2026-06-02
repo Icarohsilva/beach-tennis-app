@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTime } from '@/lib/utils/dateHelpers'
+import { GenerateSessionsButton } from './GenerateSessionsButton'
 import type { Class, ClassSession } from '@/types'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -171,6 +172,7 @@ export default async function GradePage() {
                           {enrolled}/{c.max_students}
                         </span>
                       </div>
+                      <GenerateSessionsButton classId={c.id} />
                     </Card>
                   )
                 })}
