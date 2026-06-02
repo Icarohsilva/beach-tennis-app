@@ -115,6 +115,60 @@ export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: 
 }
 
 // ---------------------------------------------------------------------------
+// addDependentSelf — guardian adds their own dependent (no admin required)
+// ---------------------------------------------------------------------------
+
+export async function addDependentSelf(
+  name: string,
+  level: StudentLevel,
+): Promise<{ dependentId?: string; error?: string }> {
+  const supabase = createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  if (!name.trim()) return { error: 'Nome é obrigatório.' }
+
+  const adminClient = createAdminClient()
+
+  // Verify caller is not a dependent themselves
+  const { data: callerProfile } = await adminClient
+    .from('profiles')
+    .select('id, is_dependent')
+    .eq('id', user.id)
+    .single()
+
+  if (!callerProfile) return { error: 'Perfil não encontrado.' }
+  if (callerProfile.is_dependent) return { error: 'Dependentes não podem adicionar dependentes.' }
+
+  const newId = crypto.randomUUID()
+
+  const { data: newDep, error } = await adminClient
+    .from('profiles')
+    .insert({
+      id: newId,
+      full_name: name.trim(),
+      level,
+      role: 'student',
+      is_dependent: true,
+      parent_id: user.id,
+      payment_type: 'subscriber',
+      credits_balance: 0,
+      contract_active: false,
+    })
+    .select('id')
+    .single()
+
+  if (error) return { error: 'Erro ao criar dependente.' }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath('/perfil')
+
+  return { dependentId: (newDep as { id: string }).id }
+}
+
+// ---------------------------------------------------------------------------
 // addDependent — creates a new student profile linked to this parent
 // ---------------------------------------------------------------------------
 

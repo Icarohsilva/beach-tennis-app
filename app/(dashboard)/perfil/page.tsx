@@ -6,7 +6,8 @@ import { PlanSelector } from '@/features/financeiro/PlanSelector'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
-import type { StudentSubscription, SubscriptionPlan, Payment } from '@/types'
+import { DependentsSection } from '@/features/aulas/DependentsSection'
+import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
 
 export default async function PerfilPage() {
   const supabase = createClient()
@@ -15,12 +16,23 @@ export default async function PerfilPage() {
 
   const adminClient = createAdminClient()
 
-  // Fetch profile for credits_balance and payment_type
+  // Fetch profile for credits_balance, payment_type, and is_dependent flag
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('credits_balance, payment_type, full_name')
+    .select('credits_balance, payment_type, full_name, is_dependent')
     .eq('id', user.id)
     .single()
+
+  // Fetch dependents (only for non-dependent guardians)
+  const { data: dependentsRaw } = !profile?.is_dependent
+    ? await adminClient
+        .from('profiles')
+        .select('id, full_name, level')
+        .eq('parent_id', user.id)
+        .eq('is_dependent', true)
+    : { data: [] }
+
+  const dependents = (dependentsRaw ?? []) as { id: string; full_name: string; level: StudentLevel }[]
 
   const { data: medicalProfile } = await adminClient
     .from('medical_profiles')
@@ -146,6 +158,18 @@ export default async function PerfilPage() {
             Histórico de Pagamentos
           </h2>
           <PaymentHistory payments={payments} />
+        </section>
+      )}
+
+      {/* Dependentes (apenas para responsáveis não-dependentes) */}
+      {!profile?.is_dependent && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Dependentes (Kids)
+          </h2>
+          <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+            <DependentsSection initialDependents={dependents} />
+          </div>
         </section>
       )}
 

@@ -81,6 +81,117 @@ export async function subscribeToPlan(
 }
 
 // ---------------------------------------------------------------------------
+// adminSubscribeStudentToPlan (admin only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Assigns a subscription plan to any student. Admin only.
+ * - Deactivates any existing active subscription
+ * - Grants initial credits equal to the plan's credits_per_month
+ * - For is_dependent students: payer_id = parent_id
+ * - Calls revalidatePath for the admin student page
+ */
+export async function adminSubscribeStudentToPlan(
+  studentId: string,
+  planId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  // Verify caller is admin
+  const { data: callerProfile } = await adminClient
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão de administrador.' }
+
+  // Fetch student profile
+  const { data: student, error: studentErr } = await adminClient
+    .from('profiles')
+    .select('id, payment_type, is_dependent, parent_id, contract_active')
+    .eq('id', studentId)
+    .single()
+
+  if (studentErr || !student) return { error: 'Aluno não encontrado.' }
+
+  const paymentType = student.payment_type as PaymentType
+  if (paymentType === 'wellhub' || paymentType === 'totalpass') {
+    return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
+  }
+
+  // Fetch plan
+  const { data: plan, error: planErr } = await adminClient
+    .from('subscription_plans')
+    .select('id, is_active, credits_per_month')
+    .eq('id', planId)
+    .single()
+
+  if (planErr || !plan) return { error: 'Plano não encontrado.' }
+  if (!plan.is_active) return { error: 'Este plano não está disponível.' }
+
+  // payer_id: dependent uses parent; otherwise self
+  const payerId = student.is_dependent && student.parent_id ? student.parent_id : studentId
+
+  // Cancel existing active subscriptions
+  await adminClient
+    .from('student_subscriptions')
+    .update({ status: 'cancelled' })
+    .eq('student_id', studentId)
+    .eq('status', 'active')
+
+  const now = new Date()
+  const nextBilling = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+  const { data: newSub, error: insertErr } = await adminClient
+    .from('student_subscriptions')
+    .insert({
+      student_id: studentId,
+      payer_id: payerId,
+      plan_id: planId,
+      status: 'active',
+      starts_at: now.toISOString(),
+      ends_at: null,
+      next_billing_at: nextBilling.toISOString(),
+      discount_pct: 0,
+      gateway_subscription_id: null,
+    })
+    .select('id')
+    .single()
+
+  if (insertErr) return { error: 'Erro ao criar assinatura. Tente novamente.' }
+
+  // Grant initial credits
+  const creditsToGrant = (plan as { id: string; is_active: boolean; credits_per_month: number }).credits_per_month
+  if (creditsToGrant > 0 && newSub) {
+    const sub = newSub as { id: string }
+    await adminClient.from('credit_transactions').insert({
+      student_id: studentId,
+      type: 'renewed',
+      amount: creditsToGrant,
+      reason: 'Créditos iniciais — associação de plano pelo admin',
+      session_id: null,
+      subscription_id: sub.id,
+      expires_at: null,
+    })
+
+    await adminClient
+      .from('profiles')
+      .update({ credits_balance: creditsToGrant })
+      .eq('id', studentId)
+  }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath(`/admin/alunos/${studentId}`)
+
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // cancelSubscription
 // ---------------------------------------------------------------------------
 
