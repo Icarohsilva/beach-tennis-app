@@ -106,6 +106,40 @@ export default async function StudentProfilePage({ params }: Props) {
     }
   }
 
+  // Fetch active subscription plans (for plan assignment)
+  const { data: plansRaw } = await adminClient
+    .from('subscription_plans')
+    .select('id, name, classes_per_week, credits_per_month, price_monthly, is_active')
+    .eq('is_active', true)
+    .order('classes_per_week', { ascending: true })
+
+  const availablePlans = (plansRaw ?? []) as {
+    id: string
+    name: string
+    classes_per_week: number
+    credits_per_month: number
+    price_monthly: number
+    is_active: boolean
+  }[]
+
+  // Fetch current active subscription for this student
+  const { data: currentSubRaw } = await adminClient
+    .from('student_subscriptions')
+    .select('id, plan_id, status, starts_at, plan:subscription_plans(id, name)')
+    .eq('student_id', params.id)
+    .eq('status', 'active')
+    .order('starts_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const currentSubscription = currentSubRaw as {
+    id: string
+    plan_id: string
+    status: string
+    starts_at: string
+    plan: { id: string; name: string } | null
+  } | null
+
   // Recent credit transactions
   const { data: creditsRaw } = await adminClient
     .from('credit_transactions')
@@ -159,7 +193,7 @@ export default async function StudentProfilePage({ params }: Props) {
         </div>
       </div>
 
-      {/* Interactive section (level, enrollments, dependents) */}
+      {/* Interactive section (level, enrollments, dependents, subscription) */}
       <Card>
         <StudentProfileClient
           studentId={student.id}
@@ -168,6 +202,8 @@ export default async function StudentProfilePage({ params }: Props) {
           availableClasses={availableClasses}
           dependents={dependents}
           isDependent={student.is_dependent}
+          availablePlans={availablePlans}
+          currentSubscription={currentSubscription}
         />
       </Card>
 

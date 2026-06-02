@@ -12,6 +12,7 @@ import {
   cancelEnrollment,
   addDependent,
 } from '@/features/aulas/adminActions'
+import { adminSubscribeStudentToPlan } from '@/features/financeiro/actions'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -35,6 +36,23 @@ interface DependentSummary {
   level: StudentLevel
 }
 
+interface PlanSummary {
+  id: string
+  name: string
+  classes_per_week: number
+  credits_per_month: number
+  price_monthly: number
+  is_active: boolean
+}
+
+interface CurrentSubscription {
+  id: string
+  plan_id: string
+  status: string
+  starts_at: string
+  plan: { id: string; name: string } | null
+}
+
 interface StudentProfileClientProps {
   studentId: string
   currentLevel: StudentLevel
@@ -42,6 +60,8 @@ interface StudentProfileClientProps {
   availableClasses: AvailableClass[]
   dependents: DependentSummary[]
   isDependent: boolean
+  availablePlans?: PlanSummary[]
+  currentSubscription?: CurrentSubscription | null
 }
 
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -57,6 +77,8 @@ export function StudentProfileClient({
   availableClasses,
   dependents,
   isDependent,
+  availablePlans = [],
+  currentSubscription = null,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
   const [enrollmentList, setEnrollmentList] = useState(enrollments)
@@ -65,6 +87,8 @@ export function StudentProfileClient({
   const [selectedClassId, setSelectedClassId] = useState('')
   const [newDependentName, setNewDependentName] = useState('')
   const [newDependentLevel, setNewDependentLevel] = useState<StudentLevel>('iniciante')
+  const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [activeSub, setActiveSub] = useState<CurrentSubscription | null>(currentSubscription ?? null)
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -148,6 +172,30 @@ export function StudentProfileClient({
       setNewDependentName('')
       setNewDependentLevel('iniciante')
       notify('Dependente adicionado.')
+    })
+  }
+
+  function handleSubscribe() {
+    if (!selectedPlanId) return
+    setError(null)
+    startTransition(async () => {
+      const result = await adminSubscribeStudentToPlan(studentId, selectedPlanId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      const plan = availablePlans.find((p) => p.id === selectedPlanId)
+      if (plan) {
+        setActiveSub({
+          id: crypto.randomUUID(),
+          plan_id: plan.id,
+          status: 'active',
+          starts_at: new Date().toISOString(),
+          plan: { id: plan.id, name: plan.name },
+        })
+      }
+      setSelectedPlanId('')
+      notify('Plano associado com sucesso.')
     })
   }
 
@@ -317,6 +365,53 @@ export function StudentProfileClient({
                 Adicionar
               </Button>
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Plano de Assinatura */}
+      {availablePlans.length > 0 && (
+        <section>
+          <h2 className="text-base font-semibold text-white mb-3">Plano de Assinatura</h2>
+
+          {/* Current plan */}
+          {activeSub?.plan ? (
+            <div className="px-4 py-3 bg-surface-card border border-surface-border rounded-xl mb-4">
+              <p className="text-white text-sm font-medium">{activeSub.plan.name}</p>
+              <p className="text-xs text-green-400 mt-0.5">Ativo desde {new Date(activeSub.starts_at).toLocaleDateString('pt-BR')}</p>
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm mb-3">Nenhum plano ativo.</p>
+          )}
+
+          {/* Assign plan */}
+          <div className="flex gap-2 items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-slate-400 mb-1">
+                {activeSub ? 'Trocar plano' : 'Associar plano'}
+              </label>
+              <select
+                value={selectedPlanId}
+                onChange={(e) => setSelectedPlanId(e.target.value)}
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="">Selecione um plano...</option>
+                {availablePlans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {p.classes_per_week}x/sem · R$ {(p.price_monthly / 100).toFixed(0)}/mês
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isPending}
+              onClick={handleSubscribe}
+              disabled={!selectedPlanId}
+            >
+              Assinar
+            </Button>
           </div>
         </section>
       )}
