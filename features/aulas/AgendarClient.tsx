@@ -67,7 +67,6 @@ export function AgendarClient({
               key={s.id}
               attendees={attendees}
               totalSpots={c.max_students}
-              sessionDate={s.session_date}
             />
           )
         })}
