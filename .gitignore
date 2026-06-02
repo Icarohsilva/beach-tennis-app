@@ -43,3 +43,12 @@ octogent/
 
 # git worktrees
 .worktrees/
+
+# claude code agent worktrees
+.claude/worktrees/
+
+# playwright mcp session logs
+.playwright-mcp/
+
+# dev server logs
+devserver.log
