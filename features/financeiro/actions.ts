@@ -40,7 +40,7 @@ export async function subscribeToPlan(
   // Fetch plan
   const { data: plan, error: planErr } = await adminClient
     .from('subscription_plans')
-    .select('id, is_active')
+    .select('id, is_active, credits_per_month, name')
     .eq('id', planId)
     .single()
 
@@ -61,7 +61,7 @@ export async function subscribeToPlan(
   const now = new Date()
   const nextBilling = new Date(now.getFullYear(), now.getMonth() + 1, 1)
 
-  const { error: insertErr } = await adminClient
+  const { data: newSub, error: insertErr } = await adminClient
     .from('student_subscriptions')
     .insert({
       student_id: user.id,
@@ -74,8 +74,28 @@ export async function subscribeToPlan(
       discount_pct: 0,
       gateway_subscription_id: null,
     })
+    .select('id')
+    .single()
 
-  if (insertErr) return { error: 'Erro ao criar assinatura. Tente novamente.' }
+  if (insertErr || !newSub) return { error: 'Erro ao criar assinatura. Tente novamente.' }
+
+  // Grant initial credits if the plan includes monthly credits
+  const credits = plan.credits_per_month as number
+  if (credits > 0) {
+    await adminClient.from('credit_transactions').insert({
+      student_id: user.id,
+      type: 'renewed',
+      amount: credits,
+      reason: `Créditos iniciais — plano ${plan.name}`,
+      session_id: null,
+      subscription_id: newSub.id,
+      expires_at: null,
+    })
+    await adminClient
+      .from('profiles')
+      .update({ credits_balance: credits })
+      .eq('id', user.id)
+  }
 
   return {}
 }
