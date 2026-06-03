@@ -311,6 +311,92 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 }
 
 // ---------------------------------------------------------------------------
+// skipEnrollmentNoBooking — enrolled student skips the next session when no
+// booking has been generated yet (pre-emptive skip, no credit deducted).
+// Creates a cancelled booking record so generateWeeklyBookings skips them.
+// ---------------------------------------------------------------------------
+
+export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  // Verify student is enrolled
+  const { count: enrolled } = await adminClient
+    .from('enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', user.id)
+    .eq('class_id', classId)
+    .eq('is_active', true)
+
+  if ((enrolled ?? 0) === 0) return { error: 'Você não está matriculado nesta turma.' }
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Find or create the next session
+  const { data: existingSession } = await adminClient
+    .from('class_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+    .eq('status', 'scheduled')
+    .order('session_date', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  let sessionId: string
+
+  if (existingSession) {
+    sessionId = (existingSession as { id: string }).id
+  } else {
+    const { data: cls } = await adminClient
+      .from('classes')
+      .select('day_of_week')
+      .eq('id', classId)
+      .single()
+    if (!cls) return { error: 'Turma não encontrada.' }
+
+    const nextDate = getNextOccurrence(new Date(), cls.day_of_week as number)
+    const { data: newSess, error: createErr } = await adminClient
+      .from('class_sessions')
+      .insert({ class_id: classId, session_date: nextDate.toISOString().slice(0, 10), status: 'scheduled', notes: null })
+      .select('id')
+      .single()
+    if (createErr || !newSess) return { error: 'Erro ao preparar sessão.' }
+    sessionId = (newSess as { id: string }).id
+  }
+
+  // Check no existing confirmed booking
+  const { count: existing } = await adminClient
+    .from('session_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', user.id)
+    .eq('session_id', sessionId)
+    .eq('status', 'confirmed')
+
+  if ((existing ?? 0) > 0) {
+    return { error: 'Você já tem um agendamento confirmado. Use "Sair desta aula" normal.' }
+  }
+
+  // Create a cancelled booking to mark the skip (no credit deducted/returned)
+  await adminClient.from('session_bookings').insert({
+    student_id: user.id,
+    session_id: sessionId,
+    type: 'extra',
+    status: 'cancelled',
+    from_enrollment: true,
+    credit_used: false,
+    cancelled_at: new Date().toISOString(),
+  })
+
+  revalidatePath('/home')
+  revalidatePath('/agendar')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // cancelBooking
 // ---------------------------------------------------------------------------
 

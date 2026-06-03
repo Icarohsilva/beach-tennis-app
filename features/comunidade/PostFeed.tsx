@@ -1,7 +1,7 @@
 'use client'
 // features/comunidade/PostFeed.tsx
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PostCard } from './PostCard'
 import type { Post, Profile } from '@/types'
@@ -14,31 +14,22 @@ type PostWithAuthor = Post & {
 interface PostFeedProps {
   currentUserId: string
   initialPosts: PostWithAuthor[]
+  localPosts: PostWithAuthor[]
   initialLikedPostIds: string[]
 }
 
 const PAGE_SIZE = 20
 
-export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: PostFeedProps) {
-  const [posts, setPosts] = useState<PostWithAuthor[]>(initialPosts)
-  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set(initialLikedPostIds))
+export function PostFeed({ currentUserId, initialPosts, localPosts, initialLikedPostIds }: PostFeedProps) {
+  const [serverPosts, setServerPosts] = useState<PostWithAuthor[]>(initialPosts)
+  const [likedPostIds] = useState<Set<string>>(new Set(initialLikedPostIds))
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(initialPosts.length === PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
-  const isFirstRender = useRef(true)
 
-  // Sync with server data when initialPosts changes (triggered by router.refresh() after a new post)
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    setPosts((prev) => {
-      const existingIds = new Set(prev.map((p) => p.id))
-      const newOnes = initialPosts.filter((p) => !existingIds.has(p.id))
-      return newOnes.length > 0 ? [...newOnes, ...prev] : prev
-    })
-  }, [initialPosts])
+  // Merge: local (just created) + server posts, deduplicating
+  const localIds = new Set(localPosts.map((p) => p.id))
+  const posts = [...localPosts, ...serverPosts.filter((p) => !localIds.has(p.id))]
 
   // Realtime: prepend new posts when inserted
   useEffect(() => {
@@ -76,7 +67,7 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
                 avatar_url: null,
               },
             }
-            setPosts((prev) => {
+            setServerPosts((prev) => {
               if (prev.some((p) => p.id === newPost.id)) return prev
               return [newPost, ...prev]
             })
@@ -134,7 +125,7 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
           },
         }
       })
-      setPosts((prev) => [...prev, ...newPosts])
+      setServerPosts((prev) => [...prev, ...newPosts])
       setPage((prev) => prev + 1)
       setHasMore(data.length === PAGE_SIZE)
     } else {

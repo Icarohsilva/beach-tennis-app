@@ -8,9 +8,11 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { createPost } from './actions'
 
+type NewPost = { id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } }
+
 interface CreatePostProps {
   onClose: () => void
-  onPostCreated?: () => void
+  onPostCreated?: (post: NewPost) => void
 }
 
 export function CreatePost({ onClose, onPostCreated }: CreatePostProps) {
@@ -90,14 +92,14 @@ export function CreatePost({ onClose, onPostCreated }: CreatePostProps) {
           imageUrls,
         })
 
-        if (result?.error) {
-          setError(result.error)
+        if (result?.error || !result?.post) {
+          setError(result?.error ?? 'Erro inesperado.')
           setUploading(false)
           return
         }
 
         setUploading(false)
-        onPostCreated?.()
+        onPostCreated?.(result.post)
         onClose()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro inesperado.')

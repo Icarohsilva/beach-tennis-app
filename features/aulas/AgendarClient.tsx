@@ -2,7 +2,7 @@
 // features/aulas/AgendarClient.tsx
 
 import { useState, useTransition } from 'react'
-import { bookNextSession, cancelBooking, skipEnrollmentSession } from './actions'
+import { bookNextSession, cancelBooking, skipEnrollmentSession, skipEnrollmentNoBooking } from './actions'
 import { joinWaitlist, leaveWaitlist, acceptWaitlistSpot } from './waitlistActions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -75,6 +75,17 @@ export function AgendarClient({
       const result = await skipEnrollmentSession(bookingId)
       if (result.error) setError(result.error)
       else setSuccess('Falta registrada. Crédito devolvido sem vencimento.')
+    })
+  }
+
+  function handleSkipNoBooking() {
+    if (!c.id) return
+    setError('')
+    setSuccess('')
+    startTransition(async () => {
+      const result = await skipEnrollmentNoBooking(c.id)
+      if (result.error) setError(result.error)
+      else setSuccess('Falta registrada para esta semana.')
     })
   }
 
@@ -154,28 +165,24 @@ export function AgendarClient({
 
       {/* Action area */}
       {isEnrolled ? (
-        hasBooking && bookingId ? (
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-            <div className="flex items-center gap-2">
-              <Badge variant="success">Aluno fixo</Badge>
-              {nextSession && (
-                <span className="text-xs text-slate-400">
-                  {formatDate(nextSession.session_date, "EEE, dd/MM")}
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={handleSkip}
-              className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
-            >
-              Sair desta aula
-            </button>
+        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
+          <div className="flex items-center gap-2">
+            <Badge variant="success">Aluno fixo</Badge>
+            {nextSession && (
+              <span className="text-xs text-slate-400">
+                {formatDate(nextSession.session_date, "EEE, dd/MM")}
+              </span>
+            )}
           </div>
-        ) : (
-          <Badge variant="success">Aluno fixo</Badge>
-        )
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={hasBooking && bookingId ? handleSkip : handleSkipNoBooking}
+            className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+          >
+            Sair desta aula
+          </button>
+        </div>
       ) : waitlistEntry?.status === 'offered' ? (
         <div className="bg-brand-600/20 border border-brand-500/50 rounded-xl px-3 py-2 space-y-2">
           <p className="text-xs text-brand-400 font-semibold">

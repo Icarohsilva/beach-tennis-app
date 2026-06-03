@@ -2,7 +2,6 @@
 // app/(dashboard)/comunidade/ComunidadeClient.tsx
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { PostFeed } from '@/features/comunidade/PostFeed'
 import { CreatePost } from '@/features/comunidade/CreatePost'
@@ -24,12 +23,14 @@ export function ComunidadeClient({
   initialPosts,
   initialLikedPostIds,
 }: ComunidadeClientProps) {
-  const router = useRouter()
   const [showCreatePost, setShowCreatePost] = useState(false)
+  // Posts created in this session — prepended to the feed immediately without server round-trip
+  const [localPosts, setLocalPosts] = useState<PostWithAuthor[]>([])
 
-  function handlePostCreated() {
+  function handlePostCreated(newPost: { id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } }) {
     setShowCreatePost(false)
-    router.refresh()  // Re-runs the server component → initialPosts gets the new post
+    const fullPost: PostWithAuthor = { ...newPost, comment_count: 0 }
+    setLocalPosts((prev) => [fullPost, ...prev])
   }
 
   return (
@@ -44,11 +45,12 @@ export function ComunidadeClient({
         <PostFeed
           currentUserId={currentUserId}
           initialPosts={initialPosts}
+          localPosts={localPosts}
           initialLikedPostIds={initialLikedPostIds}
         />
       </div>
 
-      {/* FAB — Floating Action Button */}
+      {/* FAB */}
       <button
         onClick={() => setShowCreatePost(true)}
         className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full bg-brand-600 text-white shadow-lg hover:bg-brand-700 active:bg-brand-800 transition-colors flex items-center justify-center"
@@ -57,7 +59,6 @@ export function ComunidadeClient({
         <Plus size={24} />
       </button>
 
-      {/* Create Post Modal */}
       {showCreatePost && (
         <CreatePost
           onClose={() => setShowCreatePost(false)}

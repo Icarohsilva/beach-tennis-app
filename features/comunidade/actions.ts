@@ -20,7 +20,7 @@ export async function createPost(params: {
   imageUrls: string[]
   sessionId?: string
   tournamentId?: string
-}): Promise<{ error?: string; postId?: string }> {
+}): Promise<{ error?: string; post?: { id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } } }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -33,6 +33,13 @@ export async function createPost(params: {
 
   const adminClient = createAdminClient()
 
+  // Fetch author profile for immediate display
+  const { data: authorProfile } = await adminClient
+    .from('profiles')
+    .select('id, full_name, avatar_url')
+    .eq('id', user.id)
+    .single()
+
   const { data: post, error: insertErr } = await adminClient
     .from('posts')
     .insert({
@@ -43,15 +50,31 @@ export async function createPost(params: {
       session_id: sessionId ?? null,
       tournament_id: tournamentId ?? null,
     })
-    .select('id')
+    .select('id, created_at')
     .single()
 
   if (insertErr || !post) return { error: 'Erro ao criar post. Tente novamente.' }
 
-  const { revalidatePath } = await import('next/cache')
   revalidatePath('/comunidade')
 
-  return { postId: post.id }
+  const p = post as { id: string; created_at: string }
+  return {
+    post: {
+      id: p.id,
+      author_id: user.id,
+      content: content.trim(),
+      image_urls: imageUrls,
+      likes_count: 0,
+      session_id: sessionId ?? null,
+      tournament_id: tournamentId ?? null,
+      created_at: p.created_at,
+      author: {
+        id: user.id,
+        full_name: (authorProfile as { id: string; full_name: string; avatar_url: string | null } | null)?.full_name ?? 'Aluno',
+        avatar_url: (authorProfile as { id: string; full_name: string; avatar_url: string | null } | null)?.avatar_url ?? null,
+      },
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------

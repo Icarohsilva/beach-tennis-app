@@ -449,13 +449,13 @@ export async function generateWeeklyBookings(
       const paymentType = profile.payment_type
       const needsCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
 
-      // Skip if already booked for this session
+      // Skip if already has any booking (confirmed or pre-emptively cancelled/skipped)
       const { count: exists } = await adminClient
         .from('session_bookings')
         .select('id', { count: 'exact', head: true })
         .eq('student_id', studentId)
         .eq('session_id', session.id)
-        .eq('status', 'confirmed')
+        .eq('from_enrollment', true)
 
       if ((exists ?? 0) > 0) continue
 
