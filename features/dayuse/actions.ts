@@ -67,6 +67,7 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string }> {
   if (error) return { error: error.message }
 
   revalidatePath('/agendar/dayuse')
+  revalidatePath('/home')
   return {}
 }
 
@@ -83,5 +84,6 @@ export async function cancelDayUseBooking(bookingId: string): Promise<{ error?: 
 
   if (error) return { error: error.message }
   revalidatePath('/agendar/dayuse')
+  revalidatePath('/home')
   return {}
 }

@@ -1,6 +1,7 @@
 'use server'
 // features/aulas/waitlistActions.ts
 
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { WaitlistStatus } from '@/types'
 
@@ -137,6 +138,8 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
 
   if (insertErr) return { error: 'Erro ao entrar na lista de espera. Tente novamente.' }
 
+  revalidatePath('/home')
+  revalidatePath('/agendar')
   return {}
 }
 
@@ -175,6 +178,8 @@ export async function leaveWaitlist(waitlistId: string): Promise<{ error?: strin
     await offerWaitlistSpot(entry.session_id)
   }
 
+  revalidatePath('/home')
+  revalidatePath('/agendar')
   return {}
 }
 
@@ -259,5 +264,7 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
     .update({ status: 'accepted' as WaitlistStatus })
     .eq('id', waitlistId)
 
+  revalidatePath('/home')
+  revalidatePath('/agendar')
   return {}
 }

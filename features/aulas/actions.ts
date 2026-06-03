@@ -1,6 +1,7 @@
 'use server'
 // features/aulas/actions.ts
 
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
@@ -236,6 +237,9 @@ export async function bookSession(
       .eq('id', user.id)
   }
 
+  revalidatePath('/home')
+  revalidatePath('/agendar')
+  revalidatePath('/aulas')
   return {}
 }
 
@@ -349,6 +353,9 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   // Notify next person on waitlist if any
   await offerWaitlistSpot(booking.session_id)
 
+  revalidatePath('/home')
+  revalidatePath('/agendar')
+  revalidatePath('/aulas')
   return {}
 }
 

@@ -1,6 +1,7 @@
 'use server'
 // features/comunidade/actions.ts
 
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { StudentLevel, PaymentType } from '@/types'
 
@@ -92,6 +93,7 @@ export async function toggleLike(
     // Decrement likes_count atomically (never below 0)
     await adminClient.rpc('decrement_likes_count', { post_id: postId })
 
+    revalidatePath('/comunidade')
     return { liked: false }
   } else {
     // Like: upsert with ON CONFLICT DO NOTHING for idempotency
@@ -107,6 +109,7 @@ export async function toggleLike(
     // Increment likes_count atomically
     await adminClient.rpc('increment_likes_count', { post_id: postId })
 
+    revalidatePath('/comunidade')
     return { liked: true }
   }
 }
@@ -142,6 +145,7 @@ export async function addComment(
 
   if (insertErr || !comment) return { error: 'Erro ao adicionar comentário.' }
 
+  revalidatePath('/comunidade')
   return { commentId: comment.id }
 }
 
