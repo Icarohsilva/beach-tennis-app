@@ -261,7 +261,7 @@ export async function addCreditsManually(
 
   const { error: txErr } = await adminClient.from('credit_transactions').insert({
     student_id: studentId,
-    type: amount > 0 ? 'manual_add' : 'manual_deduct',
+    type: amount > 0 ? 'renewed' : 'expired',
     amount,
     reason: reason.trim() || (amount > 0 ? 'Créditos adicionados pelo admin' : 'Créditos removidos pelo admin'),
     session_id: null,
