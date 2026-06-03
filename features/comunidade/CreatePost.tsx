@@ -118,8 +118,8 @@ export function CreatePost({ onClose, onPostCreated }: CreatePostProps) {
       />
 
       {/* Modal */}
-      <div className="fixed inset-x-0 bottom-0 z-50 sm:inset-0 sm:flex sm:items-center sm:justify-center">
-        <div className="bg-surface-card border border-surface-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="bg-surface-card border border-surface-border rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
             <h2 className="text-white font-semibold">Novo post</h2>

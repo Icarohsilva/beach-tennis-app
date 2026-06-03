@@ -140,13 +140,13 @@ export default async function StudentProfilePage({ params }: Props) {
     plan: { id: string; name: string } | null
   } | null
 
-  // Recent credit transactions
+  // Recent credit transactions (always fetched, for all payment types)
   const { data: creditsRaw } = await adminClient
     .from('credit_transactions')
     .select('id, type, amount, reason, created_at, expires_at')
     .eq('student_id', params.id)
     .order('created_at', { ascending: false })
-    .limit(10)
+    .limit(15)
 
   const credits = (creditsRaw ?? []) as {
     id: string
@@ -198,6 +198,7 @@ export default async function StudentProfilePage({ params }: Props) {
         <StudentProfileClient
           studentId={student.id}
           currentLevel={student.level as StudentLevel}
+          currentCreditsBalance={student.credits_balance}
           enrollments={enrollments}
           availableClasses={availableClasses}
           dependents={dependents}
@@ -207,37 +208,38 @@ export default async function StudentProfilePage({ params }: Props) {
         />
       </Card>
 
-      {/* Recent credit transactions */}
-      {student.payment_type === 'subscriber' && credits.length > 0 && (
-        <section>
-          <h2 className="text-base font-semibold text-white mb-3">Histórico de Créditos</h2>
-          <div className="space-y-2">
-            {credits.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-card border border-surface-border rounded-xl text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="text-white truncate">{t.reason}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    {new Date(t.created_at).toLocaleDateString('pt-BR')}
-                    {t.expires_at &&
-                      ` · expira ${new Date(t.expires_at).toLocaleDateString('pt-BR')}`}
-                  </p>
-                </div>
-                <span
-                  className={[
-                    'font-semibold shrink-0',
-                    t.amount > 0 ? 'text-green-400' : 'text-red-400',
-                  ].join(' ')}
-                >
-                  {t.amount > 0 ? `+${t.amount}` : t.amount}
-                </span>
+      {/* Credit management + history — visible for all students */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">Créditos</h2>
+        <div className="space-y-2">
+          {credits.length === 0 && (
+            <p className="text-slate-500 text-sm px-1">Nenhuma transação de crédito.</p>
+          )}
+          {credits.map((t) => (
+            <div
+              key={t.id}
+              className="flex items-center justify-between gap-3 px-4 py-3 bg-surface-card border border-surface-border rounded-xl text-sm"
+            >
+              <div className="min-w-0">
+                <p className="text-white truncate">{t.reason}</p>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  {new Date(t.created_at).toLocaleDateString('pt-BR')}
+                  {t.expires_at &&
+                    ` · expira ${new Date(t.expires_at).toLocaleDateString('pt-BR')}`}
+                </p>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
+              <span
+                className={[
+                  'font-semibold shrink-0',
+                  t.amount > 0 ? 'text-green-400' : 'text-red-400',
+                ].join(' ')}
+              >
+                {t.amount > 0 ? `+${t.amount}` : t.amount}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }

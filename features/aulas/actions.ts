@@ -8,6 +8,73 @@ import { offerWaitlistSpot } from './waitlistActions'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 
 // ---------------------------------------------------------------------------
+// getNextOccurrence — returns the next date (>= from) matching dayOfWeek
+// ---------------------------------------------------------------------------
+
+function getNextOccurrence(from: Date, dayOfWeek: number): Date {
+  const date = new Date(from)
+  const currentDay = date.getDay()
+  let daysUntil = dayOfWeek - currentDay
+  if (daysUntil < 0) daysUntil += 7
+  date.setDate(date.getDate() + daysUntil)
+  return date
+}
+
+// ---------------------------------------------------------------------------
+// bookNextSession — books the next upcoming session for a class.
+// Auto-creates the session if none exists for the upcoming occurrence.
+// ---------------------------------------------------------------------------
+
+export async function bookNextSession(classId: string): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const today = new Date().toISOString().slice(0, 10)
+
+  // Find next scheduled session
+  const { data: existingSession } = await adminClient
+    .from('class_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+    .eq('status', 'scheduled')
+    .order('session_date', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  let sessionId: string
+
+  if (existingSession) {
+    sessionId = (existingSession as { id: string }).id
+  } else {
+    // Auto-create the next session for this class
+    const { data: cls } = await adminClient
+      .from('classes')
+      .select('day_of_week, is_active')
+      .eq('id', classId)
+      .single()
+
+    if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
+
+    const nextDate = getNextOccurrence(new Date(), cls.day_of_week as number)
+    const sessionDate = nextDate.toISOString().slice(0, 10)
+
+    const { data: newSession, error: createErr } = await adminClient
+      .from('class_sessions')
+      .insert({ class_id: classId, session_date: sessionDate, status: 'scheduled', notes: null })
+      .select('id')
+      .single()
+
+    if (createErr || !newSession) return { error: 'Erro ao preparar sessão.' }
+    sessionId = (newSession as { id: string }).id
+  }
+
+  return bookSession(sessionId)
+}
+
+// ---------------------------------------------------------------------------
 // bookSession
 // ---------------------------------------------------------------------------
 

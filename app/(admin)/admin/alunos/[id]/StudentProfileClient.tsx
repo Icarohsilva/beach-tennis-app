@@ -11,6 +11,7 @@ import {
   enrollStudentInClass,
   cancelEnrollment,
   addDependent,
+  addCreditsManually,
 } from '@/features/aulas/adminActions'
 import { adminSubscribeStudentToPlan } from '@/features/financeiro/actions'
 
@@ -56,6 +57,7 @@ interface CurrentSubscription {
 interface StudentProfileClientProps {
   studentId: string
   currentLevel: StudentLevel
+  currentCreditsBalance: number
   enrollments: EnrollmentWithClass[]
   availableClasses: AvailableClass[]
   dependents: DependentSummary[]
@@ -73,6 +75,7 @@ function formatTime(t: string) {
 export function StudentProfileClient({
   studentId,
   currentLevel,
+  currentCreditsBalance,
   enrollments,
   availableClasses,
   dependents,
@@ -83,12 +86,16 @@ export function StudentProfileClient({
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
   const [enrollmentList, setEnrollmentList] = useState(enrollments)
   const [dependentList, setDependentList] = useState(dependents)
+  const [creditsBalance, setCreditsBalance] = useState(currentCreditsBalance)
 
   const [selectedClassId, setSelectedClassId] = useState('')
   const [newDependentName, setNewDependentName] = useState('')
   const [newDependentLevel, setNewDependentLevel] = useState<StudentLevel>('iniciante')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [activeSub, setActiveSub] = useState<CurrentSubscription | null>(currentSubscription ?? null)
+
+  const [creditAmount, setCreditAmount] = useState('')
+  const [creditReason, setCreditReason] = useState('')
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -196,6 +203,26 @@ export function StudentProfileClient({
       }
       setSelectedPlanId('')
       notify('Plano associado com sucesso.')
+    })
+  }
+
+  function handleAddCredits() {
+    const parsed = parseInt(creditAmount, 10)
+    if (isNaN(parsed) || parsed === 0) {
+      setError('Informe uma quantidade válida (pode ser negativa para remover).')
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      const result = await addCreditsManually(studentId, parsed, creditReason)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setCreditsBalance((prev) => prev + parsed)
+      setCreditAmount('')
+      setCreditReason('')
+      notify(`${parsed > 0 ? '+' : ''}${parsed} crédito${Math.abs(parsed) !== 1 ? 's' : ''} ${parsed > 0 ? 'adicionado' : 'removido'}.`)
     })
   }
 
@@ -368,6 +395,49 @@ export function StudentProfileClient({
           </div>
         </section>
       )}
+
+      {/* Créditos manuais */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">
+          Créditos —{' '}
+          <span className="text-brand-500">{creditsBalance}</span>{' '}
+          disponíve{creditsBalance !== 1 ? 'is' : 'l'}
+        </h2>
+        <div className="space-y-2">
+          <div className="flex gap-2 items-end flex-wrap">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Quantidade</label>
+              <input
+                type="number"
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+                placeholder="Ex: 4 ou -1"
+                className="w-24 bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            <div className="flex-1 min-w-40">
+              <label className="block text-xs text-slate-400 mb-1">Motivo (opcional)</label>
+              <input
+                type="text"
+                value={creditReason}
+                onChange={(e) => setCreditReason(e.target.value)}
+                placeholder="Ex: Aula reposição..."
+                className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={isPending}
+              onClick={handleAddCredits}
+              disabled={!creditAmount.trim()}
+            >
+              Aplicar
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">Use valor positivo para adicionar, negativo para remover.</p>
+        </div>
+      </section>
 
       {/* Plano de Assinatura */}
       {availablePlans.length > 0 && (

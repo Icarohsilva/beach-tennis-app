@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import type { Tournament, Profile } from '@/types'
+import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
+import type { Tournament, Profile, Class } from '@/types'
 
 export default async function HomePage() {
   const supabase = createClient()
@@ -13,15 +14,17 @@ export default async function HomePage() {
   if (!user) redirect('/login')
 
   const today = new Date().toISOString().slice(0, 10)
+  const todayDayOfWeek = new Date().getDay()
 
   const [
     { data: profileData },
     { data: tournamentsData },
     { data: nextSessionsData },
+    { data: todayClassesData },
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, credits_balance, payment_type')
+      .select('full_name, credits_balance, payment_type, level, is_dependent')
       .eq('id', user.id)
       .single(),
     supabase
@@ -38,10 +41,17 @@ export default async function HomePage() {
       .gte('session_date', today)
       .order('session_date', { referencedTable: 'class_sessions', ascending: true })
       .limit(5),
+    supabase
+      .from('classes')
+      .select('id, name, level, type, start_time, end_time, max_students, day_of_week')
+      .eq('day_of_week', todayDayOfWeek)
+      .eq('is_active', true)
+      .order('start_time', { ascending: true }),
   ])
 
-  const profile = profileData as Pick<Profile, 'full_name' | 'credits_balance' | 'payment_type'> | null
+  const profile = profileData as Pick<Profile, 'full_name' | 'credits_balance' | 'payment_type' | 'level' | 'is_dependent'> | null
   const tournaments = (tournamentsData ?? []) as Tournament[]
+  const showCredits = profile?.payment_type !== 'wellhub' && profile?.payment_type !== 'totalpass'
 
   type SessionRow = {
     id: string
@@ -56,7 +66,16 @@ export default async function HomePage() {
     }[]
   }
   const nextSessions = (nextSessionsData ?? []) as unknown as SessionRow[]
-  const showCredits = profile?.payment_type !== 'wellhub' && profile?.payment_type !== 'totalpass'
+
+  // Filter today's classes by student level
+  const allTodayClasses = (todayClassesData ?? []) as Class[]
+  const todayClasses = profile
+    ? allTodayClasses.filter((c) => {
+        const levelOk = canStudentAttendLevel(profile.level, c.level)
+        const kidsOk = c.type !== 'kids' || profile.is_dependent
+        return levelOk && kidsOk
+      })
+    : []
 
   return (
     <div className="p-4 space-y-6 pb-24">
@@ -77,6 +96,38 @@ export default async function HomePage() {
             Ver plano →
           </Link>
         </Card>
+      )}
+
+      {/* Aulas de hoje */}
+      {todayClasses.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-white">Aulas de hoje</h2>
+            <Link href="/agendar" className="text-xs text-brand-500 hover:text-brand-400 transition-colors">
+              agendar →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {todayClasses.map((c) => (
+              <Link key={c.id} href="/agendar">
+                <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{c.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                      </p>
+                    </div>
+                    {c.type === 'kids'
+                      ? <Badge variant="kids">KIDS</Badge>
+                      : <Badge variant="level">{c.level.toUpperCase()}</Badge>
+                    }
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       <section>

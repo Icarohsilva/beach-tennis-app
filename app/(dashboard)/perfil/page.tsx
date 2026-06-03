@@ -2,7 +2,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
-import { PlanSelector } from '@/features/financeiro/PlanSelector'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
@@ -66,15 +65,6 @@ export default async function PerfilPage() {
     : null
 
   const plan: SubscriptionPlan | null = subscriptionRaw?.plan ?? null
-
-  // Fetch available plans (for selector, when no active plan)
-  const { data: availablePlans } = await adminClient
-    .from('subscription_plans')
-    .select('*')
-    .eq('is_active', true)
-    .order('classes_per_week', { ascending: true })
-
-  const plans: SubscriptionPlan[] = availablePlans ?? []
 
   // Fetch payments ordered by created_at desc
   const { data: paymentsRaw } = await adminClient
@@ -191,16 +181,6 @@ export default async function PerfilPage() {
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {/* Selecionar Plano (se sem assinatura ativa e não Wellhub/TotalPass) */}
-      {!isWellhubOrTotalpass && !subscription && plans.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Escolha um Plano
-          </h2>
-          <PlanSelector plans={plans} currentPlanId={subscription ? plan?.id : null} />
         </section>
       )}
 

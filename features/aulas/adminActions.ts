@@ -225,6 +225,54 @@ export async function addDependent(
 }
 
 // ---------------------------------------------------------------------------
+// addCreditsManually — admin adds credits to any student (any amount, any reason)
+// ---------------------------------------------------------------------------
+
+export async function addCreditsManually(
+  studentId: string,
+  amount: number,
+  reason: string,
+): Promise<{ error?: string }> {
+  const { error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  if (!Number.isInteger(amount) || amount === 0) {
+    return { error: 'Quantidade inválida.' }
+  }
+
+  const adminClient = createAdminClient()
+
+  const { data: student } = await adminClient
+    .from('profiles')
+    .select('credits_balance')
+    .eq('id', studentId)
+    .single()
+
+  if (!student) return { error: 'Aluno não encontrado.' }
+
+  const newBalance = (student.credits_balance as number) + amount
+
+  const { error: txErr } = await adminClient.from('credit_transactions').insert({
+    student_id: studentId,
+    type: amount > 0 ? 'manual_add' : 'manual_deduct',
+    amount,
+    reason: reason.trim() || (amount > 0 ? 'Créditos adicionados pelo admin' : 'Créditos removidos pelo admin'),
+    session_id: null,
+    expires_at: null,
+  })
+
+  if (txErr) return { error: 'Erro ao registrar transação.' }
+
+  await adminClient
+    .from('profiles')
+    .update({ credits_balance: newBalance })
+    .eq('id', studentId)
+
+  revalidatePath(`/admin/alunos/${studentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // generateSessionsForExistingClass — backfill sessions for next 90 days
 // ---------------------------------------------------------------------------
 
