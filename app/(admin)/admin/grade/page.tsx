@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { GenerateSessionsButton } from './GenerateSessionsButton'
+import { DeleteClassButton } from './DeleteClassButton'
 import type { Class, ClassSession } from '@/types'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -61,20 +62,25 @@ export default async function GradePage() {
     classesByDay.set(c.day_of_week, arr)
   }
 
-  // Enrolled count per class
+  // Enrolled count per class + credit-issue count
   const classIds = allClasses.map((c) => c.id)
   const { data: enrollCountsRaw } =
     classIds.length > 0
       ? await adminClient
           .from('enrollments')
-          .select('class_id')
+          .select('class_id, profiles(credits_balance, payment_type)')
           .in('class_id', classIds)
           .eq('is_active', true)
       : { data: [] }
 
   const enrollCountMap = new Map<string, number>()
-  for (const e of (enrollCountsRaw ?? []) as { class_id: string }[]) {
+  const noCreditMap = new Map<string, number>()
+  for (const e of (enrollCountsRaw ?? []) as unknown as { class_id: string; profiles: { credits_balance: number; payment_type: string } | { credits_balance: number; payment_type: string }[] | null }[]) {
     enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
+    const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
+    if (p && p.payment_type !== 'wellhub' && p.payment_type !== 'totalpass' && p.credits_balance < 1) {
+      noCreditMap.set(e.class_id, (noCreditMap.get(e.class_id) ?? 0) + 1)
+    }
   }
 
   const dayNumber = new Date().getDay() // 0=Sunday
@@ -177,12 +183,19 @@ export default async function GradePage() {
                       <p className="text-xs text-slate-400 mb-1">
                         {formatTime(c.start_time)} – {formatTime(c.end_time)}
                       </p>
-                      {/* Row 3: vagas */}
-                      <p className={`text-xs ${spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}`}>
-                        {enrolled}/{c.max_students} vagas
-                      </p>
+                      {/* Row 3: vagas + alerta de crédito */}
+                      <div className="flex items-center justify-between">
+                        <p className={`text-xs ${spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}`}>
+                          {enrolled}/{c.max_students} vagas
+                        </p>
+                        {(noCreditMap.get(c.id) ?? 0) > 0 && (
+                          <span className="text-xs text-yellow-400 font-medium">
+                            ⚠️ {noCreditMap.get(c.id)} sem crédito
+                          </span>
+                        )}
+                      </div>
                       <GenerateSessionsButton classId={c.id} />
-
+                      <DeleteClassButton classId={c.id} className={c.name} />
                     </Card>
                   )
                 })}

@@ -88,7 +88,6 @@ export async function enrollStudentInClass(
   if ((enrolled ?? 0) >= cls.max_students) return { error: 'Turma lotada.' }
 
   // Upsert handles re-enrollment of previously cancelled students
-  // (unique constraint on student_id+class_id prevents plain INSERT from working)
   const { error } = await adminClient.from('enrollments').upsert(
     {
       student_id: studentId,
@@ -101,6 +100,65 @@ export async function enrollStudentInClass(
   )
 
   if (error) return { error: `Erro ao criar matrícula: ${error.message}` }
+
+  // Deduct 1 credit and book the next upcoming session (if any)
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const { data: nextSession } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+    .eq('status', 'scheduled')
+    .order('session_date', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  const { data: studentProfile } = await adminClient
+    .from('profiles')
+    .select('credits_balance, full_name')
+    .eq('id', studentId)
+    .single()
+
+  const balance = (studentProfile?.credits_balance as number) ?? 0
+
+  if (nextSession && balance > 0) {
+    const sessionId = (nextSession as { id: string; session_date: string }).id
+    const sessionDate = (nextSession as { id: string; session_date: string }).session_date
+
+    // Check not already booked
+    const { count: alreadyBooked } = await adminClient
+      .from('session_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId)
+      .eq('session_id', sessionId)
+      .eq('status', 'confirmed')
+
+    if ((alreadyBooked ?? 0) === 0) {
+      await adminClient.from('session_bookings').insert({
+        student_id: studentId,
+        session_id: sessionId,
+        type: 'extra',
+        status: 'confirmed',
+        from_enrollment: true,
+        credit_used: true,
+      })
+
+      await adminClient.from('credit_transactions').insert({
+        student_id: studentId,
+        type: 'used',
+        amount: -1,
+        reason: `Matrícula fixa — aula ${sessionDate}`,
+        session_id: sessionId,
+        expires_at: null,
+      })
+
+      await adminClient
+        .from('profiles')
+        .update({ credits_balance: balance - 1 })
+        .eq('id', studentId)
+    }
+  }
+
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')
   return {}
@@ -232,6 +290,62 @@ export async function addDependent(
 }
 
 // ---------------------------------------------------------------------------
+// deleteClass — soft-delete a class and cancel all associated data
+// ---------------------------------------------------------------------------
+
+export async function deleteClass(classId: string): Promise<{ error?: string }> {
+  const { error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const now = new Date().toISOString()
+  const today = format(new Date(), 'yyyy-MM-dd')
+
+  // Cancel all future sessions
+  await adminClient
+    .from('class_sessions')
+    .update({ status: 'cancelled' })
+    .eq('class_id', classId)
+    .gte('session_date', today)
+    .neq('status', 'cancelled')
+
+  // Get future session IDs to cancel bookings
+  const { data: futureSessions } = await adminClient
+    .from('class_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+
+  const sessionIds = (futureSessions ?? []).map((s: { id: string }) => s.id)
+  if (sessionIds.length > 0) {
+    await adminClient
+      .from('session_bookings')
+      .update({ status: 'cancelled', cancelled_at: now })
+      .in('session_id', sessionIds)
+      .eq('status', 'confirmed')
+  }
+
+  // Cancel all active enrollments
+  await adminClient
+    .from('enrollments')
+    .update({ is_active: false, cancelled_at: now })
+    .eq('class_id', classId)
+    .eq('is_active', true)
+
+  // Soft-delete the class
+  const { error } = await adminClient
+    .from('classes')
+    .update({ is_active: false })
+    .eq('id', classId)
+
+  if (error) return { error: 'Erro ao excluir turma.' }
+
+  revalidatePath('/admin/grade')
+  revalidatePath('/admin/alunos')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // addCreditsManually — admin adds credits to any student (any amount, any reason)
 // ---------------------------------------------------------------------------
 
@@ -277,6 +391,134 @@ export async function addCreditsManually(
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
+}
+
+// ---------------------------------------------------------------------------
+// generateWeeklyBookings — for a class, creates session_bookings for enrolled
+// students in the next 14 days. Deducts credits; notifies if insufficient.
+// Returns lists of booked and skipped students for admin display.
+// ---------------------------------------------------------------------------
+
+export async function generateWeeklyBookings(
+  classId: string,
+): Promise<{ error?: string; booked?: string[]; skipped?: string[] }> {
+  const { error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const in14 = new Date()
+  in14.setDate(in14.getDate() + 14)
+  const in14Str = format(in14, 'yyyy-MM-dd')
+
+  // Get upcoming sessions for this class
+  const { data: sessionsRaw } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+    .lte('session_date', in14Str)
+    .eq('status', 'scheduled')
+
+  const sessions = (sessionsRaw ?? []) as { id: string; session_date: string }[]
+  if (sessions.length === 0) return { booked: [], skipped: [] }
+
+  // Get all enrolled students
+  const { data: enrollmentsRaw } = await adminClient
+    .from('enrollments')
+    .select('student_id, profiles(full_name, credits_balance, payment_type)')
+    .eq('class_id', classId)
+    .eq('is_active', true)
+
+  type EnrollRow = {
+    student_id: string
+    profiles: { full_name: string; credits_balance: number; payment_type: string } | null
+  }
+  const enrollments = (enrollmentsRaw ?? []) as unknown as EnrollRow[]
+  if (enrollments.length === 0) return { booked: [], skipped: [] }
+
+  const bookedNames: string[] = []
+  const skippedNames: string[] = []
+
+  for (const session of sessions) {
+    for (const enroll of enrollments) {
+      const studentId = enroll.student_id
+      const profile = Array.isArray(enroll.profiles) ? enroll.profiles[0] : enroll.profiles
+      if (!profile) continue
+
+      const paymentType = profile.payment_type
+      const needsCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
+
+      // Skip if already booked for this session
+      const { count: exists } = await adminClient
+        .from('session_bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('student_id', studentId)
+        .eq('session_id', session.id)
+        .eq('status', 'confirmed')
+
+      if ((exists ?? 0) > 0) continue
+
+      if (!needsCredit) {
+        // Wellhub / TotalPass — book without credit
+        await adminClient.from('session_bookings').insert({
+          student_id: studentId,
+          session_id: session.id,
+          type: 'extra',
+          status: 'confirmed',
+          from_enrollment: true,
+          credit_used: false,
+        })
+        if (!bookedNames.includes(profile.full_name)) bookedNames.push(profile.full_name)
+        continue
+      }
+
+      if (profile.credits_balance < 1) {
+        // No credit — notify student and skip
+        await adminClient.from('notifications').insert({
+          user_id: studentId,
+          type: 'no_credit',
+          title: 'Sem créditos para sua aula',
+          body: `Você não tem créditos suficientes para a aula de ${session.session_date}. Renove seu plano para garantir sua vaga.`,
+        })
+        if (!skippedNames.includes(profile.full_name)) skippedNames.push(profile.full_name)
+        continue
+      }
+
+      // Has credit — book and deduct
+      await adminClient.from('session_bookings').insert({
+        student_id: studentId,
+        session_id: session.id,
+        type: 'extra',
+        status: 'confirmed',
+        from_enrollment: true,
+        credit_used: true,
+      })
+
+      await adminClient.from('credit_transactions').insert({
+        student_id: studentId,
+        type: 'used',
+        amount: -1,
+        reason: `Aula fixa semanal — ${session.session_date}`,
+        session_id: session.id,
+        expires_at: null,
+      })
+
+      // Update cached balance
+      await adminClient
+        .from('profiles')
+        .update({ credits_balance: profile.credits_balance - 1 })
+        .eq('id', studentId)
+
+      // Decrement local balance so subsequent sessions see the updated value
+      profile.credits_balance -= 1
+
+      if (!bookedNames.includes(profile.full_name)) bookedNames.push(profile.full_name)
+    }
+  }
+
+  revalidatePath('/admin/grade')
+  return { booked: bookedNames, skipped: skippedNames }
 }
 
 // ---------------------------------------------------------------------------
