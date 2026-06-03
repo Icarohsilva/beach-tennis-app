@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BT App — Guia do Aluno · Academia Hudson Barros</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+
+    /* ─── Header ─── */
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 2px solid #f97316;
+      padding: 40px 32px 32px;
+      text-align: center;
+    }
+    header .logo-emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    header h1 { font-size: 32px; font-weight: 800; color: #f97316; letter-spacing: -0.5px; }
+    header p { font-size: 16px; color: #94a3b8; margin-top: 6px; }
+    header .subtitle {
+      display: inline-block;
+      margin-top: 16px;
+      background: #f97316;
+      color: white;
+      padding: 6px 20px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    /* ─── Main layout ─── */
+    .container { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* ─── Intro box ─── */
+    .intro-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-left: 4px solid #f97316;
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+    .intro-box h2 { font-size: 18px; color: #f97316; margin-bottom: 10px; }
+    .intro-box ul { padding-left: 20px; color: #94a3b8; font-size: 15px; }
+    .intro-box ul li { margin-bottom: 6px; }
+    .intro-box strong { color: #e2e8f0; }
+
+    /* ─── Steps ─── */
+    .step {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      align-items: start;
+      margin-bottom: 60px;
+      padding-bottom: 60px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .step:last-child { border-bottom: none; }
+    .step.reverse { direction: rtl; }
+    .step.reverse > * { direction: ltr; }
+
+    .step-text {}
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: #f97316;
+      color: white;
+      font-weight: 800;
+      font-size: 16px;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+    .step-text h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-text p {
+      color: #94a3b8;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+    .step-text .tip {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .step-text .tip strong { color: #f97316; }
+    .step-text ul {
+      padding-left: 18px;
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    .step-text ul li { margin-bottom: 6px; }
+    .badge {
+      display: inline-block;
+      background: #ea580c;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 999px;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .badge.green { background: #16a34a; }
+    .badge.blue { background: #2563eb; }
+
+    /* ─── Phone mockup ─── */
+    .phone-wrap {
+      display: flex;
+      justify-content: center;
+    }
+    .phone-frame {
+      background: #1e293b;
+      border: 3px solid #334155;
+      border-radius: 36px;
+      padding: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      max-width: 200px;
+      width: 100%;
+    }
+    .phone-frame img {
+      width: 100%;
+      border-radius: 28px;
+      display: block;
+    }
+
+    /* ─── Wide screenshot ─── */
+    .wide-frame {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .wide-frame img {
+      width: 100%;
+      border-radius: 8px;
+      display: block;
+    }
+
+    /* ─── Two phone side by side ─── */
+    .two-phones {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+    .two-phones .phone-frame { max-width: 160px; }
+
+    /* ─── Section title ─── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #f97316;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #334155;
+    }
+
+    /* ─── Feature grid ─── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .feature-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+    }
+    .feature-card .icon { font-size: 28px; margin-bottom: 8px; }
+    .feature-card h3 { font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+    .feature-card p { font-size: 12px; color: #64748b; }
+
+    /* ─── URL box ─── */
+    .url-box {
+      background: #0f172a;
+      border: 1px solid #f97316;
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-align: center;
+      margin: 32px 0;
+    }
+    .url-box p { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+    .url-box a {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f97316;
+      text-decoration: none;
+    }
+    .url-box a:hover { text-decoration: underline; }
+
+    /* ─── Footer ─── */
+    footer {
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      text-align: center;
+      padding: 32px;
+      color: #475569;
+      font-size: 13px;
+    }
+    footer strong { color: #f97316; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 640px) {
+      .step { grid-template-columns: 1fr; }
+      .step.reverse { direction: ltr; }
+      .feature-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media print {
+      body { background: white; color: #1e293b; }
+      header { background: white; border-color: #f97316; }
+      .step { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo-emoji">🎾</span>
+  <h1>BT App — Academia Hudson Barros</h1>
+  <p>O aplicativo oficial da sua academia de beach tennis</p>
+  <span class="subtitle">GUIA COMPLETO PARA ALUNOS</span>
+</header>
+
+<div class="container">
+
+  <!-- INTRO -->
+  <div class="intro-box">
+    <h2>Bem-vindo ao BT App! 👋</h2>
+    <p style="color:#94a3b8; font-size:15px; margin-bottom:12px;">
+      O BT App é o aplicativo da Academia Hudson Barros para você gerenciar suas aulas de beach tennis com facilidade. Pelo app você pode:
+    </p>
+    <ul>
+      <li><strong>Agendar aulas</strong> nas turmas disponíveis para o seu nível</li>
+      <li><strong>Ver seus créditos</strong> e histórico de frequência</li>
+      <li><strong>Entrar na lista de espera</strong> quando uma turma estiver cheia</li>
+      <li><strong>Cancelar aulas</strong> com reembolso de crédito (até 5h antes)</li>
+      <li><strong>Cadastrar seus filhos (Kids)</strong> para aulas infantis</li>
+      <li><strong>Participar da comunidade</strong> e ficar por dentro dos torneios</li>
+    </ul>
+  </div>
+
+  <div class="url-box">
+    <p>Acesse pelo navegador do celular ou computador:</p>
+    <a href="https://beach-tennis-app-pi.vercel.app" target="_blank">beach-tennis-app-pi.vercel.app</a>
+    <p style="margin-top:8px; font-size:12px; color:#475569;">💡 Dica: adicione à tela inicial do seu celular para acesso rápido</p>
+  </div>
+
+  <!-- RECURSOS -->
+  <div class="section-title">O que você pode fazer</div>
+  <div class="feature-grid">
+    <div class="feature-card"><div class="icon">📅</div><h3>Agendar Aulas</h3><p>Reserve sua vaga nas turmas da semana</p></div>
+    <div class="feature-card"><div class="icon">💳</div><h3>Créditos</h3><p>Acompanhe seu saldo mensal de aulas</p></div>
+    <div class="feature-card"><div class="icon">⏳</div><h3>Lista de Espera</h3><p>Entre na fila quando a turma lotar</p></div>
+    <div class="feature-card"><div class="icon">👧</div><h3>Kids</h3><p>Cadastre filhos para aulas infantis</p></div>
+    <div class="feature-card"><div class="icon">🏆</div><h3>Torneios</h3><p>Inscreva-se nos torneios Super 8</p></div>
+    <div class="feature-card"><div class="icon">💬</div><h3>Comunidade</h3><p>Interaja com outros alunos da academia</p></div>
+  </div>
+
+  <!-- PASSO 1: ACESSO -->
+  <div class="section-title">Passo a passo</div>
+
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">1</span> Tela de Boas-vindas</h2>
+      <p>
+        Ao acessar o aplicativo pela primeira vez, você verá a tela inicial da <strong>Academia Hudson Barros</strong>.
+      </p>
+      <ul>
+        <li>Clique em <strong>"Agendar aula experimental gratuita"</strong> se ainda não é aluno</li>
+        <li>Clique em <strong>"Entrar / Criar conta"</strong> para alunos já matriculados</li>
+      </ul>
+      <div class="tip">
+        <strong>💡 Dica:</strong> A aula experimental é gratuita e não precisa de cadastro prévio. Basta preencher um formulário rápido.
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/01-landing.png" alt="Tela inicial" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 2: LOGIN/CADASTRO -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+      <div class="two-phones">
+        <div class="phone-frame">
+          <img src="screenshots/02-login.png" alt="Tela de login" />
+        </div>
+        <div class="phone-frame">
+          <img src="screenshots/03-cadastro.png" alt="Tela de cadastro" />
+        </div>
+      </div>
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">2</span> Login e Cadastro</h2>
+      <p>
+        Para acessar o app, faça login com seu email e senha. Se for seu primeiro acesso, crie uma conta.
+      </p>
+      <ul>
+        <li>Informe seu <strong>nome completo</strong>, email e telefone</li>
+        <li>Crie uma senha de sua escolha</li>
+        <li>Clique em <strong>"Criar conta"</strong></li>
+      </ul>
+      <p>Já tem conta? Basta informar seu email e senha na tela <strong>"Entrar"</strong>.</p>
+      <div class="tip">
+        <strong>🔑 Esqueceu a senha?</strong> Clique em "Esqueci minha senha" para receber um link de redefinição no seu email.
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 3: HOME -->
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">3</span> Tela Inicial (Home)</h2>
+      <p>
+        Após o login, você chega ao <strong>painel principal</strong> com um resumo do seu dia.
+      </p>
+      <ul>
+        <li><strong>Créditos disponíveis</strong> — seu saldo de aulas do mês</li>
+        <li><strong>Próximas aulas</strong> — aulas que você já agendou</li>
+        <li>Link rápido <strong>"Agendar agora"</strong> quando não há aula marcada</li>
+      </ul>
+      <p>
+        A barra de navegação na parte inferior tem 5 seções:
+        <strong>Home · Aulas · Agendar (botão +) · Comunidade · Perfil</strong>
+      </p>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/04-home-aluno.png" alt="Home do aluno" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 4: AGENDAR -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">4</span> Agendar Aulas</h2>
+      <p>
+        Toque no botão <strong>laranja "+"</strong> no centro da barra inferior ou acesse <strong>Agendar</strong> para ver as turmas disponíveis.
+      </p>
+      <ul>
+        <li>O app mostra seu <strong>nível</strong> no topo (ex: Nível C)</li>
+        <li>São exibidas apenas as turmas compatíveis com seu nível</li>
+        <li>Cada turma mostra: <strong>dia/hora, nível e vagas disponíveis</strong></li>
+        <li>Clique em <strong>"Ver sessões disponíveis"</strong> para escolher a data</li>
+        <li>Clique em <strong>"Reservar"</strong> para confirmar — usa 1 crédito</li>
+      </ul>
+      <div class="tip">
+        <strong>📌 Regra de nível:</strong> Iniciante → D → C → B → A. Você pode fazer aulas do seu nível e dos níveis abaixo.
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 5: LISTA DE ESPERA -->
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">5</span> Lista de Espera <span class="badge">NOVO</span></h2>
+      <p>
+        Quando uma turma está <strong>lotada</strong>, você pode entrar na lista de espera e ser notificado quando uma vaga abrir.
+      </p>
+      <ul>
+        <li>Na turma lotada, aparece <strong>"Entrar na fila"</strong></li>
+        <li>Quando uma vaga surgir, você recebe um aviso <strong>🔔 "Vaga disponível!"</strong></li>
+        <li>Você terá <strong>1 hora</strong> para confirmar a presença</li>
+        <li>Se não confirmar no prazo, a vaga passa para o próximo na fila</li>
+        <li>Para sair da fila, clique em <strong>"Sair da fila"</strong> a qualquer momento</li>
+      </ul>
+      <div class="tip">
+        <strong>⚖️ Fila justa:</strong> A ordem é definida pela hora em que você entrou na lista. Primeiro a entrar, primeiro a ser chamado.
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/05b-agendar-com-turmas.png" alt="Lista de espera" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 6: MINHAS AULAS -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/06-aulas.png" alt="Minhas aulas" />
+      </div>
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">6</span> Minhas Aulas</h2>
+      <p>
+        Acesse a aba <strong>Aulas</strong> (ícone de calendário) para ver todas as sessões que você agendou.
+      </p>
+      <ul>
+        <li>Veja as próximas aulas agendadas</li>
+        <li>Veja quem mais vai estar na aula (<strong>"ver colegas"</strong>)</li>
+        <li>Para cancelar: clique na aula e confirme o cancelamento</li>
+      </ul>
+      <div class="tip">
+        <strong>⏰ Cancelamento com crédito:</strong> Se cancelar com mais de <strong>5 horas de antecedência</strong>, o crédito é devolvido automaticamente. Cancelamentos de última hora não têm reembolso.
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 7: PERFIL E CRÉDITOS -->
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">7</span> Perfil, Plano e Créditos</h2>
+      <p>
+        No <strong>Perfil</strong> (ícone de pessoa) você gerencia tudo relacionado à sua conta.
+      </p>
+      <ul>
+        <li><strong>Plano Ativo</strong> — seu plano atual, créditos por mês e data de renovação</li>
+        <li><strong>Créditos</strong> — saldo atual de aulas disponíveis (renova todo mês)</li>
+        <li><strong>Histórico de Pagamentos</strong> — registro de todas as mensalidades</li>
+        <li><strong>Dependentes (Kids)</strong> — adicione filhos para aulas infantis</li>
+        <li><strong>Ficha Médica</strong> — informações de emergência (visíveis só para você e o professor)</li>
+      </ul>
+      <p>Os planos disponíveis são:</p>
+      <ul>
+        <li><strong>Plano 2x</strong> — 2 aulas/semana · 8 créditos/mês</li>
+        <li><strong>Plano 3x</strong> — 3 aulas/semana · 12 créditos/mês</li>
+        <li><strong>Plano Master</strong> — 4 aulas/semana · 15 créditos/mês</li>
+        <li><strong>Plano Livre</strong> — 5 aulas/semana · 20 créditos/mês</li>
+      </ul>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/07c-perfil-plano-creditos.png" alt="Perfil e créditos" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 8: CRÉDITO EXTRA POR CANCELAMENTO -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/07c-perfil-plano-creditos.png" alt="Crédito extra" />
+      </div>
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">8</span> Crédito Extra <span class="badge green">BÔNUS</span></h2>
+      <p>
+        Assinantes que cancelam uma aula fixa com antecedência ganham um <strong>crédito de reposição</strong>.
+      </p>
+      <ul>
+        <li>Cancele com <strong>5h ou mais de antecedência</strong></li>
+        <li>Você ganha <strong>1 crédito extra</strong> sem data de expiração</li>
+        <li>Use o crédito para agendar uma aula avulsa em qualquer semana</li>
+        <li>Seção <strong>"Meus Créditos"</strong> no perfil mostra o histórico completo</li>
+      </ul>
+      <div class="tip">
+        <strong>💡 Dica:</strong> Créditos de reposição não expiram — você pode usar quando quiser!
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 9: COMUNIDADE -->
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">9</span> Comunidade</h2>
+      <p>
+        A aba <strong>Comunidade</strong> é o feed social da academia onde você pode se conectar com outros alunos.
+      </p>
+      <ul>
+        <li>Veja posts e fotos dos treinos</li>
+        <li>Curta e comente publicações dos colegas</li>
+        <li>Compartilhe momentos da quadra</li>
+        <li>Fique por dentro de eventos e novidades da academia</li>
+      </ul>
+      <div class="tip">
+        <strong>📸 Dica:</strong> Poste uma foto do seu treino! Clique no <strong>"+"</strong> no canto inferior direito da tela para criar um post.
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/08-comunidade.png" alt="Comunidade" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 10: TORNEIOS -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/09-torneios.png" alt="Torneios" />
+      </div>
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">10</span> Torneios</h2>
+      <p>
+        Participe dos torneios organizados pela academia! O formato principal é o <strong>Super 8</strong>.
+      </p>
+      <ul>
+        <li>Veja os torneios abertos para inscrição</li>
+        <li>Cada torneio tem nível mínimo exigido</li>
+        <li>Formatos: dupla fixa ou dupla revezando</li>
+        <li>Acompanhe o chaveamento e os resultados em tempo real</li>
+      </ul>
+      <div class="tip">
+        <strong>🏆 Super 8:</strong> 8 jogadores, duplas que mudam a cada rodada. Ótimo para conhecer todos os alunos e evoluir no jogo!
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 11: DAY USE -->
+  <div class="step">
+    <div class="step-text">
+      <h2><span class="step-number">11</span> Day Use (Quadra Avulsa)</h2>
+      <p>
+        Quer jogar fora do horário fixo? Reserve uma quadra avulsa pelo <strong>Day Use</strong>.
+      </p>
+      <ul>
+        <li>Acesse <strong>Agendar → Day Use disponível</strong></li>
+        <li>Veja os slots horários abertos</li>
+        <li>Reserve o horário desejado</li>
+        <li>Sem limite de participantes — traga seus amigos!</li>
+      </ul>
+      <div class="tip">
+        <strong>🏖️ Dica:</strong> O Day Use é perfeito para jogos entre amigos ou para praticar fora das aulas fixas.
+      </div>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/11-dayuse.png" alt="Day Use" />
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSO 12: AULA EXPERIMENTAL -->
+  <div class="step reverse">
+    <div class="phone-wrap">
+      <div class="phone-frame">
+        <img src="screenshots/10-experimental.png" alt="Aula experimental" />
+      </div>
+    </div>
+    <div class="step-text">
+      <h2><span class="step-number">12</span> Aula Experimental Gratuita</h2>
+      <p>
+        Conhece alguém que quer experimentar o beach tennis? A academia oferece <strong>aula experimental gratuita</strong> sem precisar criar conta.
+      </p>
+      <ul>
+        <li>Acesse a tela inicial sem fazer login</li>
+        <li>Clique em <strong>"Agendar aula experimental gratuita"</strong></li>
+        <li>Preencha nome, email e telefone</li>
+        <li>O professor entrará em contato para confirmar o horário</li>
+      </ul>
+      <div class="tip">
+        <strong>👋 Indique um amigo!</strong> Compartilhe este link com quem quiser conhecer o beach tennis — a primeira aula é por conta da academia.
+      </div>
+    </div>
+  </div>
+
+  <!-- DÚVIDAS FREQUENTES -->
+  <div class="section-title">Dúvidas Frequentes</div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 48px;">
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ Posso fazer aula de nível acima do meu?</h3>
+      <p style="font-size:13px;">Não. O app só mostra turmas do seu nível e dos níveis abaixo. O professor define seu nível na matrícula.</p>
+    </div>
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ O crédito expira?</h3>
+      <p style="font-size:13px;">Créditos mensais do plano renovam todo mês. Créditos de reposição (cancelamento com 5h+) não expiram.</p>
+    </div>
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ Posso cancelar com reembolso?</h3>
+      <p style="font-size:13px;">Sim, desde que cancele com mais de 5 horas de antecedência. O crédito volta automaticamente.</p>
+    </div>
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ Como cadast​rar meu filho(a)?</h3>
+      <p style="font-size:13px;">Vá em Perfil → Dependentes (Kids) → informe o nome e nível do dependente e clique em Adicionar.</p>
+    </div>
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ Wellhub / TotalPass funciona?</h3>
+      <p style="font-size:13px;">Sim! Check-in pelo Wellhub e TotalPass é registrado automaticamente — não precisa fazer nada no app.</p>
+    </div>
+    <div class="feature-card" style="text-align:left;">
+      <h3 style="margin-bottom:8px;">❓ Posso usar no computador?</h3>
+      <p style="font-size:13px;">Sim. O app funciona em qualquer navegador — celular, tablet ou computador. No celular, você pode instalar na tela inicial.</p>
+    </div>
+  </div>
+
+  <div class="url-box">
+    <p>Dúvidas? Fale com a academia:</p>
+    <strong style="color:#f97316; font-size:16px;">Academia Hudson Barros · Beach Tennis</strong>
+    <p style="margin-top:8px; font-size:13px; color:#475569;">Horários: Segunda a Sexta 7h – 22h · Sábado 7h – 12h</p>
+  </div>
+
+</div>
+
+<footer>
+  <p><strong>BT App</strong> · Academia Hudson Barros · Beach Tennis</p>
+  <p style="margin-top:4px;">Bom jogo! 🎾</p>
+</footer>
+
+</body>
+</html>

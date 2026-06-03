@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BT App — Guia do Administrador · Academia Hudson Barros</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 3px solid #f97316;
+      padding: 40px 32px 32px;
+      text-align: center;
+    }
+    header .logo-emoji { font-size: 48px; display: block; margin-bottom: 12px; }
+    header h1 { font-size: 32px; font-weight: 800; color: #f97316; letter-spacing: -0.5px; }
+    header p { font-size: 16px; color: #94a3b8; margin-top: 6px; }
+    header .subtitle {
+      display: inline-block;
+      margin-top: 16px;
+      background: #1e293b;
+      border: 2px solid #f97316;
+      color: #f97316;
+      padding: 6px 20px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    .intro-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-left: 4px solid #f97316;
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 48px;
+    }
+    .intro-box h2 { font-size: 18px; color: #f97316; margin-bottom: 10px; }
+    .intro-box ul { padding-left: 20px; color: #94a3b8; font-size: 15px; }
+    .intro-box ul li { margin-bottom: 6px; }
+    .intro-box strong { color: #e2e8f0; }
+
+    /* Wide step layout */
+    .step {
+      margin-bottom: 56px;
+      padding-bottom: 56px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .step:last-child { border-bottom: none; }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: #f97316;
+      color: white;
+      font-weight: 800;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .step-header h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .badge {
+      display: inline-block;
+      background: #ea580c;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      vertical-align: middle;
+    }
+    .badge.green { background: #16a34a; }
+    .badge.blue { background: #2563eb; }
+    .badge.orange { background: #d97706; }
+
+    .step-body {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+    .step-body.wide { grid-template-columns: 1fr; }
+    .step-body.img-left { grid-template-columns: 1fr 1.2fr; }
+
+    .step-text p {
+      color: #94a3b8;
+      font-size: 15px;
+      margin-bottom: 14px;
+    }
+    .step-text ul {
+      padding-left: 18px;
+      color: #94a3b8;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+    .step-text ul li { margin-bottom: 7px; }
+    .step-text strong { color: #e2e8f0; }
+
+    .tip {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .tip strong { color: #f97316; }
+
+    /* Desktop screenshot */
+    .desktop-frame {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 8px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    }
+    .desktop-frame .frame-bar {
+      display: flex;
+      gap: 6px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+    }
+    .frame-bar span {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .frame-bar .r { background: #ef4444; }
+    .frame-bar .y { background: #eab308; }
+    .frame-bar .g { background: #22c55e; }
+    .desktop-frame img {
+      width: 100%;
+      border-radius: 6px;
+      display: block;
+    }
+
+    /* Two screenshots side by side */
+    .two-screens {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .two-screens .desktop-frame img { border-radius: 4px; }
+
+    /* Section title */
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #f97316;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #334155;
+    }
+
+    /* Quick actions grid */
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .quick-card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .quick-card .icon { font-size: 24px; margin-bottom: 6px; }
+    .quick-card h3 { font-size: 13px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+    .quick-card p { font-size: 12px; color: #64748b; }
+
+    /* URL box */
+    .url-box {
+      background: #0f172a;
+      border: 1px solid #f97316;
+      border-radius: 12px;
+      padding: 20px 24px;
+      text-align: center;
+      margin: 32px 0;
+    }
+    .url-box p { font-size: 13px; color: #64748b; margin-bottom: 6px; }
+    .url-box a { font-size: 18px; font-weight: 700; color: #f97316; text-decoration: none; }
+
+    /* Alert box */
+    .alert-box {
+      background: #1c1917;
+      border: 1px solid #78350f;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 13px;
+      color: #a16207;
+    }
+    .alert-box strong { color: #f97316; }
+
+    /* Workflow */
+    .workflow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .wf-step {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+    .wf-arrow { color: #f97316; font-size: 16px; }
+
+    footer {
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      text-align: center;
+      padding: 32px;
+      color: #475569;
+      font-size: 13px;
+    }
+    footer strong { color: #f97316; }
+
+    @media (max-width: 700px) {
+      .step-body, .step-body.img-left { grid-template-columns: 1fr; }
+      .two-screens { grid-template-columns: 1fr; }
+      .quick-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media print {
+      body { background: white; color: #1e293b; }
+      .step { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="logo-emoji">⚙️</span>
+  <h1>BT App — Painel Admin</h1>
+  <p>Academia Hudson Barros · Guia de Operação</p>
+  <span class="subtitle">MANUAL DO ADMINISTRADOR</span>
+</header>
+
+<div class="container">
+
+  <!-- INTRO -->
+  <div class="intro-box">
+    <h2>Visão Geral do Painel Admin 🎛️</h2>
+    <p style="color:#94a3b8; font-size:15px; margin-bottom:12px;">
+      O Painel Admin é a central de controle da academia. Aqui você gerencia alunos, turmas, chamadas, notificações e muito mais. O painel é acessado em um endereço separado dos alunos, protegido por credenciais de administrador.
+    </p>
+    <ul>
+      <li><strong>Dashboard</strong> — visão geral: alunos ativos, assinaturas, aulas do dia</li>
+      <li><strong>Alunos</strong> — cadastros, planos, histórico e dependentes</li>
+      <li><strong>Grade de Aulas</strong> — turmas semanais, sessões, chamada eletrônica</li>
+      <li><strong>Financeiro</strong> — histórico de pagamentos e assinaturas</li>
+      <li><strong>Notificações</strong> — envio de avisos para alunos</li>
+      <li><strong>Torneios</strong> — gerenciamento de torneios Super 8</li>
+    </ul>
+  </div>
+
+  <div class="url-box">
+    <p>Acesso admin (use suas credenciais de administrador):</p>
+    <a href="https://beach-tennis-app-pi.vercel.app/admin/dashboard" target="_blank">beach-tennis-app-pi.vercel.app/admin/dashboard</a>
+  </div>
+
+  <!-- ═══ SEÇÃO 1: DASHBOARD ═══ -->
+  <div class="section-title">1. Dashboard — Visão Geral</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">1</div>
+      <h2>Painel Principal (Dashboard)</h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          Ao fazer login como admin, você acessa o <strong>Dashboard</strong> com os principais indicadores da academia em tempo real.
+        </p>
+        <ul>
+          <li><strong>Alunos ativos</strong> — total de alunos cadastrados</li>
+          <li><strong>Assinaturas ativas</strong> — planos pagantes vigentes</li>
+          <li><strong>Aulas hoje</strong> — quantidade de turmas no dia corrente</li>
+          <li><strong>Experimentais pendentes</strong> — solicitações de aula grátis aguardando contato</li>
+        </ul>
+        <p>
+          A seção <strong>"Aulas de Hoje"</strong> mostra as turmas do dia com link direto para fazer a chamada.
+        </p>
+        <p>
+          As <strong>"Ações Rápidas"</strong> levam diretamente para as funções mais usadas: nova turma, day use, gerenciar alunos, financeiro, enviar notificação e torneios.
+        </p>
+        <div class="tip">
+          <strong>💡 Dica:</strong> Use o Dashboard todo dia para checar quais aulas acontecem hoje e ir direto à chamada sem navegar pelo menu.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/12-admin-dashboard.png" alt="Admin Dashboard" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 2: ALUNOS ═══ -->
+  <div class="section-title">2. Gestão de Alunos</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">2</div>
+      <h2>Lista de Alunos</h2>
+    </div>
+    <div class="step-body img-left">
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/13-admin-alunos.png" alt="Lista de alunos" />
+        </div>
+      </div>
+      <div class="step-text">
+        <p>
+          Em <strong>Alunos</strong> você tem a listagem completa com busca e filtros por nível.
+        </p>
+        <ul>
+          <li>Busca por nome ou email</li>
+          <li>Filtro por nível: Iniciante, D, C, B, A</li>
+          <li>Cada card mostra: nome, nível, plano ativo e turmas fixas</li>
+          <li>Clique no aluno para ver o perfil completo</li>
+        </ul>
+        <div class="tip">
+          <strong>📊 Plano exibido:</strong> O sistema mostra o nome real do plano do aluno (Plano 2x, 3x, Master, Livre) ou "Avulso" para quem não tem assinatura ativa.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">3</div>
+      <h2>Perfil Detalhado do Aluno</h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          Ao clicar em um aluno, você acessa o perfil completo com todas as informações.
+        </p>
+        <ul>
+          <li><strong>Dados pessoais</strong> — nome, email, telefone, nível</li>
+          <li><strong>Plano e créditos</strong> — plano ativo, créditos disponíveis</li>
+          <li><strong>Histórico de frequência</strong> — aulas realizadas e faltas</li>
+          <li><strong>Turmas fixas</strong> — turmas em que o aluno está matriculado</li>
+          <li><strong>Dependentes</strong> — filhos vinculados à conta</li>
+          <li><strong>Associar plano</strong> — você pode atribuir/alterar o plano do aluno diretamente</li>
+        </ul>
+        <div class="alert-box">
+          <strong>⚠️ Atenção:</strong> Para associar um plano a um dependente (Kids), acesse o perfil do responsável e use a seção Dependentes.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/21-admin-aluno-detalhe.png" alt="Detalhe do aluno" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 3: GRADE ═══ -->
+  <div class="section-title">3. Grade de Aulas</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">4</div>
+      <h2>Grade Semanal de Aulas</h2>
+    </div>
+    <div class="step-body img-left">
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/14-admin-grade.png" alt="Grade de aulas" />
+        </div>
+      </div>
+      <div class="step-text">
+        <p>
+          A <strong>Grade de Aulas</strong> mostra todas as turmas da semana organizadas por dia.
+        </p>
+        <ul>
+          <li>Todas as turmas ativas ordenadas por dia da semana</li>
+          <li>Cada turma mostra: nome, nível, horário e quantidade de inscritos</li>
+          <li>Badge colorido indica o nível (INICIANTE, D, C, B, A) e se é Kids</li>
+          <li>Clique em <strong>"Fazer chamada →"</strong> para registrar presenças</li>
+          <li>Botão <strong>"Gerar Sessões (90 dias)"</strong> para criar sessões futuras</li>
+        </ul>
+        <div class="tip">
+          <strong>📅 Sessões:</strong> O sistema gera automaticamente as sessões dos próximos 90 dias ao criar uma nova turma. Você pode gerar manualmente a qualquer momento.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">5</div>
+      <h2>Chamada Eletrônica <span class="badge green">ESSENCIAL</span></h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          A chamada é o momento de registrar quem compareceu à aula. Acesse clicando em <strong>"Fazer chamada"</strong> na grade ou no Dashboard.
+        </p>
+        <ul>
+          <li>Veja quantos alunos estão inscritos na sessão</li>
+          <li>Lista de todos os alunos com checkbox de presença</li>
+          <li>Clique em <strong>"Iniciar Aula"</strong> para começar o registro</li>
+          <li>Marque os presentes um a um</li>
+          <li>Clique em <strong>"Salvar Chamada"</strong> para confirmar</li>
+        </ul>
+        <div class="workflow">
+          <div class="wf-step">Abrir sessão do dia</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step">Clicar "Iniciar Aula"</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step">Marcar presentes</div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step">Salvar chamada</div>
+        </div>
+        <div class="tip">
+          <strong>✅ Importante:</strong> Após salvar a chamada, os alunos ausentes sem justificativa terão a falta registrada no histórico. Alunos do Wellhub/TotalPass têm presença marcada automaticamente via webhook.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/15-admin-chamada.png" alt="Chamada eletrônica" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">6</div>
+      <h2>Criar Nova Turma</h2>
+    </div>
+    <div class="step-body img-left">
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/19-admin-nova-turma.png" alt="Nova turma" />
+        </div>
+      </div>
+      <div class="step-text">
+        <p>
+          Para criar uma nova turma, acesse <strong>Grade → + Nova Turma</strong>.
+        </p>
+        <ul>
+          <li><strong>Nome da turma</strong> — ex: "Terça 18h Iniciante"</li>
+          <li><strong>Nível</strong> — Iniciante, D, C, B ou A</li>
+          <li><strong>Dia da semana</strong> — segunda a sábado</li>
+          <li><strong>Horário</strong> — hora de início e fim</li>
+          <li><strong>Máximo de alunos</strong> — limite de vagas por sessão</li>
+          <li><strong>Kids</strong> — marque se for turma infantil</li>
+        </ul>
+        <p>
+          Após criar, o sistema gera automaticamente as sessões dos <strong>próximos 90 dias</strong>.
+        </p>
+        <div class="tip">
+          <strong>✏️ Editar turma:</strong> Para editar uma turma existente, acesse a grade, clique na turma e clique em "Editar". Você pode alterar horário, capacidade e outros dados.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 4: NOTIFICAÇÕES ═══ -->
+  <div class="section-title">4. Notificações</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">7</div>
+      <h2>Enviar Notificações para Alunos</h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          Use a seção <strong>Notificações</strong> para enviar avisos e comunicados para os alunos da academia.
+        </p>
+        <ul>
+          <li><strong>Título</strong> — assunto da notificação</li>
+          <li><strong>Mensagem</strong> — corpo do aviso</li>
+          <li><strong>Destinatários</strong> — todos os alunos ou grupo específico</li>
+          <li><strong>Tipo</strong> — informativo, urgente, evento, etc.</li>
+        </ul>
+        <p>Exemplos de uso:</p>
+        <ul>
+          <li>Avisar sobre cancelamento de aula por chuva</li>
+          <li>Convocar para torneio ou evento especial</li>
+          <li>Comunicar mudança de horário</li>
+          <li>Lembrete de pagamento ou renovação de plano</li>
+        </ul>
+        <div class="tip">
+          <strong>📣 Nota:</strong> Notificações em tempo real via Push/WhatsApp estarão disponíveis na próxima fase do sistema. No momento, as notificações ficam visíveis no app.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/16-admin-notificacoes.png" alt="Notificações" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 5: FINANCEIRO ═══ -->
+  <div class="section-title">5. Financeiro</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">8</div>
+      <h2>Histórico Financeiro</h2>
+    </div>
+    <div class="step-body img-left">
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/17-admin-financeiro.png" alt="Financeiro" />
+        </div>
+      </div>
+      <div class="step-text">
+        <p>
+          A seção <strong>Financeiro</strong> mostra o histórico de todas as transações e assinaturas da academia.
+        </p>
+        <ul>
+          <li>Histórico de pagamentos por aluno</li>
+          <li>Assinaturas ativas e data de vencimento</li>
+          <li>Status: pago, pendente, cancelado</li>
+          <li>Valor pago por período</li>
+        </ul>
+        <div class="alert-box">
+          <strong>💳 Integração Mercado Pago:</strong> O módulo de cobrança automática (boleto, cartão, PIX) está planejado para a próxima fase. No momento, pagamentos são registrados manualmente.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 6: TORNEIOS ═══ -->
+  <div class="section-title">6. Torneios</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">9</div>
+      <h2>Gerenciar Torneios Super 8</h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          Crie e gerencie os torneios mensais da academia pelo painel de <strong>Torneios</strong>.
+        </p>
+        <ul>
+          <li><strong>Criar torneio</strong> — nome, datas, nível mínimo, formato, vagas</li>
+          <li><strong>Inscrições</strong> — os alunos se inscrevem pelo app</li>
+          <li><strong>Chaveamento</strong> — bracket gerado automaticamente</li>
+          <li><strong>Resultados</strong> — registre o placar de cada partida</li>
+          <li><strong>Status</strong> — aberto, em andamento, finalizado</li>
+        </ul>
+        <p>Formatos disponíveis:</p>
+        <ul>
+          <li><strong>Super 8</strong> — 8 jogadores com duplas revezando (formato principal)</li>
+          <li><strong>Dupla fixa</strong> — parceiros definidos do início ao fim</li>
+        </ul>
+        <div class="tip">
+          <strong>🏆 Super 8:</strong> No formato Super 8, cada rodada forma duplas diferentes. Todos jogam com todos ao longo do torneio, tornando o evento muito dinâmico e divertido.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/18-admin-torneios.png" alt="Torneios" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 7: DAY USE ═══ -->
+  <div class="section-title">7. Day Use</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">10</div>
+      <h2>Gerenciar Day Use (Quadra Avulsa)</h2>
+    </div>
+    <div class="step-body img-left">
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/11-dayuse.png" alt="Day Use" />
+        </div>
+      </div>
+      <div class="step-text">
+        <p>
+          O <strong>Day Use</strong> permite criar slots de horário para reserva avulsa de quadra, sem turma fixa.
+        </p>
+        <ul>
+          <li>Acesse <strong>Grade → Day Use</strong> ou <strong>Dashboard → Day Use</strong></li>
+          <li>Crie um novo slot com data, horário e capacidade</li>
+          <li>Os alunos veem e reservam os slots disponíveis no app</li>
+          <li>Perfeito para horários extras, treino livre ou eventos pontuais</li>
+        </ul>
+        <div class="tip">
+          <strong>🏖️ Sem limite de nível:</strong> Day Use não exige nível mínimo — qualquer aluno pode reservar, independente do nível.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SEÇÃO 8: CONFIGURAÇÕES ═══ -->
+  <div class="section-title">8. Configurações</div>
+
+  <div class="step">
+    <div class="step-header">
+      <div class="step-number">11</div>
+      <h2>Configurações do Sistema</h2>
+    </div>
+    <div class="step-body">
+      <div class="step-text">
+        <p>
+          Em <strong>Configurações</strong> você personaliza o sistema para a academia.
+        </p>
+        <ul>
+          <li><strong>Planos de assinatura</strong> — crie, edite e desative planos (preços, créditos, frequência)</li>
+          <li><strong>Configurações gerais</strong> — nome da academia, horários de funcionamento</li>
+          <li><strong>Níveis</strong> — hierarquia: Iniciante → D → C → B → A</li>
+        </ul>
+        <div class="tip">
+          <strong>💡 Planos personalizados:</strong> Você pode criar quantos planos quiser com valores, créditos e frequências diferentes para atender diferentes perfis de alunos.
+        </div>
+      </div>
+      <div>
+        <div class="desktop-frame">
+          <div class="frame-bar"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+          <img src="screenshots/20-admin-configuracoes.png" alt="Configurações" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ FLUXO DIÁRIO ═══ -->
+  <div class="section-title">Fluxo de Operação Diária</div>
+
+  <div class="quick-grid">
+    <div class="quick-card">
+      <div class="icon">🌅</div>
+      <h3>Manhã</h3>
+      <p>Abra o Dashboard. Veja as aulas do dia. Verifique experimentais pendentes para entrar em contato.</p>
+    </div>
+    <div class="quick-card">
+      <div class="icon">📋</div>
+      <h3>Antes da aula</h3>
+      <p>Clique em "Fazer chamada" da turma do dia. Confira os alunos inscritos.</p>
+    </div>
+    <div class="quick-card">
+      <div class="icon">✅</div>
+      <h3>Durante a aula</h3>
+      <p>Clique "Iniciar Aula". Marque os presentes. Salve a chamada ao final.</p>
+    </div>
+    <div class="quick-card">
+      <div class="icon">🔔</div>
+      <h3>Lista de espera</h3>
+      <p>O sistema gerencia automaticamente a fila a cada 15 min. Nenhuma ação necessária.</p>
+    </div>
+    <div class="quick-card">
+      <div class="icon">💬</div>
+      <h3>Comunicados</h3>
+      <p>Use Notificações para avisar sobre cancelamentos, eventos ou mudanças de horário.</p>
+    </div>
+    <div class="quick-card">
+      <div class="icon">👤</div>
+      <h3>Novos alunos</h3>
+      <p>Alunos se cadastram sozinhos. Você define o nível e associa o plano no perfil deles.</p>
+    </div>
+  </div>
+
+  <!-- FUNCIONALIDADES FUTURAS -->
+  <div class="section-title">Próximas Funcionalidades</div>
+  <div style="background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px 28px; margin-bottom: 48px;">
+    <p style="color:#64748b; font-size:14px; margin-bottom:16px;">As funcionalidades abaixo já foram planejadas e serão lançadas nas próximas atualizações:</p>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <p style="color:#94a3b8; font-size:14px; margin-bottom:8px;"><strong style="color:#f97316;">📱 Notificações Push</strong></p>
+        <p style="color:#64748b; font-size:13px;">Avisos automáticos no celular do aluno (PWA Web Push)</p>
+      </div>
+      <div>
+        <p style="color:#94a3b8; font-size:14px; margin-bottom:8px;"><strong style="color:#f97316;">💳 Mercado Pago</strong></p>
+        <p style="color:#64748b; font-size:13px;">Cobrança automática de mensalidades via boleto, cartão e PIX</p>
+      </div>
+      <div>
+        <p style="color:#94a3b8; font-size:14px; margin-bottom:8px;"><strong style="color:#f97316;">📧 Email / WhatsApp</strong></p>
+        <p style="color:#64748b; font-size:13px;">Envio de notificações por email (Resend) e WhatsApp (Z-API)</p>
+      </div>
+      <div>
+        <p style="color:#94a3b8; font-size:14px; margin-bottom:8px;"><strong style="color:#f97316;">📊 Relatórios</strong></p>
+        <p style="color:#64748b; font-size:13px;">Painel financeiro completo com inadimplência e faturamento</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="url-box">
+    <p>Painel administrativo disponível em:</p>
+    <a href="https://beach-tennis-app-pi.vercel.app/admin/dashboard" target="_blank">beach-tennis-app-pi.vercel.app/admin/dashboard</a>
+    <p style="margin-top:8px; font-size:12px; color:#475569;">Mantenha suas credenciais de admin em segurança — nunca as compartilhe com alunos.</p>
+  </div>
+
+</div>
+
+<footer>
+  <p><strong>BT App</strong> · Academia Hudson Barros · Painel Administrativo</p>
+  <p style="margin-top:4px;">Versão 2.0 · Junho 2026</p>
+</footer>
+
+</body>
+</html>
