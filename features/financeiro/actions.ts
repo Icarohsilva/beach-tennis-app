@@ -280,6 +280,63 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
 }
 
 // ---------------------------------------------------------------------------
+// adminCancelStudentPlan — admin cancels a student's plan, optionally zeroing credits
+// ---------------------------------------------------------------------------
+
+export async function adminCancelStudentPlan(
+  studentId: string,
+  clearCredits: boolean,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  const { data: caller } = await adminClient.from('profiles').select('role').eq('id', user.id).single()
+  if (caller?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { data: sub } = await adminClient
+    .from('student_subscriptions')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!sub) return { error: 'Nenhum plano ativo encontrado.' }
+
+  await adminClient
+    .from('student_subscriptions')
+    .update({ status: 'cancelled' })
+    .eq('id', sub.id)
+
+  if (clearCredits) {
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('credits_balance')
+      .eq('id', studentId)
+      .single()
+
+    const balance = (profile?.credits_balance as number) ?? 0
+    if (balance !== 0) {
+      await adminClient.from('credit_transactions').insert({
+        student_id: studentId,
+        type: 'expired',
+        amount: -balance,
+        reason: 'Cancelamento de plano pelo admin — créditos zerados',
+        session_id: null,
+        expires_at: null,
+      })
+      await adminClient.from('profiles').update({ credits_balance: 0 }).eq('id', studentId)
+    }
+  }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath(`/admin/alunos/${studentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // applyDiscount (admin only)
 // ---------------------------------------------------------------------------
 

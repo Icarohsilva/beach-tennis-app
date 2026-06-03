@@ -87,13 +87,20 @@ export async function enrollStudentInClass(
 
   if ((enrolled ?? 0) >= cls.max_students) return { error: 'Turma lotada.' }
 
-  const { error } = await adminClient.from('enrollments').insert({
-    student_id: studentId,
-    class_id: classId,
-    is_active: true,
-  })
+  // Upsert handles re-enrollment of previously cancelled students
+  // (unique constraint on student_id+class_id prevents plain INSERT from working)
+  const { error } = await adminClient.from('enrollments').upsert(
+    {
+      student_id: studentId,
+      class_id: classId,
+      is_active: true,
+      enrolled_at: new Date().toISOString(),
+      cancelled_at: null,
+    },
+    { onConflict: 'student_id,class_id' },
+  )
 
-  if (error) return { error: 'Erro ao criar matrícula.' }
+  if (error) return { error: `Erro ao criar matrícula: ${error.message}` }
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')
   return {}

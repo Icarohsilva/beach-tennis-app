@@ -13,7 +13,7 @@ import {
   addDependent,
   addCreditsManually,
 } from '@/features/aulas/adminActions'
-import { adminSubscribeStudentToPlan } from '@/features/financeiro/actions'
+import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -96,6 +96,7 @@ export function StudentProfileClient({
 
   const [creditAmount, setCreditAmount] = useState('')
   const [creditReason, setCreditReason] = useState('')
+  const [showCancelPlanDialog, setShowCancelPlanDialog] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -223,6 +224,21 @@ export function StudentProfileClient({
       setCreditAmount('')
       setCreditReason('')
       notify(`${parsed > 0 ? '+' : ''}${parsed} crédito${Math.abs(parsed) !== 1 ? 's' : ''} ${parsed > 0 ? 'adicionado' : 'removido'}.`)
+    })
+  }
+
+  function handleCancelPlan(clearCredits: boolean) {
+    setShowCancelPlanDialog(false)
+    setError(null)
+    startTransition(async () => {
+      const result = await adminCancelStudentPlan(studentId, clearCredits)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setActiveSub(null)
+      if (clearCredits) setCreditsBalance(0)
+      notify('Plano cancelado.')
     })
   }
 
@@ -447,11 +463,60 @@ export function StudentProfileClient({
           {/* Current plan */}
           {activeSub?.plan ? (
             <div className="px-4 py-3 bg-surface-card border border-surface-border rounded-xl mb-4">
-              <p className="text-white text-sm font-medium">{activeSub.plan.name}</p>
-              <p className="text-xs text-green-400 mt-0.5">Ativo desde {new Date(activeSub.starts_at).toLocaleDateString('pt-BR')}</p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-white text-sm font-medium">{activeSub.plan.name}</p>
+                  <p className="text-xs text-green-400 mt-0.5">
+                    Ativo desde {new Date(activeSub.starts_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setShowCancelPlanDialog(true)}
+                  className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50 shrink-0"
+                >
+                  Remover plano
+                </button>
+              </div>
             </div>
           ) : (
             <p className="text-slate-500 text-sm mb-3">Nenhum plano ativo.</p>
+          )}
+
+          {/* Cancel plan confirmation dialog */}
+          {showCancelPlanDialog && (
+            <div className="bg-red-950/40 border border-red-800/50 rounded-xl px-4 py-3 mb-4 space-y-3">
+              <p className="text-white text-sm font-semibold">Remover plano do aluno?</p>
+              <p className="text-slate-300 text-xs">
+                Deseja também zerar os créditos do aluno ({creditsBalance} crédito{creditsBalance !== 1 ? 's' : ''})?
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  loading={isPending}
+                  onClick={() => handleCancelPlan(true)}
+                >
+                  Remover plano e zerar créditos
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={isPending}
+                  onClick={() => handleCancelPlan(false)}
+                >
+                  Remover plano, manter créditos
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelPlanDialog(false)}
+                  className="text-xs text-slate-400 hover:text-white underline"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Assign plan */}
