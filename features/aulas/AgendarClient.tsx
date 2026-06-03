@@ -2,7 +2,7 @@
 // features/aulas/AgendarClient.tsx
 
 import { useState, useTransition } from 'react'
-import { bookNextSession, cancelBooking } from './actions'
+import { bookNextSession, cancelBooking, skipEnrollmentSession } from './actions'
 import { joinWaitlist, leaveWaitlist, acceptWaitlistSpot } from './waitlistActions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -64,6 +64,17 @@ export function AgendarClient({
       const result = await cancelBooking(bookingId)
       if (result.error) setError(result.error)
       else setSuccess('Agendamento cancelado.')
+    })
+  }
+
+  function handleSkip() {
+    if (!bookingId) return
+    setError('')
+    setSuccess('')
+    startTransition(async () => {
+      const result = await skipEnrollmentSession(bookingId)
+      if (result.error) setError(result.error)
+      else setSuccess('Falta registrada. Crédito devolvido sem vencimento.')
     })
   }
 
@@ -143,7 +154,28 @@ export function AgendarClient({
 
       {/* Action area */}
       {isEnrolled ? (
-        <Badge variant="success">Aluno fixo</Badge>
+        hasBooking && bookingId ? (
+          <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
+            <div className="flex items-center gap-2">
+              <Badge variant="success">Aluno fixo</Badge>
+              {nextSession && (
+                <span className="text-xs text-slate-400">
+                  {formatDate(nextSession.session_date, "EEE, dd/MM")}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={handleSkip}
+              className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            >
+              Sair desta aula
+            </button>
+          </div>
+        ) : (
+          <Badge variant="success">Aluno fixo</Badge>
+        )
       ) : waitlistEntry?.status === 'offered' ? (
         <div className="bg-brand-600/20 border border-brand-500/50 rounded-xl px-3 py-2 space-y-2">
           <p className="text-xs text-brand-400 font-semibold">

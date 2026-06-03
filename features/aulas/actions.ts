@@ -244,6 +244,73 @@ export async function bookSession(
 }
 
 // ---------------------------------------------------------------------------
+// skipEnrollmentSession — fixed student skips one specific session.
+// Always refunds 1 non-expiring credit regardless of timing.
+// Does NOT cancel the enrollment (student stays fixed for future weeks).
+// ---------------------------------------------------------------------------
+
+export async function skipEnrollmentSession(bookingId: string): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  const { data: booking } = await adminClient
+    .from('session_bookings')
+    .select('id, student_id, session_id, status, credit_used, from_enrollment')
+    .eq('id', bookingId)
+    .single()
+
+  if (!booking) return { error: 'Agendamento não encontrado.' }
+  if (booking.student_id !== user.id) return { error: 'Sem permissão.' }
+  if (booking.status !== 'confirmed') return { error: 'Este agendamento já foi cancelado.' }
+  if (!booking.from_enrollment) return { error: 'Use o cancelamento normal para aulas avulsas.' }
+
+  const now = new Date().toISOString()
+
+  const { error: cancelErr } = await adminClient
+    .from('session_bookings')
+    .update({ status: 'cancelled' as BookingStatus, cancelled_at: now })
+    .eq('id', bookingId)
+
+  if (cancelErr) return { error: 'Erro ao cancelar. Tente novamente.' }
+
+  // Always return a non-expiring credit when a fixed student skips
+  if (booking.credit_used) {
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('credits_balance')
+      .eq('id', user.id)
+      .single()
+
+    const balance = (profile?.credits_balance as number) ?? 0
+
+    await adminClient.from('credit_transactions').insert({
+      student_id: user.id,
+      type: 'refunded',
+      amount: 1,
+      reason: `Falta em aula fixa — crédito reposição sem vencimento`,
+      session_id: booking.session_id,
+      expires_at: null,
+    })
+
+    await adminClient
+      .from('profiles')
+      .update({ credits_balance: balance + 1 })
+      .eq('id', user.id)
+  }
+
+  // Open spot for next person on waitlist
+  await offerWaitlistSpot(booking.session_id)
+
+  revalidatePath('/home')
+  revalidatePath('/agendar')
+  revalidatePath('/aulas')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // cancelBooking
 // ---------------------------------------------------------------------------
 
