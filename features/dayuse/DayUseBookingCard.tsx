@@ -12,13 +12,15 @@ interface Props {
   slot: DayUseSlot
   bookingsCount: number
   myBookingId: string | null
+  attendees: string[]
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, attendees }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
   const [localCount, setLocalCount] = useState(bookingsCount)
+  const [showAttendees, setShowAttendees] = useState(false)
   const isFull = localCount >= slot.capacity
 
   async function handleBook() {
@@ -65,9 +67,25 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId }: Props) {
             {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
           </p>
           {slot.notes && <p className="text-slate-400 text-xs mt-0.5">{slot.notes}</p>}
-          <p className="text-slate-500 text-xs mt-1">
-            {localCount}/{slot.capacity} reservas
-          </p>
+          <button
+            type="button"
+            onClick={() => setShowAttendees((v) => !v)}
+            className="text-slate-500 text-xs mt-1 hover:text-slate-300 transition-colors flex items-center gap-1"
+          >
+            <span>👥 {localCount}/{slot.capacity} reservas</span>
+            <span>{showAttendees ? '▲' : '▼'}</span>
+          </button>
+          {showAttendees && (
+            <ul className="mt-1 pl-1 space-y-0.5">
+              {attendees.length === 0 ? (
+                <li className="text-xs text-slate-600">Nenhuma reserva ainda.</li>
+              ) : (
+                attendees.map((name, i) => (
+                  <li key={i} className="text-xs text-slate-400">{name}</li>
+                ))
+              )}
+            </ul>
+          )}
         </div>
         <div className="shrink-0">
           {bookingId ? (

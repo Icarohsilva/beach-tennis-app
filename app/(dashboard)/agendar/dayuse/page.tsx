@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DayUseBookingCard } from '@/features/dayuse/DayUseBookingCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
@@ -23,20 +23,33 @@ export default async function AgendarDayUsePage() {
   const slotList = (slots ?? []) as DayUseSlot[]
   const slotIds = slotList.map((s) => s.id)
 
+  // Use adminClient to bypass RLS and see all bookings + names
+  const adminClient = createAdminClient()
   const { data: allBookings } =
     slotIds.length > 0
-      ? await supabase
+      ? await adminClient
           .from('dayuse_bookings')
-          .select('id, slot_id, student_id')
+          .select('id, slot_id, student_id, profiles(full_name)')
           .in('slot_id', slotIds)
           .eq('status', 'confirmed')
       : { data: [] }
 
   const countMap = new Map<string, number>()
   const myBookings = new Map<string, string>()
-  for (const b of (allBookings ?? []) as { id: string; slot_id: string; student_id: string }[]) {
+  const attendeesMap = new Map<string, string[]>()
+
+  for (const b of (allBookings ?? []) as {
+    id: string
+    slot_id: string
+    student_id: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }[]) {
     countMap.set(b.slot_id, (countMap.get(b.slot_id) ?? 0) + 1)
     if (b.student_id === user.id) myBookings.set(b.slot_id, b.id)
+    const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
+    if (profile?.full_name) {
+      attendeesMap.set(b.slot_id, [...(attendeesMap.get(b.slot_id) ?? []), profile.full_name])
+    }
   }
 
   const byDate = new Map<string, DayUseSlot[]>()
@@ -75,6 +88,7 @@ export default async function AgendarDayUsePage() {
                   slot={slot}
                   bookingsCount={countMap.get(slot.id) ?? 0}
                   myBookingId={myBookings.get(slot.id) ?? null}
+                  attendees={attendeesMap.get(slot.id) ?? []}
                 />
               ))}
             </div>

@@ -71,7 +71,17 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
     sessionId = (newSession as { id: string }).id
   }
 
-  return bookSession(sessionId)
+  // Determine if a credit should be consumed (wellhub/totalpass don't use credits)
+  const { data: studentProfile } = await adminClient
+    .from('profiles')
+    .select('payment_type')
+    .eq('id', user.id)
+    .single()
+
+  const paymentType = (studentProfile as { payment_type: string } | null)?.payment_type
+  const useCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
+
+  return bookSession(sessionId, useCredit)
 }
 
 // ---------------------------------------------------------------------------
