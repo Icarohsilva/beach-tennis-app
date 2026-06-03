@@ -9,6 +9,7 @@ import type { Post, Profile } from '@/types'
 
 type PostWithAuthor = Post & {
   author: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
+  comment_count: number
 }
 
 interface ComunidadeClientProps {

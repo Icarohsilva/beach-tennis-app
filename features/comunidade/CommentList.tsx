@@ -22,9 +22,10 @@ interface Comment {
 interface CommentListProps {
   postId: string
   currentUserId: string
+  onCommentAdded?: () => void
 }
 
-export function CommentList({ postId, currentUserId }: CommentListProps) {
+export function CommentList({ postId, currentUserId, onCommentAdded }: CommentListProps) {
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [text, setText] = useState('')
@@ -77,6 +78,7 @@ export function CommentList({ postId, currentUserId }: CommentListProps) {
       const result = await addComment(postId, text.trim())
       if (!result?.error) {
         setText('')
+        onCommentAdded?.()
         // Re-fetch comments to get server data
         const supabase = createClient()
         const { data } = await supabase

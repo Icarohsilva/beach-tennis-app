@@ -8,6 +8,7 @@ import type { Post, Profile } from '@/types'
 
 type PostWithAuthor = Post & {
   author: Pick<Profile, 'id' | 'full_name' | 'avatar_url'>
+  comment_count: number
 }
 
 interface PostFeedProps {
@@ -16,7 +17,7 @@ interface PostFeedProps {
   initialLikedPostIds: string[]
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 20
 
 export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: PostFeedProps) {
   const [posts, setPosts] = useState<PostWithAuthor[]>(initialPosts)
@@ -25,7 +26,7 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
   const [hasMore, setHasMore] = useState(initialPosts.length === PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
 
-  // Subscribe to Realtime inserts on 'posts' channel
+  // Realtime: prepend new posts when inserted
   useEffect(() => {
     const supabase = createClient()
 
@@ -35,7 +36,6 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'posts' },
         async (payload) => {
-          // Fetch the full post with author
           const { data } = await supabase
             .from('posts')
             .select('id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
@@ -55,13 +55,13 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
               session_id: data.session_id,
               tournament_id: data.tournament_id,
               created_at: data.created_at,
+              comment_count: 0,
               author: (authorRaw as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>) ?? {
                 id: data.author_id,
                 full_name: 'Aluno',
                 avatar_url: null,
               },
             }
-            // Prepend new post only if it's not already in the list
             setPosts((prev) => {
               if (prev.some((p) => p.id === newPost.id)) return prev
               return [newPost, ...prev]
@@ -71,9 +71,7 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
       )
       .subscribe()
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const loadMore = useCallback(async () => {
@@ -88,6 +86,19 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
     if (data && data.length > 0) {
+      const postIds = data.map((d: { id: string }) => d.id)
+
+      // Fetch comment counts for new batch
+      const { data: ccRaw } = await supabase
+        .from('post_comments')
+        .select('post_id')
+        .in('post_id', postIds)
+
+      const ccMap: Record<string, number> = {}
+      for (const c of (ccRaw ?? []) as { post_id: string }[]) {
+        ccMap[c.post_id] = (ccMap[c.post_id] ?? 0) + 1
+      }
+
       const newPosts: PostWithAuthor[] = data.map((d) => {
         const authorRaw = Array.isArray((d as { author: unknown }).author)
           ? (d as { author: unknown[] }).author[0]
@@ -101,6 +112,7 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
           session_id: d.session_id,
           tournament_id: d.tournament_id,
           created_at: d.created_at,
+          comment_count: ccMap[d.id] ?? 0,
           author: (authorRaw as Pick<Profile, 'id' | 'full_name' | 'avatar_url'>) ?? {
             id: d.author_id,
             full_name: 'Aluno',

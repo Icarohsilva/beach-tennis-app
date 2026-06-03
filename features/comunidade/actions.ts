@@ -47,6 +47,9 @@ export async function createPost(params: {
 
   if (insertErr || !post) return { error: 'Erro ao criar post. Tente novamente.' }
 
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath('/comunidade')
+
   return { postId: post.id }
 }
 
