@@ -1,7 +1,7 @@
 'use client'
 // features/comunidade/PostFeed.tsx
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PostCard } from './PostCard'
 import type { Post, Profile } from '@/types'
@@ -25,6 +25,20 @@ export function PostFeed({ currentUserId, initialPosts, initialLikedPostIds }: P
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(initialPosts.length === PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
+  const isFirstRender = useRef(true)
+
+  // Sync with server data when initialPosts changes (triggered by router.refresh() after a new post)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setPosts((prev) => {
+      const existingIds = new Set(prev.map((p) => p.id))
+      const newOnes = initialPosts.filter((p) => !existingIds.has(p.id))
+      return newOnes.length > 0 ? [...newOnes, ...prev] : prev
+    })
+  }, [initialPosts])
 
   // Realtime: prepend new posts when inserted
   useEffect(() => {

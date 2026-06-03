@@ -2,6 +2,7 @@
 // app/(dashboard)/comunidade/ComunidadeClient.tsx
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { PostFeed } from '@/features/comunidade/PostFeed'
 import { CreatePost } from '@/features/comunidade/CreatePost'
@@ -23,7 +24,13 @@ export function ComunidadeClient({
   initialPosts,
   initialLikedPostIds,
 }: ComunidadeClientProps) {
+  const router = useRouter()
   const [showCreatePost, setShowCreatePost] = useState(false)
+
+  function handlePostCreated() {
+    setShowCreatePost(false)
+    router.refresh()  // Re-runs the server component → initialPosts gets the new post
+  }
 
   return (
     <div className="relative min-h-full pb-24">
@@ -54,7 +61,7 @@ export function ComunidadeClient({
       {showCreatePost && (
         <CreatePost
           onClose={() => setShowCreatePost(false)}
-          onPostCreated={() => setShowCreatePost(false)}
+          onPostCreated={handlePostCreated}
         />
       )}
     </div>
