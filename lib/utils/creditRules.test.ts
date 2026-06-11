@@ -15,11 +15,16 @@ describe('canCancelWithRefund', () => {
     expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(false)
   })
 
-  it('blocks cancellation exactly at window limit', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + CANCELLATION_WINDOW_HOURS)
-    // at exactly 5h: not strictly greater, so no refund
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(false)
+  it('allows cancellation exactly at window limit (>= 5h)', () => {
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T13:00:00-03:00'),
+    ).toBe(true)
+  })
+
+  it('blocks cancellation just inside the window', () => {
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T13:00:01-03:00'),
+    ).toBe(false)
   })
 })
 
