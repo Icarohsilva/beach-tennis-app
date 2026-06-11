@@ -4,15 +4,15 @@ import { canCancelWithRefund, getMakeupCreditExpiry, CANCELLATION_WINDOW_HOURS }
 
 describe('canCancelWithRefund', () => {
   it('allows cancellation 6 hours before', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + 6)
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(true)
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T12:00:00-03:00'),
+    ).toBe(true)
   })
 
   it('blocks cancellation 4 hours before', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + 4)
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(false)
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T14:00:00-03:00'),
+    ).toBe(false)
   })
 
   it('allows cancellation exactly at window limit (>= 5h)', () => {
