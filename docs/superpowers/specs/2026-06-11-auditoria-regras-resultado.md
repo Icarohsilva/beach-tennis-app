@@ -67,6 +67,10 @@ A função buscava o slot mas selecionava apenas `id`, sem `capacity`, e não co
 
 - **`cancelBooking` não emite `offerWaitlistSpot` via `cancelSubscription`/`adminCancelStudentPlan`.** O cancelamento de assinatura não percorre os bookings ativos do aluno nem libera vagas na fila. Se um aluno tem sessões futuras confirmadas e cancela o contrato, as vagas ficam presas. Impacto: outros alunos na fila não são notificados automaticamente. Mitigação futura: cancelamento de contrato deve cancelar bookings futuros e chamar `offerWaitlistSpot` para cada sessão.
 
+- **Webhook Mercado Pago** (`app/api/webhooks/mercadopago/route.ts:~166`): renovação mensal faz SET absoluto de `credits_balance` ("renovação substitui, não acumula"). Isso zera créditos de reposição/extra não usados no momento da renovação. Decisão de produto pendente: a renovação deve preservar créditos com vencimento próprio? Quando decidido, migrar para `adjust_credits`/lógica de expiração seletiva.
+
+- **`features/aulas/adminActions.ts`**: débitos de check-in e geração semanal migrados para `adjust_credits` (este commit).
+
 ---
 
 ## Achados novos (não corrigidos nesta fase)

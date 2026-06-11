@@ -143,19 +143,21 @@ export async function enrollStudentInClass(
         credit_used: true,
       })
 
-      await adminClient.from('credit_transactions').insert({
-        student_id: studentId,
-        type: 'used',
-        amount: -1,
-        reason: `Matrícula fixa — aula ${sessionDate}`,
-        session_id: sessionId,
-        expires_at: null,
+      const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+        p_student_id: studentId,
+        p_delta: -1,
+        p_type: 'used',
+        p_reason: `Matrícula fixa — aula ${sessionDate}`,
+        p_session_id: sessionId,
       })
 
-      await adminClient
-        .from('profiles')
-        .update({ credits_balance: balance - 1 })
-        .eq('id', studentId)
+      if (creditErr) {
+        return {
+          error: creditErr.message.includes('INSUFFICIENT_CREDITS')
+            ? 'Aluno sem créditos suficientes.'
+            : 'Erro ao debitar crédito.',
+        }
+      }
     }
   }
 
@@ -495,22 +497,26 @@ export async function generateWeeklyBookings(
         credit_used: true,
       })
 
-      await adminClient.from('credit_transactions').insert({
-        student_id: studentId,
-        type: 'used',
-        amount: -1,
-        reason: `Aula fixa semanal — ${session.session_date}`,
-        session_id: session.id,
-        expires_at: null,
+      const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+        p_student_id: studentId,
+        p_delta: -1,
+        p_type: 'used',
+        p_reason: `Aula fixa semanal — ${session.session_date}`,
+        p_session_id: session.id,
       })
 
-      // Update cached balance
-      await adminClient
-        .from('profiles')
-        .update({ credits_balance: profile.credits_balance - 1 })
-        .eq('id', studentId)
+      if (creditErr) {
+        if (creditErr.message.includes('INSUFFICIENT_CREDITS')) {
+          // Race between pre-check and RPC — treat as no-credit: skip
+          if (!skippedNames.includes(profile.full_name)) skippedNames.push(profile.full_name)
+        } else {
+          console.error(`adjust_credits failed for student ${studentId}:`, creditErr.message)
+        }
+        continue
+      }
 
       // Decrement local balance so subsequent sessions see the updated value
+      // (pre-check uses this to avoid pointless RPC calls across loop iterations)
       profile.credits_balance -= 1
 
       if (!bookedNames.includes(profile.full_name)) bookedNames.push(profile.full_name)
