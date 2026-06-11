@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
+import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 
@@ -438,10 +439,10 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
   const clsCancel = Array.isArray(session.class) ? session.class[0] : session.class
   const cls = clsCancel as { start_time: string }
-  const sessionStartIso = `${session.session_date}T${cls.start_time}`
+  const sessionStart = sessionStartIso(session.session_date, cls.start_time)
 
   const now = new Date().toISOString()
-  const refundEligible = canCancelWithRefund(sessionStartIso, now)
+  const refundEligible = canCancelWithRefund(sessionStart, now)
 
   // Cancel booking
   const { error: cancelErr } = await adminClient
