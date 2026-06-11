@@ -24,7 +24,7 @@
 | Fila: 1h para aceitar oferta | `acceptWaitlistSpot`: compara `new Date()` com `notified_at + 1h` | ok |
 | Fila: avanço automático ao desistir ou expirar | `leaveWaitlist` (status=offered) e `acceptWaitlistSpot` (SESSION_FULL) chamam `offerWaitlistSpot` | ok |
 | Day use: sem consumo de crédito | `bookDayUse`: nenhuma chamada a `adjust_credits`; insert direto em `dayuse_bookings` | ok |
-| Day use: capacidade | Coluna `capacity` em `dayuse_slots`; validação em `validateDayUseSlot` | pendente (ver achados) |
+| Day use: capacidade | Contagem de bookings confirmados antes do insert em `bookDayUse`; retorna erro se lotado | corrigida (este commit) |
 | Torneios: inscrição valida nível e status | `registerForTournament`: `status === 'open'`, `canStudentAttendLevel`, dedup | ok |
 | Dependentes: `payer_id = parent_id` | `subscribeToPlan` e `adminSubscribeStudentToPlan`: `is_dependent && parent_id ? parent_id : user.id` | ok |
 
@@ -46,6 +46,12 @@ O insert em `session_bookings` e o débito em `credit_transactions`/`profiles.cr
 
 **5 — Fila de espera não validava nível/kids/limite diário (Task 5 · SHA 115ed72)**
 `joinWaitlist` não verificava se o aluno tinha nível adequado nem se era dependente (para turmas kids), permitindo entrar na fila mesmo sem elegibilidade. `acceptWaitlistSpot` não checava o limite diário de 2 aulas, potencialmente convertendo a oferta em booking inválido. Adicionados os checks em ambas as funções.
+
+**6 — `subscribeToPlan` e `adminSubscribeStudentToPlan` sobrescreviam `credits_balance` com SET absoluto (FINANCEIRO-1 · este commit)**
+Ambas as funções faziam `update({ credits_balance: X })` diretamente na tabela `profiles`, destruindo silenciosamente créditos residuais (reposição ou extra) ao renovar/migrar de plano. Corrigido: substituídas pelas chamadas à RPC `adjust_credits(p_delta=+credits, p_type='renewed')`, que soma ao saldo existente atomicamente e insere o registro em `credit_transactions` na mesma transação.
+
+**7 — `bookDayUse` não verificava capacidade do slot antes de inserir (DAYUSE-1 · este commit)**
+A função buscava o slot mas selecionava apenas `id`, sem `capacity`, e não contava bookings confirmados existentes. Dois alunos podiam reservar simultaneamente o mesmo slot de capacidade 1. Corrigido: seleção expandida para `id, capacity`; contagem de bookings confirmados adicionada antes do insert; retorna `{ error: 'Este horário está lotado.' }` quando `confirmedCount >= capacity`.
 
 ---
 
@@ -85,9 +91,9 @@ Severidade: **alta**. Pode causar perda silenciosa de créditos existentes ao re
 Arquivo: `features/financeiro/actions.ts`, linhas 249–253. O filtro `.not('expires_at', 'is', null)` exclui apenas transações de reposição com vencimento (`expires_at IS NOT NULL`). Créditos mensais do tipo `renewed` (inseridos sem `expires_at`) não são expirados ao cancelar a assinatura. Se a regra de negócio for "créditos mensais expiram com o contrato", esta função está incompleta.
 Severidade: **média** (depende da política de negócio; pode ser intencional se créditos mensais não-usados devem ser honrados).
 
-**[TORNEIOS-1] `registerForTournament` não verifica capacidade máxima do torneio**
-Arquivo: `features/torneios/actions.ts`, linhas 95–116. A inscrição é aceita sem limite de participantes — não há coluna `max_participants` nem contagem de inscrições antes do insert. Em torneios com bracket fixo (chaveamento), inscrições em excesso gerariam brackets quebrados.
-Severidade: **média** (problema operacional; não há campo de capacidade no schema atual — é uma lacuna de modelagem).
+**[TORNEIOS-1] `registerForTournament` não verifica capacidade máxima do torneio — sem coluna de limite no schema — pendente de decisão de produto**
+Arquivo: `features/torneios/actions.ts`, linhas 95–116. A inscrição é aceita sem limite de participantes. A tabela `tournaments` (migration `001_initial_schema.sql`) não possui coluna `max_participants` nem equivalente — é uma lacuna de modelagem, não de código. Nenhuma alteração de código foi feita; a correção depende de decisão de produto sobre se (e como) limitar inscrições por torneio, seguida de migration para adicionar a coluna.
+Severidade: **média** (problema operacional; pendente de decisão de produto).
 
 **[TORNEIOS-2] `recordMatchResult` não verifica se o match já possui resultado**
 Arquivo: `features/torneios/actions.ts`, linhas 163–168. O UPDATE sobrescreve `score` e `winner_id` sem checar se o confronto já foi finalizado. Permite correção acidental de resultado já publicado sem confirmação de idempotência.

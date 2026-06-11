@@ -82,19 +82,13 @@ export async function subscribeToPlan(
   // Grant initial credits if the plan includes monthly credits
   const credits = plan.credits_per_month as number
   if (credits > 0) {
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'renewed',
-      amount: credits,
-      reason: `Créditos iniciais — plano ${plan.name}`,
-      session_id: null,
-      subscription_id: newSub.id,
-      expires_at: null,
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: user.id,
+      p_delta: credits,
+      p_type: 'renewed',
+      p_reason: `Créditos do plano ${plan.name}`,
     })
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: credits })
-      .eq('id', user.id)
+    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
   }
 
   return {}
@@ -188,21 +182,13 @@ export async function adminSubscribeStudentToPlan(
   // Grant initial credits
   const creditsToGrant = (plan as { id: string; is_active: boolean; credits_per_month: number }).credits_per_month
   if (creditsToGrant > 0 && newSub) {
-    const sub = newSub as { id: string }
-    await adminClient.from('credit_transactions').insert({
-      student_id: studentId,
-      type: 'renewed',
-      amount: creditsToGrant,
-      reason: 'Créditos iniciais — associação de plano pelo admin',
-      session_id: null,
-      subscription_id: sub.id,
-      expires_at: null,
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_delta: creditsToGrant,
+      p_type: 'renewed',
+      p_reason: `Créditos do plano ${planId}`,
     })
-
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: creditsToGrant })
-      .eq('id', studentId)
+    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
   }
 
   const { revalidatePath } = await import('next/cache')

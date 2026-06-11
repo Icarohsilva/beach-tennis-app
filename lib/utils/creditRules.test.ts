@@ -1,6 +1,6 @@
 // lib/utils/creditRules.test.ts
 import { describe, it, expect } from 'vitest'
-import { canCancelWithRefund, getMakeupCreditExpiry, CANCELLATION_WINDOW_HOURS } from './creditRules'
+import { canCancelWithRefund, getMakeupCreditExpiry } from './creditRules'
 
 describe('canCancelWithRefund', () => {
   it('allows cancellation 6 hours before', () => {
