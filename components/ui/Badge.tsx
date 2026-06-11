@@ -14,7 +14,7 @@ export function Badge({ children, variant = 'default', className }: BadgeProps) 
     level: 'bg-brand-500 text-surface',
     success: 'bg-emerald-400 text-surface',
     warning: 'bg-yellow-400 text-surface',
-    danger: 'bg-red-500 text-white',
+    danger: 'bg-red-600 text-white',
   }
   return (
     <span className={cn('inline-flex items-center px-2 py-0.5 rounded text-xs font-extrabold tracking-wide', variants[variant], className)}>
