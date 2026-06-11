@@ -1,7 +1,11 @@
 -- Atomicidade para créditos e capacidade de turma.
 
+-- SECURITY DEFINER bypassa RLS intencionalmente; o acesso é restrito ao
+-- service role via REVOKE de public/anon/authenticated no fim do arquivo.
+
 -- Insere a transação de crédito e atualiza o saldo na mesma transação.
--- Bloqueia saldo negativo (raise INSUFFICIENT_CREDITS).
+-- Bloqueia saldo negativo (raise INSUFFICIENT_CREDITS) e distingue
+-- aluno inexistente (raise STUDENT_NOT_FOUND).
 create or replace function public.adjust_credits(
   p_student_id uuid,
   p_delta int,
@@ -21,6 +25,10 @@ begin
     and credits_balance + p_delta >= 0;
 
   if not found then
+    perform 1 from profiles where id = p_student_id;
+    if not found then
+      raise exception 'STUDENT_NOT_FOUND';
+    end if;
     raise exception 'INSUFFICIENT_CREDITS';
   end if;
 
@@ -30,6 +38,10 @@ end;
 $$;
 
 -- Checa lotação e insere o booking sob lock por sessão (sem overbooking).
+-- A tabela tem unique(student_id, session_id) cobrindo qualquer status:
+-- um booking cancelado é REATIVADO (antes disso, reagendar a mesma sessão
+-- após cancelar era impossível — violação de unique). Booking já confirmado
+-- gera ALREADY_BOOKED.
 create or replace function public.book_session_atomic(
   p_student_id uuid,
   p_session_id uuid,
@@ -45,6 +57,7 @@ as $$
 declare
   v_count int;
   v_booking_id uuid;
+  v_existing_status booking_status;
 begin
   perform pg_advisory_xact_lock(hashtext(p_session_id::text));
 
@@ -54,6 +67,27 @@ begin
 
   if v_count >= p_max_students then
     raise exception 'SESSION_FULL';
+  end if;
+
+  select id, status into v_booking_id, v_existing_status
+  from session_bookings
+  where student_id = p_student_id and session_id = p_session_id;
+
+  if found then
+    if v_existing_status = 'confirmed'::booking_status then
+      raise exception 'ALREADY_BOOKED';
+    end if;
+
+    update session_bookings
+    set status = 'confirmed'::booking_status,
+        type = p_type::booking_type,
+        from_enrollment = p_from_enrollment,
+        credit_used = p_credit_used,
+        booked_at = now(),
+        cancelled_at = null
+    where id = v_booking_id;
+
+    return v_booking_id;
   end if;
 
   insert into session_bookings (student_id, session_id, type, status, from_enrollment, credit_used)
