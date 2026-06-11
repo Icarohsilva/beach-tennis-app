@@ -16,4 +16,9 @@ describe('sessionStartIso', () => {
     expect(new Date(sessionStartIso('2026-06-11', '18:00:00')).getTime())
       .toBe(Date.UTC(2026, 5, 11, 21, 0, 0))
   })
+
+  it('lança erro para formato de hora inesperado', () => {
+    expect(() => sessionStartIso('2026-06-11', '8:00')).toThrow('formato de hora inesperado')
+    expect(() => sessionStartIso('2026-06-11', '')).toThrow('formato de hora inesperado')
+  })
 })

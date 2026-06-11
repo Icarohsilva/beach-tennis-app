@@ -9,6 +9,13 @@ export const BRT_OFFSET = '-03:00'
  * ancorado no fuso de Brasília — independe do fuso do servidor.
  */
 export function sessionStartIso(sessionDate: string, startTime: string): string {
-  const time = startTime.length === 5 ? `${startTime}:00` : startTime
+  let time: string
+  if (/^\d{2}:\d{2}$/.test(startTime)) {
+    time = `${startTime}:00`
+  } else if (/^\d{2}:\d{2}:\d{2}$/.test(startTime)) {
+    time = startTime
+  } else {
+    throw new Error(`sessionStartIso: formato de hora inesperado "${startTime}"`)
+  }
   return `${sessionDate}T${time}${BRT_OFFSET}`
 }
