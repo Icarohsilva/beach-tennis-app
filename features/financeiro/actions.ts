@@ -82,19 +82,13 @@ export async function subscribeToPlan(
   // Grant initial credits if the plan includes monthly credits
   const credits = plan.credits_per_month as number
   if (credits > 0) {
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'renewed',
-      amount: credits,
-      reason: `Créditos iniciais — plano ${plan.name}`,
-      session_id: null,
-      subscription_id: newSub.id,
-      expires_at: null,
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: user.id,
+      p_delta: credits,
+      p_type: 'renewed',
+      p_reason: `Créditos do plano ${plan.name}`,
     })
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: credits })
-      .eq('id', user.id)
+    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
   }
 
   return {}
@@ -188,21 +182,13 @@ export async function adminSubscribeStudentToPlan(
   // Grant initial credits
   const creditsToGrant = (plan as { id: string; is_active: boolean; credits_per_month: number }).credits_per_month
   if (creditsToGrant > 0 && newSub) {
-    const sub = newSub as { id: string }
-    await adminClient.from('credit_transactions').insert({
-      student_id: studentId,
-      type: 'renewed',
-      amount: creditsToGrant,
-      reason: 'Créditos iniciais — associação de plano pelo admin',
-      session_id: null,
-      subscription_id: sub.id,
-      expires_at: null,
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_delta: creditsToGrant,
+      p_type: 'renewed',
+      p_reason: `Créditos do plano ${planId}`,
     })
-
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: creditsToGrant })
-      .eq('id', studentId)
+    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
   }
 
   const { revalidatePath } = await import('next/cache')
@@ -245,35 +231,27 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
 
   if (cancelErr) return { error: 'Erro ao cancelar assinatura.' }
 
-  // Invalidate makeup credits (expires_at IS NOT NULL)
-  const { data: makeupCredits } = await adminClient
-    .from('credit_transactions')
-    .select('id, amount')
-    .eq('student_id', user.id)
-    .not('expires_at', 'is', null)
-    .in('type', ['refunded'])
+  // Expira todos os créditos restantes ao cancelar o contrato.
+  // adjust_credits mantém ledger e saldo consistentes na mesma transação.
+  const { data: profileRow } = await adminClient
+    .from('profiles')
+    .select('credits_balance')
+    .eq('id', user.id)
+    .single()
 
-  if (makeupCredits && makeupCredits.length > 0) {
-    const totalToExpire = makeupCredits.reduce(
-      (sum: number, t: { amount: number }) => sum + t.amount,
-      0,
-    )
-
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'expired',
-      amount: -totalToExpire,
-      reason: 'Cancelamento de contrato — créditos de reposição expirados',
-      session_id: null,
-      subscription_id: sub.id,
-      expires_at: null,
+  const remaining = (profileRow?.credits_balance as number) ?? 0
+  if (remaining > 0) {
+    const { error: expireErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: user.id,
+      p_delta: -remaining,
+      p_type: 'expired',
+      p_reason: 'Cancelamento de contrato — créditos expirados',
     })
-
-    // Update cached balance: set to 0
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: 0 })
-      .eq('id', user.id)
+    if (expireErr) {
+      console.error('[cancelSubscription] adjust_credits falhou', {
+        studentId: user.id, error: expireErr.message,
+      })
+    }
   }
 
   return {}
@@ -318,16 +296,19 @@ export async function adminCancelStudentPlan(
       .single()
 
     const balance = (profile?.credits_balance as number) ?? 0
-    if (balance !== 0) {
-      await adminClient.from('credit_transactions').insert({
-        student_id: studentId,
-        type: 'expired',
-        amount: -balance,
-        reason: 'Cancelamento de plano pelo admin — créditos zerados',
-        session_id: null,
-        expires_at: null,
+    if (balance > 0) {
+      const { error: expireErr } = await adminClient.rpc('adjust_credits', {
+        p_student_id: studentId,
+        p_delta: -balance,
+        p_type: 'expired',
+        p_reason: 'Cancelamento de plano pelo admin — créditos zerados',
       })
-      await adminClient.from('profiles').update({ credits_balance: 0 }).eq('id', studentId)
+      if (expireErr) {
+        console.error('[adminCancelStudentPlan] adjust_credits falhou', {
+          studentId, error: expireErr.message,
+        })
+        return { error: 'Plano cancelado, mas houve um erro ao zerar os créditos.' }
+      }
     }
   }
 

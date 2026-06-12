@@ -43,6 +43,7 @@ export default function LoginPage() {
 
   return (
     <Card>
+      <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
       <h2 className="text-lg font-semibold text-white mb-6">Entrar</h2>
       <form onSubmit={handleLogin} className="flex flex-col gap-4">
         <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

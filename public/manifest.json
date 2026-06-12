@@ -4,7 +4,7 @@
   "description": "Gestão de aulas e torneios de beach tennis",
   "start_url": "/home",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#0c1220",
   "theme_color": "#ea580c",
   "orientation": "portrait",
   "icons": [

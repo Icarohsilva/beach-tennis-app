@@ -23,8 +23,8 @@ export function BottomNav() {
 
         <Link href="/agendar" className="relative -top-5">
           <div className={cn(
-            'flex h-14 w-14 items-center justify-center rounded-full bg-brand-600 shadow-lg shadow-brand-600/40 border-4 border-surface',
-            pathname.startsWith('/agendar') && 'bg-brand-500',
+            'flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-600/40 border-4 border-surface transition-transform active:scale-95',
+            pathname.startsWith('/agendar') && 'from-brand-400 to-brand-600',
           )}>
             <Plus className="h-6 w-6 text-white" />
           </div>

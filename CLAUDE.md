@@ -67,11 +67,11 @@ Migrations live in `supabase/migrations/` and must be applied via `supabase db p
 Dark theme with orange brand. Key Tailwind tokens:
 
 ```
-bg-surface        #0f172a  (page background)
-bg-surface-card   #1e293b  (cards/panels)
-border-surface-border  #334155
+bg-surface        #0c1220  (page background)
+bg-surface-card   #151e31  (cards/panels)
+border-surface-border  #26334d
 text-brand-500    #f97316  (primary orange)
-bg-brand-600      #ea580c  (buttons/CTAs)
+Gradiente de marca: bg-gradient-to-br from-brand-600 to-brand-800 (headers/CTAs de destaque)
 ```
 
 UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge`, `Input`, `BottomNav`. Always use these rather than raw HTML elements for consistency.

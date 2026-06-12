@@ -8,6 +8,10 @@ import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
+import { StatHeader } from '@/components/ui/StatHeader'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { CalendarPlus } from 'lucide-react'
 import type { Tournament, Profile, Class, ClassSession, DayUseSlot } from '@/types'
 
 export default async function HomePage() {
@@ -25,6 +29,7 @@ export default async function HomePage() {
     { data: nextSessionsData },
     { data: todayClassesData },
     { data: todayDayUseData },
+    { count: weeklyClassesCount },
   ] = await Promise.all([
     supabase
       .from('profiles')
@@ -57,6 +62,11 @@ export default async function HomePage() {
       .eq('date', today)
       .eq('is_active', true)
       .order('start_time', { ascending: true }),
+    supabase
+      .from('enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', user.id)
+      .eq('is_active', true),
   ])
 
   const profile = profileData as Pick<Profile, 'full_name' | 'credits_balance' | 'payment_type' | 'level' | 'is_dependent'> | null
@@ -248,29 +258,21 @@ export default async function HomePage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
-      <div>
-        <h1 className="text-xl font-bold text-white">
-          Olá{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}!
-        </h1>
-        <p className="text-slate-400 text-sm mt-0.5">Bom treino hoje 🎾</p>
-      </div>
-
-      {showCredits && (
-        <Card className="flex items-center justify-between">
-          <div>
-            <p className="text-slate-400 text-xs">Créditos disponíveis</p>
-            <p className="text-3xl font-bold text-brand-500">{profile?.credits_balance ?? 0}</p>
-          </div>
-          <Link href="/perfil" className="text-xs text-slate-400 hover:text-white transition-colors">
-            Ver plano →
-          </Link>
-        </Card>
-      )}
+      <StatHeader
+        name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
+        stats={[
+          ...(showCredits
+            ? [{ label: 'Créditos', value: profile?.credits_balance ?? 0 }]
+            : [{ label: 'Plano', value: profile?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
+          { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
+          { label: 'Nível', value: (profile?.level ?? '—').toUpperCase() },
+        ]}
+      />
 
       {/* Aulas de hoje com ações inline */}
       {todayClasses.length > 0 && (
         <section>
-          <h2 className="text-base font-semibold text-white mb-3">Aulas de hoje</h2>
+          <SectionHeader title="Aulas de hoje" />
           <div className="space-y-3">
             {todayClasses.map((c) => {
               const nextSession = nextSessionByClass.get(c.id) ?? null
@@ -310,12 +312,7 @@ export default async function HomePage() {
       {/* Day Use hoje */}
       {todayDayUse.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-white">Day Use hoje</h2>
-            <Link href="/agendar/dayuse" className="text-xs text-brand-500 hover:text-brand-400 transition-colors">
-              reservar →
-            </Link>
-          </div>
+          <SectionHeader title="Day Use hoje" href="/agendar/dayuse" linkLabel="reservar" />
           <div className="space-y-2">
             {todayDayUse.map((slot) => (
               <Link key={slot.id} href="/agendar/dayuse">
@@ -345,21 +342,15 @@ export default async function HomePage() {
 
       {/* Próximas aulas agendadas */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-white">Minhas Próximas Aulas</h2>
-          <Link href="/aulas" className="text-xs text-brand-500 hover:text-brand-400 transition-colors">
-            ver todas →
-          </Link>
-        </div>
+        <SectionHeader title="Minhas Próximas Aulas" href="/aulas" linkLabel="ver todas" />
         {nextSessions.length === 0 ? (
-          <Card>
-            <p className="text-slate-400 text-sm text-center py-2">
-              Nenhuma aula agendada.{' '}
-              <Link href="/agendar" className="text-brand-500 hover:underline">
-                Agendar agora →
-              </Link>
-            </p>
-          </Card>
+          <EmptyState
+            icon={CalendarPlus}
+            title="Nenhuma aula agendada"
+            description="Garanta sua vaga na próxima aula da sua turma."
+            ctaHref="/agendar"
+            ctaLabel="Agendar agora"
+          />
         ) : (
           <div className="space-y-2">
             {nextSessions.map((item) => {
@@ -389,12 +380,7 @@ export default async function HomePage() {
 
       {tournaments.length > 0 && (
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-white">Próximos Torneios</h2>
-            <Link href="/torneios" className="text-xs text-brand-500 hover:text-brand-400 transition-colors">
-              ver todos →
-            </Link>
-          </div>
+          <SectionHeader title="Próximos Torneios" href="/torneios" />
           <div className="space-y-2">
             {tournaments.map((tournament) => (
               <Link key={tournament.id} href={`/torneios/${tournament.id}`}>

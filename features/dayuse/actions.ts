@@ -52,10 +52,21 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string }> {
 
   const { data: slot } = await supabase
     .from('dayuse_slots')
-    .select('id')
+    .select('id, capacity')
     .eq('id', slotId)
     .single()
   if (!slot) return { error: 'Slot não encontrado' }
+
+  // Capacity check: count confirmed bookings for this slot
+  const { count: confirmedCount } = await supabase
+    .from('dayuse_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('slot_id', slotId)
+    .eq('status', 'confirmed')
+
+  if ((confirmedCount ?? 0) >= (slot as { id: string; capacity: number }).capacity) {
+    return { error: 'Este horário está lotado.' }
+  }
 
   const { error } = await supabase.from('dayuse_bookings').insert({
     slot_id: slotId,

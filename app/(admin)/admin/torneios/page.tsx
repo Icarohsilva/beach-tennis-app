@@ -4,9 +4,11 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { CreateTournamentForm } from './CreateTournamentForm'
 import { TournamentStatusActions } from './TournamentStatusActions'
+import { Trophy } from 'lucide-react'
 import type { Tournament, TournamentStatus } from '@/types'
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
@@ -51,7 +53,7 @@ export default async function AdminTorneiosPage() {
 
       {/* Tournament list */}
       {tournaments.length === 0 ? (
-        <p className="text-slate-400 text-sm">Nenhum torneio cadastrado ainda.</p>
+        <EmptyState icon={Trophy} title="Nenhum torneio cadastrado ainda." description="Use o formulário acima para criar o primeiro torneio." />
       ) : (
         <div className="space-y-3">
           {tournaments.map((tournament) => (

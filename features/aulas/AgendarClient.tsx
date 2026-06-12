@@ -161,7 +161,11 @@ export function AgendarClient({
 
       {/* Feedback */}
       {success && <p className="text-xs text-green-400">{success}</p>}
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && (
+        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+          {error}
+        </p>
+      )}
 
       {/* Action area */}
       {isEnrolled ? (
@@ -213,8 +217,8 @@ export function AgendarClient({
           </button>
         </div>
       ) : hasBooking ? (
-        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-          <Badge variant="success">Confirmado</Badge>
+        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border border-l-[3px] border-l-brand-500 rounded-xl">
+          <Badge variant="success">CONFIRMADO</Badge>
           <button
             type="button"
             disabled={isPending}
@@ -226,17 +230,16 @@ export function AgendarClient({
         </div>
       ) : isFull && nextSession ? (
         <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-          <p className="text-xs text-slate-400">
-            Lotada · Fila: {sessionWaitlistCount}/{c.max_students}
-          </p>
-          <button
-            type="button"
+          <Badge variant="danger">LOTADA</Badge>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={isPending}
             disabled={isPending}
             onClick={handleJoin}
-            className="text-xs text-brand-400 hover:text-brand-300 underline disabled:opacity-50"
           >
-            Entrar na fila
-          </button>
+            Fila de espera ({sessionWaitlistCount})
+          </Button>
         </div>
       ) : (
         <Button

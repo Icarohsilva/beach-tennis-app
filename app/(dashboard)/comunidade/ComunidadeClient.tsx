@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { PostFeed } from '@/features/comunidade/PostFeed'
 import { CreatePost } from '@/features/comunidade/CreatePost'
+import { SectionHeader } from '@/components/ui/SectionHeader'
 import type { Post, Profile } from '@/types'
 
 type PostWithAuthor = Post & {
@@ -37,7 +38,7 @@ export function ComunidadeClient({
     <div className="relative min-h-full pb-24">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-surface border-b border-surface-border px-4 py-3">
-        <h1 className="text-lg font-bold text-white">Comunidade</h1>
+        <SectionHeader title="Comunidade" />
       </div>
 
       {/* Feed */}

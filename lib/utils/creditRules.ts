@@ -3,7 +3,7 @@
 export const CANCELLATION_WINDOW_HOURS = 5
 
 /**
- * Returns true if cancellation is more than CANCELLATION_WINDOW_HOURS before session.
+ * Returns true if cancellation is at least CANCELLATION_WINDOW_HOURS before session.
  * Only then does the student receive a makeup credit.
  */
 export function canCancelWithRefund(
@@ -14,7 +14,7 @@ export function canCancelWithRefund(
   const sessionStart = new Date(sessionStartIso)
   const now = new Date(nowIso)
   const diffHours = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60)
-  return diffHours > windowHours
+  return diffHours >= windowHours
 }
 
 /**

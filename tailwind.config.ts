@@ -24,9 +24,9 @@ const config: Config = {
           900: '#7c2d12',
         },
         surface: {
-          DEFAULT: '#0f172a',
-          card:    '#1e293b',
-          border:  '#334155',
+          DEFAULT: '#0c1220',
+          card:    '#151e31',
+          border:  '#26334d',
         },
       },
     },

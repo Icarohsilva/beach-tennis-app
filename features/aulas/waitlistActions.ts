@@ -3,7 +3,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import type { WaitlistStatus } from '@/types'
+import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
+import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 
 // ---------------------------------------------------------------------------
 // offerWaitlistSpot — called when a spot opens (cancellation or cron)
@@ -71,15 +72,35 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
   // Fetch session + class
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, status, class:classes(max_students)')
+    .select('id, status, class:classes(max_students, level, type)')
     .eq('id', sessionId)
     .single()
 
   if (!session) return { error: 'Sessão não encontrada.' }
   if (session.status !== 'scheduled') return { error: 'Esta sessão não está disponível.' }
 
-  const classRaw = Array.isArray(session.class) ? session.class[0] : session.class
-  const maxStudents = (classRaw as { max_students: number } | null)?.max_students ?? 0
+  const clsInfo = (Array.isArray(session.class) ? session.class[0] : session.class) as {
+    max_students: number
+    level: StudentLevel
+    type: ClassType
+  } | null
+  if (!clsInfo) return { error: 'Turma não encontrada.' }
+
+  const { data: joinProfile } = await adminClient
+    .from('profiles')
+    .select('level, is_dependent')
+    .eq('id', user.id)
+    .single()
+  if (!joinProfile) return { error: 'Perfil não encontrado.' }
+
+  if (!canStudentAttendLevel(joinProfile.level as StudentLevel, clsInfo.level)) {
+    return { error: `Seu nível (${joinProfile.level}) não permite participar desta turma (${clsInfo.level}).` }
+  }
+  if (clsInfo.type === 'kids' && !joinProfile.is_dependent) {
+    return { error: 'Esta turma é exclusiva para alunos kids (dependentes).' }
+  }
+
+  const maxStudents = clsInfo.max_students
 
   // Confirm session is actually full
   const { count: bookedCount } = await adminClient
@@ -229,34 +250,53 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
   const classRaw = Array.isArray(session.class) ? session.class[0] : session.class
   const maxStudents = (classRaw as { max_students: number } | null)?.max_students ?? 0
 
-  const { count: bookedCount } = await adminClient
-    .from('session_bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('session_id', entry.session_id)
-    .eq('status', 'confirmed')
+  // Limite diário: máx 2 aulas confirmadas na data da sessão
+  const { data: sessionDateRow } = await adminClient
+    .from('class_sessions')
+    .select('session_date')
+    .eq('id', entry.session_id)
+    .single()
 
-  if ((bookedCount ?? 0) >= maxStudents) {
-    // Another booking slipped in — expire and advance queue
-    await adminClient
-      .from('waitlists')
-      .update({ status: 'expired' as WaitlistStatus })
-      .eq('id', waitlistId)
-    await offerWaitlistSpot(entry.session_id)
-    return { error: 'A vaga foi preenchida. O próximo da fila será notificado.' }
+  if (sessionDateRow) {
+    const { data: sameDaySessions } = await adminClient
+      .from('class_sessions')
+      .select('id')
+      .eq('session_date', sessionDateRow.session_date)
+
+    const sameDayIds = (sameDaySessions ?? []).map((s: { id: string }) => s.id)
+    const { count: dailyCount } = await adminClient
+      .from('session_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', user.id)
+      .eq('status', 'confirmed')
+      .in('session_id', sameDayIds)
+
+    if ((dailyCount ?? 0) >= 2) {
+      return { error: 'Você já atingiu o limite de 2 aulas nessa data.' }
+    }
   }
 
-  // Create the booking directly (validations already passed at joinWaitlist time)
-  const { error: bookingErr } = await adminClient.from('session_bookings').insert({
-    student_id: user.id,
-    session_id: entry.session_id,
-    type: 'extra',
-    status: 'confirmed',
-    from_enrollment: false,
-    credit_used: false,
-    booked_at: new Date().toISOString(),
+  // Insert atômico — se outro booking entrou antes, expira e avança a fila
+  const { error: bookingErr } = await adminClient.rpc('book_session_atomic', {
+    p_student_id: user.id,
+    p_session_id: entry.session_id,
+    p_max_students: maxStudents,
   })
 
-  if (bookingErr) return { error: 'Erro ao criar agendamento. Tente novamente.' }
+  if (bookingErr) {
+    if (bookingErr.message.includes('SESSION_FULL')) {
+      await adminClient
+        .from('waitlists')
+        .update({ status: 'expired' as WaitlistStatus })
+        .eq('id', waitlistId)
+      await offerWaitlistSpot(entry.session_id)
+      return { error: 'A vaga foi preenchida. O próximo da fila será notificado.' }
+    }
+    if (bookingErr.message.includes('ALREADY_BOOKED')) {
+      return { error: 'Você já tem um agendamento nesta sessão.' }
+    }
+    return { error: 'Erro ao criar agendamento. Tente novamente.' }
+  }
 
   // Mark waitlist entry as accepted
   await adminClient

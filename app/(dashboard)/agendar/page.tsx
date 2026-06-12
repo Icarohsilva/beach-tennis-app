@@ -1,9 +1,11 @@
 // app/(dashboard)/agendar/page.tsx
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { CalendarX } from 'lucide-react'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
+import { EmptyState } from '@/components/ui/EmptyState'
 import type { Class, ClassSession, Profile } from '@/types'
 
 export default async function AgendarPage() {
@@ -53,11 +55,11 @@ export default async function AgendarPage() {
           </div>
           <span className="text-2xl">🏖️</span>
         </Link>
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-4">🔍</p>
-          <p className="font-semibold text-white mb-1">Nenhuma turma disponível</p>
-          <p className="text-sm">Não há turmas ativas compatíveis com seu nível.</p>
-        </div>
+        <EmptyState
+          icon={CalendarX}
+          title="Nenhuma turma disponível"
+          description="Não há turmas ativas compatíveis com seu nível."
+        />
       </div>
     )
   }

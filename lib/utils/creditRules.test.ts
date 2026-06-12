@@ -1,25 +1,30 @@
 // lib/utils/creditRules.test.ts
 import { describe, it, expect } from 'vitest'
-import { canCancelWithRefund, getMakeupCreditExpiry, CANCELLATION_WINDOW_HOURS } from './creditRules'
+import { canCancelWithRefund, getMakeupCreditExpiry } from './creditRules'
 
 describe('canCancelWithRefund', () => {
   it('allows cancellation 6 hours before', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + 6)
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(true)
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T12:00:00-03:00'),
+    ).toBe(true)
   })
 
   it('blocks cancellation 4 hours before', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + 4)
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(false)
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T14:00:00-03:00'),
+    ).toBe(false)
   })
 
-  it('blocks cancellation exactly at window limit', () => {
-    const sessionDate = new Date()
-    sessionDate.setHours(sessionDate.getHours() + CANCELLATION_WINDOW_HOURS)
-    // at exactly 5h: not strictly greater, so no refund
-    expect(canCancelWithRefund(sessionDate.toISOString(), new Date().toISOString())).toBe(false)
+  it('allows cancellation exactly at window limit (>= 5h)', () => {
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T13:00:00-03:00'),
+    ).toBe(true)
+  })
+
+  it('blocks cancellation just inside the window', () => {
+    expect(
+      canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T13:00:01-03:00'),
+    ).toBe(false)
   })
 })
 

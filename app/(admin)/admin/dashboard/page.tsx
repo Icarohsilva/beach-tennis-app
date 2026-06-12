@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { createAdminClient } from '@/lib/supabase/server'
+import { StatCard } from '@/components/ui/StatCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
@@ -10,13 +11,17 @@ export default async function AdminDashboardPage() {
   const today = new Date().toISOString().slice(0, 10)
 
   const [
-    { count: totalStudents },
-    { count: activeSubscriptions },
+    { count: activeStudents },
+    { count: todaySessionsCount },
+    { count: activeEnrollments },
+    { count: todayDayUseCount },
     { data: todaySessions },
     { data: recentTrials },
   ] = await Promise.all([
-    adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true),
-    adminClient.from('student_subscriptions').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+    adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true),
+    adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled'),
+    adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true),
+    adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true),
     adminClient.from('class_sessions')
       .select('id, status, class:classes(name, start_time, end_time, level, type)')
       .eq('session_date', today)
@@ -41,24 +46,12 @@ export default async function AdminDashboardPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-white">Dashboard</h1>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <p className="text-slate-400 text-xs mb-1">Alunos ativos</p>
-          <p className="text-3xl font-bold text-white">{totalStudents ?? 0}</p>
-        </Card>
-        <Card>
-          <p className="text-slate-400 text-xs mb-1">Assinaturas ativas</p>
-          <p className="text-3xl font-bold text-brand-500">{activeSubscriptions ?? 0}</p>
-        </Card>
-        <Card>
-          <p className="text-slate-400 text-xs mb-1">Aulas hoje</p>
-          <p className="text-3xl font-bold text-white">{sessions.length}</p>
-        </Card>
-        <Card>
-          <p className="text-slate-400 text-xs mb-1">Experimentais pendentes</p>
-          <p className="text-3xl font-bold text-yellow-400">{trials.length}</p>
-        </Card>
+      {/* KPI StatCards */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Alunos ativos" value={activeStudents ?? 0} />
+        <StatCard label="Aulas hoje" value={todaySessionsCount ?? 0} />
+        <StatCard label="Matrículas ativas" value={activeEnrollments ?? 0} />
+        <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} />
       </div>
 
       {/* Today's sessions */}

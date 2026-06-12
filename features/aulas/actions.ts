@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
+import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 
@@ -99,7 +100,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
  *   4. Kids check: turma kids → student must be a dependent
  *   5. Daily limit: ≤2 confirmed bookings on the same date
  *   6. No duplicate confirmed booking on the same session
- *   7. Debit credit if credit_used=true and insert credit_transaction
+ *   7. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
  */
 export async function bookSession(
   sessionId: string,
@@ -185,56 +186,55 @@ export async function bookSession(
     return { error: 'Você já possui um agendamento confirmado nesta sessão.' }
   }
 
-  // 7. Capacity check
-  const { count: bookedCount } = await adminClient
-    .from('session_bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('session_id', sessionId)
-    .eq('status', 'confirmed')
-
-  if ((bookedCount ?? 0) >= cls.max_students) {
-    return { error: 'Esta turma está lotada.' }
-  }
-
   // Decide credit usage
   const useCredit = useCreditArg ?? false
   if (useCredit && profile.credits_balance < 1) {
     return { error: 'Créditos insuficientes.' }
   }
 
-  // Insert booking
-  const { data: newBooking, error: insertErr } = await adminClient
-    .from('session_bookings')
-    .insert({
-      student_id: user.id,
-      session_id: sessionId,
-      type: 'extra',
-      status: 'confirmed' as BookingStatus,
-      from_enrollment: false,
-      credit_used: useCredit,
-    })
-    .select('id')
-    .single()
+  // Capacity check + insert na mesma transação (sem overbooking)
+  const { data: bookingId, error: bookErr } = await adminClient.rpc('book_session_atomic', {
+    p_student_id: user.id,
+    p_session_id: sessionId,
+    p_max_students: cls.max_students,
+    p_credit_used: useCredit,
+  })
 
-  if (insertErr || !newBooking) {
+  if (bookErr) {
+    if (bookErr.message.includes('SESSION_FULL')) return { error: 'Esta turma está lotada.' }
+    if (bookErr.message.includes('ALREADY_BOOKED')) return { error: 'Você já possui um agendamento confirmado nesta sessão.' }
     return { error: 'Erro ao criar agendamento. Tente novamente.' }
   }
 
-  // Credit debit
+  // Débito atômico (transação + saldo juntos)
   if (useCredit) {
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'used',
-      amount: -1,
-      reason: `Agendamento avulso — ${cls.name} (${session.session_date})`,
-      session_id: sessionId,
-      expires_at: null,
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: user.id,
+      p_delta: -1,
+      p_type: 'used',
+      p_reason: `Agendamento avulso — ${cls.name} (${session.session_date})`,
+      p_session_id: sessionId,
     })
 
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: profile.credits_balance - 1 })
-      .eq('id', user.id)
+    if (creditErr) {
+      // Desfaz o booking se o débito falhou (saldo esgotado em corrida)
+      const { error: rollbackErr } = await adminClient
+        .from('session_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId as string)
+
+      if (rollbackErr) {
+        console.error('[bookSession] rollback do booking falhou após erro no débito', {
+          bookingId,
+          creditErr: creditErr.message,
+          rollbackErr: rollbackErr.message,
+        })
+      }
+
+      return creditErr.message.includes('INSUFFICIENT_CREDITS')
+        ? { error: 'Créditos insuficientes.' }
+        : { error: 'Erro ao criar agendamento. Tente novamente.' }
+    }
   }
 
   revalidatePath('/home')
@@ -276,29 +276,21 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 
   if (cancelErr) return { error: 'Erro ao cancelar. Tente novamente.' }
 
-  // Always return a non-expiring credit when a fixed student skips
-  if (booking.credit_used) {
-    const { data: profile } = await adminClient
-      .from('profiles')
-      .select('credits_balance')
-      .eq('id', user.id)
-      .single()
+  // Aluno fixo sempre recebe crédito de reposição sem vencimento ao sair de uma aula
+  const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+    p_student_id: user.id,
+    p_delta: 1,
+    p_type: 'refunded',
+    p_reason: 'Falta em aula fixa — crédito reposição sem vencimento',
+    p_session_id: booking.session_id,
+  })
 
-    const balance = (profile?.credits_balance as number) ?? 0
-
-    await adminClient.from('credit_transactions').insert({
-      student_id: user.id,
-      type: 'refunded',
-      amount: 1,
-      reason: `Falta em aula fixa — crédito reposição sem vencimento`,
-      session_id: booking.session_id,
-      expires_at: null,
+  let creditWarning: string | undefined
+  if (creditErr) {
+    console.error('[skipEnrollmentSession] adjust_credits falhou', {
+      bookingId, sessionId: booking.session_id, error: creditErr.message,
     })
-
-    await adminClient
-      .from('profiles')
-      .update({ credits_balance: balance + 1 })
-      .eq('id', user.id)
+    creditWarning = 'Saída registrada, mas houve um erro ao gerar o crédito. Contate o suporte.'
   }
 
   // Open spot for next person on waitlist
@@ -307,7 +299,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
   revalidatePath('/home')
   revalidatePath('/agendar')
   revalidatePath('/aulas')
-  return {}
+  return creditWarning ? { error: creditWarning } : {}
 }
 
 // ---------------------------------------------------------------------------
@@ -380,16 +372,20 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
     return { error: 'Você já tem um agendamento confirmado. Use "Sair desta aula" normal.' }
   }
 
-  // Create a cancelled booking to mark the skip (no credit deducted/returned)
-  await adminClient.from('session_bookings').insert({
-    student_id: user.id,
-    session_id: sessionId,
-    type: 'extra',
-    status: 'cancelled',
-    from_enrollment: true,
-    credit_used: false,
-    cancelled_at: new Date().toISOString(),
-  })
+  // Create a cancelled booking to mark the skip (no credit deducted/returned).
+  // Upsert handles the case where a cancelled row already exists (unique constraint on student_id,session_id).
+  await adminClient.from('session_bookings').upsert(
+    {
+      student_id: user.id,
+      session_id: sessionId,
+      type: 'extra',
+      status: 'cancelled',
+      from_enrollment: true,
+      credit_used: false,
+      cancelled_at: new Date().toISOString(),
+    },
+    { onConflict: 'student_id,session_id' },
+  )
 
   revalidatePath('/home')
   revalidatePath('/agendar')
@@ -438,10 +434,10 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
   const clsCancel = Array.isArray(session.class) ? session.class[0] : session.class
   const cls = clsCancel as { start_time: string }
-  const sessionStartIso = `${session.session_date}T${cls.start_time}`
+  const sessionStart = sessionStartIso(session.session_date, cls.start_time)
 
   const now = new Date().toISOString()
-  const refundEligible = canCancelWithRefund(sessionStartIso, now)
+  const refundEligible = canCancelWithRefund(sessionStart, now)
 
   // Cancel booking
   const { error: cancelErr } = await adminClient
@@ -455,30 +451,32 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   if (cancelErr) return { error: 'Erro ao cancelar. Tente novamente.' }
 
   // Credit logic: extra (non-expiring) for fixed enrollment; makeup (30 days) for paid avulso
+  let creditWarning: string | undefined
   if (refundEligible) {
     const { data: profile } = await adminClient
       .from('profiles')
-      .select('credits_balance, payment_type')
+      .select('payment_type')
       .eq('id', user.id)
       .single()
 
     if (profile) {
       if (booking.from_enrollment && profile.payment_type === 'subscriber') {
-        // Extra credit: does not expire while contract is active
-        await adminClient.from('credit_transactions').insert({
-          student_id: user.id,
-          type: 'refunded',
-          amount: 1,
-          reason: `Cancelamento de aula fixa — crédito extra (${session.session_date})`,
-          session_id: booking.session_id,
-          expires_at: null,
+        // Crédito extra: não expira enquanto o contrato estiver ativo
+        const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+          p_student_id: user.id,
+          p_delta: 1,
+          p_type: 'refunded',
+          p_reason: `Cancelamento de aula fixa — crédito extra (${session.session_date})`,
+          p_session_id: booking.session_id,
         })
-        await adminClient
-          .from('profiles')
-          .update({ credits_balance: profile.credits_balance + 1 })
-          .eq('id', user.id)
+        if (creditErr) {
+          console.error('[cancelBooking] adjust_credits falhou', {
+            bookingId, sessionId: booking.session_id, error: creditErr.message,
+          })
+          creditWarning = 'Aula cancelada, mas houve um erro ao gerar o crédito. Contate o suporte.'
+        }
       } else if (booking.credit_used) {
-        // Makeup credit for paid avulso booking: expires in N days
+        // Crédito de reposição: expira em N dias
         let expiryDays = 30
         const { data: settings } = await adminClient
           .from('system_settings')
@@ -487,18 +485,20 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
         if (settings?.credit_expiry_days) expiryDays = settings.credit_expiry_days
 
         const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
-        await adminClient.from('credit_transactions').insert({
-          student_id: user.id,
-          type: 'refunded',
-          amount: 1,
-          reason: `Cancelamento com reposição — sessão ${session.session_date}`,
-          session_id: booking.session_id,
-          expires_at: expiry.toISOString(),
+        const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+          p_student_id: user.id,
+          p_delta: 1,
+          p_type: 'refunded',
+          p_reason: `Cancelamento com reposição — sessão ${session.session_date}`,
+          p_session_id: booking.session_id,
+          p_expires_at: expiry.toISOString(),
         })
-        await adminClient
-          .from('profiles')
-          .update({ credits_balance: profile.credits_balance + 1 })
-          .eq('id', user.id)
+        if (creditErr) {
+          console.error('[cancelBooking] adjust_credits falhou', {
+            bookingId, sessionId: booking.session_id, error: creditErr.message,
+          })
+          creditWarning = 'Aula cancelada, mas houve um erro ao gerar o crédito. Contate o suporte.'
+        }
       }
     }
   }
@@ -509,7 +509,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   revalidatePath('/home')
   revalidatePath('/agendar')
   revalidatePath('/aulas')
-  return {}
+  return creditWarning ? { error: creditWarning } : {}
 }
 
 // ---------------------------------------------------------------------------
