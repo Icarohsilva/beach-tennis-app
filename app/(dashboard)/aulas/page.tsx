@@ -3,6 +3,9 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { CalendarX } from 'lucide-react'
 import type { Class, ClassSession, Enrollment } from '@/types'
 
 export default async function AulasPage() {
@@ -25,13 +28,13 @@ export default async function AulasPage() {
   if (classIds.length === 0) {
     return (
       <div className="p-4 pb-24">
-        <h1 className="text-xl font-bold text-white mb-4">Minhas Aulas</h1>
-        <div className="text-center py-16 text-slate-400">
-          <p className="text-4xl mb-4">🎾</p>
-          <p className="font-semibold text-white mb-1">Sem matrículas</p>
-          <p className="text-sm">Você ainda não está matriculado em nenhuma turma fixa.</p>
-          <p className="text-xs mt-2">Solicite ao seu professor para te matricular.</p>
-        </div>
+        <SectionHeader title="Minhas Aulas" />
+        <EmptyState
+          icon={CalendarX}
+          title="Você ainda não tem aulas"
+          ctaHref="/agendar"
+          ctaLabel="Agendar aula"
+        />
       </div>
     )
   }
@@ -182,13 +185,10 @@ export default async function AulasPage() {
 
   return (
     <div className="p-4 space-y-4 pb-24">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Minhas Aulas</h1>
-        <span className="text-xs text-slate-400">{typedEnrollments.length} matrículas ativas</span>
-      </div>
+      <SectionHeader title="Minhas Aulas" />
 
       <div className="space-y-4">
-        {typedEnrollments.map((enrollment) => {
+        {typedEnrollments.map((enrollment, index) => {
           const c = enrollment.class
           const nextSession = nextSessionByClass.get(c.id) ?? null
           const nextId = nextSession?.id
@@ -203,7 +203,7 @@ export default async function AulasPage() {
 
           return (
             <div key={enrollment.id} className="space-y-1">
-              <ClassCard class_={c} enrolledCount={countByClass.get(c.id) ?? 0} />
+              <ClassCard class_={c} enrolledCount={countByClass.get(c.id) ?? 0} accent={index === 0} />
               <AgendarClient
                 class_={c}
                 nextSession={nextSession}

@@ -4,6 +4,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PostCard } from './PostCard'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Users } from 'lucide-react'
 import type { Post, Profile } from '@/types'
 
 type PostWithAuthor = Post & {
@@ -137,11 +139,11 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
 
   if (posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="text-5xl mb-4">🎾</div>
-        <p className="text-slate-300 font-medium">Nenhum post ainda</p>
-        <p className="text-slate-500 text-sm mt-1">Seja o primeiro a compartilhar algo!</p>
-      </div>
+      <EmptyState
+        icon={Users}
+        title="Nenhum post ainda"
+        description="Seja o primeiro a compartilhar com a galera."
+      />
     )
   }
 

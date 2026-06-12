@@ -8,9 +8,10 @@ interface ClassCardProps {
   class_: Class
   enrolledCount: number
   onClick?: () => void
+  accent?: boolean
 }
 
-export function ClassCard({ class_: c, enrolledCount, onClick }: ClassCardProps) {
+export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCardProps) {
   const spotsLeft = c.max_students - enrolledCount
   const isFull = spotsLeft <= 0
   const isKids = c.type === 'kids'
@@ -18,7 +19,7 @@ export function ClassCard({ class_: c, enrolledCount, onClick }: ClassCardProps)
   const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
   return (
-    <Card onClick={onClick}>
+    <Card onClick={onClick} accent={accent}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">

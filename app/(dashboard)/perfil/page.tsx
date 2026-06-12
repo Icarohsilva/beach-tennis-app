@@ -6,6 +6,8 @@ import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { StatCard } from '@/components/ui/StatCard'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
 
 export default async function PerfilPage() {
@@ -15,10 +17,10 @@ export default async function PerfilPage() {
 
   const adminClient = createAdminClient()
 
-  // Fetch profile for credits_balance, payment_type, and is_dependent flag
+  // Fetch profile for credits_balance, payment_type, level, and is_dependent flag
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('credits_balance, payment_type, full_name, is_dependent')
+    .select('credits_balance, payment_type, full_name, is_dependent, level')
     .eq('id', user.id)
     .single()
 
@@ -108,11 +110,17 @@ export default async function PerfilPage() {
         )}
       </div>
 
+      {/* Stats: Créditos + Nível */}
+      {!isWellhubOrTotalpass && (
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard label="Créditos" value={profile?.credits_balance ?? 0} />
+          <StatCard label="Nível" value={(profile?.level ?? '—').toUpperCase()} />
+        </div>
+      )}
+
       {/* Plano Ativo */}
       <section>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-          Plano Ativo
-        </h2>
+        <SectionHeader title="Plano Ativo" />
         {isWellhubOrTotalpass ? (
           <div className="bg-surface-card border border-surface-border rounded-xl p-4">
             <p className="text-sm text-slate-300">
@@ -130,32 +138,10 @@ export default async function PerfilPage() {
         )}
       </section>
 
-      {/* Créditos */}
-      {!isWellhubOrTotalpass && (
-        <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Créditos
-          </h2>
-          <div className="bg-surface-card border border-surface-border rounded-xl p-4 flex items-center gap-3">
-            <span className="text-3xl font-bold text-brand-500">
-              {profile?.credits_balance ?? 0}
-            </span>
-            <div>
-              <p className="text-white text-sm font-medium">créditos disponíveis</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Renova todo mês com base no seu plano
-              </p>
-            </div>
-          </div>
-        </section>
-      )}
-
       {/* Histórico de Créditos Extras */}
       {!isWellhubOrTotalpass && creditTransactions.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Meus Créditos
-          </h2>
+          <SectionHeader title="Meus Créditos" />
           <div className="space-y-2">
             {creditTransactions.map((t) => (
               <div
@@ -187,9 +173,7 @@ export default async function PerfilPage() {
       {/* Histórico de Pagamentos */}
       {!isWellhubOrTotalpass && (
         <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Histórico de Pagamentos
-          </h2>
+          <SectionHeader title="Histórico de Pagamentos" />
           <PaymentHistory payments={payments} />
         </section>
       )}
@@ -197,9 +181,7 @@ export default async function PerfilPage() {
       {/* Dependentes (apenas para responsáveis não-dependentes) */}
       {!profile?.is_dependent && (
         <section>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-            Dependentes (Kids)
-          </h2>
+          <SectionHeader title="Dependentes (Kids)" />
           <div className="bg-surface-card border border-surface-border rounded-xl p-4">
             <DependentsSection initialDependents={dependents} />
           </div>
@@ -208,9 +190,7 @@ export default async function PerfilPage() {
 
       {/* Ficha Médica */}
       <section>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-          Ficha Médica
-        </h2>
+        <SectionHeader title="Ficha Médica" />
         <div className="bg-surface-card border border-surface-border rounded-xl p-4">
           <p className="text-xs text-slate-500 mb-4">
             Informações de saúde para uso em caso de emergência na quadra. Visível apenas para você e o professor.
