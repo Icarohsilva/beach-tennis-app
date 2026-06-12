@@ -1,7 +1,10 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { Sun } from 'lucide-react'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { DayUseBookingCard } from '@/features/dayuse/DayUseBookingCard'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 
@@ -71,16 +74,15 @@ export default async function AgendarDayUsePage() {
         <p className="text-slate-400 text-sm mt-1">Reserva de quadra sem usar créditos</p>
       </div>
       {byDate.size === 0 ? (
-        <div className="bg-surface-card border border-surface-border rounded-xl p-6 text-center">
-          <p className="text-slate-400 text-sm">Nenhum horário de day use disponível no momento.</p>
-          <p className="text-slate-500 text-xs mt-1">O professor divulga os horários com antecedência.</p>
-        </div>
+        <EmptyState
+          icon={Sun}
+          title="Nenhum horário disponível"
+          description="O professor divulga os horários de day use com antecedência."
+        />
       ) : (
         Array.from(byDate.entries()).map(([date, dateSlots]) => (
           <div key={date}>
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-              {formatDate(date, "EEEE, dd 'de' MMMM")}
-            </h2>
+            <SectionHeader title={formatDate(date, "EEEE, dd 'de' MMMM")} />
             <div className="space-y-2">
               {dateSlots.map((slot) => (
                 <DayUseBookingCard
