@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { Users } from 'lucide-react'
 import type { Profile, StudentLevel } from '@/types'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
@@ -135,7 +137,7 @@ export default async function AlunosPage({ searchParams }: Props) {
 
       {/* Student list */}
       {students.length === 0 ? (
-        <p className="text-slate-400 text-sm text-center py-12">Nenhum aluno encontrado.</p>
+        <EmptyState icon={Users} title="Nenhum aluno encontrado." description="Tente ajustar os filtros ou cadastre um novo aluno." />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {students.map((student) => {

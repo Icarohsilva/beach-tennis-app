@@ -3,9 +3,13 @@ import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { GenerateSessionsButton } from './GenerateSessionsButton'
 import { DeleteClassButton } from './DeleteClassButton'
+import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -90,28 +94,20 @@ export default async function GradePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Grade de Aulas</h1>
         <div className="flex gap-2">
-          <Link
-            href="/admin/grade/dayuse"
-            className="text-sm bg-surface-card border border-surface-border text-slate-300 hover:text-white px-3 py-1.5 rounded-md transition-colors"
-          >
-            Day Use
+          <Link href="/admin/grade/dayuse">
+            <Button variant="secondary" size="sm">Day Use</Button>
           </Link>
-          <Link
-            href="/admin/grade/nova-turma"
-            className="text-sm bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-md transition-colors"
-          >
-            + Nova Turma
+          <Link href="/admin/grade/nova-turma">
+            <Button size="sm">+ Nova Turma</Button>
           </Link>
         </div>
       </div>
 
       {/* Today's sessions */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-3">
-          Hoje — {DAY_NAMES[dayNumber]}
-        </h2>
+        <SectionHeader title={`Hoje — ${DAY_NAMES[dayNumber]}`} />
         {sessionsToday.length === 0 ? (
-          <p className="text-slate-400 text-sm">Nenhuma sessão hoje.</p>
+          <EmptyState icon={CalendarDays} title="Nenhuma sessão hoje." />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {sessionsToday.map((session) => {
@@ -133,7 +129,7 @@ export default async function GradePage() {
                       {formatTime(clsRaw.start_time)} – {formatTime(clsRaw.end_time)}
                     </p>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400">{confirmed}/{max} alunos</span>
+                      <span className="text-sm font-extrabold text-brand-500">{confirmed}/{max}</span>
                       {isFull ? (
                         <Badge variant="danger">Lotada</Badge>
                       ) : (
@@ -150,7 +146,7 @@ export default async function GradePage() {
 
       {/* Weekly schedule */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-3">Grade Semanal</h2>
+        <SectionHeader title="Grade Semanal" />
         {[1, 2, 3, 4, 5, 6, 0].map((day) => {
           const dayClasses = classesByDay.get(day) ?? []
           if (dayClasses.length === 0) return null
@@ -185,8 +181,9 @@ export default async function GradePage() {
                       </p>
                       {/* Row 3: vagas + alerta de crédito */}
                       <div className="flex items-center justify-between">
-                        <p className={`text-xs ${spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}`}>
-                          {enrolled}/{c.max_students} vagas
+                        <p className="text-xs text-slate-400">
+                          <span className="text-sm font-extrabold text-brand-500">{enrolled}/{c.max_students}</span>{' '}
+                          <span className={spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}>vagas</span>
                         </p>
                         {(noCreditMap.get(c.id) ?? 0) > 0 && (
                           <span className="text-xs text-yellow-400 font-medium">
