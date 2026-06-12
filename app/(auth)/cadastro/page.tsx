@@ -47,6 +47,7 @@ export default function CadastroPage() {
   if (confirmEmail) {
     return (
       <Card>
+        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
         <div className="text-center py-4">
           <div className="text-4xl mb-4">📧</div>
           <h2 className="text-lg font-semibold text-white mb-2">Confirme seu email</h2>
@@ -67,6 +68,7 @@ export default function CadastroPage() {
 
   return (
     <Card>
+      <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
       <h2 className="text-lg font-semibold text-white mb-6">Criar conta</h2>
       <form onSubmit={handleCadastro} className="flex flex-col gap-4">
         <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />

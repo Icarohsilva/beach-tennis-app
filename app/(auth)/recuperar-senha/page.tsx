@@ -32,6 +32,7 @@ export default function RecuperarSenhaPage() {
   if (sent) {
     return (
       <Card>
+        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
         <p className="text-green-400 text-sm text-center">
           Email enviado! Verifique sua caixa de entrada.
         </p>
@@ -41,6 +42,7 @@ export default function RecuperarSenhaPage() {
 
   return (
     <Card>
+      <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
       <h2 className="text-lg font-semibold text-white mb-6">Recuperar senha</h2>
       <form onSubmit={handleReset} className="flex flex-col gap-4">
         <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
