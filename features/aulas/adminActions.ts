@@ -365,31 +365,18 @@ export async function addCreditsManually(
 
   const adminClient = createAdminClient()
 
-  const { data: student } = await adminClient
-    .from('profiles')
-    .select('credits_balance')
-    .eq('id', studentId)
-    .single()
-
-  if (!student) return { error: 'Aluno não encontrado.' }
-
-  const newBalance = (student.credits_balance as number) + amount
-
-  const { error: txErr } = await adminClient.from('credit_transactions').insert({
-    student_id: studentId,
-    type: amount > 0 ? 'renewed' : 'expired',
-    amount,
-    reason: reason.trim() || (amount > 0 ? 'Créditos adicionados pelo admin' : 'Créditos removidos pelo admin'),
-    session_id: null,
-    expires_at: null,
+  const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+    p_student_id: studentId,
+    p_delta: amount,
+    p_type: amount > 0 ? 'renewed' : 'expired',
+    p_reason: reason.trim() || (amount > 0 ? 'Créditos adicionados pelo admin' : 'Créditos removidos pelo admin'),
   })
 
-  if (txErr) return { error: 'Erro ao registrar transação.' }
-
-  await adminClient
-    .from('profiles')
-    .update({ credits_balance: newBalance })
-    .eq('id', studentId)
+  if (creditErr) {
+    if (creditErr.message.includes('STUDENT_NOT_FOUND')) return { error: 'Aluno não encontrado.' }
+    if (creditErr.message.includes('INSUFFICIENT_CREDITS')) return { error: 'Saldo insuficiente para remover essa quantidade.' }
+    return { error: 'Erro ao registrar transação.' }
+  }
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
