@@ -18,7 +18,7 @@ export default async function AdminDashboardPage() {
     { data: todaySessions },
     { data: recentTrials },
   ] = await Promise.all([
-    adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+    adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true),
     adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled'),
     adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true),
     adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true),
