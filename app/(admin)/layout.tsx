@@ -32,21 +32,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-surface text-white flex flex-col md:flex-row">
-      <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen p-4 hidden md:flex flex-col">
-        <div className="mb-6">
+      <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen hidden md:flex flex-col">
+        <div className="bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-5 mb-2">
           <Logo variant="full" size="sm" />
-          <span className="text-xs text-slate-500 mt-1 block">Painel Admin</span>
+          <span className="text-xs text-white/70 mt-1 block">Painel Admin</span>
         </div>
-        <nav className="flex flex-col gap-1 text-sm text-slate-400 flex-1">
-          {navLinks.map(link => (
-            <Link key={link.href} href={link.href} className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <LogoutButton className="mt-4 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors text-left w-full">
-          Sair
-        </LogoutButton>
+        <div className="px-4 pb-4 flex flex-col flex-1">
+          <nav className="flex flex-col gap-1 text-sm text-slate-400 flex-1">
+            {navLinks.map(link => (
+              <Link key={link.href} href={link.href} className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+          <LogoutButton className="mt-4 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors text-left w-full">
+            Sair
+          </LogoutButton>
+        </div>
       </aside>
       <AdminMobileNav links={navLinks} />
       <main className="flex-1 p-6 mt-14 md:mt-0">{children}</main>
