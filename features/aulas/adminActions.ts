@@ -367,28 +367,16 @@ export async function generateWeeklyBookings(
   in14.setDate(in14.getDate() + 14)
   const in14Str = format(in14, 'yyyy-MM-dd')
 
-  // Get upcoming sessions for this class
-  const { data: sessionsRaw } = await adminClient
-    .from('class_sessions')
-    .select('id, session_date')
-    .eq('class_id', classId)
-    .gte('session_date', today)
-    .lte('session_date', in14Str)
-    .eq('status', 'scheduled')
-
-  const sessions = (sessionsRaw ?? []) as { id: string; session_date: string }[]
-  if (sessions.length === 0) return { booked: [], skipped: [] }
-
-  // Get all enrolled students
+  // Matrículas ativas da turma com nome do aluno
   const { data: enrollmentsRaw } = await adminClient
     .from('enrollments')
-    .select('student_id, profiles(full_name, credits_balance, payment_type)')
+    .select('student_id, profiles(full_name)')
     .eq('class_id', classId)
     .eq('is_active', true)
 
   type EnrollRow = {
     student_id: string
-    profiles: { full_name: string; credits_balance: number; payment_type: string } | null
+    profiles: { full_name: string } | { full_name: string }[] | null
   }
   const enrollments = (enrollmentsRaw ?? []) as unknown as EnrollRow[]
   if (enrollments.length === 0) return { booked: [], skipped: [] }
@@ -396,84 +384,22 @@ export async function generateWeeklyBookings(
   const bookedNames: string[] = []
   const skippedNames: string[] = []
 
-  for (const session of sessions) {
-    for (const enroll of enrollments) {
-      const studentId = enroll.student_id
-      const profile = Array.isArray(enroll.profiles) ? enroll.profiles[0] : enroll.profiles
-      if (!profile) continue
+  for (const enroll of enrollments) {
+    const prof = Array.isArray(enroll.profiles) ? enroll.profiles[0] : enroll.profiles
+    const name = prof?.full_name ?? 'Aluno'
 
-      const paymentType = profile.payment_type
-      const needsCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
+    const r = await reconcileEnrollmentCredits(
+      enroll.student_id,
+      classId,
+      today,
+      in14Str,
+      adminClient,
+    )
 
-      // Skip if already has any booking (confirmed or pre-emptively cancelled/skipped)
-      const { count: exists } = await adminClient
-        .from('session_bookings')
-        .select('id', { count: 'exact', head: true })
-        .eq('student_id', studentId)
-        .eq('session_id', session.id)
-        .eq('from_enrollment', true)
-
-      if ((exists ?? 0) > 0) continue
-
-      if (!needsCredit) {
-        // Wellhub / TotalPass — book without credit
-        await adminClient.from('session_bookings').insert({
-          student_id: studentId,
-          session_id: session.id,
-          type: 'extra',
-          status: 'confirmed',
-          from_enrollment: true,
-          credit_used: false,
-        })
-        if (!bookedNames.includes(profile.full_name)) bookedNames.push(profile.full_name)
-        continue
-      }
-
-      if (profile.credits_balance < 1) {
-        // No credit — notify student and skip
-        await adminClient.from('notifications').insert({
-          user_id: studentId,
-          type: 'no_credit',
-          title: 'Sem créditos para sua aula',
-          body: `Você não tem créditos suficientes para a aula de ${session.session_date}. Renove seu plano para garantir sua vaga.`,
-        })
-        if (!skippedNames.includes(profile.full_name)) skippedNames.push(profile.full_name)
-        continue
-      }
-
-      // Has credit — book and deduct
-      await adminClient.from('session_bookings').insert({
-        student_id: studentId,
-        session_id: session.id,
-        type: 'extra',
-        status: 'confirmed',
-        from_enrollment: true,
-        credit_used: true,
-      })
-
-      const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-        p_student_id: studentId,
-        p_delta: -1,
-        p_type: 'used',
-        p_reason: `Aula fixa semanal — ${session.session_date}`,
-        p_session_id: session.id,
-      })
-
-      if (creditErr) {
-        if (creditErr.message.includes('INSUFFICIENT_CREDITS')) {
-          // Race between pre-check and RPC — treat as no-credit: skip
-          if (!skippedNames.includes(profile.full_name)) skippedNames.push(profile.full_name)
-        } else {
-          console.error(`adjust_credits failed for student ${studentId}:`, creditErr.message)
-        }
-        continue
-      }
-
-      // Decrement local balance so subsequent sessions see the updated value
-      // (pre-check uses this to avoid pointless RPC calls across loop iterations)
-      profile.credits_balance -= 1
-
-      if (!bookedNames.includes(profile.full_name)) bookedNames.push(profile.full_name)
+    if (r.booked > 0) {
+      if (!bookedNames.includes(name)) bookedNames.push(name)
+    } else if (r.skipped > 0) {
+      if (!skippedNames.includes(name)) skippedNames.push(name)
     }
   }
 
