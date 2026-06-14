@@ -33,5 +33,7 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // Exclui /api: rotas de API (crons, webhooks) têm autenticação própria
+  // (CRON_SECRET / assinatura) e não devem ser redirecionadas para /login.
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
