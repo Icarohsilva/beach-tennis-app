@@ -103,7 +103,8 @@ export async function subscribeToPlan(
 /**
  * Assigns a subscription plan to any student. Admin only.
  * - Deactivates any existing active subscription
- * - Grants initial credits equal to the plan's credits_per_month
+ * - Grants prorated credits by reconciling the student's active enrollments
+ *   over the remaining month (reconcileEnrollmentCredits)
  * - For is_dependent students: payer_id = parent_id
  * - Calls revalidatePath for the admin student page
  */

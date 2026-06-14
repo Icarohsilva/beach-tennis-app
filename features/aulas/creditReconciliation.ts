@@ -14,8 +14,8 @@ const EMPTY: ReconcileResult = { booked: 0, granted: 0, debited: 0, skipped: 0 }
 
 /**
  * Reconcilia os créditos de UMA matrícula (aluno+turma) no intervalo [from, to]:
- * para cada sessão scheduled ainda não reservada, concede 1 crédito, reserva a
- * sessão e debita 1 crédito (Wellhub/TotalPass: só reserva). Idempotente.
+ * para cada sessão scheduled ainda não reservada, reserva a sessão, concede 1
+ * crédito e debita 1 crédito (Wellhub/TotalPass: só reserva). Idempotente.
  */
 export async function reconcileEnrollmentCredits(
   studentId: string,
@@ -73,13 +73,16 @@ export async function reconcileEnrollmentCredits(
   const sessions = (sessionsRaw ?? []) as { id: string; session_date: string }[]
   if (sessions.length === 0) return result
 
-  // Reservas confirmadas existentes do aluno entre essas sessões
+  // Sessões em que o aluno já tem reserva (QUALQUER status). Inclui canceladas
+  // de propósito: opt-out de aula fixa (skipEnrollmentNoBooking) e saída com
+  // refund (skipEnrollmentSession) deixam uma reserva 'cancelled'. Reconciliar
+  // não pode reativá-las nem reconceder crédito — pulamos qualquer linha
+  // existente (o unique student_id+session_id garante no máximo uma).
   const sessionIds = sessions.map((s) => s.id)
   const { data: existingRaw } = await adminClient
     .from('session_bookings')
     .select('session_id')
     .eq('student_id', studentId)
-    .eq('status', 'confirmed')
     .in('session_id', sessionIds)
   const bookedSessionIds = new Set(
     (existingRaw ?? []).map((b: { session_id: string }) => b.session_id),
@@ -106,14 +109,24 @@ export async function reconcileEnrollmentCredits(
 
     if (!op.needsCredit) continue
 
-    // 2. Concede 1 crédito (log)
+    // 2. Concede 1 crédito (log). Só debita se a concessão funcionou — assim um
+    //    erro na concessão não faz o débito consumir saldo pré-existente.
+    //    Obs.: as 3 RPCs não são atômicas entre si; uma falha após a reserva
+    //    pode deixar a sessão reservada sem o par concede/debita. É raro
+    //    (cada RPC é atômica) e fica registrado no log para auditoria.
     const { error: grantErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: studentId,
       p_delta: 1,
       p_type: 'renewed',
       p_reason: op.grantReason,
     })
-    if (!grantErr) result.granted++
+    if (grantErr) {
+      console.error('[reconcileEnrollmentCredits] concessao falhou', {
+        studentId, sessionId: op.sessionId, error: grantErr.message,
+      })
+      continue
+    }
+    result.granted++
 
     // 3. Debita 1 crédito (log, vinculado à sessão)
     const { error: debitErr } = await adminClient.rpc('adjust_credits', {
@@ -123,7 +136,13 @@ export async function reconcileEnrollmentCredits(
       p_reason: op.debitReason,
       p_session_id: op.sessionId,
     })
-    if (!debitErr) result.debited++
+    if (debitErr) {
+      console.error('[reconcileEnrollmentCredits] debito falhou', {
+        studentId, sessionId: op.sessionId, error: debitErr.message,
+      })
+      continue
+    }
+    result.debited++
   }
 
   return result
