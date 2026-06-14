@@ -3,9 +3,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { format } from 'date-fns'
+import { format, endOfMonth } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
+import { reconcileEnrollmentCredits } from './creditReconciliation'
+import { requiresCredit } from '@/lib/utils/reconciliationOps'
 
 async function requireAdmin(): Promise<{ userId: string; error?: string }> {
   const supabase = createClient()
@@ -87,6 +89,26 @@ export async function enrollStudentInClass(
 
   if ((enrolled ?? 0) >= cls.max_students) return { error: 'Turma lotada.' }
 
+  // Validação: matrícula fixa exige plano ativo (exceto Wellhub/TotalPass)
+  const { data: validationProfile } = await adminClient
+    .from('profiles')
+    .select('payment_type')
+    .eq('id', studentId)
+    .single()
+
+  if (requiresCredit((validationProfile?.payment_type as string) ?? 'subscriber')) {
+    const { count: activeSubs } = await adminClient
+      .from('student_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId)
+      .eq('status', 'active')
+    if ((activeSubs ?? 0) === 0) {
+      return {
+        error: 'Aluno não possui plano ativo. Vincule um plano antes de criar a matrícula fixa.',
+      }
+    }
+  }
+
   // Upsert handles re-enrollment of previously cancelled students
   const { error } = await adminClient.from('enrollments').upsert(
     {
@@ -101,65 +123,10 @@ export async function enrollStudentInClass(
 
   if (error) return { error: `Erro ao criar matrícula: ${error.message}` }
 
-  // Deduct 1 credit and book the next upcoming session (if any)
+  // Concede + reserva + debita todas as sessões restantes do mês para esta turma
   const today = format(new Date(), 'yyyy-MM-dd')
-  const { data: nextSession } = await adminClient
-    .from('class_sessions')
-    .select('id, session_date')
-    .eq('class_id', classId)
-    .gte('session_date', today)
-    .eq('status', 'scheduled')
-    .order('session_date', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  const { data: studentProfile } = await adminClient
-    .from('profiles')
-    .select('credits_balance, full_name')
-    .eq('id', studentId)
-    .single()
-
-  const balance = (studentProfile?.credits_balance as number) ?? 0
-
-  if (nextSession && balance > 0) {
-    const sessionId = (nextSession as { id: string; session_date: string }).id
-    const sessionDate = (nextSession as { id: string; session_date: string }).session_date
-
-    // Check not already booked
-    const { count: alreadyBooked } = await adminClient
-      .from('session_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', studentId)
-      .eq('session_id', sessionId)
-      .eq('status', 'confirmed')
-
-    if ((alreadyBooked ?? 0) === 0) {
-      await adminClient.from('session_bookings').insert({
-        student_id: studentId,
-        session_id: sessionId,
-        type: 'extra',
-        status: 'confirmed',
-        from_enrollment: true,
-        credit_used: true,
-      })
-
-      const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-        p_student_id: studentId,
-        p_delta: -1,
-        p_type: 'used',
-        p_reason: `Matrícula fixa — aula ${sessionDate}`,
-        p_session_id: sessionId,
-      })
-
-      if (creditErr) {
-        return {
-          error: creditErr.message.includes('INSUFFICIENT_CREDITS')
-            ? 'Aluno sem créditos suficientes.'
-            : 'Erro ao debitar crédito.',
-        }
-      }
-    }
-  }
+  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
+  await reconcileEnrollmentCredits(studentId, classId, today, monthEnd)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')
