@@ -350,9 +350,9 @@ export async function addCreditsManually(
 }
 
 // ---------------------------------------------------------------------------
-// generateWeeklyBookings — for a class, creates session_bookings for enrolled
-// students in the next 14 days. Deducts credits; notifies if insufficient.
-// Returns lists of booked and skipped students for admin display.
+// generateWeeklyBookings — for a class, reconciles each enrolled student over
+// the next 14 days via reconcileEnrollmentCredits (book + grant + debit).
+// Returns lists of booked and skipped (e.g. full sessions) students for display.
 // ---------------------------------------------------------------------------
 
 export async function generateWeeklyBookings(
