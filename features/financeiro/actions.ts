@@ -3,6 +3,8 @@
 
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { PaymentType } from '@/types'
+import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
+import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 
 // ---------------------------------------------------------------------------
 // subscribeToPlan
@@ -79,16 +81,16 @@ export async function subscribeToPlan(
 
   if (insertErr || !newSub) return { error: 'Erro ao criar assinatura. Tente novamente.' }
 
-  // Grant initial credits if the plan includes monthly credits
-  const credits = plan.credits_per_month as number
-  if (credits > 0) {
-    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: user.id,
-      p_delta: credits,
-      p_type: 'renewed',
-      p_reason: `Créditos do plano ${plan.name}`,
-    })
-    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
+  // Concede créditos proporcionais reconciliando as matrículas ativas do aluno
+  const { data: activeEnrolls } = await adminClient
+    .from('enrollments')
+    .select('class_id')
+    .eq('student_id', user.id)
+    .eq('is_active', true)
+
+  const { from, to } = getRemainingMonthWindow(new Date())
+  for (const e of (activeEnrolls ?? []) as { class_id: string }[]) {
+    await reconcileEnrollmentCredits(user.id, e.class_id, from, to)
   }
 
   return {}
@@ -101,7 +103,8 @@ export async function subscribeToPlan(
 /**
  * Assigns a subscription plan to any student. Admin only.
  * - Deactivates any existing active subscription
- * - Grants initial credits equal to the plan's credits_per_month
+ * - Grants prorated credits by reconciling the student's active enrollments
+ *   over the remaining month (reconcileEnrollmentCredits)
  * - For is_dependent students: payer_id = parent_id
  * - Calls revalidatePath for the admin student page
  */
@@ -179,16 +182,18 @@ export async function adminSubscribeStudentToPlan(
 
   if (insertErr) return { error: 'Erro ao criar assinatura. Tente novamente.' }
 
-  // Grant initial credits
-  const creditsToGrant = (plan as { id: string; is_active: boolean; credits_per_month: number }).credits_per_month
-  if (creditsToGrant > 0 && newSub) {
-    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: studentId,
-      p_delta: creditsToGrant,
-      p_type: 'renewed',
-      p_reason: `Créditos do plano ${planId}`,
-    })
-    if (creditErr) return { error: 'Erro ao conceder créditos do plano.' }
+  // Concede créditos proporcionais reconciliando as matrículas ativas do aluno
+  if (newSub) {
+    const { data: activeEnrolls } = await adminClient
+      .from('enrollments')
+      .select('class_id')
+      .eq('student_id', studentId)
+      .eq('is_active', true)
+
+    const { from, to } = getRemainingMonthWindow(new Date())
+    for (const e of (activeEnrolls ?? []) as { class_id: string }[]) {
+      await reconcileEnrollmentCredits(studentId, e.class_id, from, to)
+    }
   }
 
   const { revalidatePath } = await import('next/cache')
