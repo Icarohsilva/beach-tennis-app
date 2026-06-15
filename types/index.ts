@@ -33,6 +33,7 @@ export interface Profile {
   contract_active: boolean
   credits_balance: number // cached; source of truth = credit_transactions
   monthly_checkin_target: number
+  pending_partner: CheckinPartner | null
   wellhub_id: string | null
   totalpass_id: string | null
   created_at: string
