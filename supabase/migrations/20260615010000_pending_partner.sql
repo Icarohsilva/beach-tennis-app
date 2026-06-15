@@ -18,8 +18,8 @@ begin
     new.raw_user_meta_data->>'avatar_url',
     new.raw_user_meta_data->>'phone',
     case when v_partner in ('wellhub','totalpass') then v_partner::checkin_partner else null end,
-    case when v_partner = 'wellhub' then v_partner_id else null end,
-    case when v_partner = 'totalpass' then v_partner_id else null end
+    case when v_partner = 'wellhub' then nullif(v_partner_id, '') else null end,
+    case when v_partner = 'totalpass' then nullif(v_partner_id, '') else null end
   );
   return new;
 end;

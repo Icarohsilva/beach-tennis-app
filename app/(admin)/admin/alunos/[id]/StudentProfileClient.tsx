@@ -353,6 +353,8 @@ export function StudentProfileClient({
       }
       setLinkedPartner(pending)
       setStudentTypeState(pending)
+      setPartnerId(declaredId)
+      setTargetInput(String(target))
       setPending(null)
       notify('Parceiro confirmado.')
     })
