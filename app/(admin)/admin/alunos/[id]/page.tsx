@@ -229,6 +229,7 @@ export default async function StudentProfilePage({ params }: Props) {
           wellhubId={student.wellhub_id}
           totalpassId={student.totalpass_id}
           monthlyTarget={student.monthly_checkin_target}
+          pendingPartner={student.pending_partner}
           checkins={checkins}
         />
       </Card>

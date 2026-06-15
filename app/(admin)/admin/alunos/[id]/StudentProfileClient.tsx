@@ -14,7 +14,7 @@ import {
   addCreditsManually,
 } from '@/features/aulas/adminActions'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
-import { setStudentType, recordCheckin } from '@/features/checkin/actions'
+import { setStudentType, recordCheckin, clearPendingPartner } from '@/features/checkin/actions'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -69,6 +69,7 @@ interface StudentProfileClientProps {
   wellhubId: string | null
   totalpassId: string | null
   monthlyTarget: number
+  pendingPartner: 'wellhub' | 'totalpass' | null
   checkins: {
     id: string
     partner: 'wellhub' | 'totalpass'
@@ -99,6 +100,7 @@ export function StudentProfileClient({
   wellhubId,
   totalpassId,
   monthlyTarget,
+  pendingPartner,
   checkins,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
@@ -125,6 +127,7 @@ export function StudentProfileClient({
   const [linkedPartner, setLinkedPartner] = useState<string>(paymentType)
   const [checkinList, setCheckinList] = useState(checkins)
   const [checkinsDone, setCheckinsDone] = useState(checkins.length)
+  const [pending, setPending] = useState<'wellhub' | 'totalpass' | null>(pendingPartner)
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -326,6 +329,45 @@ export function StudentProfileClient({
       ])
       if (result.progress) setCheckinsDone(result.progress.done)
       notify('Check-in registrado.')
+    })
+  }
+
+  function handleConfirmPartner() {
+    if (!pending) return
+    const target = parseInt(targetInput, 10)
+    if (Number.isNaN(target) || target < 0) {
+      setError('Defina uma meta mensal válida antes de confirmar.')
+      return
+    }
+    const declaredId = (pending === 'wellhub' ? wellhubId : totalpassId) ?? ''
+    setError(null)
+    startTransition(async () => {
+      const result = await setStudentType(studentId, {
+        type: pending,
+        partnerId: declaredId,
+        monthlyTarget: target,
+      })
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setLinkedPartner(pending)
+      setStudentTypeState(pending)
+      setPending(null)
+      notify('Parceiro confirmado.')
+    })
+  }
+
+  function handleRejectPartner() {
+    setError(null)
+    startTransition(async () => {
+      const result = await clearPendingPartner(studentId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setPending(null)
+      notify('Solicitação recusada.')
     })
   }
 
@@ -641,6 +683,30 @@ export function StudentProfileClient({
       {/* Tipo de aluno: Mensalista / Wellhub / TotalPass */}
       <section className="pt-4 border-t border-surface-border">
         <h3 className="text-sm font-semibold text-white mb-2">Tipo de aluno</h3>
+
+        {pending && (
+          <div className="mb-3 p-3 rounded-lg border border-yellow-700/50 bg-yellow-950/30">
+            <p className="text-sm text-yellow-200">
+              Solicitação de parceiro pendente:{' '}
+              <strong>{pending === 'wellhub' ? 'Gympass (Wellhub)' : 'TotalPass'}</strong>
+              {' · ID '}
+              <span className="font-mono">
+                {(pending === 'wellhub' ? wellhubId : totalpassId) || '—'}
+              </span>
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Defina a meta mensal abaixo e confirme.
+            </p>
+            <div className="flex gap-2 mt-2">
+              <Button onClick={handleConfirmPartner} disabled={isPending}>
+                Confirmar
+              </Button>
+              <Button onClick={handleRejectPartner} disabled={isPending} variant="secondary">
+                Recusar
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2 items-end">
           <label className="text-xs text-slate-400">
