@@ -29,6 +29,7 @@ export const manualValidator: CheckinValidator = {
  * Devolve o validador do parceiro. Hoje, manual para ambos.
  * No follow-up, retorna os adaptadores reais Wellhub/TotalPass.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function getValidator(_partner: CheckinPartner): CheckinValidator {
   return manualValidator
 }
