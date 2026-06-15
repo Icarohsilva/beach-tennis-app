@@ -8,6 +8,7 @@ export type BookingStatus = 'confirmed' | 'cancelled'
 export type BookingType = 'extra' | 'makeup'
 export type AttendanceStatus = 'present' | 'absent' | 'late'
 export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass'
+export type CheckinPartner = 'wellhub' | 'totalpass'
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled'
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
@@ -31,6 +32,7 @@ export interface Profile {
   parent_id: string | null
   contract_active: boolean
   credits_balance: number // cached; source of truth = credit_transactions
+  monthly_checkin_target: number
   wellhub_id: string | null
   totalpass_id: string | null
   created_at: string
@@ -86,6 +88,18 @@ export interface Attendance {
   status: AttendanceStatus
   source: AttendanceSource
   checked_in_at: string
+}
+
+export interface Checkin {
+  id: string
+  student_id: string
+  partner: CheckinPartner
+  checkin_date: string // YYYY-MM-DD
+  session_id: string | null
+  external_ref: string | null
+  validation: 'manual' | CheckinPartner
+  created_by: string | null
+  created_at: string
 }
 
 export interface CreditTransaction {
