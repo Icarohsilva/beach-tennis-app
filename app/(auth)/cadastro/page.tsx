@@ -11,19 +11,31 @@ import { Card } from '@/components/ui/Card'
 export default function CadastroPage() {
   const router = useRouter()
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
+  const [partner, setPartner] = useState<'none' | 'wellhub' | 'totalpass'>('none')
+  const [partnerId, setPartnerId] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmEmail, setConfirmEmail] = useState(false)
 
   async function handleCadastro(e: React.FormEvent) {
     e.preventDefault()
+    if (partner !== 'none' && !partnerId.trim()) {
+      setError('Informe o ID do seu Gympass/TotalPass.')
+      return
+    }
     setLoading(true)
     setError('')
     const supabase = createClient()
+    const meta: Record<string, string> = { full_name: form.full_name }
+    if (form.phone.trim()) meta.phone = form.phone.trim()
+    if (partner !== 'none') {
+      meta.pending_partner = partner
+      meta.partner_id = partnerId.trim()
+    }
     const { data, error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { full_name: form.full_name } },
+      options: { data: meta },
     })
     if (error) {
       setError(error.message)
@@ -74,6 +86,26 @@ export default function CadastroPage() {
         <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
         <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
         <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
+        <label className="text-sm text-slate-300">
+          Você usa Gympass ou TotalPass?
+          <select
+            value={partner}
+            onChange={(e) => setPartner(e.target.value as 'none' | 'wellhub' | 'totalpass')}
+            className="mt-1 block w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+          >
+            <option value="none">Não uso</option>
+            <option value="wellhub">Gympass (Wellhub)</option>
+            <option value="totalpass">TotalPass</option>
+          </select>
+        </label>
+        {partner !== 'none' && (
+          <Input
+            label="ID do Gympass/TotalPass"
+            value={partnerId}
+            onChange={(e) => setPartnerId(e.target.value)}
+            required
+          />
+        )}
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" loading={loading} size="lg" className="w-full">

@@ -45,7 +45,7 @@ export async function setStudentType(
   if (input.type === 'subscriber') {
     const { error } = await adminClient
       .from('profiles')
-      .update({ payment_type: 'subscriber', monthly_checkin_target: 0 })
+      .update({ payment_type: 'subscriber', monthly_checkin_target: 0, pending_partner: null })
       .eq('id', studentId)
     if (error) return { error: 'Erro ao definir tipo do aluno.' }
     revalidatePath(`/admin/alunos/${studentId}`)
@@ -63,6 +63,7 @@ export async function setStudentType(
       payment_type: input.type,
       [idColumn]: input.partnerId.trim() || null,
       monthly_checkin_target: input.monthlyTarget,
+      pending_partner: null,
     })
     .eq('id', studentId)
 
@@ -193,6 +194,23 @@ async function findLinkedSession(
     .maybeSingle()
 
   return (booking?.session_id as string | undefined) ?? null
+}
+
+/** Recusa a solicitação de parceiro autodeclarada: limpa pending_partner. */
+export async function clearPendingPartner(studentId: string): Promise<{ error?: string }> {
+  const { ok } = await requireAdmin()
+  if (!ok) return { error: 'Sem permissão de administrador.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('profiles')
+    .update({ pending_partner: null })
+    .eq('id', studentId)
+
+  if (error) return { error: 'Erro ao recusar solicitação.' }
+
+  revalidatePath(`/admin/alunos/${studentId}`)
+  return {}
 }
 
 /** Conta os check-ins do mês corrente e calcula o progresso. */
