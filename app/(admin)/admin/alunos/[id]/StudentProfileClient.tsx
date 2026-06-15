@@ -124,6 +124,7 @@ export function StudentProfileClient({
   const [targetInput, setTargetInput] = useState(String(monthlyTarget))
   const [linkedPartner, setLinkedPartner] = useState<string>(paymentType)
   const [checkinList, setCheckinList] = useState(checkins)
+  const [checkinsDone, setCheckinsDone] = useState(checkins.length)
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -317,12 +318,13 @@ export function StudentProfileClient({
           id: crypto.randomUUID(),
           partner: linkedPartner as 'wellhub' | 'totalpass',
           checkin_date: new Date().toISOString().slice(0, 10),
-          session_id: null,
+          session_id: result.linkedSessionId ?? null,
           validation: 'manual',
           created_at: new Date().toISOString(),
         },
         ...prev,
       ])
+      if (result.progress) setCheckinsDone(result.progress.done)
       notify('Check-in registrado.')
     })
   }
@@ -681,12 +683,12 @@ export function StudentProfileClient({
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-slate-300">
-                {checkinList.length} / {monthlyTarget} check-ins no mês
-                {checkinList.length < monthlyTarget && (
-                  <span className="text-yellow-400"> · faltam {monthlyTarget - checkinList.length}</span>
+                {checkinsDone} / {monthlyTarget} check-ins no mês
+                {checkinsDone < monthlyTarget && (
+                  <span className="text-yellow-400"> · faltam {monthlyTarget - checkinsDone}</span>
                 )}
-                {checkinList.length > monthlyTarget && monthlyTarget > 0 && (
-                  <span className="text-green-400"> · {checkinList.length - monthlyTarget} adiantado(s)</span>
+                {checkinsDone > monthlyTarget && monthlyTarget > 0 && (
+                  <span className="text-green-400"> · {checkinsDone - monthlyTarget} adiantado(s)</span>
                 )}
               </p>
               <Button onClick={handleRecordCheckin} disabled={isPending}>

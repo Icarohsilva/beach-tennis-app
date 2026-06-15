@@ -81,7 +81,7 @@ export async function recordCheckin(
   studentId: string,
   partner: CheckinPartner,
   opts?: { date?: string; code?: string; createdBy?: string },
-): Promise<{ error?: string; progress?: CheckinProgress }> {
+): Promise<{ error?: string; progress?: CheckinProgress; linkedSessionId?: string | null }> {
   const { ok } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
@@ -154,7 +154,10 @@ export async function recordCheckin(
   }
 
   revalidatePath(`/admin/alunos/${studentId}`)
-  return { progress: await monthlyProgress(adminClient, studentId, profile.monthly_checkin_target) }
+  return {
+    progress: await monthlyProgress(adminClient, studentId, profile.monthly_checkin_target),
+    linkedSessionId,
+  }
 }
 
 /** Sessão agendada na data, de turma com matrícula ativa e reserva confirmada. */
