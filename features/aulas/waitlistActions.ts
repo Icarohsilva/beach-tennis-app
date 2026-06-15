@@ -88,12 +88,13 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
 
   const { data: joinProfile } = await adminClient
     .from('profiles')
-    .select('level, is_dependent')
+    .select('level, is_dependent, payment_type')
     .eq('id', user.id)
     .single()
   if (!joinProfile) return { error: 'Perfil não encontrado.' }
 
-  if (!canStudentAttendLevel(joinProfile.level as StudentLevel, clsInfo.level)) {
+  const skipsLevel = joinProfile.payment_type === 'wellhub' || joinProfile.payment_type === 'totalpass'
+  if (!skipsLevel && !canStudentAttendLevel(joinProfile.level as StudentLevel, clsInfo.level)) {
     return { error: `Seu nível (${joinProfile.level}) não permite participar desta turma (${clsInfo.level}).` }
   }
   if (clsInfo.type === 'kids' && !joinProfile.is_dependent) {

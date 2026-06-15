@@ -117,7 +117,7 @@ export async function bookSession(
   // 1. Fetch student profile
   const { data: profile, error: profileErr } = await adminClient
     .from('profiles')
-    .select('id, level, is_dependent, credits_balance')
+    .select('id, level, is_dependent, credits_balance, payment_type')
     .eq('id', user.id)
     .single()
   if (profileErr || !profile) return { error: 'Perfil não encontrado.' }
@@ -144,8 +144,9 @@ export async function bookSession(
     name: string
   }
 
-  // 3. Level check
-  if (!canStudentAttendLevel(profile.level as StudentLevel, cls.level)) {
+  // 3. Level check (Wellhub/TotalPass entram em qualquer turma)
+  const skipsLevel = profile.payment_type === 'wellhub' || profile.payment_type === 'totalpass'
+  if (!skipsLevel && !canStudentAttendLevel(profile.level as StudentLevel, cls.level)) {
     return { error: `Seu nível (${profile.level}) não permite participar desta turma (${cls.level}).` }
   }
 
