@@ -25,7 +25,9 @@
 **Modify:**
 - `types/index.ts` — `CheckinPartner`, `Checkin`, e `monthly_checkin_target` em `Profile`.
 - `app/(admin)/admin/alunos/[id]/page.tsx` — buscar check-ins do mês + passar dados de parceiro ao client.
-- `app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx` — seção de vínculo + painel de check-in.
+- `app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx` — seletor de tipo de aluno + painel de check-in.
+- `features/aulas/actions.ts` — `bookSession`: pular checagem de nível p/ WH/TP.
+- `features/aulas/waitlistActions.ts` — `joinWaitlist`: pular checagem de nível p/ WH/TP.
 
 ---
 
@@ -312,12 +314,12 @@ git commit -m "feat(checkin): calculo puro de progresso mensal"
 
 ---
 
-## Task 5: Action `setStudentPartner`
+## Task 5: Action `setStudentType`
 
 **Files:**
 - Create: `features/checkin/actions.ts`
 
-- [ ] **Step 1: Write the file with `setStudentPartner`**
+- [ ] **Step 1: Write the file with `setStudentType`**
 
 ```ts
 'use server'
@@ -340,34 +342,51 @@ async function requireAdmin(): Promise<{ ok: boolean }> {
   return { ok: profile?.role === 'admin' }
 }
 
+export type StudentType = 'subscriber' | CheckinPartner
+
 /**
- * Vincula um aluno a um parceiro (Wellhub/TotalPass): define payment_type,
- * o ID do parceiro no campo correspondente e a meta mensal de check-ins.
+ * Define o tipo do aluno numa única ação:
+ * - 'subscriber' (Mensalista): payment_type='subscriber', meta zerada.
+ * - 'wellhub' / 'totalpass': payment_type do parceiro, grava o ID no campo
+ *   correspondente e a meta mensal de check-ins.
+ * (Vincular plano/créditos do mensalista continua em adminSubscribeStudentToPlan.)
  */
-export async function setStudentPartner(
+export async function setStudentType(
   studentId: string,
-  input: { partner: CheckinPartner; partnerId: string; monthlyTarget: number },
+  input:
+    | { type: 'subscriber' }
+    | { type: CheckinPartner; partnerId: string; monthlyTarget: number },
 ): Promise<{ error?: string }> {
   const { ok } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
+
+  const adminClient = createAdminClient()
+
+  if (input.type === 'subscriber') {
+    const { error } = await adminClient
+      .from('profiles')
+      .update({ payment_type: 'subscriber', monthly_checkin_target: 0 })
+      .eq('id', studentId)
+    if (error) return { error: 'Erro ao definir tipo do aluno.' }
+    revalidatePath(`/admin/alunos/${studentId}`)
+    return {}
+  }
 
   if (!Number.isInteger(input.monthlyTarget) || input.monthlyTarget < 0) {
     return { error: 'Meta mensal inválida.' }
   }
 
-  const adminClient = createAdminClient()
-  const idColumn = input.partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
-
+  const idColumn = input.type === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
   const { error } = await adminClient
     .from('profiles')
     .update({
-      payment_type: input.partner,
+      payment_type: input.type,
       [idColumn]: input.partnerId.trim() || null,
       monthly_checkin_target: input.monthlyTarget,
     })
     .eq('id', studentId)
 
-  if (error) return { error: 'Erro ao vincular parceiro.' }
+  if (error) return { error: 'Erro ao definir tipo do aluno.' }
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
@@ -383,7 +402,7 @@ Expected: PASS.
 
 ```bash
 git add features/checkin/actions.ts
-git commit -m "feat(checkin): action setStudentPartner (vincular parceiro + meta)"
+git commit -m "feat(checkin): action setStudentType (Mensalista/Wellhub/TotalPass)"
 ```
 
 ---
@@ -610,7 +629,7 @@ E passar as props novas ao `<StudentProfileClient ... />` (adicionar dentro do J
 Adicionar ao import de actions (após a linha do `adminSubscribeStudentToPlan`):
 
 ```ts
-import { setStudentPartner, recordCheckin } from '@/features/checkin/actions'
+import { setStudentType, recordCheckin } from '@/features/checkin/actions'
 ```
 
 Adicionar à `interface StudentProfileClientProps` (antes do fechamento `}`):
@@ -643,8 +662,8 @@ Adicionar os parâmetros desestruturados na função (após `currentSubscription
 Adicionar os estados (após `const [showCancelPlanDialog, ...]`):
 
 ```ts
-  const [partner, setPartner] = useState<'wellhub' | 'totalpass'>(
-    paymentType === 'totalpass' ? 'totalpass' : 'wellhub',
+  const [studentType, setStudentTypeState] = useState<'subscriber' | 'wellhub' | 'totalpass'>(
+    paymentType === 'wellhub' || paymentType === 'totalpass' ? paymentType : 'subscriber',
   )
   const [partnerId, setPartnerId] = useState(
     (paymentType === 'totalpass' ? totalpassId : wellhubId) ?? '',
@@ -657,21 +676,37 @@ Adicionar os estados (após `const [showCancelPlanDialog, ...]`):
 Adicionar os handlers (junto dos outros `handle...`):
 
 ```ts
-  function handleSavePartner() {
+  function handleSaveType() {
+    setError(null)
+    if (studentType === 'subscriber') {
+      startTransition(async () => {
+        const result = await setStudentType(studentId, { type: 'subscriber' })
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        setLinkedPartner('subscriber')
+        notify('Tipo do aluno atualizado.')
+      })
+      return
+    }
     const target = parseInt(targetInput, 10)
     if (Number.isNaN(target) || target < 0) {
       setError('Meta mensal inválida.')
       return
     }
-    setError(null)
     startTransition(async () => {
-      const result = await setStudentPartner(studentId, { partner, partnerId, monthlyTarget: target })
+      const result = await setStudentType(studentId, {
+        type: studentType,
+        partnerId,
+        monthlyTarget: target,
+      })
       if (result.error) {
         setError(result.error)
         return
       }
-      setLinkedPartner(partner)
-      notify('Parceiro vinculado.')
+      setLinkedPartner(studentType)
+      notify('Tipo do aluno atualizado.')
     })
   }
 
@@ -705,37 +740,44 @@ Adicionar os handlers (junto dos outros `handle...`):
 Adicionar este bloco JSX dentro do return do componente, logo antes do fechamento do container (perto das outras seções, ex.: após a seção de plano/assinatura):
 
 ```tsx
-      {/* Wellhub / TotalPass */}
+      {/* Tipo de aluno: Mensalista / Wellhub / TotalPass */}
       <section className="pt-4 border-t border-surface-border">
-        <h3 className="text-sm font-semibold text-white mb-2">Wellhub / TotalPass</h3>
+        <h3 className="text-sm font-semibold text-white mb-2">Tipo de aluno</h3>
 
         <div className="flex flex-wrap gap-2 items-end">
           <label className="text-xs text-slate-400">
-            Parceiro
+            Tipo
             <select
-              value={partner}
-              onChange={(e) => setPartner(e.target.value as 'wellhub' | 'totalpass')}
+              value={studentType}
+              onChange={(e) =>
+                setStudentTypeState(e.target.value as 'subscriber' | 'wellhub' | 'totalpass')
+              }
               className="mt-1 block bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm text-white"
             >
+              <option value="subscriber">Mensalista (plano)</option>
               <option value="wellhub">Wellhub</option>
               <option value="totalpass">TotalPass</option>
             </select>
           </label>
-          <label className="text-xs text-slate-400">
-            ID do parceiro
-            <Input value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="mt-1" />
-          </label>
-          <label className="text-xs text-slate-400">
-            Meta mensal
-            <Input
-              type="number"
-              value={targetInput}
-              onChange={(e) => setTargetInput(e.target.value)}
-              className="mt-1 w-24"
-            />
-          </label>
-          <Button onClick={handleSavePartner} disabled={isPending} variant="secondary">
-            Salvar vínculo
+          {(studentType === 'wellhub' || studentType === 'totalpass') && (
+            <>
+              <label className="text-xs text-slate-400">
+                ID do parceiro
+                <Input value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="mt-1" />
+              </label>
+              <label className="text-xs text-slate-400">
+                Meta mensal
+                <Input
+                  type="number"
+                  value={targetInput}
+                  onChange={(e) => setTargetInput(e.target.value)}
+                  className="mt-1 w-24"
+                />
+              </label>
+            </>
+          )}
+          <Button onClick={handleSaveType} disabled={isPending} variant="secondary">
+            Salvar tipo
           </Button>
         </div>
 
@@ -795,7 +837,66 @@ git commit -m "feat(checkin): UI de vinculo e registro de check-in no perfil do 
 
 ---
 
-## Task 8: Verificação final
+## Task 8: Dispensar nível para Wellhub/TotalPass (avulsa + espera)
+
+**Files:**
+- Modify: `features/aulas/actions.ts` (`bookSession`)
+- Modify: `features/aulas/waitlistActions.ts` (`joinWaitlist`)
+
+Regra: WH/TP entram em qualquer turma; a hierarquia de nível continua valendo para os demais. Kids e limite diário permanecem.
+
+- [ ] **Step 1: `bookSession` — buscar `payment_type` e pular nível p/ WH/TP**
+
+Em `features/aulas/actions.ts`, na `bookSession`, no select do perfil (passo "1. Fetch student profile") incluir `payment_type`:
+
+```ts
+    .select('id, level, is_dependent, credits_balance, payment_type')
+```
+
+E o bloco "3. Level check" passa a ser:
+
+```ts
+  // 3. Level check (Wellhub/TotalPass entram em qualquer turma)
+  const skipsLevel = profile.payment_type === 'wellhub' || profile.payment_type === 'totalpass'
+  if (!skipsLevel && !canStudentAttendLevel(profile.level as StudentLevel, cls.level)) {
+    return { error: `Seu nível (${profile.level}) não permite participar desta turma (${cls.level}).` }
+  }
+```
+
+- [ ] **Step 2: `joinWaitlist` — buscar `payment_type` e pular nível p/ WH/TP**
+
+Em `features/aulas/waitlistActions.ts`, na `joinWaitlist`, no select do perfil incluir `payment_type`:
+
+```ts
+    .select('level, is_dependent, payment_type')
+```
+
+E a checagem de nível passa a ser:
+
+```ts
+  const skipsLevel = joinProfile.payment_type === 'wellhub' || joinProfile.payment_type === 'totalpass'
+  if (!skipsLevel && !canStudentAttendLevel(joinProfile.level as StudentLevel, clsInfo.level)) {
+    return { error: `Seu nível (${joinProfile.level}) não permite participar desta turma (${clsInfo.level}).` }
+  }
+```
+
+> Leia as duas funções antes de editar para casar os nomes de variáveis exatos (`profile`/`joinProfile`, `cls`/`clsInfo`). Não altere as checagens de kids nem o limite diário.
+
+- [ ] **Step 3: Typecheck + lint**
+
+Run: `npx tsc --noEmit && npm run lint`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add features/aulas/actions.ts features/aulas/waitlistActions.ts
+git commit -m "feat(checkin): WH/TP ignoram regra de nivel em avulsa e lista de espera"
+```
+
+---
+
+## Task 9: Verificação final
 
 - [ ] **Step 1: Run the full test suite**
 
@@ -814,6 +915,8 @@ Com `npm run dev`, como admin em `/admin/alunos/<id>`:
 2. Clicar "Registrar check-in" num dia sem aula → aparece na lista, contador sobe, **sem** "presença em aula".
 3. Garantir uma matrícula fixa + reserva confirmada numa sessão de hoje; registrar check-in hoje → aparece com "presença em aula" e cria `attendance` (source=wellhub).
 4. Repetir além da meta → mostra "adiantado(s)".
+5. Trocar o tipo do aluno para **Mensalista** → `payment_type` vira `subscriber` e a meta zera.
+6. Como aluno **WH/TP**, reservar uma aula avulsa de nível **acima** do dele → permitido (sem erro de nível); entrar na lista de espera de turma de nível acima → permitido. Repetir com um **mensalista** de nível inferior → bloqueado por nível (regra mantida).
 
 - [ ] **Step 4: Commit (se houver ajustes do smoke)**
 
@@ -830,8 +933,10 @@ git commit -m "test(checkin): ajustes apos verificacao manual"
 - Tipos → Task 2.
 - Adaptador/validação (manual agora) → Task 3.
 - Progresso mensal → Task 4.
-- Vincular aluno (payment_type + ID + meta) → Task 5 + UI Task 7.
+- Definir tipo do aluno (Mensalista/Wellhub/TotalPass + ID + meta) → Task 5 + UI Task 7.
 - `recordCheckin` (validação, idempotência, presença em aula, progresso) → Task 6.
 - Painel feitos × faltantes + registro de check-in → Task 7.
-- Testes → Tasks 3, 4 (puros) + Task 8 (suite + smoke).
+- WH/TP ignoram regra de nível em avulsa + lista de espera → Task 8.
+- Testes → Tasks 3, 4 (puros) + Task 9 (suite + smoke).
+- Já implementado (avulsa/espera/aula fixa sem crédito p/ WH/TP) → confirmado no smoke da Task 9, sem novas tasks.
 - Fora de escopo (adaptadores reais, self-service) → não incluídos, conforme spec.

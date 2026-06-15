@@ -21,10 +21,20 @@ Check-in pode ser feito a qualquer hora, pelo próprio aluno (futuro) e pelo adm
 - **Janela:** sem restrição de horário.
 - **Meta mensal:** número fixo por aluno, definido pelo admin.
 - **Créditos:** Wellhub/TotalPass **não** usam crédito (mantém comportamento atual).
+- **Tipo de aluno:** o admin define o tipo numa única tela — Mensalista (`payment_type='subscriber'`) × Wellhub × TotalPass. (Vincular plano/créditos do mensalista continua na ação existente.)
+- **Nível para WH/TP:** a hierarquia de nível (iniciante < D < C < B < A) **não** se aplica a Wellhub/TotalPass na reserva avulsa nem na lista de espera — eles entram em qualquer turma com vaga. Para mensalista/avulso a regra continua valendo.
+
+## Já implementado (sem trabalho nesta entrega)
+
+- Wellhub/TotalPass **sem crédito em aula fixa, qualquer turma**: a reconciliação de créditos agenda WH/TP sem débito e a matrícula via admin não checa nível.
+- Wellhub/TotalPass **em aula avulsa com vaga**: [`bookNextSession`](../../../features/aulas/actions.ts) detecta o parceiro e chama `bookSession(useCredit=false)`; capacidade respeitada.
+- Wellhub/TotalPass **na lista de espera**: `joinWaitlist` não bloqueia por tipo de pagamento.
+
+Esta entrega só **ajusta a regra de nível** nesses dois pontos (ver abaixo) e adiciona o seletor de tipo.
 
 ## Escopo
 
-**Nesta entrega:** vínculo do aluno (payment_type + ID do parceiro + meta mensal), modelo de dados de check-in, registro de check-in com **validação manual/admin**, ligação com presença em aula fixa, painel de progresso (feitos × faltantes), e a **interface de adaptador** com um validador stub.
+**Nesta entrega:** seletor de **tipo de aluno** (Mensalista/Wellhub/TotalPass) com ID do parceiro + meta mensal; modelo de dados de check-in; registro de check-in com **validação manual/admin**; ligação com presença em aula fixa; painel de progresso (feitos × faltantes); **interface de adaptador** com validador stub; e **dispensa da checagem de nível** para WH/TP em `bookSession` e `joinWaitlist`.
 
 **Fora (follow-up isolado):** adaptadores reais Wellhub/TotalPass (pull por código ou push por webhook) e a tela self-service do aluno. A `action` de registro é compartilhada, então o follow-up é uma troca localizada.
 
