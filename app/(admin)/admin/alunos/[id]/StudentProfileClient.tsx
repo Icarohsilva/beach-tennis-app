@@ -14,6 +14,7 @@ import {
   addCreditsManually,
 } from '@/features/aulas/adminActions'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
+import { setStudentType, recordCheckin } from '@/features/checkin/actions'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -64,6 +65,18 @@ interface StudentProfileClientProps {
   isDependent: boolean
   availablePlans?: PlanSummary[]
   currentSubscription?: CurrentSubscription | null
+  paymentType: string
+  wellhubId: string | null
+  totalpassId: string | null
+  monthlyTarget: number
+  checkins: {
+    id: string
+    partner: 'wellhub' | 'totalpass'
+    checkin_date: string
+    session_id: string | null
+    validation: string
+    created_at: string
+  }[]
 }
 
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -82,6 +95,11 @@ export function StudentProfileClient({
   isDependent,
   availablePlans = [],
   currentSubscription = null,
+  paymentType,
+  wellhubId,
+  totalpassId,
+  monthlyTarget,
+  checkins,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
   const [enrollmentList, setEnrollmentList] = useState(enrollments)
@@ -97,6 +115,15 @@ export function StudentProfileClient({
   const [creditAmount, setCreditAmount] = useState('')
   const [creditReason, setCreditReason] = useState('')
   const [showCancelPlanDialog, setShowCancelPlanDialog] = useState(false)
+  const [studentType, setStudentTypeState] = useState<'subscriber' | 'wellhub' | 'totalpass'>(
+    paymentType === 'wellhub' || paymentType === 'totalpass' ? paymentType : 'subscriber',
+  )
+  const [partnerId, setPartnerId] = useState(
+    (paymentType === 'totalpass' ? totalpassId : wellhubId) ?? '',
+  )
+  const [targetInput, setTargetInput] = useState(String(monthlyTarget))
+  const [linkedPartner, setLinkedPartner] = useState<string>(paymentType)
+  const [checkinList, setCheckinList] = useState(checkins)
 
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -239,6 +266,64 @@ export function StudentProfileClient({
       setActiveSub(null)
       if (clearCredits) setCreditsBalance(0)
       notify('Plano cancelado.')
+    })
+  }
+
+  function handleSaveType() {
+    setError(null)
+    if (studentType === 'subscriber') {
+      startTransition(async () => {
+        const result = await setStudentType(studentId, { type: 'subscriber' })
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        setLinkedPartner('subscriber')
+        notify('Tipo do aluno atualizado.')
+      })
+      return
+    }
+    const target = parseInt(targetInput, 10)
+    if (Number.isNaN(target) || target < 0) {
+      setError('Meta mensal inválida.')
+      return
+    }
+    startTransition(async () => {
+      const result = await setStudentType(studentId, {
+        type: studentType,
+        partnerId,
+        monthlyTarget: target,
+      })
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setLinkedPartner(studentType)
+      notify('Tipo do aluno atualizado.')
+    })
+  }
+
+  function handleRecordCheckin() {
+    if (linkedPartner !== 'wellhub' && linkedPartner !== 'totalpass') return
+    setError(null)
+    startTransition(async () => {
+      const result = await recordCheckin(studentId, linkedPartner as 'wellhub' | 'totalpass')
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setCheckinList((prev) => [
+        {
+          id: crypto.randomUUID(),
+          partner: linkedPartner as 'wellhub' | 'totalpass',
+          checkin_date: new Date().toISOString().slice(0, 10),
+          session_id: null,
+          validation: 'manual',
+          created_at: new Date().toISOString(),
+        },
+        ...prev,
+      ])
+      notify('Check-in registrado.')
     })
   }
 
@@ -550,6 +635,86 @@ export function StudentProfileClient({
           </div>
         </section>
       )}
+
+      {/* Tipo de aluno: Mensalista / Wellhub / TotalPass */}
+      <section className="pt-4 border-t border-surface-border">
+        <h3 className="text-sm font-semibold text-white mb-2">Tipo de aluno</h3>
+
+        <div className="flex flex-wrap gap-2 items-end">
+          <label className="text-xs text-slate-400">
+            Tipo
+            <select
+              value={studentType}
+              onChange={(e) =>
+                setStudentTypeState(e.target.value as 'subscriber' | 'wellhub' | 'totalpass')
+              }
+              className="mt-1 block bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm text-white"
+            >
+              <option value="subscriber">Mensalista (plano)</option>
+              <option value="wellhub">Wellhub</option>
+              <option value="totalpass">TotalPass</option>
+            </select>
+          </label>
+          {(studentType === 'wellhub' || studentType === 'totalpass') && (
+            <>
+              <label className="text-xs text-slate-400">
+                ID do parceiro
+                <Input value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="mt-1" />
+              </label>
+              <label className="text-xs text-slate-400">
+                Meta mensal
+                <Input
+                  type="number"
+                  value={targetInput}
+                  onChange={(e) => setTargetInput(e.target.value)}
+                  className="mt-1 w-24"
+                />
+              </label>
+            </>
+          )}
+          <Button onClick={handleSaveType} disabled={isPending} variant="secondary">
+            Salvar tipo
+          </Button>
+        </div>
+
+        {(linkedPartner === 'wellhub' || linkedPartner === 'totalpass') && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-slate-300">
+                {checkinList.length} / {monthlyTarget} check-ins no mês
+                {checkinList.length < monthlyTarget && (
+                  <span className="text-yellow-400"> · faltam {monthlyTarget - checkinList.length}</span>
+                )}
+                {checkinList.length > monthlyTarget && monthlyTarget > 0 && (
+                  <span className="text-green-400"> · {checkinList.length - monthlyTarget} adiantado(s)</span>
+                )}
+              </p>
+              <Button onClick={handleRecordCheckin} disabled={isPending}>
+                Registrar check-in
+              </Button>
+            </div>
+            <ul className="space-y-1">
+              {checkinList.map((c) => (
+                <li
+                  key={c.id}
+                  className="flex items-center justify-between text-xs px-3 py-2 bg-surface-card border border-surface-border rounded-lg"
+                >
+                  <span className="text-white">
+                    {new Date(c.checkin_date).toLocaleDateString('pt-BR')}
+                    {c.session_id && <span className="text-green-400"> · presença em aula</span>}
+                  </span>
+                  <Badge variant={c.partner === 'wellhub' ? 'success' : 'warning'}>
+                    {c.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
+                  </Badge>
+                </li>
+              ))}
+              {checkinList.length === 0 && (
+                <li className="text-slate-500 text-xs px-1">Nenhum check-in neste mês.</li>
+              )}
+            </ul>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

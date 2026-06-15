@@ -2,6 +2,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
@@ -157,6 +158,25 @@ export default async function StudentProfilePage({ params }: Props) {
     expires_at: string | null
   }[]
 
+  // Check-ins do mês corrente (Wellhub/TotalPass)
+  const { from: monthFrom, to: monthTo } = getMonthWindow(new Date())
+  const { data: checkinsRaw } = await adminClient
+    .from('checkins')
+    .select('id, partner, checkin_date, session_id, validation, created_at')
+    .eq('student_id', params.id)
+    .gte('checkin_date', monthFrom)
+    .lte('checkin_date', monthTo)
+    .order('checkin_date', { ascending: false })
+
+  const checkins = (checkinsRaw ?? []) as {
+    id: string
+    partner: 'wellhub' | 'totalpass'
+    checkin_date: string
+    session_id: string | null
+    validation: string
+    created_at: string
+  }[]
+
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Breadcrumb */}
@@ -205,6 +225,11 @@ export default async function StudentProfilePage({ params }: Props) {
           isDependent={student.is_dependent}
           availablePlans={availablePlans}
           currentSubscription={currentSubscription}
+          paymentType={student.payment_type}
+          wellhubId={student.wellhub_id}
+          totalpassId={student.totalpass_id}
+          monthlyTarget={student.monthly_checkin_target}
+          checkins={checkins}
         />
       </Card>
 
