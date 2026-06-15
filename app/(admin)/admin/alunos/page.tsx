@@ -28,7 +28,7 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   let dbQuery = adminClient
     .from('profiles')
-    .select('id, full_name, level, payment_type, contract_active, is_dependent, parent_id, credits_balance')
+    .select('id, full_name, level, payment_type, contract_active, is_dependent, parent_id, credits_balance, pending_partner')
     .eq('role', 'student')
     .order('full_name', { ascending: true })
 
@@ -44,7 +44,7 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   const students = (profiles ?? []) as Pick<
     Profile,
-    'id' | 'full_name' | 'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance'
+    'id' | 'full_name' | 'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'pending_partner'
   >[]
 
   // Fetch active enrollments count per student
@@ -151,6 +151,11 @@ export default async function AlunosPage({ searchParams }: Props) {
                       <p className="text-white font-medium text-sm truncate">{student.full_name}</p>
                       {student.is_dependent && (
                         <span className="text-xs text-slate-500">Dependente</span>
+                      )}
+                      {student.pending_partner && (
+                        <span className="block text-xs text-yellow-400 mt-0.5">
+                          Parceiro pendente
+                        </span>
                       )}
                     </div>
                     <Badge variant="level">{student.level.toUpperCase()}</Badge>
