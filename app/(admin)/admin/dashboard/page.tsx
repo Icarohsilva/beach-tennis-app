@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 
-import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId, getStaffContext } from '@/lib/supabase/server'
+import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -9,6 +10,8 @@ import Link from 'next/link'
 export default async function AdminDashboardPage() {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
+  const staff = await getStaffContext()
+  const isOwner = staff?.isOwner ?? false
   const today = new Date().toISOString().slice(0, 10)
 
   const [
@@ -108,14 +111,16 @@ export default async function AdminDashboardPage() {
       <section>
         <h2 className="text-lg font-semibold text-white mb-3">Ações Rápidas</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[
-            { href: '/admin/grade/nova-turma', label: '+ Nova Turma' },
-            { href: '/admin/grade/dayuse', label: 'Day Use' },
-            { href: '/admin/alunos', label: 'Gerenciar Alunos' },
-            { href: '/admin/financeiro', label: 'Financeiro' },
-            { href: '/admin/notificacoes', label: 'Enviar Notificação' },
-            { href: '/admin/torneios', label: 'Torneios' },
-          ].map((item) => (
+          {([
+            { href: '/admin/grade/nova-turma', label: '+ Nova Turma', area: 'aulas' },
+            { href: '/admin/grade/dayuse', label: 'Day Use', area: 'aulas' },
+            { href: '/admin/alunos', label: 'Gerenciar Alunos', area: 'alunos' },
+            { href: '/admin/financeiro', label: 'Financeiro', area: 'financeiro' },
+            { href: '/admin/notificacoes', label: 'Enviar Notificação', area: 'notificacoes' },
+            { href: '/admin/torneios', label: 'Torneios', area: 'torneios' },
+          ] as { href: string; label: string; area: AdminArea }[])
+            .filter((item) => canAccessArea(item.area, isOwner))
+            .map((item) => (
             <Link key={item.href} href={item.href}>
               <Card className="text-center hover:border-brand-600/50 transition-colors cursor-pointer py-4">
                 <span className="text-slate-300 text-sm">{item.label}</span>
