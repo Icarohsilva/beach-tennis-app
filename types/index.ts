@@ -1,6 +1,7 @@
 // types/index.ts
 
-export type UserRole = 'student' | 'admin'
+export type UserRole = 'student' | 'admin' | 'super_admin'
+export type OrganizationStatus = 'active' | 'suspended'
 export type StudentLevel = 'A' | 'B' | 'C' | 'D' | 'iniciante'
 export type PaymentType = 'subscriber' | 'per_class' | 'wellhub' | 'totalpass'
 export type ClassType = 'kids' | 'adult'
@@ -19,8 +20,21 @@ export type TournamentModality = 'dupla_fixa' | 'dupla_revezando'
 export type TournamentStatus = 'draft' | 'open' | 'in_progress' | 'finished'
 export type TrialStatus = 'pending' | 'attended' | 'no_show' | 'cancelled'
 
+export interface Organization {
+  id: string
+  name: string
+  slug: string
+  invite_code: string
+  logo_url: string | null
+  brand_color: string | null
+  status: OrganizationStatus
+  is_default: boolean
+  created_at: string
+}
+
 export interface Profile {
   id: string
+  organization_id: string
   full_name: string
   avatar_url: string | null
   phone: string | null
@@ -41,6 +55,7 @@ export interface Profile {
 
 export interface Class {
   id: string
+  organization_id: string
   name: string
   description: string | null
   level: StudentLevel
@@ -55,6 +70,7 @@ export interface Class {
 
 export interface ClassSession {
   id: string
+  organization_id: string
   class_id: string
   session_date: string // YYYY-MM-DD
   status: SessionStatus
@@ -63,6 +79,7 @@ export interface ClassSession {
 
 export interface Enrollment {
   id: string
+  organization_id: string
   student_id: string
   class_id: string
   enrolled_at: string
@@ -72,6 +89,7 @@ export interface Enrollment {
 
 export interface SessionBooking {
   id: string
+  organization_id: string
   student_id: string
   session_id: string
   type: BookingType
@@ -84,6 +102,7 @@ export interface SessionBooking {
 
 export interface Attendance {
   id: string
+  organization_id: string
   student_id: string
   session_id: string
   status: AttendanceStatus
@@ -93,6 +112,7 @@ export interface Attendance {
 
 export interface Checkin {
   id: string
+  organization_id: string
   student_id: string
   partner: CheckinPartner
   checkin_date: string // YYYY-MM-DD
@@ -105,6 +125,7 @@ export interface Checkin {
 
 export interface CreditTransaction {
   id: string
+  organization_id: string
   student_id: string
   type: CreditTransactionType
   amount: number
@@ -117,6 +138,7 @@ export interface CreditTransaction {
 
 export interface TrialBooking {
   id: string
+  organization_id: string
   name: string
   email: string
   phone: string
@@ -128,6 +150,7 @@ export interface TrialBooking {
 
 export interface SubscriptionPlan {
   id: string
+  organization_id: string
   name: string
   description: string | null
   classes_per_week: number
@@ -140,6 +163,7 @@ export interface SubscriptionPlan {
 
 export interface StudentSubscription {
   id: string
+  organization_id: string
   student_id: string
   payer_id: string
   plan_id: string
@@ -153,6 +177,7 @@ export interface StudentSubscription {
 
 export interface Payment {
   id: string
+  organization_id: string
   student_id: string
   subscription_id: string | null
   session_id: string | null
@@ -168,6 +193,7 @@ export interface Payment {
 
 export interface Tournament {
   id: string
+  organization_id: string
   name: string
   date: string
   format: TournamentFormat
@@ -179,6 +205,7 @@ export interface Tournament {
 
 export interface Post {
   id: string
+  organization_id: string
   author_id: string
   content: string
   image_urls: string[]
@@ -190,6 +217,7 @@ export interface Post {
 
 export interface Notification {
   id: string
+  organization_id: string
   user_id: string
   type: string
   title: string
@@ -200,6 +228,7 @@ export interface Notification {
 
 export interface DayUseSlot {
   id: string
+  organization_id: string
   court: number       // 1 ou 2
   date: string        // YYYY-MM-DD
   start_time: string  // HH:MM
@@ -213,6 +242,7 @@ export interface DayUseSlot {
 
 export interface DayUseBooking {
   id: string
+  organization_id: string
   slot_id: string
   student_id: string
   status: 'confirmed' | 'cancelled'
@@ -224,6 +254,7 @@ export type WaitlistStatus = 'waiting' | 'offered' | 'accepted' | 'expired' | 'c
 
 export interface Waitlist {
   id: string
+  organization_id: string
   session_id: string
   student_id: string
   position: number

@@ -1,6 +1,6 @@
 'use server'
 
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { format } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
@@ -22,10 +22,13 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   if (!data.name.trim()) return { error: 'Nome é obrigatório' }
   if (data.start_time >= data.end_time) return { error: 'Horário de fim deve ser depois do início' }
 
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { error: 'Academia não encontrada.' }
+
   const adminClient = createAdminClient()
   const { data: newClass, error } = await adminClient
     .from('classes')
-    .insert({ ...data, is_active: true })
+    .insert({ ...data, is_active: true, organization_id: orgId })
     .select('id')
     .single()
   if (error) return { error: error.message }

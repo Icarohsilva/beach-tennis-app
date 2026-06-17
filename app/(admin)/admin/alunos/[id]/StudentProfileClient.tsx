@@ -57,6 +57,7 @@ interface CurrentSubscription {
 
 interface StudentProfileClientProps {
   studentId: string
+  organizationId: string
   currentLevel: StudentLevel
   currentCreditsBalance: number
   enrollments: EnrollmentWithClass[]
@@ -88,6 +89,7 @@ function formatTime(t: string) {
 
 export function StudentProfileClient({
   studentId,
+  organizationId,
   currentLevel,
   currentCreditsBalance,
   enrollments,
@@ -168,6 +170,7 @@ export function StudentProfileClient({
           ...prev,
           {
             id: crypto.randomUUID(), // temporary until page reload
+            organization_id: organizationId,
             student_id: studentId,
             class_id: cls.id,
             enrolled_at: new Date().toISOString(),

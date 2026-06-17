@@ -1,6 +1,6 @@
 // app/(admin)/alunos/page.tsx
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -22,6 +22,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AlunosPage({ searchParams }: Props) {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   const query = searchParams.q?.trim() ?? ''
   const levelFilter = searchParams.level ?? ''
@@ -30,6 +31,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     .from('profiles')
     .select('id, full_name, level, payment_type, contract_active, is_dependent, parent_id, credits_balance, pending_partner')
     .eq('role', 'student')
+    .eq('organization_id', orgId)
     .order('full_name', { ascending: true })
 
   if (query) {

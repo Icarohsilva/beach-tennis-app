@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic'
 
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -8,6 +8,7 @@ import Link from 'next/link'
 
 export default async function AdminDashboardPage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
   const today = new Date().toISOString().slice(0, 10)
 
   const [
@@ -18,17 +19,19 @@ export default async function AdminDashboardPage() {
     { data: todaySessions },
     { data: recentTrials },
   ] = await Promise.all([
-    adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true),
-    adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled'),
-    adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true),
-    adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true),
+    adminClient.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).eq('organization_id', orgId),
+    adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled').eq('organization_id', orgId),
+    adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
+    adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true).eq('organization_id', orgId),
     adminClient.from('class_sessions')
       .select('id, status, class:classes(name, start_time, end_time, level, type)')
       .eq('session_date', today)
-      .neq('status', 'cancelled'),
+      .neq('status', 'cancelled')
+      .eq('organization_id', orgId),
     adminClient.from('trial_bookings')
       .select('id, name, status, created_at')
       .eq('status', 'pending')
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
       .limit(5),
   ])

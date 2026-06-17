@@ -384,18 +384,25 @@ export async function updateSystemSettings(settings: {
   // Verify caller is admin
   const { data: callerProfile } = await adminClient
     .from('profiles')
-    .select('role')
+    .select('role, organization_id')
     .eq('id', user.id)
     .single()
 
   if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
+  const orgId = (callerProfile as { organization_id: string }).organization_id
 
-  const { error: updateErr } = await adminClient
-    .from('system_settings')
-    .update(settings)
-    .not('id', 'is', null)
+  // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
+  const rows = Object.entries(settings)
+    .filter(([, v]) => v !== undefined)
+    .map(([key, value]) => ({ organization_id: orgId, key, value: String(value) }))
 
-  if (updateErr) return { error: 'Erro ao salvar configurações.' }
+  if (rows.length > 0) {
+    const { error: updateErr } = await adminClient
+      .from('system_settings')
+      .upsert(rows, { onConflict: 'organization_id,key' })
+
+    if (updateErr) return { error: 'Erro ao salvar configurações.' }
+  }
 
   return {}
 }

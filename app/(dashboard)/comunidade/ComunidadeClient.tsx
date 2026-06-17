@@ -28,7 +28,7 @@ export function ComunidadeClient({
   // Posts created in this session — prepended to the feed immediately without server round-trip
   const [localPosts, setLocalPosts] = useState<PostWithAuthor[]>([])
 
-  function handlePostCreated(newPost: { id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } }) {
+  function handlePostCreated(newPost: { id: string; organization_id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } }) {
     setShowCreatePost(false)
     const fullPost: PostWithAuthor = { ...newPost, comment_count: 0 }
     setLocalPosts((prev) => [fullPost, ...prev])

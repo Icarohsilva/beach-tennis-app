@@ -45,7 +45,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
         async (payload) => {
           const { data } = await supabase
             .from('posts')
-            .select('id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+            .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
             .eq('id', payload.new.id)
             .single()
 
@@ -55,6 +55,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
               : (data as { author: unknown }).author
             const newPost: PostWithAuthor = {
               id: data.id,
+              organization_id: data.organization_id,
               author_id: data.author_id,
               content: data.content,
               image_urls: data.image_urls ?? [],
@@ -88,7 +89,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
     const supabase = createClient()
     const { data } = await supabase
       .from('posts')
-      .select('id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+      .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -112,6 +113,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
           : (d as { author: unknown }).author
         return {
           id: d.id,
+          organization_id: d.organization_id,
           author_id: d.author_id,
           content: d.content,
           image_urls: d.image_urls ?? [],

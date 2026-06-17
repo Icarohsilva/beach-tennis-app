@@ -1,5 +1,5 @@
 // app/(admin)/financeiro/page.tsx
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { PlansManager } from './PlansManager'
@@ -26,6 +26,7 @@ interface PendingPayment {
 
 export default async function FinanceiroPage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   // ─── Receita do mês ──────────────────────────────────────────────────────
   const startOfMonth = new Date()
@@ -35,6 +36,7 @@ export default async function FinanceiroPage() {
   const { data: monthlyPayments } = await adminClient
     .from('payments')
     .select('amount, status')
+    .eq('organization_id', orgId)
     .gte('created_at', startOfMonth.toISOString())
 
   const monthlyRevenue = (monthlyPayments as RevenueRow[] ?? [])
@@ -50,6 +52,7 @@ export default async function FinanceiroPage() {
     .from('student_subscriptions')
     .select('student_id, profiles:profiles!student_subscriptions_student_id_fkey(full_name)')
     .eq('status', 'active')
+    .eq('organization_id', orgId)
 
   // Filter: students whose last payment has status = 'failed'
   const inadimplentes: InadimplentRow[] = []
@@ -74,6 +77,7 @@ export default async function FinanceiroPage() {
     .from('payments')
     .select('id, student_id, amount, currency, created_at, profiles:profiles!payments_student_id_fkey(full_name)')
     .eq('status', 'pending')
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(20)
 
@@ -83,6 +87,7 @@ export default async function FinanceiroPage() {
   const { data: plansRaw } = await adminClient
     .from('subscription_plans')
     .select('*')
+    .eq('organization_id', orgId)
     .order('classes_per_week', { ascending: true })
 
   const plans: SubscriptionPlan[] = plansRaw ?? []

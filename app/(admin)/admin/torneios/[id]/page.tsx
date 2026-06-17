@@ -1,7 +1,7 @@
 // app/(admin)/torneios/[id]/page.tsx
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { BracketView } from '@/features/torneios/BracketView'
@@ -30,12 +30,14 @@ interface PageProps {
 
 export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   // Fetch tournament
   const { data: tournament, error } = await adminClient
     .from('tournaments')
     .select('*')
     .eq('id', params.id)
+    .eq('organization_id', orgId)
     .single()
 
   if (error || !tournament) notFound()

@@ -1,5 +1,5 @@
 // app/(admin)/configuracoes/page.tsx
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { SystemSettingsForm } from './SystemSettingsForm'
 
 interface SystemSettings {
@@ -9,15 +9,18 @@ interface SystemSettings {
 
 export default async function ConfiguracoesPage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
-  const { data: settings } = await adminClient
+  const { data: rows } = await adminClient
     .from('system_settings')
-    .select('credit_expiry_days, cancellation_window_hours')
-    .maybeSingle()
+    .select('key, value')
+    .eq('organization_id', orgId)
+
+  const map = new Map((rows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
 
   const defaults: SystemSettings = {
-    credit_expiry_days: settings?.credit_expiry_days ?? 30,
-    cancellation_window_hours: settings?.cancellation_window_hours ?? 5,
+    credit_expiry_days: Number(map.get('credit_expiry_days') ?? 30),
+    cancellation_window_hours: Number(map.get('cancellation_window_hours') ?? 5),
   }
 
   return (

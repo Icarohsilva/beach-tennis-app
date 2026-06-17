@@ -1,6 +1,6 @@
 // app/(admin)/grade/page.tsx
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -17,12 +17,14 @@ const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
 export default async function GradePage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   // Fetch all active classes
   const { data: classes } = await adminClient
     .from('classes')
     .select('*')
     .eq('is_active', true)
+    .eq('organization_id', orgId)
     .order('day_of_week', { ascending: true })
     .order('start_time', { ascending: true })
 
@@ -35,6 +37,7 @@ export default async function GradePage() {
     .select('*, class:classes(name, level, type, start_time, end_time, max_students)')
     .eq('session_date', today)
     .neq('status', 'cancelled')
+    .eq('organization_id', orgId)
     .order('class(start_time)', { ascending: true })
 
   type SessionWithClass = ClassSession & {

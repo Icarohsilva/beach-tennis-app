@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { EditClassForm } from '@/features/aulas/EditClassForm'
 import type { Class } from '@/types'
 
 export default async function EditClassPage({ params }: { params: { sessionId: string } }) {
   const classId = params.sessionId
   const adminClient = createAdminClient()
-  const { data } = await adminClient.from('classes').select('*').eq('id', classId).single()
+  const orgId = await getCurrentOrgId()
+  const { data } = await adminClient.from('classes').select('*').eq('id', classId).eq('organization_id', orgId).single()
   if (!data) notFound()
   return (
     <div className="space-y-6 max-w-2xl">

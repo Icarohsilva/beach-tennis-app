@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { CreateDayUseForm } from '@/features/dayuse/CreateDayUseForm'
 import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
@@ -7,12 +7,14 @@ import type { DayUseSlot } from '@/types'
 
 export default async function AdminDayUsePage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
   const today = new Date().toISOString().slice(0, 10)
 
   const { data: slots } = await adminClient
     .from('dayuse_slots')
     .select('*')
     .eq('is_active', true)
+    .eq('organization_id', orgId)
     .gte('date', today)
     .order('date', { ascending: true })
     .order('start_time', { ascending: true })

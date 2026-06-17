@@ -26,6 +26,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# supabase access token (one-off migration runs)
+.supabase-token
+
 # vercel
 .vercel
 

@@ -22,7 +22,7 @@ export function Logo({ size = 'md', variant = 'full' }: Props) {
     const s = iconSizes[size]
     return (
       <Image
-        src="/icon.svg"
+        src="public/icon.svg"
         alt="Beach Tennis"
         width={s}
         height={s}

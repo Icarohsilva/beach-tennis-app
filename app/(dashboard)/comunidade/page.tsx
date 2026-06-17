@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { ComunidadeClient } from './ComunidadeClient'
 import type { Post, Profile } from '@/types'
 
@@ -17,11 +17,13 @@ export default async function ComunidadePage() {
   if (!user) redirect('/login')
 
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
-  // Fetch initial posts — adminClient bypasses RLS so all posts are always visible
+  // Fetch initial posts — adminClient bypasses RLS, então escopamos pela academia.
   const { data: postsRaw } = await adminClient
     .from('posts')
     .select('id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(20)
 
@@ -46,6 +48,7 @@ export default async function ComunidadePage() {
       : (d as { author: unknown }).author
     return {
       id: d.id,
+      organization_id: orgId as string,
       author_id: d.author_id,
       content: d.content,
       image_urls: d.image_urls ?? [],

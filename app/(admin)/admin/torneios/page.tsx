@@ -1,6 +1,6 @@
 // app/(admin)/torneios/page.tsx
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -27,10 +27,12 @@ const STATUS_VARIANTS: Record<TournamentStatus, 'default' | 'success' | 'warning
 
 export default async function AdminTorneiosPage() {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   const { data, error } = await adminClient
     .from('tournaments')
     .select('*')
+    .eq('organization_id', orgId)
     .order('date', { ascending: false })
 
   const tournaments = (data ?? []) as Tournament[]

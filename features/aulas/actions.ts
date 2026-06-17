@@ -416,7 +416,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   // Fetch booking
   const { data: booking, error: bookingErr } = await adminClient
     .from('session_bookings')
-    .select('id, student_id, session_id, status, credit_used, from_enrollment')
+    .select('id, student_id, session_id, status, credit_used, from_enrollment, organization_id')
     .eq('id', bookingId)
     .single()
 
@@ -479,11 +479,13 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
       } else if (booking.credit_used) {
         // Crédito de reposição: expira em N dias
         let expiryDays = 30
-        const { data: settings } = await adminClient
+        const { data: settingRow } = await adminClient
           .from('system_settings')
-          .select('credit_expiry_days')
-          .single()
-        if (settings?.credit_expiry_days) expiryDays = settings.credit_expiry_days
+          .select('value')
+          .eq('organization_id', booking.organization_id)
+          .eq('key', 'credit_expiry_days')
+          .maybeSingle()
+        if (settingRow?.value) expiryDays = Number(settingRow.value)
 
         const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {

@@ -1,7 +1,7 @@
 // app/(admin)/alunos/[id]/page.tsx
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -21,6 +21,7 @@ const paymentLabel: Record<string, string> = {
 
 export default async function StudentProfilePage({ params }: Props) {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   // Fetch student profile
   const { data: profile } = await adminClient
@@ -28,6 +29,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .select('*')
     .eq('id', params.id)
     .eq('role', 'student')
+    .eq('organization_id', orgId)
     .single()
 
   if (!profile) notFound()
@@ -52,6 +54,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .from('classes')
     .select('id, name, level, type, day_of_week, start_time, end_time, max_students, is_active')
     .eq('is_active', true)
+    .eq('organization_id', orgId)
     .order('day_of_week', { ascending: true })
     .order('start_time', { ascending: true })
 
@@ -112,6 +115,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .from('subscription_plans')
     .select('id, name, classes_per_week, credits_per_month, price_monthly, is_active')
     .eq('is_active', true)
+    .eq('organization_id', orgId)
     .order('classes_per_week', { ascending: true })
 
   const availablePlans = (plansRaw ?? []) as {
@@ -217,6 +221,7 @@ export default async function StudentProfilePage({ params }: Props) {
       <Card>
         <StudentProfileClient
           studentId={student.id}
+          organizationId={student.organization_id}
           currentLevel={student.level as StudentLevel}
           currentCreditsBalance={student.credits_balance}
           enrollments={enrollments}

@@ -11,12 +11,12 @@ async function assertAdmin() {
   const adminClient = createAdminClient()
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('role')
+    .select('role, organization_id')
     .eq('id', user.id)
     .single()
 
   if (profile?.role !== 'admin') throw new Error('Sem permissão.')
-  return adminClient
+  return { adminClient, orgId: (profile as { organization_id: string }).organization_id }
 }
 
 export async function togglePlanActive(
@@ -24,7 +24,7 @@ export async function togglePlanActive(
   isActive: boolean,
 ): Promise<{ error?: string }> {
   try {
-    const adminClient = await assertAdmin()
+    const { adminClient } = await assertAdmin()
     const { error } = await adminClient
       .from('subscription_plans')
       .update({ is_active: isActive })
@@ -43,7 +43,7 @@ export async function updatePlanPrice(
   prices: { price_monthly?: number; price_quarterly?: number; price_annual?: number },
 ): Promise<{ error?: string }> {
   try {
-    const adminClient = await assertAdmin()
+    const { adminClient } = await assertAdmin()
 
     // Validate
     for (const [key, val] of Object.entries(prices)) {
@@ -77,7 +77,7 @@ export interface CreatePlanData {
 
 export async function createPlan(data: CreatePlanData): Promise<{ error?: string }> {
   try {
-    const adminClient = await assertAdmin()
+    const { adminClient, orgId } = await assertAdmin()
 
     if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
     if (data.credits_per_month < 1) return { error: 'Créditos por mês deve ser ≥ 1.' }
@@ -94,6 +94,7 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
       price_quarterly: data.price_quarterly,
       price_annual: data.price_annual,
       is_active: true,
+      organization_id: orgId,
     })
 
     if (error) return { error: error.message }
@@ -109,7 +110,7 @@ export async function applyDiscountAdmin(
   discountPct: number,
 ): Promise<{ error?: string }> {
   try {
-    const adminClient = await assertAdmin()
+    const { adminClient } = await assertAdmin()
 
     if (discountPct < 0 || discountPct > 100) {
       return { error: 'Desconto deve estar entre 0 e 100.' }

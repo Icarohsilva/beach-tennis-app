@@ -20,7 +20,7 @@ export async function createPost(params: {
   imageUrls: string[]
   sessionId?: string
   tournamentId?: string
-}): Promise<{ error?: string; post?: { id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } } }> {
+}): Promise<{ error?: string; post?: { id: string; organization_id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } } }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -33,16 +33,20 @@ export async function createPost(params: {
 
   const adminClient = createAdminClient()
 
-  // Fetch author profile for immediate display
+  // Fetch author profile for immediate display + org scoping
   const { data: authorProfile } = await adminClient
     .from('profiles')
-    .select('id, full_name, avatar_url')
+    .select('id, full_name, avatar_url, organization_id')
     .eq('id', user.id)
     .single()
+
+  const orgId = (authorProfile as { organization_id: string } | null)?.organization_id
+  if (!orgId) return { error: 'Perfil sem academia associada.' }
 
   const { data: post, error: insertErr } = await adminClient
     .from('posts')
     .insert({
+      organization_id: orgId,
       author_id: user.id,
       content: content.trim(),
       image_urls: imageUrls,
@@ -61,6 +65,7 @@ export async function createPost(params: {
   return {
     post: {
       id: p.id,
+      organization_id: orgId,
       author_id: user.id,
       content: content.trim(),
       image_urls: imageUrls,
@@ -95,6 +100,14 @@ export async function toggleLike(
 
   const adminClient = createAdminClient()
 
+  const { data: likerProfile } = await adminClient
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single()
+  const likerOrgId = (likerProfile as { organization_id: string } | null)?.organization_id
+  if (!likerOrgId) return { error: 'Perfil sem academia associada.' }
+
   // Check if the like already exists
   const { data: existingLike } = await adminClient
     .from('post_likes')
@@ -123,7 +136,7 @@ export async function toggleLike(
     const { error: insertErr } = await adminClient
       .from('post_likes')
       .upsert(
-        { post_id: postId, user_id: user.id },
+        { post_id: postId, user_id: user.id, organization_id: likerOrgId },
         { onConflict: 'post_id,user_id', ignoreDuplicates: true },
       )
 
@@ -156,9 +169,18 @@ export async function addComment(
 
   const adminClient = createAdminClient()
 
+  const { data: commenterProfile } = await adminClient
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single()
+  const commenterOrgId = (commenterProfile as { organization_id: string } | null)?.organization_id
+  if (!commenterOrgId) return { error: 'Perfil sem academia associada.' }
+
   const { data: comment, error: insertErr } = await adminClient
     .from('post_comments')
     .insert({
+      organization_id: commenterOrgId,
       post_id: postId,
       author_id: user.id,
       content: content.trim(),
@@ -206,11 +228,12 @@ export async function sendNotification(params: {
   // Verify caller is admin
   const { data: callerProfile } = await adminClient
     .from('profiles')
-    .select('role')
+    .select('role, organization_id')
     .eq('id', user.id)
     .single()
 
   if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
+  const orgId = (callerProfile as { organization_id: string }).organization_id
 
   const { title, body, type, filterMode, filterValue, channels } = params
 
@@ -224,6 +247,7 @@ export async function sendNotification(params: {
     .select('id, full_name, phone')
     .eq('role', 'student')
     .eq('contract_active', true)
+    .eq('organization_id', orgId)
 
   if (filterMode === 'by_level' && filterValue) {
     query = query.eq('level', filterValue as StudentLevel)
@@ -251,6 +275,7 @@ export async function sendNotification(params: {
 
   // Insert notification records for all recipients
   const notificationRows = recipients.map((r: { id: string }) => ({
+    organization_id: orgId,
     user_id: r.id,
     type,
     title,

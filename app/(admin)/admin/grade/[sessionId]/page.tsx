@@ -1,7 +1,7 @@
 // app/(admin)/grade/[sessionId]/page.tsx
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { AttendanceSheet } from '@/features/aulas/AttendanceSheet'
 import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
@@ -15,12 +15,14 @@ interface Props {
 
 export default async function SessionDetailPage({ params }: Props) {
   const adminClient = createAdminClient()
+  const orgId = await getCurrentOrgId()
 
   // Fetch session + class
   const { data: session } = await adminClient
     .from('class_sessions')
     .select('*, class:classes(*)')
     .eq('id', params.sessionId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!session) notFound()
