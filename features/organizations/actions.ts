@@ -1,6 +1,7 @@
 'use server'
 // features/organizations/actions.ts
-import { createAdminClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
 
 export interface CreateAcademyInput {
@@ -89,4 +90,73 @@ export async function resolveInviteCode(
     .maybeSingle()
   if (!data || data.status !== 'active') return null
   return { orgId: data.id, orgName: data.name }
+}
+
+export interface CreateProfessorInput {
+  fullName: string
+  email: string
+  password: string
+  phone?: string
+}
+
+// Cria um professor na academia do dono logado. Owner-only.
+export async function createProfessor(input: CreateProfessorInput): Promise<{ error?: string }> {
+  const ctx = await getStaffContext()
+  if (!ctx) return { error: 'Não autenticado.' }
+  if (!ctx.isOwner) return { error: 'Apenas o dono pode adicionar professores.' }
+
+  const admin = createAdminClient()
+  // Busca o invite_code da academia para o trigger ligar o novo perfil à org.
+  const { data: org } = await admin
+    .from('organizations')
+    .select('invite_code')
+    .eq('id', ctx.organizationId)
+    .single()
+  if (!org) return { error: 'Academia não encontrada.' }
+
+  const { data: created, error: userErr } = await admin.auth.admin.createUser({
+    email: input.email.trim(),
+    password: input.password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: input.fullName.trim(),
+      phone: input.phone?.trim() || undefined,
+      org_invite_code: org.invite_code,
+    },
+  })
+  if (userErr || !created?.user) {
+    const msg = userErr?.message?.toLowerCase().includes('already')
+      ? 'Já existe uma conta com esse email.'
+      : 'Não foi possível criar o professor.'
+    return { error: msg }
+  }
+
+  // Promove a admin. owner_id continua o dono → o novo entra como professor.
+  await admin.from('profiles').update({ role: 'admin' }).eq('id', created.user.id)
+  revalidatePath('/admin/equipe')
+  return {}
+}
+
+// Remove um professor da academia do dono. Owner-only. Não permite remover o dono.
+export async function removeProfessor(profileId: string): Promise<{ error?: string }> {
+  const ctx = await getStaffContext()
+  if (!ctx) return { error: 'Não autenticado.' }
+  if (!ctx.isOwner) return { error: 'Apenas o dono pode remover professores.' }
+  if (profileId === ctx.userId) return { error: 'O dono não pode se remover.' }
+
+  const admin = createAdminClient()
+  // Garante que o alvo pertence à mesma academia (evita remover de outra org).
+  const { data: target } = await admin
+    .from('profiles')
+    .select('id, organization_id')
+    .eq('id', profileId)
+    .single()
+  if (!target || target.organization_id !== ctx.organizationId) {
+    return { error: 'Professor não encontrado nesta academia.' }
+  }
+
+  const { error: delErr } = await admin.auth.admin.deleteUser(profileId)
+  if (delErr) return { error: 'Não foi possível remover o professor.' }
+  revalidatePath('/admin/equipe')
+  return {}
 }
