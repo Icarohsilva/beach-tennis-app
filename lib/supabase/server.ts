@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import type { Organization } from '@/types'
 
 export function createClient() {
@@ -54,4 +55,46 @@ export async function getCurrentOrg(): Promise<Organization | null> {
     .eq('id', orgId)
     .single()
   return (data as Organization) ?? null
+}
+
+export interface StaffContext {
+  userId: string
+  organizationId: string
+  isOwner: boolean
+}
+
+// Contexto de staff do admin logado. isOwner = é o dono (owner_id) da academia.
+// Retorna null se não houver usuário ou perfil/org.
+export async function getStaffContext(): Promise<StaffContext | null> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const admin = createAdminClient()
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single()
+  if (!profile?.organization_id) return null
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', profile.organization_id)
+    .single()
+
+  return {
+    userId: user.id,
+    organizationId: profile.organization_id,
+    isOwner: org?.owner_id === user.id,
+  }
+}
+
+// Guard para páginas owner-only. Redireciona professor para o dashboard.
+export async function requireOwner(): Promise<StaffContext> {
+  const ctx = await getStaffContext()
+  if (!ctx) redirect('/login')
+  if (!ctx.isOwner) redirect('/admin/dashboard')
+  return ctx
 }

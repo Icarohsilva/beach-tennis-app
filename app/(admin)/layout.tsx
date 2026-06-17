@@ -5,15 +5,7 @@ import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { Logo } from '@/components/ui/Logo'
 import { AdminMobileNav } from '@/components/ui/AdminMobileNav'
-
-const navLinks = [
-  { href: '/admin/dashboard', label: 'Dashboard' },
-  { href: '/admin/alunos', label: 'Alunos' },
-  { href: '/admin/grade', label: 'Grade de Aulas' },
-  { href: '/admin/financeiro', label: 'Financeiro' },
-  { href: '/admin/notificacoes', label: 'Notificações' },
-  { href: '/admin/torneios', label: 'Torneios' },
-]
+import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -29,6 +21,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .single()
 
   if (profile?.role !== 'admin') redirect('/home')
+
+  const { data: profileOrg } = await adminClient
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single()
+
+  const { data: org } = profileOrg?.organization_id
+    ? await adminClient
+        .from('organizations')
+        .select('owner_id')
+        .eq('id', profileOrg.organization_id)
+        .single()
+    : { data: null }
+
+  const isOwner = org?.owner_id === user.id
+
+  // area = chave usada por canAccessArea pra decidir se professor vê o item.
+  const allNav: { href: string; label: string; area: AdminArea }[] = [
+    { href: '/admin/dashboard', label: 'Dashboard', area: 'dashboard' },
+    { href: '/admin/alunos', label: 'Alunos', area: 'alunos' },
+    { href: '/admin/grade', label: 'Grade de Aulas', area: 'aulas' },
+    { href: '/admin/financeiro', label: 'Financeiro', area: 'financeiro' },
+    { href: '/admin/notificacoes', label: 'Notificações', area: 'notificacoes' },
+    { href: '/admin/torneios', label: 'Torneios', area: 'torneios' },
+    { href: '/admin/configuracoes', label: 'Configurações', area: 'configuracoes' },
+    { href: '/admin/equipe', label: 'Equipe', area: 'equipe' },
+  ]
+  const navLinks = allNav.filter((l) => canAccessArea(l.area, isOwner))
 
   return (
     <div className="min-h-screen bg-surface text-white flex flex-col md:flex-row">

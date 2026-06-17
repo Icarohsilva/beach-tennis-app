@@ -1,5 +1,5 @@
 // app/(admin)/configuracoes/page.tsx
-import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { SystemSettingsForm } from './SystemSettingsForm'
 
 interface SystemSettings {
@@ -8,6 +8,7 @@ interface SystemSettings {
 }
 
 export default async function ConfiguracoesPage() {
+  await requireOwner()
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 

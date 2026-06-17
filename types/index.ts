@@ -27,8 +27,10 @@ export interface Organization {
   invite_code: string
   logo_url: string | null
   brand_color: string | null
+  description: string | null
   status: OrganizationStatus
   is_default: boolean
+  owner_id: string | null
   created_at: string
 }
 

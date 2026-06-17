@@ -1,5 +1,5 @@
 // app/(admin)/financeiro/page.tsx
-import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { PlansManager } from './PlansManager'
@@ -25,6 +25,7 @@ interface PendingPayment {
 }
 
 export default async function FinanceiroPage() {
+  await requireOwner() // professor → redirecionado para /admin/dashboard
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
