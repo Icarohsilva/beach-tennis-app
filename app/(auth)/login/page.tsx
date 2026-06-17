@@ -57,6 +57,11 @@ export default function LoginPage() {
         <Link href="/cadastro" className="hover:text-brand-400">Criar conta</Link>
         <Link href="/recuperar-senha" className="hover:text-brand-400">Esqueci minha senha</Link>
       </div>
+      <div className="mt-2 text-center">
+        <Link href="/criar-academia" className="text-sm text-brand-400 hover:text-brand-300">
+          É professor? Crie sua academia
+        </Link>
+      </div>
     </Card>
   )
 }
