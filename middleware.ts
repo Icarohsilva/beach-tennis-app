@@ -19,9 +19,12 @@ export function middleware(request: NextRequest) {
   }
 
   // Protected routes: require a Supabase session cookie.
-  // Supabase SSR sets cookies named sb-<project-ref>-auth-token.
+  // Supabase SSR sets cookies named sb-<project-ref>-auth-token. Sessões grandes
+  // (ex.: muito user_metadata) são FRAGMENTADAS em sb-<ref>-auth-token.0, .1, ...
+  // que NÃO terminam em "-auth-token". Por isso usamos includes() e não endsWith():
+  // senão usuários com cookie fragmentado caem em loop de redirect para /login.
   const hasSession = request.cookies.getAll().some(
-    (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'),
+    (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token'),
   )
 
   if (!hasSession) {
