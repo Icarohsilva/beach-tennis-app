@@ -36,10 +36,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         .single()
     : { data: null as { owner_id: string; name: string; onboarding_completed: boolean } | null }
 
-  // Gate: academia sem onboarding concluído não acessa o painel.
-  if (org && org.onboarding_completed === false) redirect('/onboarding')
-
   const isOwner = org?.owner_id === user.id
+
+  // Gate: academia sem onboarding concluído não acessa o painel. Só o dono é
+  // mandado pra /onboarding (só ele conclui); professor não fica em loop de
+  // redirect — embora esse estado seja inalcançável (professor só é criado de
+  // dentro do painel, já com onboarding concluído).
+  if (org && org.onboarding_completed === false && isOwner) redirect('/onboarding')
 
   // area = chave usada por canAccessArea pra decidir se professor vê o item.
   const allNav: { href: string; label: string; area: AdminArea }[] = [
