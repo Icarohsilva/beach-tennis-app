@@ -31,10 +31,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: org } = profileOrg?.organization_id
     ? await adminClient
         .from('organizations')
-        .select('owner_id, name')
+        .select('owner_id, name, onboarding_completed')
         .eq('id', profileOrg.organization_id)
         .single()
-    : { data: null as { owner_id: string; name: string } | null }
+    : { data: null as { owner_id: string; name: string; onboarding_completed: boolean } | null }
+
+  // Gate: academia sem onboarding concluído não acessa o painel.
+  if (org && org.onboarding_completed === false) redirect('/onboarding')
 
   const isOwner = org?.owner_id === user.id
 
