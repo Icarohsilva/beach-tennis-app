@@ -31,6 +31,13 @@ export interface Organization {
   status: OrganizationStatus
   is_default: boolean
   owner_id: string | null
+  is_listed: boolean
+  state: string | null
+  city: string | null
+  neighborhood: string | null
+  address_line: string | null
+  sports: string[]
+  whatsapp: string | null
   created_at: string
 }
 
