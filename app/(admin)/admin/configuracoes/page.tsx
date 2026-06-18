@@ -26,26 +26,32 @@ export default async function ConfiguracoesPage() {
 
   const { data: orgRow } = await adminClient
     .from('organizations')
-    .select('is_listed, state, city, neighborhood, address_line, sports, whatsapp')
+    .select('is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp')
     .eq('id', orgId)
     .single()
 
   const org = (orgRow ?? {}) as {
     is_listed?: boolean
+    cep?: string | null
     state?: string | null
     city?: string | null
     neighborhood?: string | null
     address_line?: string | null
+    address_number?: string | null
+    no_number?: boolean
     sports?: string[] | null
     whatsapp?: string | null
   }
 
   const listing = {
     is_listed: org.is_listed ?? true,
+    cep: org.cep ?? '',
     state: org.state ?? '',
     city: org.city ?? '',
     neighborhood: org.neighborhood ?? '',
     address_line: org.address_line ?? '',
+    address_number: org.address_number ?? '',
+    no_number: org.no_number ?? false,
     sports: org.sports ?? [],
     whatsapp: org.whatsapp ?? '',
   }

@@ -414,10 +414,13 @@ export async function updateSystemSettings(settings: {
 
 export async function updateOrgListing(input: {
   is_listed: boolean
+  cep: string
   state: string
   city: string
   neighborhood: string
   address_line: string
+  address_number: string
+  no_number: boolean
   sports: string[]
   whatsapp: string
 }): Promise<{ error?: string }> {
@@ -450,10 +453,13 @@ export async function updateOrgListing(input: {
     .from('organizations')
     .update({
       is_listed: input.is_listed,
+      cep: input.cep.trim() || null,
       state: input.state.trim().toUpperCase() || null,
       city: input.city.trim() || null,
       neighborhood: input.neighborhood.trim() || null,
       address_line: input.address_line.trim() || null,
+      address_number: input.no_number ? null : input.address_number.trim() || null,
+      no_number: input.no_number,
       sports: normalizeSports(input.sports),
       whatsapp: input.whatsapp.trim() || null,
     })
