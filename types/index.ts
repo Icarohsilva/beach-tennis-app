@@ -38,6 +38,10 @@ export interface Organization {
   address_line: string | null
   sports: string[]
   whatsapp: string | null
+  cep: string | null
+  address_number: string | null
+  no_number: boolean
+  onboarding_completed: boolean
   created_at: string
 }
 
