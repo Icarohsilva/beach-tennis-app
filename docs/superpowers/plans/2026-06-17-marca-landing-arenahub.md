@@ -912,7 +912,7 @@ export default function LandingPage() {
           <div className={s.price}>
             <h2>Comece de graça</h2>
             <div className={s.priceBig}>
-              R$ 39,90<small> /mês</small>
+              R$ 49,90<small> /mês</small>
             </div>
             <p>1º mês por nossa conta. Depois, preço único — sem taxa por aluno, sem surpresa.</p>
             <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">
@@ -943,7 +943,7 @@ Expected: succeeds; in the route summary `/` is marked static (`○`) or prerend
 
 - [ ] **Step 3: Manual visual smoke (dev server)**
 
-Run: `npm run dev`, open `http://localhost:3000`. Confirm: hero photo with dark overlay + animated floating icons; sports chips; 6 feature cards with hover lift; student split with the second photo; pricing R$ 39,90; footer. Click each CTA — "Criar conta grátis" → `/criar-academia`, "Entrar" → `/login`, "Encontrar uma arena" → `/experimental`, and nav anchors scroll smoothly. Resize to mobile width: nav links hide, hero text shrinks, grid collapses to one column.
+Run: `npm run dev`, open `http://localhost:3000`. Confirm: hero photo with dark overlay + animated floating icons; sports chips; 6 feature cards with hover lift; student split with the second photo; pricing R$ 39,90; footer. Click each CTA — "Criar conta grátis" → `/criar-academia`, "Entrar" → `/login`, "Encontrar uma arena" → `/experimental`, and nav anchors scroll smoothly. Resize to mobile width: nav links hide, hero text shrinks, grid collapses to one column. (Preço atual: R$ 49,90/mês.)
 
 - [ ] **Step 4: Commit**
 

@@ -76,7 +76,7 @@ Reescrever de Server Component estático (sem dados; pode permanecer estático/e
    reposição · Check-in (Wellhub/TotalPass) · Financeiro · Torneios · Comunidade.
 5. **Seção "Para quem joga"** (split com foto): achar arena por região + agendar experimental.
    CTA "Encontrar uma arena" → `/experimental`.
-6. **Teaser de preço**: "Comece de graça · R$ 39,90/mês · 1º mês por nossa conta" + CTA.
+6. **Teaser de preço**: "Comece de graça · R$ 49,90/mês · 1º mês por nossa conta" + CTA.
 7. **Footer**: wordmark + "© 2026 ArenaHub · arenahub.pro".
 
 Implementação:

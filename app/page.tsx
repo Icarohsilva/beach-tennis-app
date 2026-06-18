@@ -175,7 +175,7 @@ export default function LandingPage() {
           <div className={s.price}>
             <h2>Comece de graça</h2>
             <div className={s.priceBig}>
-              R$ 39,90<small> /mês</small>
+              R$ 49,90<small> /mês</small>
             </div>
             <p>1º mês por nossa conta. Depois, preço único — sem taxa por aluno, sem surpresa.</p>
             <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">

@@ -15,7 +15,7 @@ webhook MercadoPago que libera créditos).
 ## Decisões (todas confirmadas com o usuário)
 
 - **Pagamento automático via MercadoPago** (não manual/Pix).
-- **Preço fixo R$ 39,90/mês**, sem tiers.
+- **Preço fixo R$ 49,90/mês**, sem tiers.
 - **Primeiro mês grátis** (trial de 30 dias a partir da criação da academia).
 - **Sem cartão no início**: a academia usa 30 dias grátis sem informar cartão; ao
   aproximar/vencer o trial, aparece o convite para assinar.
@@ -62,7 +62,7 @@ create table platform_subscriptions (
 - `lib/billing/platformPlan.ts`:
   ```ts
   export const PLATFORM_PLAN = {
-    priceMonthly: 39.9,
+    priceMonthly: 49.9,
     currency: 'BRL',
     reason: 'Assinatura Plataforma — Beach Tennis App',
   } as const
@@ -82,7 +82,7 @@ create table platform_subscriptions (
    {
      "reason": "Assinatura Plataforma — Beach Tennis App",
      "auto_recurring": { "frequency": 1, "frequency_type": "months",
-                          "transaction_amount": 39.9, "currency_id": "BRL" },
+                          "transaction_amount": 49.9, "currency_id": "BRL" },
      "payer_email": "<email do owner>",
      "back_url": "https://<DOMINIO>/admin/assinatura?retorno=1",
      "external_reference": "<organization_id>",
