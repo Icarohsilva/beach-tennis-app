@@ -159,7 +159,7 @@ export default function LandingPage() {
               </div>
               <Link
                 className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`}
-                href="/experimental"
+                href="/arenas"
                 style={{ marginTop: 18 }}
               >
                 Encontrar uma arena
