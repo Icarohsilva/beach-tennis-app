@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getOpenTrialSessions } from '@/lib/arenas/sessions'
 import { SPORT_BY_SLUG } from '@/lib/arenas/sports'
+import { formatAddress } from '@/lib/arenas/formatAddress'
 import { Card } from '@/components/ui/Card'
 import { TrialBookingForm } from './TrialBookingForm'
 
@@ -18,6 +19,8 @@ interface ArenaRow {
   state: string | null
   neighborhood: string | null
   address_line: string | null
+  address_number: string | null
+  no_number: boolean
   sports: string[]
   whatsapp: string | null
 }
@@ -31,7 +34,7 @@ export default async function ArenaPage({ params }: PageProps) {
 
   const { data } = await admin
     .from('organizations')
-    .select('id, name, slug, status, is_listed, city, state, neighborhood, address_line, sports, whatsapp')
+    .select('id, name, slug, status, is_listed, city, state, neighborhood, address_line, address_number, no_number, sports, whatsapp')
     .eq('slug', params.slug)
     .single()
 
@@ -49,7 +52,7 @@ export default async function ArenaPage({ params }: PageProps) {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">{org.name}</h1>
           <p className="text-slate-400 text-sm mt-1">
-            {[org.address_line, org.neighborhood, org.city, org.state].filter(Boolean).join(' · ')}
+            {[formatAddress(org), org.neighborhood, org.city, org.state].filter(Boolean).join(' · ')}
           </p>
           <div className="flex flex-wrap gap-1.5 mt-3">
             {org.sports.map((slug) => {
