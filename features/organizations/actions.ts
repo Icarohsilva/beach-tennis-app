@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
+import { normalizeSports } from '@/lib/arenas/sports'
 
 export interface CreateAcademyInput {
   academyName: string
@@ -158,5 +159,64 @@ export async function removeProfessor(profileId: string): Promise<{ error?: stri
   const { error: delErr } = await admin.auth.admin.deleteUser(profileId)
   if (delErr) return { error: 'Não foi possível remover o professor.' }
   revalidatePath('/admin/equipe')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// completeOnboarding (owner only) — tela obrigatória pós-cadastro.
+// Grava endereço + vitrine + personalização e marca onboarding_completed.
+// ---------------------------------------------------------------------------
+
+export interface CompleteOnboardingInput {
+  cep: string
+  state: string
+  city: string
+  neighborhood: string
+  address_line: string
+  address_number: string
+  no_number: boolean
+  sports: string[]
+  whatsapp: string
+  is_listed: boolean
+  description: string
+  brand_color: string
+}
+
+export async function completeOnboarding(
+  input: CompleteOnboardingInput,
+): Promise<{ error?: string }> {
+  const ctx = await getStaffContext()
+  if (!ctx) return { error: 'Não autenticado.' }
+  if (!ctx.isOwner) return { error: 'Apenas o dono pode concluir o cadastro da academia.' }
+
+  if (!input.cep.trim()) return { error: 'Informe o CEP.' }
+  if (!input.city.trim()) return { error: 'Informe a cidade.' }
+  if (!input.no_number && !input.address_number.trim()) {
+    return { error: 'Informe o número ou marque "Sem número".' }
+  }
+
+  const admin = createAdminClient()
+  const { error: updErr } = await admin
+    .from('organizations')
+    .update({
+      cep: input.cep.trim() || null,
+      state: input.state.trim().toUpperCase() || null,
+      city: input.city.trim() || null,
+      neighborhood: input.neighborhood.trim() || null,
+      address_line: input.address_line.trim() || null,
+      address_number: input.no_number ? null : input.address_number.trim() || null,
+      no_number: input.no_number,
+      sports: normalizeSports(input.sports),
+      whatsapp: input.whatsapp.trim() || null,
+      is_listed: input.is_listed,
+      description: input.description.trim() || null,
+      brand_color: input.brand_color.trim() || null,
+      onboarding_completed: true,
+    })
+    .eq('id', ctx.organizationId)
+  if (updErr) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  revalidatePath('/arenas')
+  revalidatePath('/admin/configuracoes')
   return {}
 }
