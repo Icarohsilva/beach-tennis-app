@@ -14,7 +14,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/cadastro') ||
     pathname.startsWith('/criar-academia') ||
     pathname.startsWith('/recuperar-senha') ||
-    pathname.startsWith('/experimental')
+    pathname.startsWith('/experimental') ||
+    pathname.startsWith('/arenas')
   ) {
     return NextResponse.next()
   }
