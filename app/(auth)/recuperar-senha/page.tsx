@@ -17,8 +17,12 @@ export default function RecuperarSenhaPage() {
     setLoading(true)
     setError('')
     const supabase = createClient()
+    // Usa o domínio de produção (NEXT_PUBLIC_SITE_URL) para o link do email não
+    // nascer apontando para localhost quando disparado em dev. Cai no origin atual
+    // só como fallback de desenvolvimento.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/nova-senha`,
+      redirectTo: `${siteUrl}/nova-senha`,
     })
     if (error) {
       setError('Não foi possível enviar o email. Tente novamente.')
