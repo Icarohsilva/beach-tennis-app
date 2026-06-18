@@ -25,7 +25,7 @@ export default async function EquipePage() {
 
   const professors = ((staff ?? []) as ProfessorRow[]).filter((p) => p.id !== org?.owner_id)
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://beach-tennis-app-pi.vercel.app'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
   const inviteUrl = `${baseUrl}/cadastro?convite=${org?.invite_code ?? ''}`
 
   return (
