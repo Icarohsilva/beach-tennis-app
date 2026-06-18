@@ -1,7 +1,7 @@
 {
-  "name": "Beach Tennis App",
-  "short_name": "BT App",
-  "description": "Gestão de aulas e torneios de beach tennis",
+  "name": "ArenaHub",
+  "short_name": "ArenaHub",
+  "description": "Gestão para arenas e academias de esporte",
   "start_url": "/home",
   "display": "standalone",
   "background_color": "#0c1220",
