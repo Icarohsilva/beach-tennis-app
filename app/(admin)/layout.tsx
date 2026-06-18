@@ -31,10 +31,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: org } = profileOrg?.organization_id
     ? await adminClient
         .from('organizations')
-        .select('owner_id')
+        .select('owner_id, name')
         .eq('id', profileOrg.organization_id)
         .single()
-    : { data: null }
+    : { data: null as { owner_id: string; name: string } | null }
 
   const isOwner = org?.owner_id === user.id
 
@@ -55,8 +55,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-surface text-white flex flex-col md:flex-row">
       <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen hidden md:flex flex-col">
         <div className="bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-5 mb-2">
-          <Logo variant="full" size="sm" />
-          <span className="text-xs text-white/70 mt-1 block">Painel Admin</span>
+          <Logo variant="icon" size="sm" />
+          <span className="text-sm font-bold text-white mt-1 block truncate">
+            {org?.name ?? 'Painel Admin'}
+          </span>
+          <span className="text-xs text-white/70 block">Painel Admin</span>
         </div>
         <div className="px-4 pb-4 flex flex-col flex-1">
           <nav className="flex flex-col gap-1 text-sm text-slate-400 flex-1">
