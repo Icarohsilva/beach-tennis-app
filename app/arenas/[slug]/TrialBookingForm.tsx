@@ -1,5 +1,5 @@
 'use client'
-// app/experimental/TrialBookingForm.tsx
+// app/arenas/[slug]/TrialBookingForm.tsx
 
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
@@ -7,22 +7,14 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { createTrialBooking } from './actions'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-
-interface SessionOption {
-  id: string
-  session_date: string
-  class_name: string
-  start_time: string
-  end_time: string
-  level: string
-  spots_left: number
-}
+import type { TrialSessionOption } from '@/lib/arenas/sessions'
 
 interface TrialBookingFormProps {
-  sessions: SessionOption[]
+  organizationId: string
+  sessions: TrialSessionOption[]
 }
 
-export function TrialBookingForm({ sessions }: TrialBookingFormProps) {
+export function TrialBookingForm({ organizationId, sessions }: TrialBookingFormProps) {
   const [selectedSessionId, setSelectedSessionId] = useState<string>(sessions[0]?.id ?? '')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -41,7 +33,7 @@ export function TrialBookingForm({ sessions }: TrialBookingFormProps) {
     }
 
     startTransition(async () => {
-      const result = await createTrialBooking(selectedSessionId, name, email, phone)
+      const result = await createTrialBooking(organizationId, selectedSessionId, name, email, phone)
       if (result.error) {
         setError(result.error)
         return
@@ -64,11 +56,8 @@ export function TrialBookingForm({ sessions }: TrialBookingFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Session selector */}
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
-          Escolha uma sessão
-        </label>
+        <label className="block text-sm font-medium text-slate-300 mb-2">Escolha uma sessão</label>
         <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
           {sessions.map((s) => (
             <button
@@ -99,7 +88,6 @@ export function TrialBookingForm({ sessions }: TrialBookingFormProps) {
         </div>
       </div>
 
-      {/* Personal data */}
       <div className="space-y-3">
         <Input
           label="Nome completo"
@@ -126,17 +114,9 @@ export function TrialBookingForm({ sessions }: TrialBookingFormProps) {
         />
       </div>
 
-      {error && (
-        <p className="text-red-400 text-sm">{error}</p>
-      )}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
 
-      <Button
-        type="submit"
-        variant="primary"
-        size="lg"
-        loading={isPending}
-        className="w-full"
-      >
+      <Button type="submit" variant="primary" size="lg" loading={isPending} className="w-full">
         Agendar aula gratuita
       </Button>
 

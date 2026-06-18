@@ -1,9 +1,12 @@
 'use server'
-// app/experimental/actions.ts
+// app/arenas/[slug]/actions.ts
+// Agendamento de aula experimental, escopado por organization_id para isolar
+// academias. Movido de app/experimental/actions.ts.
 
 import { createAdminClient } from '@/lib/supabase/server'
 
 export async function createTrialBooking(
+  organizationId: string,
   sessionId: string,
   name: string,
   email: string,
@@ -20,11 +23,12 @@ export async function createTrialBooking(
 
   const adminClient = createAdminClient()
 
-  // Verify session exists and is scheduled
+  // Sessão precisa existir E pertencer a esta academia.
   const { data: session } = await adminClient
     .from('class_sessions')
     .select('id, session_date, status, class:classes(id, name, max_students, type, is_active)')
     .eq('id', sessionId)
+    .eq('organization_id', organizationId)
     .single()
 
   if (!session) return { error: 'Sessão não encontrada.' }
@@ -34,10 +38,11 @@ export async function createTrialBooking(
   if (!cls?.is_active) return { error: 'Turma inativa.' }
   if (cls?.type === 'kids') return { error: 'Aula experimental disponível apenas para adultos.' }
 
-  // Check for duplicate booking by email on this session
+  // Duplicidade por e-mail na sessão (dentro da org).
   const { count: dupCount } = await adminClient
     .from('trial_bookings')
     .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
     .eq('session_id', sessionId)
     .eq('email', email.trim().toLowerCase())
     .in('status', ['pending', 'attended'])
@@ -46,16 +51,18 @@ export async function createTrialBooking(
     return { error: 'Já existe um agendamento experimental com este e-mail para esta sessão.' }
   }
 
-  // Check capacity (bookings + trials)
+  // Capacidade (reservas confirmadas + trials) dentro da org.
   const { count: bookingsCount } = await adminClient
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
     .eq('session_id', sessionId)
     .eq('status', 'confirmed')
 
   const { count: trialsCount } = await adminClient
     .from('trial_bookings')
     .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
     .eq('session_id', sessionId)
     .in('status', ['pending', 'attended'])
 
@@ -64,8 +71,8 @@ export async function createTrialBooking(
     return { error: 'Esta sessão está lotada.' }
   }
 
-  // Insert trial booking
   const { error: insertErr } = await adminClient.from('trial_bookings').insert({
+    organization_id: organizationId,
     name: name.trim(),
     email: email.trim().toLowerCase(),
     phone: phone.trim(),
