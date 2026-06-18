@@ -1,6 +1,6 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getCurrentOrg } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 
@@ -8,6 +8,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  const org = await getCurrentOrg()
 
   // Fetch recent notifications (last 20)
   const { data: notificationsRaw } = await supabase
@@ -31,7 +33,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-surface text-white">
       {/* Top bar */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-end px-3 bg-surface border-b border-surface-border/40">
+      <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-between px-3 bg-surface border-b border-surface-border/40">
+        <span className="text-sm font-semibold text-white truncate max-w-[60%]">
+          {org?.name ?? ''}
+        </span>
         <NotificationBell initialNotifications={notifications} />
         {unreadCount > 0 && <span className="sr-only">{unreadCount} notificações não lidas</span>}
       </header>
