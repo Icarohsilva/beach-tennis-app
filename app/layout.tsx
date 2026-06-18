@@ -1,18 +1,33 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Sora } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+const sora = Sora({ subsets: ['latin'], weight: ['400', '600', '700', '800'], variable: '--font-sora' })
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
 
 export const metadata: Metadata = {
-  title: 'Beach Tennis App',
-  description: 'Gestão de aulas e torneios de beach tennis',
+  metadataBase: new URL(SITE_URL),
+  title: 'ArenaHub — Gestão para arenas e academias de esporte',
+  description:
+    'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'BT App',
+    title: 'ArenaHub',
+  },
+  openGraph: {
+    title: 'ArenaHub — Gestão para arenas e academias de esporte',
+    description:
+      'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
+    url: SITE_URL,
+    siteName: 'ArenaHub',
+    images: ['/og.png'],
+    locale: 'pt_BR',
+    type: 'website',
   },
 }
 
@@ -23,7 +38,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} ${inter.variable} ${sora.variable}`}>{children}</body>
     </html>
   )
 }
