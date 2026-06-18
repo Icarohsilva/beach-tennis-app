@@ -6,7 +6,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8 gap-3">
           <Logo variant="full" size="md" />
-          <p className="text-slate-400 text-sm">Academia Hudson Barros</p>
+          <p className="text-slate-400 text-sm">Gestão para arenas e academias</p>
         </div>
         {children}
       </div>
