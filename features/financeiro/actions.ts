@@ -5,6 +5,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { PaymentType } from '@/types'
 import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
+import { normalizeSports } from '@/lib/arenas/sports'
 
 // ---------------------------------------------------------------------------
 // subscribeToPlan
@@ -404,5 +405,64 @@ export async function updateSystemSettings(settings: {
     if (updateErr) return { error: 'Erro ao salvar configurações.' }
   }
 
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateOrgListing (owner only) — vitrine pública no diretório /arenas
+// ---------------------------------------------------------------------------
+
+export async function updateOrgListing(input: {
+  is_listed: boolean
+  state: string
+  city: string
+  neighborhood: string
+  address_line: string
+  sports: string[]
+  whatsapp: string
+}): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  // Só o dono da academia edita a vitrine.
+  const { data: callerProfile } = await adminClient
+    .from('profiles')
+    .select('role, organization_id')
+    .eq('id', user.id)
+    .single()
+
+  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
+  const orgId = (callerProfile as { organization_id: string }).organization_id
+
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', orgId)
+    .single()
+  if ((org as { owner_id: string | null } | null)?.owner_id !== user.id) {
+    return { error: 'Sem permissão.' }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('organizations')
+    .update({
+      is_listed: input.is_listed,
+      state: input.state.trim().toUpperCase() || null,
+      city: input.city.trim() || null,
+      neighborhood: input.neighborhood.trim() || null,
+      address_line: input.address_line.trim() || null,
+      sports: normalizeSports(input.sports),
+      whatsapp: input.whatsapp.trim() || null,
+    })
+    .eq('id', orgId)
+
+  if (updateErr) return { error: 'Erro ao salvar a vitrine.' }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath('/admin/configuracoes')
+  revalidatePath('/arenas')
   return {}
 }
