@@ -1,44 +1,34 @@
-import Image from 'next/image'
-
 interface Props {
   size?: 'sm' | 'md' | 'lg'
   variant?: 'full' | 'icon'
 }
 
-const sizes = {
-  sm: { w: 110, h: 26 },
-  md: { w: 154, h: 36 },
-  lg: { w: 198, h: 46 },
+const textSizes = {
+  sm: 'text-base',
+  md: 'text-xl',
+  lg: 'text-2xl',
 }
 
 const iconSizes = {
-  sm: 28,
-  md: 36,
-  lg: 48,
+  sm: 'text-xl',
+  md: 'text-2xl',
+  lg: 'text-3xl',
 }
 
 export function Logo({ size = 'md', variant = 'full' }: Props) {
   if (variant === 'icon') {
-    const s = iconSizes[size]
     return (
-      <Image
-        src="public/icon.svg"
-        alt="Beach Tennis"
-        width={s}
-        height={s}
-        priority
-      />
+      <span className={iconSizes[size]} role="img" aria-label="ArenaHub">
+        🏟️
+      </span>
     )
   }
 
-  const { w, h } = sizes[size]
   return (
-    <Image
-      src="/logo.svg"
-      alt="Beach Tennis"
-      width={w}
-      height={h}
-      priority
-    />
+    <span className={`font-extrabold tracking-tight ${textSizes[size]}`} aria-label="ArenaHub">
+      <span aria-hidden="true">🏟️ </span>
+      <span className="text-white">Arena</span>
+      <span className="text-brand-500">Hub</span>
+    </span>
   )
 }
