@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { createAcademy } from '@/features/organizations/actions'
+import { formatDocument, isValidDocument } from '@/lib/validation/documento'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
@@ -12,7 +13,7 @@ import { Card } from '@/components/ui/Card'
 export default function CriarAcademiaPage() {
   const router = useRouter()
   const [form, setForm] = useState({
-    academyName: '', fullName: '', email: '', password: '', phone: '',
+    academyName: '', fullName: '', email: '', password: '', phone: '', document: '',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,11 +21,20 @@ export default function CriarAcademiaPage() {
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
 
+  // Documento mascarado progressivamente enquanto digita (CPF até 11, CNPJ acima).
+  const setDocument = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((f) => ({ ...f, document: formatDocument(e.target.value) }))
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
 
+    if (!isValidDocument(form.document)) {
+      setError('CPF ou CNPJ inválido.')
+      return
+    }
+
+    setLoading(true)
     const res = await createAcademy(form)
     if (res.error) {
       setError(res.error)
@@ -56,6 +66,14 @@ export default function CriarAcademiaPage() {
         <Input label="Nome da academia" value={form.academyName} onChange={set('academyName')} required />
         <Input label="Seu nome" value={form.fullName} onChange={set('fullName')} required />
         <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
+        <Input
+          label="CPF ou CNPJ"
+          value={form.document}
+          onChange={setDocument}
+          placeholder="000.000.000-00"
+          inputMode="numeric"
+          required
+        />
         <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
 

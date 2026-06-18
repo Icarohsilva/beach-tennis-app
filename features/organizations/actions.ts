@@ -4,12 +4,19 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
 import { normalizeSports } from '@/lib/arenas/sports'
+import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
+
+// Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
+const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.pro'
+const DOCUMENT_IN_USE_MSG =
+  `Já existe uma academia cadastrada com este CPF/CNPJ. Fale com o suporte: ${SUPPORT_CONTACT}`
 
 export interface CreateAcademyInput {
   academyName: string
   fullName: string
   email: string
   password: string
+  document: string
   phone?: string
   description?: string
   brandColor?: string
@@ -28,6 +35,18 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
   if (!name) return { error: 'Informe o nome da academia.' }
   if (!input.email.trim() || !input.password) return { error: 'Email e senha são obrigatórios.' }
 
+  // Documento (CPF/CNPJ): valida dígito verificador e exige unicidade global.
+  // Guarda só dígitos. 1 documento = 1 academia (anti-fraude de cadastros grátis).
+  const document = onlyDigits(input.document ?? '')
+  if (!isValidDocument(document)) return { error: 'CPF ou CNPJ inválido.' }
+
+  const { data: docOwner } = await admin
+    .from('organizations')
+    .select('id')
+    .eq('owner_document', document)
+    .maybeSingle()
+  if (docOwner) return { error: DOCUMENT_IN_USE_MSG }
+
   const slug = await generateUniqueSlug(admin, name)
   const inviteCode = await generateUniqueInviteCode(admin)
 
@@ -38,6 +57,7 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
       name,
       slug,
       invite_code: inviteCode,
+      owner_document: document,
       status: 'active',
       is_default: false,
       description: input.description?.trim() || null,
@@ -45,7 +65,13 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
     })
     .select('id')
     .single()
-  if (orgErr || !org) return { error: 'Não foi possível criar a academia. Tente outro nome.' }
+  if (orgErr || !org) {
+    // 23505 = violação de índice único. Corrida no documento → mesma mensagem.
+    if (orgErr?.code === '23505' && orgErr.message?.includes('owner_document')) {
+      return { error: DOCUMENT_IN_USE_MSG }
+    }
+    return { error: 'Não foi possível criar a academia. Tente outro nome.' }
+  }
 
   // 2. Cria o usuário no Auth. O trigger handle_new_user lê org_invite_code e
   // liga o perfil a esta org. email_confirm:true permite login imediato.

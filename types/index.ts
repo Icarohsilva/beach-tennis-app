@@ -31,6 +31,7 @@ export interface Organization {
   status: OrganizationStatus
   is_default: boolean
   owner_id: string | null
+  owner_document: string | null
   is_listed: boolean
   state: string | null
   city: string | null
