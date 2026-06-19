@@ -1,7 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import type { Organization } from '@/types'
+import type { Organization, Membership } from '@/types'
+import { resolveActiveOrg, ACTIVE_ORG_COOKIE, type ActiveOrgResolution } from '@/lib/org/activeOrg'
 
 export function createClient() {
   const cookieStore = cookies()
@@ -31,19 +32,76 @@ export function createAdminClient() {
   )
 }
 
-// Academia (tenant) do usuário autenticado. Use para escopar TODA query feita com
-// createAdminClient (service role ignora a RLS) por organization_id e evitar vazamento
-// de dados entre academias.
-export async function getCurrentOrgId(): Promise<string | null> {
+// Memberships do usuário logado, com nome/slug da academia (para a tela de seleção
+// e o seletor do topo). Lê via RLS (memberships_select_own).
+export interface MembershipWithOrg {
+  organization_id: string
+  role: string
+  org_name: string
+  org_slug: string
+}
+
+export async function getMemberships(): Promise<MembershipWithOrg[]> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+  const { data } = await supabase
+    .from('memberships')
+    .select('organization_id, role, organizations(name, slug)')
+    .eq('user_id', user.id)
+  return ((data ?? []) as Array<{
+    organization_id: string
+    role: string
+    organizations: { name: string; slug: string } | { name: string; slug: string }[] | null
+  }>).map((r) => {
+    const o = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations
+    return {
+      organization_id: r.organization_id,
+      role: r.role,
+      org_name: o?.name ?? '',
+      org_slug: o?.slug ?? '',
+    }
+  })
+}
+
+// Resolução completa (none | active | choose). Usada pelos layouts para decidir
+// redirect para /selecionar-academia (Plano 3). Hoje, com 1 membership, sempre active.
+export async function resolveActiveOrgForUser(): Promise<ActiveOrgResolution> {
+  const memberships = await getMemberships()
+  const cookieOrgId = cookies().get(ACTIVE_ORG_COOKIE)?.value ?? null
+  return resolveActiveOrg(
+    memberships.map((mm) => ({ organization_id: mm.organization_id })),
+    cookieOrgId,
+  )
+}
+
+// Id da academia ativa (null se não resolvida — sem membership ou precisa escolher).
+export async function getActiveOrgId(): Promise<string | null> {
+  const res = await resolveActiveOrgForUser()
+  return res.status === 'active' ? res.orgId : null
+}
+
+// Membership do usuário na academia ativa (campos por-academia: level, credits, etc.).
+export async function getActiveMembership(): Promise<Membership | null> {
+  const orgId = await getActiveOrgId()
+  if (!orgId) return null
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
-  const { data } = await supabase
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
+  const { data } = await createAdminClient()
+    .from('memberships')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  return data?.organization_id ?? null
+  return (data as Membership) ?? null
+}
+
+// Academia (tenant) ativa do usuário. Deriva da membership ativa (cookie), NÃO mais de
+// profiles.organization_id. Use para escopar TODA query feita com createAdminClient
+// (service role ignora a RLS) por organization_id e evitar vazamento entre academias.
+export async function getCurrentOrgId(): Promise<string | null> {
+  return getActiveOrgId()
 }
 
 export async function getCurrentOrg(): Promise<Organization | null> {
@@ -70,23 +128,28 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
+  const orgId = await getActiveOrgId()
+  if (!orgId) return null
+
   const admin = createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
+  // Papel vem da membership da academia ativa (não mais de profiles.role).
+  const { data: membership } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  if (!profile?.organization_id) return null
+  if (!membership) return null
 
   const { data: org } = await admin
     .from('organizations')
     .select('owner_id')
-    .eq('id', profile.organization_id)
+    .eq('id', orgId)
     .single()
 
   return {
     userId: user.id,
-    organizationId: profile.organization_id,
+    organizationId: orgId,
     isOwner: org?.owner_id === user.id,
   }
 }
