@@ -73,6 +73,15 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
     return { error: 'Não foi possível criar a academia. Tente outro nome.' }
   }
 
+  // Assinatura da plataforma em trial (1º mês grátis). on delete cascade garante limpeza
+  // junto com a org no rollback. Falha aqui não deve abortar o cadastro (best-effort);
+  // o backfill/edição posterior cobre, e a org sem linha cai no paywall (seguro).
+  await admin.from('platform_subscriptions').insert({
+    organization_id: org.id,
+    status: 'trialing',
+    trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+  })
+
   // 2. Cria o usuário no Auth. O trigger handle_new_user lê org_invite_code e
   // liga o perfil a esta org. email_confirm:true permite login imediato.
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
