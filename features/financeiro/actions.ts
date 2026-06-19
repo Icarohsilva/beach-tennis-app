@@ -1,7 +1,7 @@
 'use server'
 // features/financeiro/actions.ts
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import type { PaymentType } from '@/types'
 import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
@@ -25,39 +25,38 @@ export async function subscribeToPlan(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Fetch student profile
-  const { data: profile, error: profileErr } = await adminClient
-    .from('profiles')
-    .select('id, payment_type, is_dependent, parent_id, contract_active')
-    .eq('id', user.id)
-    .single()
+  // Dados por-academia (payment_type/dependente) vêm da membership da academia ativa.
+  const membership = await getActiveMembership()
+  if (!membership) return { error: 'Perfil não encontrado.' }
 
-  if (profileErr || !profile) return { error: 'Perfil não encontrado.' }
-
-  const paymentType = profile.payment_type as PaymentType
+  const paymentType = membership.payment_type as PaymentType
   if (paymentType === 'wellhub' || paymentType === 'totalpass') {
     return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
   }
 
-  // Fetch plan
+  // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
     .from('subscription_plans')
     .select('id, is_active, credits_per_month, name')
     .eq('id', planId)
+    .eq('organization_id', orgId)
     .single()
 
   if (planErr || !plan) return { error: 'Plano não encontrado.' }
   if (!plan.is_active) return { error: 'Este plano não está disponível.' }
 
   // payer_id: dependent uses parent; otherwise self
-  const payerId = profile.is_dependent && profile.parent_id ? profile.parent_id : user.id
+  const payerId = membership.is_dependent && membership.parent_id ? membership.parent_id : user.id
 
-  // Cancel existing active subscriptions
+  // Cancel existing active subscriptions (nesta academia)
   await adminClient
     .from('student_subscriptions')
     .update({ status: 'cancelled' })
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
 
   // Next billing = 1st day of next month
@@ -67,6 +66,7 @@ export async function subscribeToPlan(
   const { data: newSub, error: insertErr } = await adminClient
     .from('student_subscriptions')
     .insert({
+      organization_id: orgId,
       student_id: user.id,
       payer_id: payerId,
       plan_id: planId,
@@ -87,6 +87,7 @@ export async function subscribeToPlan(
     .from('enrollments')
     .select('class_id')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
 
   const { from, to } = getRemainingMonthWindow(new Date())
@@ -118,21 +119,25 @@ export async function adminSubscribeStudentToPlan(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify caller is admin
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
+  // Verify caller is admin na academia ativa (papel vive na membership).
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão de administrador.' }
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão de administrador.' }
 
-  // Fetch student profile
+  // Dados por-academia do aluno vêm da membership desta academia.
   const { data: student, error: studentErr } = await adminClient
-    .from('profiles')
-    .select('id, payment_type, is_dependent, parent_id, contract_active')
-    .eq('id', studentId)
+    .from('memberships')
+    .select('payment_type, is_dependent, parent_id, contract_active')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
     .single()
 
   if (studentErr || !student) return { error: 'Aluno não encontrado.' }
@@ -142,11 +147,12 @@ export async function adminSubscribeStudentToPlan(
     return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
   }
 
-  // Fetch plan
+  // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
     .from('subscription_plans')
     .select('id, is_active, credits_per_month')
     .eq('id', planId)
+    .eq('organization_id', orgId)
     .single()
 
   if (planErr || !plan) return { error: 'Plano não encontrado.' }
@@ -155,11 +161,12 @@ export async function adminSubscribeStudentToPlan(
   // payer_id: dependent uses parent; otherwise self
   const payerId = student.is_dependent && student.parent_id ? student.parent_id : studentId
 
-  // Cancel existing active subscriptions
+  // Cancel existing active subscriptions (nesta academia)
   await adminClient
     .from('student_subscriptions')
     .update({ status: 'cancelled' })
     .eq('student_id', studentId)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
 
   const now = new Date()
@@ -168,6 +175,7 @@ export async function adminSubscribeStudentToPlan(
   const { data: newSub, error: insertErr } = await adminClient
     .from('student_subscriptions')
     .insert({
+      organization_id: orgId,
       student_id: studentId,
       payer_id: payerId,
       plan_id: planId,
@@ -189,6 +197,7 @@ export async function adminSubscribeStudentToPlan(
       .from('enrollments')
       .select('class_id')
       .eq('student_id', studentId)
+      .eq('organization_id', orgId)
       .eq('is_active', true)
 
     const { from, to } = getRemainingMonthWindow(new Date())
@@ -218,12 +227,15 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Find active subscription
+  // Find active subscription (na academia ativa)
   const { data: sub, error: subErr } = await adminClient
     .from('student_subscriptions')
     .select('id, organization_id')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
     .single()
 
@@ -238,14 +250,16 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   if (cancelErr) return { error: 'Erro ao cancelar assinatura.' }
 
   // Expira todos os créditos restantes ao cancelar o contrato.
+  // Saldo é por-academia: vem da membership da academia da assinatura.
   // adjust_credits mantém ledger e saldo consistentes na mesma transação.
-  const { data: profileRow } = await adminClient
-    .from('profiles')
+  const { data: membershipRow } = await adminClient
+    .from('memberships')
     .select('credits_balance')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', sub.organization_id)
     .single()
 
-  const remaining = (profileRow?.credits_balance as number) ?? 0
+  const remaining = (membershipRow?.credits_balance as number) ?? 0
   if (remaining > 0) {
     const { error: expireErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: user.id,
@@ -277,14 +291,23 @@ export async function adminCancelStudentPlan(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  const { data: caller } = await adminClient.from('profiles').select('role').eq('id', user.id).single()
+  // Papel é por-academia: vem da membership da academia ativa.
+  const { data: caller } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
   if (caller?.role !== 'admin') return { error: 'Sem permissão.' }
 
   const { data: sub } = await adminClient
     .from('student_subscriptions')
     .select('id, organization_id')
     .eq('student_id', studentId)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
     .maybeSingle()
 
@@ -296,13 +319,15 @@ export async function adminCancelStudentPlan(
     .eq('id', sub.id)
 
   if (clearCredits) {
-    const { data: profile } = await adminClient
-      .from('profiles')
+    // Saldo é por-academia: vem da membership da academia da assinatura.
+    const { data: membershipRow } = await adminClient
+      .from('memberships')
       .select('credits_balance')
-      .eq('id', studentId)
+      .eq('user_id', studentId)
+      .eq('organization_id', sub.organization_id)
       .single()
 
-    const balance = (profile?.credits_balance as number) ?? 0
+    const balance = (membershipRow?.credits_balance as number) ?? 0
     if (balance > 0) {
       const { error: expireErr } = await adminClient.rpc('adjust_credits', {
         p_student_id: studentId,
@@ -342,15 +367,18 @@ export async function applyDiscount(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify caller is admin
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
+  // Papel é por-academia: vem da membership da academia ativa.
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   if (discountPct < 0 || discountPct > 100) {
     return { error: 'Desconto deve estar entre 0 e 100.' }
@@ -360,6 +388,7 @@ export async function applyDiscount(
     .from('student_subscriptions')
     .update({ discount_pct: discountPct })
     .eq('id', subscriptionId)
+    .eq('organization_id', orgId)
 
   if (updateErr) return { error: 'Erro ao aplicar desconto.' }
 
@@ -383,16 +412,18 @@ export async function updateSystemSettings(settings: {
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify caller is admin
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
-    .select('role, organization_id')
-    .eq('id', user.id)
+  // Papel é por-academia: vem da membership da academia ativa.
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
-  const orgId = (callerProfile as { organization_id: string }).organization_id
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
   const rows = Object.entries(settings)
@@ -431,16 +462,18 @@ export async function updateOrgListing(input: {
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Só o dono da academia edita a vitrine.
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
-    .select('role, organization_id')
-    .eq('id', user.id)
+  // Só o dono da academia edita a vitrine. Papel é por-academia (membership).
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
-  const orgId = (callerProfile as { organization_id: string }).organization_id
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   const { data: org } = await adminClient
     .from('organizations')

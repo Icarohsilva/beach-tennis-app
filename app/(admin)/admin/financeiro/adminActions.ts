@@ -1,22 +1,27 @@
 'use server'
 // app/(admin)/financeiro/adminActions.ts
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 
 async function assertAdmin() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Não autenticado.')
 
+  const orgId = await getActiveOrgId()
+  if (!orgId) throw new Error('Academia ativa não encontrada.')
+
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('role, organization_id')
-    .eq('id', user.id)
+  // Papel é por-academia: vem da membership da academia ativa.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (profile?.role !== 'admin') throw new Error('Sem permissão.')
-  return { adminClient, orgId: (profile as { organization_id: string }).organization_id }
+  if (membership?.role !== 'admin') throw new Error('Sem permissão.')
+  return { adminClient, orgId }
 }
 
 export async function togglePlanActive(
@@ -24,11 +29,12 @@ export async function togglePlanActive(
   isActive: boolean,
 ): Promise<{ error?: string }> {
   try {
-    const { adminClient } = await assertAdmin()
+    const { adminClient, orgId } = await assertAdmin()
     const { error } = await adminClient
       .from('subscription_plans')
       .update({ is_active: isActive })
       .eq('id', planId)
+      .eq('organization_id', orgId)
 
     if (error) return { error: 'Erro ao atualizar plano.' }
     revalidatePath('/admin/financeiro')
@@ -43,7 +49,7 @@ export async function updatePlanPrice(
   prices: { price_monthly?: number; price_quarterly?: number; price_annual?: number },
 ): Promise<{ error?: string }> {
   try {
-    const { adminClient } = await assertAdmin()
+    const { adminClient, orgId } = await assertAdmin()
 
     // Validate
     for (const [key, val] of Object.entries(prices)) {
@@ -56,6 +62,7 @@ export async function updatePlanPrice(
       .from('subscription_plans')
       .update(prices)
       .eq('id', planId)
+      .eq('organization_id', orgId)
 
     if (error) return { error: 'Erro ao atualizar preço.' }
     revalidatePath('/admin/financeiro')
@@ -110,7 +117,7 @@ export async function applyDiscountAdmin(
   discountPct: number,
 ): Promise<{ error?: string }> {
   try {
-    const { adminClient } = await assertAdmin()
+    const { adminClient, orgId } = await assertAdmin()
 
     if (discountPct < 0 || discountPct > 100) {
       return { error: 'Desconto deve estar entre 0 e 100.' }
@@ -120,6 +127,7 @@ export async function applyDiscountAdmin(
       .from('student_subscriptions')
       .update({ discount_pct: discountPct })
       .eq('id', subscriptionId)
+      .eq('organization_id', orgId)
 
     if (error) return { error: 'Erro ao aplicar desconto.' }
     revalidatePath('/admin/financeiro')

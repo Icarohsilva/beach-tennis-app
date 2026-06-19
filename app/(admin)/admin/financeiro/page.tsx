@@ -63,6 +63,7 @@ export default async function FinanceiroPage() {
         .from('payments')
         .select('status')
         .eq('student_id', sub.student_id)
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
