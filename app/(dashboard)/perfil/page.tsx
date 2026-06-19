@@ -1,5 +1,5 @@
 // app/(dashboard)/perfil/page.tsx
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
@@ -16,24 +16,58 @@ export default async function PerfilPage() {
   if (!user) redirect('/login')
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
 
-  // Fetch profile for credits_balance, payment_type, level, and is_dependent flag
-  const { data: profile } = await adminClient
+  // Identidade (full_name) vem de profiles; campos por-academia (credits_balance,
+  // payment_type, level, is_dependent) vêm da membership da academia ativa.
+  const { data: identity } = await adminClient
     .from('profiles')
-    .select('credits_balance, payment_type, full_name, is_dependent, level')
+    .select('full_name')
     .eq('id', user.id)
     .single()
 
-  // Fetch dependents (only for non-dependent guardians)
-  const { data: dependentsRaw } = !profile?.is_dependent
+  const membership = await getActiveMembership()
+  const profile = membership
+    ? {
+        full_name: identity?.full_name ?? null,
+        credits_balance: membership.credits_balance,
+        payment_type: membership.payment_type,
+        level: membership.level,
+        is_dependent: membership.is_dependent,
+      }
+    : null
+
+  // Fetch dependents (only for non-dependent guardians). Os dependentes têm
+  // membership na MESMA academia ativa — filtra por organization_id.
+  const { data: dependentMembersRaw } = !profile?.is_dependent
     ? await adminClient
-        .from('profiles')
-        .select('id, full_name, level')
+        .from('memberships')
+        .select('user_id, level')
         .eq('parent_id', user.id)
+        .eq('organization_id', orgId)
         .eq('is_dependent', true)
     : { data: [] }
 
-  const dependents = (dependentsRaw ?? []) as { id: string; full_name: string; level: StudentLevel }[]
+  const dependentMembers = (dependentMembersRaw ?? []) as { user_id: string; level: StudentLevel }[]
+  const dependentIds = dependentMembers.map((d) => d.user_id)
+
+  const { data: dependentNamesRaw } = dependentIds.length > 0
+    ? await adminClient
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', dependentIds)
+    : { data: [] }
+
+  const nameById = new Map<string, string>(
+    ((dependentNamesRaw ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+  )
+  const dependentsRaw = dependentMembers.map((d) => ({
+    id: d.user_id,
+    full_name: nameById.get(d.user_id) ?? '',
+    level: d.level,
+  }))
+
+  const dependents = dependentsRaw as { id: string; full_name: string; level: StudentLevel }[]
 
   const { data: medicalProfile } = await adminClient
     .from('medical_profiles')
@@ -46,6 +80,7 @@ export default async function PerfilPage() {
     .from('student_subscriptions')
     .select('*, plan:subscription_plans(*)')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
     .order('starts_at', { ascending: false })
     .limit(1)
@@ -73,6 +108,7 @@ export default async function PerfilPage() {
     .from('payments')
     .select('*')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(50)
 
@@ -83,6 +119,7 @@ export default async function PerfilPage() {
     .from('credit_transactions')
     .select('id, type, amount, reason, created_at, expires_at')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('type', 'refunded')
     .gt('amount', 0)
     .order('created_at', { ascending: false })
