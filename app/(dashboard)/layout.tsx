@@ -1,8 +1,9 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
-import { createClient, getCurrentOrg, resolveActiveOrgForUser } from '@/lib/supabase/server'
+import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { NotificationBell } from '@/components/ui/NotificationBell'
+import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -16,6 +17,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (res.status === 'choose') redirect('/selecionar-academia')
 
   const org = await getCurrentOrg()
+  const memberships = await getMemberships()
+  const activeOrgId = await getActiveOrgId()
 
   // Fetch recent notifications (last 20)
   const { data: notificationsRaw } = await supabase
@@ -40,9 +43,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-surface text-white">
       {/* Top bar */}
       <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-between px-3 bg-surface border-b border-surface-border/40">
-        <span className="text-sm font-semibold text-white truncate max-w-[60%]">
-          {org?.name ?? ''}
-        </span>
+        {memberships.length > 1 && activeOrgId ? (
+          <OrgSwitcher
+            items={memberships.map((m) => ({ organization_id: m.organization_id, org_name: m.org_name }))}
+            activeOrgId={activeOrgId}
+          />
+        ) : (
+          <span className="text-sm font-semibold text-white truncate max-w-[60%]">{org?.name ?? ''}</span>
+        )}
         <NotificationBell initialNotifications={notifications} />
         {unreadCount > 0 && <span className="sr-only">{unreadCount} notificações não lidas</span>}
       </header>
