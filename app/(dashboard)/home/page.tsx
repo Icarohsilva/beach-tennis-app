@@ -1,7 +1,7 @@
 // app/(dashboard)/home/page.tsx
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { ClassCard } from '@/features/aulas/ClassCard'
@@ -23,6 +23,10 @@ export default async function HomePage() {
   const todayDayOfWeek = new Date().getDay()
   const adminClient = createAdminClient()
 
+  // Campos por-academia vêm da membership da academia ativa; identidade (full_name) de profiles.
+  const orgId = await getActiveOrgId()
+  const membership = await getActiveMembership()
+
   const [
     { data: profileData },
     { data: tournamentsData },
@@ -33,19 +37,21 @@ export default async function HomePage() {
   ] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, credits_balance, payment_type, level, is_dependent')
+      .select('full_name')
       .eq('id', user.id)
       .single(),
     supabase
       .from('tournaments')
       .select('*')
       .eq('status', 'open')
+      .eq('organization_id', orgId)
       .order('date', { ascending: true })
       .limit(3),
     supabase
       .from('session_bookings')
       .select('id, session:class_sessions(id, session_date, class:classes(name, start_time, end_time, level, type))')
       .eq('student_id', user.id)
+      .eq('organization_id', orgId)
       .eq('status', 'confirmed')
       .gte('session_date', today)
       .order('session_date', { referencedTable: 'class_sessions', ascending: true })
@@ -55,23 +61,26 @@ export default async function HomePage() {
       .select('*')
       .eq('day_of_week', todayDayOfWeek)
       .eq('is_active', true)
+      .eq('organization_id', orgId)
       .order('start_time', { ascending: true }),
     supabase
       .from('dayuse_slots')
       .select('id, court, start_time, end_time, capacity, notes')
       .eq('date', today)
       .eq('is_active', true)
+      .eq('organization_id', orgId)
       .order('start_time', { ascending: true }),
     supabase
       .from('enrollments')
       .select('id', { count: 'exact', head: true })
       .eq('student_id', user.id)
+      .eq('organization_id', orgId)
       .eq('is_active', true),
   ])
 
-  const profile = profileData as Pick<Profile, 'full_name' | 'credits_balance' | 'payment_type' | 'level' | 'is_dependent'> | null
+  const profile = profileData as Pick<Profile, 'full_name'> | null
   const tournaments = (tournamentsData ?? []) as Tournament[]
-  const showCredits = profile?.payment_type !== 'wellhub' && profile?.payment_type !== 'totalpass'
+  const showCredits = membership?.payment_type !== 'wellhub' && membership?.payment_type !== 'totalpass'
   const todayDayUse = (todayDayUseData ?? []) as Pick<DayUseSlot, 'id' | 'court' | 'start_time' | 'end_time' | 'capacity' | 'notes'>[]
 
   type SessionRow = {
@@ -90,10 +99,10 @@ export default async function HomePage() {
 
   // Filter today's classes by student level
   const allTodayClasses = (todayClassesData ?? []) as Class[]
-  const todayClasses = profile
+  const todayClasses = membership
     ? allTodayClasses.filter((c) => {
-        const levelOk = canStudentAttendLevel(profile.level, c.level)
-        const kidsOk = c.type !== 'kids' || profile.is_dependent
+        const levelOk = canStudentAttendLevel(membership.level, c.level)
+        const kidsOk = c.type !== 'kids' || membership.is_dependent
         return levelOk && kidsOk
       })
     : []
@@ -138,6 +147,7 @@ export default async function HomePage() {
         .from('enrollments')
         .select('class_id')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('class_id', todayClassIds)
         .eq('is_active', true)
     : { data: [] }
@@ -152,6 +162,7 @@ export default async function HomePage() {
         .from('session_bookings')
         .select('id, session_id')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('session_id', todaySessionIds)
         .eq('status', 'confirmed')
     : { data: [] }
@@ -215,6 +226,7 @@ export default async function HomePage() {
         .from('waitlists')
         .select('id, session_id, position, status, notified_at')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('session_id', todaySessionIds)
         .in('status', ['waiting', 'offered'])
     : { data: [] }
@@ -243,6 +255,7 @@ export default async function HomePage() {
     .from('class_sessions')
     .select('id')
     .eq('session_date', today)
+    .eq('organization_id', orgId)
 
   const allTodayIds = (allTodaySessionIds ?? []).map((s: { id: string }) => s.id)
   let dailyBookingCount = 0
@@ -251,6 +264,7 @@ export default async function HomePage() {
       .from('session_bookings')
       .select('id', { count: 'exact', head: true })
       .eq('student_id', user.id)
+      .eq('organization_id', orgId)
       .in('session_id', allTodayIds)
       .eq('status', 'confirmed')
     dailyBookingCount = count ?? 0
@@ -262,10 +276,10 @@ export default async function HomePage() {
         name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
         stats={[
           ...(showCredits
-            ? [{ label: 'Créditos', value: profile?.credits_balance ?? 0 }]
-            : [{ label: 'Plano', value: profile?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
+            ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
+            : [{ label: 'Plano', value: membership?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
           { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-          { label: 'Nível', value: (profile?.level ?? '—').toUpperCase() },
+          { label: 'Nível', value: (membership?.level ?? '—').toUpperCase() },
         ]}
       />
 
