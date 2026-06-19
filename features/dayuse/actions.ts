@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { validateDayUseSlot } from './validation'
 
 export { validateDayUseSlot }
@@ -19,11 +19,17 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
   const validation = validateDayUseSlot(data.start_time, data.end_time, data.capacity)
   if (validation.error) return validation
 
+  // organization_id é informado explicitamente: o trigger trg_set_org de dayuse_slots
+  // foi removido no cutover de identidade (plano 3).
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
   const adminClient = createAdminClient()
   const { data: { user } } = await adminClient.auth.getUser()
 
   const { error } = await adminClient.from('dayuse_slots').insert({
     ...data,
+    organization_id: orgId,
     notes: data.notes || null,
     created_by: user?.id,
     is_active: true,

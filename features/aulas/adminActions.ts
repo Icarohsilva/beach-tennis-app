@@ -55,9 +55,6 @@ export async function updateStudentLevel(
 
   if (error) return { error: 'Erro ao atualizar nível.' }
 
-  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
-  await adminClient.from('profiles').update({ level }).eq('id', studentId)
-
   return {}
 }
 
@@ -213,21 +210,13 @@ export async function addDependentSelf(
 
   const newId = crypto.randomUUID()
 
-  // Identidade do dependente (profiles). organization_id = academia ativa (default).
+  // Identidade do dependente (profiles = só identidade). Campos por-academia vão
+  // na membership abaixo.
   const { data: newDep, error } = await adminClient
     .from('profiles')
     .insert({
       id: newId,
       full_name: name.trim(),
-      role: 'student',
-      organization_id: orgId,
-      // fonte dupla: espelha campos por-academia em profiles até o Plano 3
-      level,
-      is_dependent: true,
-      parent_id: user.id,
-      payment_type: 'subscriber',
-      credits_balance: 0,
-      contract_active: false,
     })
     .select('id')
     .single()
@@ -284,19 +273,11 @@ export async function addDependent(
 
   const newId = crypto.randomUUID()
 
-  // Identidade do dependente (profiles, sem auth user — gerido pelo responsável).
+  // Identidade do dependente (profiles = só identidade; sem auth user — gerido pelo
+  // responsável). Campos por-academia vão na membership abaixo.
   const { error } = await adminClient.from('profiles').insert({
     id: newId,
     full_name: fullName.trim(),
-    role: 'student',
-    organization_id: orgId,
-    // fonte dupla: espelha campos por-academia em profiles até o Plano 3
-    level,
-    is_dependent: true,
-    parent_id: parentId,
-    payment_type: 'subscriber',
-    contract_active: true,
-    credits_balance: 0,
   })
 
   if (error) return { error: 'Erro ao criar dependente.' }

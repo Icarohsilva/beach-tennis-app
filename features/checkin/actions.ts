@@ -55,8 +55,6 @@ export async function setStudentType(
       .eq('user_id', studentId)
       .eq('organization_id', orgId)
     if (error) return { error: 'Erro ao definir tipo do aluno.' }
-    // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
-    await adminClient.from('profiles').update(patch).eq('id', studentId)
     revalidatePath(`/admin/alunos/${studentId}`)
     return {}
   }
@@ -80,9 +78,6 @@ export async function setStudentType(
     .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao definir tipo do aluno.' }
-
-  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
-  await adminClient.from('profiles').update(patch).eq('id', studentId)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
@@ -232,9 +227,6 @@ export async function clearPendingPartner(studentId: string): Promise<{ error?: 
     .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao recusar solicitação.' }
-
-  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
-  await adminClient.from('profiles').update({ pending_partner: null }).eq('id', studentId)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}

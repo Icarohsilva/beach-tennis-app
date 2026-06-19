@@ -95,10 +95,9 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
     return { error: msg }
   }
 
-  // 3. Promove o perfil a admin e marca como dono da org.
-  await admin.from('profiles').update({ role: 'admin' }).eq('id', created.user.id)
+  // 3. Marca o usuário como dono da org e promove a membership a admin
+  //    (a membership é a fonte da verdade do papel por-academia).
   await admin.from('organizations').update({ owner_id: created.user.id }).eq('id', org.id)
-  // Promove também a membership da academia recém-criada (fonte da verdade do papel).
   await admin
     .from('memberships')
     .update({ role: 'admin' })
@@ -164,9 +163,8 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
     return { error: msg }
   }
 
-  // Promove a admin. owner_id continua o dono → o novo entra como professor.
-  await admin.from('profiles').update({ role: 'admin' }).eq('id', created.user.id)
-  // Promove também a membership desta academia (fonte da verdade do papel).
+  // Promove a membership desta academia a admin (fonte da verdade do papel).
+  // owner_id continua o dono → o novo entra como professor (admin não-dono).
   await admin
     .from('memberships')
     .update({ role: 'admin' })
@@ -185,12 +183,14 @@ export async function removeProfessor(profileId: string): Promise<{ error?: stri
 
   const admin = createAdminClient()
   // Garante que o alvo pertence à mesma academia (evita remover de outra org).
+  // O vínculo por-academia vive em memberships, não mais em profiles.
   const { data: target } = await admin
-    .from('profiles')
-    .select('id, organization_id')
-    .eq('id', profileId)
-    .single()
-  if (!target || target.organization_id !== ctx.organizationId) {
+    .from('memberships')
+    .select('user_id')
+    .eq('user_id', profileId)
+    .eq('organization_id', ctx.organizationId)
+    .maybeSingle()
+  if (!target) {
     return { error: 'Professor não encontrado nesta academia.' }
   }
 

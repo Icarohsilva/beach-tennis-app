@@ -168,12 +168,6 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
             .update({ credits_balance: creditsPerMonth })
             .eq('user_id', sub.student_id)
             .eq('organization_id', sub.organization_id)
-
-          // Fonte dupla: mantém profiles.credits_balance em sincronia (removido no Plano 3).
-          await adminClient
-            .from('profiles')
-            .update({ credits_balance: creditsPerMonth })
-            .eq('id', sub.student_id)
         }
       }
     }
