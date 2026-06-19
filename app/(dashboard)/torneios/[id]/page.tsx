@@ -1,7 +1,7 @@
 // app/(dashboard)/torneios/[id]/page.tsx
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { BracketView } from '@/features/torneios/BracketView'
@@ -33,11 +33,14 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Fetch tournament
+  // Torneio precisa pertencer à academia ativa (RLS deixa passar todas as orgs
+  // do usuário; aqui restringimos à academia ativa).
+  const orgId = await getActiveOrgId()
   const { data: tournament, error } = await supabase
     .from('tournaments')
     .select('*')
     .eq('id', params.id)
+    .eq('organization_id', orgId)
     .single()
 
   if (error || !tournament) notFound()

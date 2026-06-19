@@ -1,7 +1,7 @@
 'use server'
 // features/torneios/actions.ts
 
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import type { StudentLevel, TournamentStatus, TournamentFormat, TournamentModality } from '@/types'
 
@@ -21,18 +21,22 @@ export async function createTournament(input: {
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role
-  const { data: profile } = await adminClient
-    .from('profiles')
+  // Verify admin role na academia ativa (papel vive na membership).
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  if (profile?.role !== 'admin') return { error: 'Sem permissão.' }
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   const { data, error } = await adminClient
     .from('tournaments')
     .insert({
+      organization_id: orgId,
       name: input.name,
       date: input.date,
       format: input.format,
@@ -61,12 +65,15 @@ export async function registerForTournament(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Fetch tournament
+  // Fetch tournament (escopado pela academia ativa)
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
     .select('id, status, level, modality')
     .eq('id', tournamentId)
+    .eq('organization_id', orgId)
     .single()
 
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
@@ -76,19 +83,14 @@ export async function registerForTournament(
     return { error: 'Inscrições encerradas para este torneio.' }
   }
 
-  // Fetch student profile
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('id, level')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile) return { error: 'Perfil não encontrado.' }
+  // Nível do aluno vem da membership da academia ativa.
+  const membership = await getActiveMembership()
+  if (!membership) return { error: 'Perfil não encontrado.' }
 
   // Level validation
-  if (!canStudentAttendLevel(profile.level as StudentLevel, tournament.level as StudentLevel)) {
+  if (!canStudentAttendLevel(membership.level as StudentLevel, tournament.level as StudentLevel)) {
     return {
-      error: `Seu nível (${profile.level}) não permite participar deste torneio (${tournament.level}).`,
+      error: `Seu nível (${membership.level}) não permite participar deste torneio (${tournament.level}).`,
     }
   }
 
@@ -107,6 +109,7 @@ export async function registerForTournament(
   const { error: insertErr } = await adminClient
     .from('tournament_registrations')
     .insert({
+      organization_id: orgId,
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: tournament.modality === 'dupla_fixa' ? (partnerId ?? null) : null,
@@ -130,20 +133,24 @@ export async function recordMatchResult(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role
-  const { data: profile } = await adminClient
-    .from('profiles')
+  // Verify admin role na academia ativa (papel vive na membership).
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  if (profile?.role !== 'admin') return { error: 'Sem permissão.' }
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  // Fetch match with tournament
+  // Fetch match with tournament (escopado pela academia ativa)
   const { data: match, error: matchErr } = await adminClient
     .from('tournament_matches')
     .select('id, player1_id, player2_id, tournament_id, tournament:tournaments(status)')
     .eq('id', matchId)
+    .eq('organization_id', orgId)
     .single()
 
   if (matchErr || !match) return { error: 'Confronto não encontrado.' }
@@ -184,20 +191,24 @@ export async function updateTournamentStatus(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role
-  const { data: profile } = await adminClient
-    .from('profiles')
+  // Verify admin role na academia ativa (papel vive na membership).
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  if (profile?.role !== 'admin') return { error: 'Sem permissão.' }
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  // Fetch current status
+  // Fetch current status (escopado pela academia ativa)
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
     .select('id, status')
     .eq('id', tournamentId)
+    .eq('organization_id', orgId)
     .single()
 
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }

@@ -1,5 +1,5 @@
 // app/(dashboard)/torneios/page.tsx
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
 import type { Tournament } from '@/types'
 
@@ -18,11 +18,13 @@ interface PageProps {
 
 export default async function TorneiosPage({ searchParams }: PageProps) {
   const supabase = createClient()
+  const orgId = await getActiveOrgId()
   const nivel = searchParams.nivel ?? ''
 
   let query = supabase
     .from('tournaments')
     .select('*')
+    .eq('organization_id', orgId)
     .neq('status', 'draft')
     .order('date', { ascending: true })
 
