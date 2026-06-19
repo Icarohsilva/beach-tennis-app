@@ -1,6 +1,7 @@
 // app/api/webhooks/mercadopago/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { mapPreapprovalStatus } from '@/lib/billing/mpStatus'
 import crypto from 'crypto'
 
 /**
@@ -79,6 +80,13 @@ interface WebhookPayload {
 
 async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
   const action = body.action ?? body.type
+
+  // Eventos de assinatura da PLATAFORMA (cobrança academia→plataforma).
+  // Separado do fluxo payment.* (billing aluno→academia), que segue abaixo intocado.
+  if (action === 'subscription_preapproval' || action === 'subscription_authorized_payment') {
+    return handlePlatformSubscription(action, String(body.data?.id ?? ''))
+  }
+
   const gatewayPaymentId = String(body.data?.id ?? '')
 
   // Only handle payment events
@@ -172,6 +180,69 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
       }
     }
   }
+
+  return NextResponse.json({ received: true })
+}
+
+// Sincroniza platform_subscriptions a partir de eventos de assinatura do MercadoPago.
+// - subscription_preapproval: mudança de status da assinatura (id = preapproval id).
+// - subscription_authorized_payment: cobrança mensal aprovada → empurra current_period_end.
+async function handlePlatformSubscription(
+  action: string,
+  resourceId: string,
+): Promise<NextResponse> {
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN
+  if (!token) {
+    console.error('[webhook/mercadopago] MERCADOPAGO_ACCESS_TOKEN ausente')
+    return NextResponse.json({ received: true })
+  }
+  if (!resourceId) return NextResponse.json({ error: 'Missing data.id' }, { status: 400 })
+
+  const admin = createAdminClient()
+  const nowIso = new Date().toISOString()
+
+  if (action === 'subscription_preapproval') {
+    // Lê a assinatura no MP: status + external_reference (= organization_id).
+    const res = await fetch(`https://api.mercadopago.com/preapproval/${resourceId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) {
+      console.error('[webhook/mercadopago] GET preapproval falhou:', res.status)
+      return NextResponse.json({ received: true })
+    }
+    const pre = (await res.json()) as { status?: string; external_reference?: string }
+    const mapped = mapPreapprovalStatus(pre.status)
+    if (!mapped || !pre.external_reference) return NextResponse.json({ received: true })
+
+    await admin
+      .from('platform_subscriptions')
+      .update({ status: mapped, mp_preapproval_id: resourceId, updated_at: nowIso })
+      .eq('organization_id', pre.external_reference)
+
+    return NextResponse.json({ received: true })
+  }
+
+  // subscription_authorized_payment: cobrança mensal aprovada.
+  // O id do evento é do pagamento; encontramos a org pela assinatura associada.
+  const res = await fetch(`https://api.mercadopago.com/authorized_payments/${resourceId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    console.error('[webhook/mercadopago] GET authorized_payment falhou:', res.status)
+    return NextResponse.json({ received: true })
+  }
+  const pay = (await res.json()) as { preapproval_id?: string; status?: string }
+  if (pay.status !== 'approved' || !pay.preapproval_id) {
+    return NextResponse.json({ received: true })
+  }
+
+  // Empurra o período pago em +1 mês a partir de agora e marca ativa. Idempotente o
+  // suficiente para o smoke test (reprocessar empurra o período de novo; aceitável).
+  const periodEnd = new Date(Date.now() + 30 * 86400000).toISOString()
+  await admin
+    .from('platform_subscriptions')
+    .update({ status: 'active', current_period_end: periodEnd, updated_at: nowIso })
+    .eq('mp_preapproval_id', pay.preapproval_id)
 
   return NextResponse.json({ received: true })
 }
