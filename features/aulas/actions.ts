@@ -2,7 +2,7 @@
 // features/aulas/actions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
@@ -33,13 +33,16 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
   const today = new Date().toISOString().slice(0, 10)
 
-  // Find next scheduled session
+  // Find next scheduled session (escopado pela academia ativa)
   const { data: existingSession } = await adminClient
     .from('class_sessions')
     .select('id')
     .eq('class_id', classId)
+    .eq('organization_id', orgId)
     .gte('session_date', today)
     .eq('status', 'scheduled')
     .order('session_date', { ascending: true })
@@ -56,6 +59,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
       .from('classes')
       .select('day_of_week, is_active')
       .eq('id', classId)
+      .eq('organization_id', orgId)
       .single()
 
     if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
@@ -65,7 +69,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
 
     const { data: newSession, error: createErr } = await adminClient
       .from('class_sessions')
-      .insert({ class_id: classId, session_date: sessionDate, status: 'scheduled', notes: null })
+      .insert({ organization_id: orgId, class_id: classId, session_date: sessionDate, status: 'scheduled', notes: null })
       .select('id')
       .single()
 
@@ -73,14 +77,9 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
     sessionId = (newSession as { id: string }).id
   }
 
-  // Determine if a credit should be consumed (wellhub/totalpass don't use credits)
-  const { data: studentProfile } = await adminClient
-    .from('profiles')
-    .select('payment_type')
-    .eq('id', user.id)
-    .single()
-
-  const paymentType = (studentProfile as { payment_type: string } | null)?.payment_type
+  // Tipo de pagamento (por-academia) vem da membership da academia ativa.
+  const membership = await getActiveMembership()
+  const paymentType = membership?.payment_type
   const useCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
 
   return bookSession(sessionId, useCredit)
@@ -113,20 +112,20 @@ export async function bookSession(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // 1. Fetch student profile
-  const { data: profile, error: profileErr } = await adminClient
-    .from('profiles')
-    .select('id, level, is_dependent, credits_balance, payment_type')
-    .eq('id', user.id)
-    .single()
-  if (profileErr || !profile) return { error: 'Perfil não encontrado.' }
+  // 1. Campos por-academia (level, is_dependent, credits_balance, payment_type)
+  //    vêm da membership da academia ativa.
+  const profile = await getActiveMembership()
+  if (!profile) return { error: 'Perfil não encontrado.' }
 
-  // 2. Fetch session + class
+  // 2. Fetch session + class (escopado pela academia ativa)
   const { data: session, error: sessionErr } = await adminClient
     .from('class_sessions')
     .select('id, class_id, session_date, status, class:classes(id, level, type, max_students, name)')
     .eq('id', sessionId)
+    .eq('organization_id', orgId)
     .single()
   if (sessionErr || !session) return { error: 'Sessão não encontrada.' }
 
@@ -167,6 +166,7 @@ export async function bookSession(
         await adminClient
           .from('class_sessions')
           .select('id')
+          .eq('organization_id', orgId)
           .eq('session_date', session.session_date)
       ).data?.map((s: { id: string }) => s.id) ?? [],
     )
@@ -209,8 +209,6 @@ export async function bookSession(
 
   // Débito atômico (transação + saldo juntos)
   if (useCredit) {
-    const orgId = await getActiveOrgId()
-    if (!orgId) return { error: 'Academia ativa não encontrada.' }
     const { error: creditErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: user.id,
       p_org: orgId,
@@ -319,24 +317,28 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify student is enrolled
+  // Verify student is enrolled (na academia ativa)
   const { count: enrolled } = await adminClient
     .from('enrollments')
     .select('id', { count: 'exact', head: true })
     .eq('student_id', user.id)
     .eq('class_id', classId)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
 
   if ((enrolled ?? 0) === 0) return { error: 'Você não está matriculado nesta turma.' }
 
   const today = new Date().toISOString().slice(0, 10)
 
-  // Find or create the next session
+  // Find or create the next session (escopado pela academia ativa)
   const { data: existingSession } = await adminClient
     .from('class_sessions')
     .select('id')
     .eq('class_id', classId)
+    .eq('organization_id', orgId)
     .gte('session_date', today)
     .eq('status', 'scheduled')
     .order('session_date', { ascending: true })
@@ -352,13 +354,14 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
       .from('classes')
       .select('day_of_week')
       .eq('id', classId)
+      .eq('organization_id', orgId)
       .single()
     if (!cls) return { error: 'Turma não encontrada.' }
 
     const nextDate = getNextOccurrence(new Date(), cls.day_of_week as number)
     const { data: newSess, error: createErr } = await adminClient
       .from('class_sessions')
-      .insert({ class_id: classId, session_date: nextDate.toISOString().slice(0, 10), status: 'scheduled', notes: null })
+      .insert({ organization_id: orgId, class_id: classId, session_date: nextDate.toISOString().slice(0, 10), status: 'scheduled', notes: null })
       .select('id')
       .single()
     if (createErr || !newSess) return { error: 'Erro ao preparar sessão.' }
@@ -381,6 +384,7 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
   // Upsert handles the case where a cancelled row already exists (unique constraint on student_id,session_id).
   await adminClient.from('session_bookings').upsert(
     {
+      organization_id: orgId,
       student_id: user.id,
       session_id: sessionId,
       type: 'extra',
@@ -458,10 +462,12 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   // Credit logic: extra (non-expiring) for fixed enrollment; makeup (30 days) for paid avulso
   let creditWarning: string | undefined
   if (refundEligible) {
+    // payment_type é por-academia: lê da membership da academia do booking.
     const { data: profile } = await adminClient
-      .from('profiles')
+      .from('memberships')
       .select('payment_type')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
+      .eq('organization_id', booking.organization_id)
       .single()
 
     if (profile) {
@@ -540,18 +546,22 @@ export async function markAttendance(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify caller is admin
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
+  // Verify caller is admin na academia ativa (papel vive na membership).
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   // Upsert attendance
   const { error: upsertErr } = await adminClient.from('attendance').upsert(
     {
+      organization_id: orgId,
       student_id: studentId,
       session_id: sessionId,
       status: present ? 'present' : 'absent',
@@ -582,13 +592,21 @@ export async function markAttendanceBulk(
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return { error: 'Sem permissão.' }
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   const now = new Date().toISOString()
   const presentSet = new Set(presentIds)
 
   const rows = allStudentIds.map((studentId) => ({
+    organization_id: orgId,
     session_id: sessionId,
     student_id: studentId,
     status: presentSet.has(studentId) ? 'present' : 'absent' as 'present' | 'absent',
