@@ -35,7 +35,11 @@ export function middleware(request: NextRequest) {
   }
 
   // Admin role check is handled by app/(admin)/layout.tsx (Server Component).
-  return NextResponse.next()
+  // Propaga o pathname para o layout admin via header — o gate de cobrança precisa
+  // saber a rota atual para isentar a própria /admin/assinatura (senão loop de redirect).
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', pathname)
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export const config = {

@@ -1,11 +1,14 @@
 // app/(admin)/layout.tsx
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
+import { Sparkles } from 'lucide-react'
 import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { Logo } from '@/components/ui/Logo'
 import { AdminMobileNav } from '@/components/ui/AdminMobileNav'
 import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
+import { getPlatformAccess } from '@/lib/billing/access'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -41,6 +44,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // redirect — embora esse estado seja inalcançável (professor só é criado de
   // dentro do painel, já com onboarding concluído).
   if (org && org.onboarding_completed === false && isOwner) redirect('/onboarding')
+
+  // Gate de cobrança da plataforma (academia→plataforma). Academia sem assinatura em
+  // dia não acessa o painel — exceto a própria /admin/assinatura (senão loop). Alunos
+  // não são afetados (este gate é só do painel admin). O pathname chega via header
+  // setado no middleware.ts.
+  const pathname = headers().get('x-pathname') ?? ''
+  const isAssinaturaRoute = pathname.startsWith('/admin/assinatura')
+  const access = await getPlatformAccess(ctx.organizationId)
+  if (!access.allowed && !isAssinaturaRoute) redirect('/admin/assinatura')
+  // Aviso suave na reta final do trial (não repete na própria página de assinatura).
+  const showTrialBanner =
+    !isAssinaturaRoute && access.status === 'trialing' && access.daysLeft <= 7
 
   // area = chave usada por canAccessArea pra decidir se professor vê o item.
   const allNav: { href: string; label: string; area: AdminArea }[] = [
@@ -79,7 +94,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </aside>
       <AdminMobileNav links={navLinks} />
-      <main className="flex-1 p-6 mt-14 md:mt-0">{children}</main>
+      <main className="flex-1 p-6 mt-14 md:mt-0">
+        {showTrialBanner && (
+          <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-brand-600/40 bg-brand-600/10 px-4 py-3 text-sm text-brand-100">
+            <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
+            <span>
+              Seu mês grátis termina em{' '}
+              <strong>{access.daysLeft === 1 ? '1 dia' : `${access.daysLeft} dias`}</strong>.
+            </span>
+            <Link
+              href="/admin/assinatura"
+              className="font-semibold text-brand-300 underline underline-offset-2 hover:text-brand-200"
+            >
+              Assinar agora
+            </Link>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   )
 }
