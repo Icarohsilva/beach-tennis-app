@@ -15,15 +15,25 @@ export default async function EquipePage() {
     .eq('id', ctx.organizationId)
     .single()
 
-  // Professores = admins da org que NÃO são o dono.
+  // Professores = admins da org que NÃO são o dono. Papel é por-academia: vem
+  // das memberships desta org (não de profiles.role, que é o papel padrão).
   const { data: staff } = await admin
-    .from('profiles')
-    .select('id, full_name')
+    .from('memberships')
+    .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
     .eq('organization_id', ctx.organizationId)
     .eq('role', 'admin')
-    .order('full_name', { ascending: true })
 
-  const professors = ((staff ?? []) as ProfessorRow[]).filter((p) => p.id !== org?.owner_id)
+  type StaffRow = {
+    user_id: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }
+  const professors: ProfessorRow[] = ((staff ?? []) as unknown as StaffRow[])
+    .map((m) => {
+      const prof = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
+      return { id: m.user_id, full_name: prof?.full_name ?? '' }
+    })
+    .filter((p) => p.id !== org?.owner_id)
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
   const inviteUrl = `${baseUrl}/cadastro?convite=${org?.invite_code ?? ''}`

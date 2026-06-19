@@ -37,19 +37,34 @@ export default async function SessionDetailPage({ params }: Props) {
     .from('session_bookings')
     .select('student_id')
     .eq('session_id', params.sessionId)
+    .eq('organization_id', orgId)
     .eq('status', 'confirmed')
 
   const studentIds = (bookings ?? []).map((b: { student_id: string }) => b.student_id)
 
-  // Fetch student profiles
+  // Identidade (full_name) vem de profiles; nível/tipo são por-academia e vêm
+  // da membership do aluno NESTA org.
   const { data: profiles } =
     studentIds.length > 0
       ? await adminClient
           .from('profiles')
-          .select('id, full_name, level, payment_type')
+          .select('id, full_name')
           .in('id', studentIds)
-          .order('full_name', { ascending: true })
       : { data: [] }
+
+  const { data: memsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('memberships')
+          .select('user_id, level, payment_type')
+          .in('user_id', studentIds)
+          .eq('organization_id', orgId)
+      : { data: [] }
+
+  const memByStudent = new Map<string, { level: Profile['level']; payment_type: Profile['payment_type'] }>()
+  for (const m of (memsRaw ?? []) as { user_id: string; level: Profile['level']; payment_type: Profile['payment_type'] }[]) {
+    memByStudent.set(m.user_id, { level: m.level, payment_type: m.payment_type })
+  }
 
   // Fetch attendances for this session
   const { data: attendances } =
@@ -58,6 +73,7 @@ export default async function SessionDetailPage({ params }: Props) {
           .from('attendance')
           .select('*')
           .eq('session_id', params.sessionId)
+          .eq('organization_id', orgId)
           .in('student_id', studentIds)
       : { data: [] }
 
@@ -65,10 +81,20 @@ export default async function SessionDetailPage({ params }: Props) {
     (attendances ?? []).map((a: Attendance) => [a.student_id, a]),
   )
 
-  const students = (profiles ?? []).map((p: Pick<Profile, 'id' | 'full_name' | 'level' | 'payment_type'>) => ({
-    student: p,
-    attendance: attendanceByStudent.get(p.id) ?? null,
-  }))
+  const students = (profiles ?? [])
+    .map((p: Pick<Profile, 'id' | 'full_name'>) => {
+      const mem = memByStudent.get(p.id)
+      return {
+        student: {
+          id: p.id,
+          full_name: p.full_name,
+          level: mem?.level ?? ('iniciante' as Profile['level']),
+          payment_type: mem?.payment_type ?? ('per_class' as Profile['payment_type']),
+        },
+        attendance: attendanceByStudent.get(p.id) ?? null,
+      }
+    })
+    .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
 
   return (
     <div className="space-y-6 max-w-2xl">

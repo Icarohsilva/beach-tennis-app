@@ -59,8 +59,15 @@ export async function updateClass(
   if (data.start_time && data.end_time && data.start_time >= data.end_time) {
     return { error: 'Horário de fim deve ser depois do início' }
   }
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { error: 'Academia não encontrada.' }
   const adminClient = createAdminClient()
-  const { error } = await adminClient.from('classes').update(data).eq('id', classId)
+  // Guarda de isolamento: só edita turma da academia ativa.
+  const { error } = await adminClient
+    .from('classes')
+    .update(data)
+    .eq('id', classId)
+    .eq('organization_id', orgId)
   if (error) return { error: error.message }
   revalidatePath('/admin/grade')
   revalidatePath(`/admin/grade/${classId}/editar`, 'page')
@@ -68,11 +75,15 @@ export async function updateClass(
 }
 
 export async function deactivateClass(classId: string): Promise<{ error?: string }> {
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { error: 'Academia não encontrada.' }
   const adminClient = createAdminClient()
+  // Guarda de isolamento: só desativa turma da academia ativa.
   const { error } = await adminClient
     .from('classes')
     .update({ is_active: false })
     .eq('id', classId)
+    .eq('organization_id', orgId)
   if (error) return { error: error.message }
   revalidatePath('/admin/grade')
   return {}

@@ -53,6 +53,7 @@ export default async function GradePage() {
           .from('session_bookings')
           .select('session_id')
           .in('session_id', sessionIds)
+          .eq('organization_id', orgId)
           .eq('status', 'confirmed')
       : { data: [] }
 
@@ -69,22 +70,41 @@ export default async function GradePage() {
     classesByDay.set(c.day_of_week, arr)
   }
 
-  // Enrolled count per class + credit-issue count
+  // Enrolled count per class + credit-issue count. Saldo/tipo são por-academia:
+  // vêm da membership do aluno NESTA org (não de profiles, que só reflete a
+  // academia padrão do aluno multi-vínculo).
   const classIds = allClasses.map((c) => c.id)
-  const { data: enrollCountsRaw } =
+  const { data: enrollRowsRaw } =
     classIds.length > 0
       ? await adminClient
           .from('enrollments')
-          .select('class_id, profiles(credits_balance, payment_type)')
+          .select('class_id, student_id')
           .in('class_id', classIds)
+          .eq('organization_id', orgId)
           .eq('is_active', true)
       : { data: [] }
 
+  const enrollRows = (enrollRowsRaw ?? []) as { class_id: string; student_id: string }[]
+  const enrolledStudentIds = Array.from(new Set(enrollRows.map((e) => e.student_id)))
+  const { data: enrollMemsRaw } =
+    enrolledStudentIds.length > 0
+      ? await adminClient
+          .from('memberships')
+          .select('user_id, credits_balance, payment_type')
+          .in('user_id', enrolledStudentIds)
+          .eq('organization_id', orgId)
+      : { data: [] }
+
+  const memByStudent = new Map<string, { credits_balance: number; payment_type: string }>()
+  for (const m of (enrollMemsRaw ?? []) as { user_id: string; credits_balance: number; payment_type: string }[]) {
+    memByStudent.set(m.user_id, { credits_balance: m.credits_balance, payment_type: m.payment_type })
+  }
+
   const enrollCountMap = new Map<string, number>()
   const noCreditMap = new Map<string, number>()
-  for (const e of (enrollCountsRaw ?? []) as unknown as { class_id: string; profiles: { credits_balance: number; payment_type: string } | { credits_balance: number; payment_type: string }[] | null }[]) {
+  for (const e of enrollRows) {
     enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
-    const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
+    const p = memByStudent.get(e.student_id)
     if (p && p.payment_type !== 'wellhub' && p.payment_type !== 'totalpass' && p.credits_balance < 1) {
       noCreditMap.set(e.class_id, (noCreditMap.get(e.class_id) ?? 0) + 1)
     }

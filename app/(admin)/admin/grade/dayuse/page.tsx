@@ -28,6 +28,7 @@ export default async function AdminDayUsePage() {
           .from('dayuse_bookings')
           .select('slot_id')
           .in('slot_id', slotIds)
+          .eq('organization_id', orgId)
           .eq('status', 'confirmed')
       : { data: [] }
 

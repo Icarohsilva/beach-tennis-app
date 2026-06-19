@@ -68,6 +68,22 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   }
   const registrations = (registrationsData ?? []) as unknown as Registration[]
 
+  // Nível é por-academia: vem da membership do jogador NESTA org (não de
+  // profiles, que só reflete a academia padrão do jogador multi-vínculo).
+  const playerIds = Array.from(new Set(registrations.map((r) => r.player_id)))
+  const { data: levelMemsRaw } =
+    playerIds.length > 0
+      ? await adminClient
+          .from('memberships')
+          .select('user_id, level')
+          .in('user_id', playerIds)
+          .eq('organization_id', orgId)
+      : { data: [] }
+  const levelByPlayer = new Map<string, string>()
+  for (const m of (levelMemsRaw ?? []) as { user_id: string; level: string }[]) {
+    levelByPlayer.set(m.user_id, m.level)
+  }
+
   // Fetch matches with player names
   const { data: matchesData } = await adminClient
     .from('tournament_matches')
@@ -128,9 +144,12 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                         </p>
                       )}
                     </div>
-                    {playerRaw?.level && (
-                      <Badge variant="level">{String(playerRaw.level).toUpperCase()}</Badge>
-                    )}
+                    {(() => {
+                      const lvl = levelByPlayer.get(reg.player_id) ?? playerRaw?.level
+                      return lvl ? (
+                        <Badge variant="level">{String(lvl).toUpperCase()}</Badge>
+                      ) : null
+                    })()}
                   </div>
                 </Card>
               )
