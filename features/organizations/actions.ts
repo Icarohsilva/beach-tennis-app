@@ -98,6 +98,12 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
   // 3. Promove o perfil a admin e marca como dono da org.
   await admin.from('profiles').update({ role: 'admin' }).eq('id', created.user.id)
   await admin.from('organizations').update({ owner_id: created.user.id }).eq('id', org.id)
+  // Promove também a membership da academia recém-criada (fonte da verdade do papel).
+  await admin
+    .from('memberships')
+    .update({ role: 'admin' })
+    .eq('user_id', created.user.id)
+    .eq('organization_id', org.id)
 
   return { inviteCode }
 }
@@ -160,6 +166,12 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
 
   // Promove a admin. owner_id continua o dono → o novo entra como professor.
   await admin.from('profiles').update({ role: 'admin' }).eq('id', created.user.id)
+  // Promove também a membership desta academia (fonte da verdade do papel).
+  await admin
+    .from('memberships')
+    .update({ role: 'admin' })
+    .eq('user_id', created.user.id)
+    .eq('organization_id', ctx.organizationId)
   revalidatePath('/admin/equipe')
   return {}
 }
