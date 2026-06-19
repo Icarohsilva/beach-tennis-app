@@ -79,6 +79,7 @@ export default async function ComunidadePage() {
   return (
     <ComunidadeClient
       currentUserId={user.id}
+      activeOrgId={orgId as string}
       initialPosts={initialPosts}
       initialLikedPostIds={initialLikedPostIds}
     />

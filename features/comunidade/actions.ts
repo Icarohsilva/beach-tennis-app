@@ -2,7 +2,7 @@
 // features/comunidade/actions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { StudentLevel, PaymentType } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -33,15 +33,15 @@ export async function createPost(params: {
 
   const adminClient = createAdminClient()
 
-  // Fetch author profile for immediate display + org scoping
+  // Post pertence à academia ATIVA. Identidade (nome/avatar) vem de profiles.
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
   const { data: authorProfile } = await adminClient
     .from('profiles')
-    .select('id, full_name, avatar_url, organization_id')
+    .select('id, full_name, avatar_url')
     .eq('id', user.id)
     .single()
-
-  const orgId = (authorProfile as { organization_id: string } | null)?.organization_id
-  if (!orgId) return { error: 'Perfil sem academia associada.' }
 
   const { data: post, error: insertErr } = await adminClient
     .from('posts')
@@ -100,13 +100,8 @@ export async function toggleLike(
 
   const adminClient = createAdminClient()
 
-  const { data: likerProfile } = await adminClient
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-  const likerOrgId = (likerProfile as { organization_id: string } | null)?.organization_id
-  if (!likerOrgId) return { error: 'Perfil sem academia associada.' }
+  const likerOrgId = await getActiveOrgId()
+  if (!likerOrgId) return { error: 'Academia ativa não encontrada.' }
 
   // Check if the like already exists
   const { data: existingLike } = await adminClient
@@ -169,13 +164,8 @@ export async function addComment(
 
   const adminClient = createAdminClient()
 
-  const { data: commenterProfile } = await adminClient
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-  const commenterOrgId = (commenterProfile as { organization_id: string } | null)?.organization_id
-  if (!commenterOrgId) return { error: 'Perfil sem academia associada.' }
+  const commenterOrgId = await getActiveOrgId()
+  if (!commenterOrgId) return { error: 'Academia ativa não encontrada.' }
 
   const { data: comment, error: insertErr } = await adminClient
     .from('post_comments')
@@ -225,15 +215,18 @@ export async function sendNotification(params: {
 
   const adminClient = createAdminClient()
 
-  // Verify caller is admin
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
-    .select('role, organization_id')
-    .eq('id', user.id)
+  // Academia ATIVA + verificação de admin via membership desta academia.
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (callerProfile?.role !== 'admin') return { error: 'Sem permissão.' }
-  const orgId = (callerProfile as { organization_id: string }).organization_id
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
 
   const { title, body, type, filterMode, filterValue, channels } = params
 
@@ -241,35 +234,40 @@ export async function sendNotification(params: {
     return { error: 'Título e mensagem são obrigatórios.' }
   }
 
-  // Build recipient query
-  let query = adminClient
-    .from('profiles')
-    .select('id, full_name, phone')
+  // Destinatários: memberships de alunos da academia ativa. Os campos por-academia
+  // (level, payment_type, contract_active) vivem na membership.
+  let memQuery = adminClient
+    .from('memberships')
+    .select('user_id, level, payment_type')
+    .eq('organization_id', orgId)
     .eq('role', 'student')
     .eq('contract_active', true)
-    .eq('organization_id', orgId)
 
   if (filterMode === 'by_level' && filterValue) {
-    query = query.eq('level', filterValue as StudentLevel)
+    memQuery = memQuery.eq('level', filterValue as StudentLevel)
   } else if (filterMode === 'by_plan' && filterValue) {
-    query = query.eq('payment_type', filterValue as PaymentType)
-  } else if (filterMode === 'pwa_only') {
-    // Filter to only students who have a push_subscription registered
-    // We check the push_subscriptions table (if it exists) or a field on profiles
+    memQuery = memQuery.eq('payment_type', filterValue as PaymentType)
+  }
+
+  const { data: members, error: membersErr } = await memQuery
+  if (membersErr) return { error: 'Erro ao buscar destinatários.' }
+  let memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+
+  if (filterMode === 'pwa_only') {
     const { data: pushSubs } = await adminClient
       .from('push_subscriptions')
       .select('user_id')
-
-    if (pushSubs && pushSubs.length > 0) {
-      const userIdsWithPush = pushSubs.map((s: { user_id: string }) => s.user_id)
-      query = query.in('id', userIdsWithPush)
-    } else {
-      // No push subscribers — skip
-      return { sentCount: 0 }
-    }
+    const pushIds = new Set((pushSubs ?? []).map((s: { user_id: string }) => s.user_id))
+    memberIds = memberIds.filter((id) => pushIds.has(id))
   }
 
-  const { data: recipients, error: recipientsErr } = await query
+  if (memberIds.length === 0) return { sentCount: 0 }
+
+  // Identidade (nome/telefone) dos destinatários vem de profiles.
+  const { data: recipients, error: recipientsErr } = await adminClient
+    .from('profiles')
+    .select('id, full_name, phone')
+    .in('id', memberIds)
   if (recipientsErr) return { error: 'Erro ao buscar destinatários.' }
   if (!recipients || recipients.length === 0) return { sentCount: 0 }
 

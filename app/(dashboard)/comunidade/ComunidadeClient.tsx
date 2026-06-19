@@ -15,12 +15,14 @@ type PostWithAuthor = Post & {
 
 interface ComunidadeClientProps {
   currentUserId: string
+  activeOrgId: string
   initialPosts: PostWithAuthor[]
   initialLikedPostIds: string[]
 }
 
 export function ComunidadeClient({
   currentUserId,
+  activeOrgId,
   initialPosts,
   initialLikedPostIds,
 }: ComunidadeClientProps) {
@@ -45,6 +47,7 @@ export function ComunidadeClient({
       <div className="px-4 py-4">
         <PostFeed
           currentUserId={currentUserId}
+          activeOrgId={activeOrgId}
           initialPosts={initialPosts}
           localPosts={localPosts}
           initialLikedPostIds={initialLikedPostIds}

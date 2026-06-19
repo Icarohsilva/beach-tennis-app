@@ -15,6 +15,7 @@ type PostWithAuthor = Post & {
 
 interface PostFeedProps {
   currentUserId: string
+  activeOrgId: string
   initialPosts: PostWithAuthor[]
   localPosts: PostWithAuthor[]
   initialLikedPostIds: string[]
@@ -22,7 +23,7 @@ interface PostFeedProps {
 
 const PAGE_SIZE = 20
 
-export function PostFeed({ currentUserId, initialPosts, localPosts, initialLikedPostIds }: PostFeedProps) {
+export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts, initialLikedPostIds }: PostFeedProps) {
   const [serverPosts, setServerPosts] = useState<PostWithAuthor[]>(initialPosts)
   const [likedPostIds] = useState<Set<string>>(new Set(initialLikedPostIds))
   const [page, setPage] = useState(1)
@@ -43,6 +44,9 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'posts' },
         async (payload) => {
+          // Multi-vínculo: ignora posts de outras academias (RLS deixa passar
+          // todas as orgs do usuário; aqui filtramos pela academia ativa).
+          if (payload.new.organization_id !== activeOrgId) return
           const { data } = await supabase
             .from('posts')
             .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
@@ -80,7 +84,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [activeOrgId])
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return
@@ -90,6 +94,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
     const { data } = await supabase
       .from('posts')
       .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+      .eq('organization_id', activeOrgId)
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -137,7 +142,7 @@ export function PostFeed({ currentUserId, initialPosts, localPosts, initialLiked
     }
 
     setLoadingMore(false)
-  }, [loadingMore, hasMore, page])
+  }, [loadingMore, hasMore, page, activeOrgId])
 
   if (posts.length === 0) {
     return (
