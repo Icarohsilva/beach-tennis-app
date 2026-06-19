@@ -1,6 +1,6 @@
 // app/(admin)/layout.tsx
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { Logo } from '@/components/ui/Logo'
@@ -12,31 +12,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  // Contexto de staff da academia ATIVA (papel/dono vêm da membership, não de profiles).
+  const ctx = await getStaffContext()
+  if (!ctx) redirect('/home')
+
   // Use admin client for role check — bypasses RLS, gets ground-truth role
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
+  // Gate de papel: a membership da academia ativa precisa ser admin.
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', ctx.userId)
+    .eq('organization_id', ctx.organizationId)
     .single()
 
-  if (profile?.role !== 'admin') redirect('/home')
+  if (membership?.role !== 'admin') redirect('/home')
 
-  const { data: profileOrg } = await adminClient
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('owner_id, name, onboarding_completed')
+    .eq('id', ctx.organizationId)
     .single()
 
-  const { data: org } = profileOrg?.organization_id
-    ? await adminClient
-        .from('organizations')
-        .select('owner_id, name, onboarding_completed')
-        .eq('id', profileOrg.organization_id)
-        .single()
-    : { data: null as { owner_id: string; name: string; onboarding_completed: boolean } | null }
-
-  const isOwner = org?.owner_id === user.id
+  const isOwner = ctx.isOwner
 
   // Gate: academia sem onboarding concluído não acessa o painel. Só o dono é
   // mandado pra /onboarding (só ele conclui); professor não fica em loop de

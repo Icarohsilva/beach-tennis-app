@@ -1,6 +1,6 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
-import { createClient, getCurrentOrg } from '@/lib/supabase/server'
+import { createClient, getCurrentOrg, resolveActiveOrgForUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 
@@ -8,6 +8,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  // Gancho do Plano 3: com 2+ academias e sem cookie válido, manda escolher.
+  // No Plano 2 ninguém tem 2 memberships, então 'choose' nunca dispara (rota só
+  // existe a partir do Plano 3). 'none' (sem academia) segue normalmente.
+  const res = await resolveActiveOrgForUser()
+  if (res.status === 'choose') redirect('/selecionar-academia')
 
   const org = await getCurrentOrg()
 
