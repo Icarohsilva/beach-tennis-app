@@ -27,27 +27,61 @@ export default async function AlunosPage({ searchParams }: Props) {
   const query = searchParams.q?.trim() ?? ''
   const levelFilter = searchParams.level ?? ''
 
+  // Campos por-academia vêm da membership da academia ativa (não de profiles):
+  // um aluno multi-vínculo só aparece nesta lista se tiver membership nesta org,
+  // e seus valores (nível, créditos, etc.) são os desta academia. A identidade
+  // (full_name) vem de profiles via join.
   let dbQuery = adminClient
-    .from('profiles')
-    .select('id, full_name, level, payment_type, contract_active, is_dependent, parent_id, credits_balance, pending_partner')
+    .from('memberships')
+    .select(
+      'user_id, level, payment_type, contract_active, is_dependent, parent_id, credits_balance, pending_partner, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+    )
     .eq('role', 'student')
     .eq('organization_id', orgId)
-    .order('full_name', { ascending: true })
 
   if (query) {
-    dbQuery = dbQuery.ilike('full_name', `%${query}%`)
+    dbQuery = dbQuery.ilike('profiles.full_name', `%${query}%`)
   }
 
   if (levelFilter && LEVEL_ORDER.includes(levelFilter as StudentLevel)) {
     dbQuery = dbQuery.eq('level', levelFilter)
   }
 
-  const { data: profiles } = await dbQuery
+  const { data: membershipsRaw } = await dbQuery
 
-  const students = (profiles ?? []) as Pick<
+  type StudentRow = Pick<
     Profile,
     'id' | 'full_name' | 'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'pending_partner'
-  >[]
+  >
+
+  const students: StudentRow[] = (
+    (membershipsRaw ?? []) as unknown as {
+      user_id: string
+      level: StudentLevel
+      payment_type: Profile['payment_type']
+      contract_active: boolean
+      is_dependent: boolean
+      parent_id: string | null
+      credits_balance: number
+      pending_partner: Profile['pending_partner']
+      profiles: { full_name: string } | { full_name: string }[] | null
+    }[]
+  )
+    .map((m) => {
+      const prof = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
+      return {
+        id: m.user_id,
+        full_name: prof?.full_name ?? '',
+        level: m.level,
+        payment_type: m.payment_type,
+        contract_active: m.contract_active,
+        is_dependent: m.is_dependent,
+        parent_id: m.parent_id,
+        credits_balance: m.credits_balance,
+        pending_partner: m.pending_partner,
+      }
+    })
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
   // Fetch active enrollments count per student
   const studentIds = students.map((s) => s.id)
@@ -57,6 +91,7 @@ export default async function AlunosPage({ searchParams }: Props) {
           .from('enrollments')
           .select('student_id')
           .in('student_id', studentIds)
+          .eq('organization_id', orgId)
           .eq('is_active', true)
       : { data: [] }
 
@@ -72,6 +107,7 @@ export default async function AlunosPage({ searchParams }: Props) {
           .from('student_subscriptions')
           .select('student_id, plan:subscription_plans(name)')
           .in('student_id', studentIds)
+          .eq('organization_id', orgId)
           .eq('status', 'active')
       : { data: [] }
 

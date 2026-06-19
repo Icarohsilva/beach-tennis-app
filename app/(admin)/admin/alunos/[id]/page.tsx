@@ -23,24 +23,45 @@ export default async function StudentProfilePage({ params }: Props) {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
-  // Fetch student profile
+  // Campos por-academia vêm da membership da academia ativa: um aluno
+  // multi-vínculo só é gerenciável aqui se tiver membership nesta org, e seus
+  // valores (nível, tipo, créditos, etc.) são os desta academia.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select(
+      'level, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id',
+    )
+    .eq('user_id', params.id)
+    .eq('organization_id', orgId)
+    .eq('role', 'student')
+    .single()
+
+  if (!membership) notFound()
+
+  // Identidade (compartilhada entre academias) vem de profiles.
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('*')
+    .select('id, full_name, phone, avatar_url')
     .eq('id', params.id)
-    .eq('role', 'student')
-    .eq('organization_id', orgId)
     .single()
 
   if (!profile) notFound()
 
-  const student = profile as Profile
+  const student = {
+    ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
+    ...(membership as Pick<
+      Profile,
+      'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id'
+    >),
+    organization_id: orgId,
+  } as Profile
 
   // Fetch active enrollments with class info
   const { data: enrollmentsRaw } = await adminClient
     .from('enrollments')
     .select('*, class:classes(id, name, level, type, day_of_week, start_time, end_time)')
     .eq('student_id', params.id)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
     .order('class(day_of_week)', { ascending: true })
 
@@ -95,19 +116,28 @@ export default async function StudentProfilePage({ params }: Props) {
       end_time: c.end_time,
     }))
 
-  // Fetch dependents (if student is not a dependent themselves)
+  // Fetch dependents (if student is not a dependent themselves). Vínculo
+  // pai/dependente é por-academia: vem das memberships desta org. Identidade
+  // (full_name) vem de profiles via join.
   const dependents: { id: string; full_name: string; level: StudentLevel }[] = []
   if (!student.is_dependent) {
     const { data: depsRaw } = await adminClient
-      .from('profiles')
-      .select('id, full_name, level')
+      .from('memberships')
+      .select('user_id, level, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
       .eq('parent_id', params.id)
       .eq('is_dependent', true)
-      .order('full_name', { ascending: true })
+      .eq('organization_id', orgId)
 
-    for (const d of (depsRaw ?? []) as Pick<Profile, 'id' | 'full_name' | 'level'>[]) {
-      dependents.push({ id: d.id, full_name: d.full_name, level: d.level as StudentLevel })
+    type DepRow = {
+      user_id: string
+      level: StudentLevel
+      profiles: { full_name: string } | { full_name: string }[] | null
     }
+    for (const d of (depsRaw ?? []) as unknown as DepRow[]) {
+      const prof = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles
+      dependents.push({ id: d.user_id, full_name: prof?.full_name ?? '', level: d.level })
+    }
+    dependents.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
   }
 
   // Fetch active subscription plans (for plan assignment)
@@ -132,6 +162,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .from('student_subscriptions')
     .select('id, plan_id, status, starts_at, plan:subscription_plans(id, name)')
     .eq('student_id', params.id)
+    .eq('organization_id', orgId)
     .eq('status', 'active')
     .order('starts_at', { ascending: false })
     .limit(1)
@@ -150,6 +181,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .from('credit_transactions')
     .select('id, type, amount, reason, created_at, expires_at')
     .eq('student_id', params.id)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(15)
 
@@ -168,6 +200,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .from('checkins')
     .select('id, partner, checkin_date, session_id, validation, created_at')
     .eq('student_id', params.id)
+    .eq('organization_id', orgId)
     .gte('checkin_date', monthFrom)
     .lte('checkin_date', monthTo)
     .order('checkin_date', { ascending: false })
