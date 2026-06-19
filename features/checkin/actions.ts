@@ -2,24 +2,28 @@
 // features/checkin/actions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
 import { format } from 'date-fns'
 import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 
-async function requireAdmin(): Promise<{ ok: boolean }> {
+async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { ok: false }
+  if (!user) return { ok: false, orgId: '' }
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { ok: false, orgId: '' }
+  // Papel é por-academia: vem da membership da academia ativa.
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
-  return { ok: profile?.role === 'admin' }
+  return { ok: membership?.role === 'admin', orgId }
 }
 
 export type StudentType = 'subscriber' | CheckinPartner
@@ -37,17 +41,22 @@ export async function setStudentType(
     | { type: 'subscriber' }
     | { type: CheckinPartner; partnerId: string; monthlyTarget: number },
 ): Promise<{ error?: string }> {
-  const { ok } = await requireAdmin()
+  const { ok, orgId } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
   const adminClient = createAdminClient()
 
   if (input.type === 'subscriber') {
+    const patch = { payment_type: 'subscriber', monthly_checkin_target: 0, pending_partner: null }
+    // Tipo do aluno é por-academia: fonte é a membership da academia ativa.
     const { error } = await adminClient
-      .from('profiles')
-      .update({ payment_type: 'subscriber', monthly_checkin_target: 0, pending_partner: null })
-      .eq('id', studentId)
+      .from('memberships')
+      .update(patch)
+      .eq('user_id', studentId)
+      .eq('organization_id', orgId)
     if (error) return { error: 'Erro ao definir tipo do aluno.' }
+    // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
+    await adminClient.from('profiles').update(patch).eq('id', studentId)
     revalidatePath(`/admin/alunos/${studentId}`)
     return {}
   }
@@ -57,17 +66,23 @@ export async function setStudentType(
   }
 
   const idColumn = input.type === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
+  const patch = {
+    payment_type: input.type,
+    [idColumn]: input.partnerId.trim() || null,
+    monthly_checkin_target: input.monthlyTarget,
+    pending_partner: null,
+  }
+  // Tipo do aluno é por-academia: fonte é a membership da academia ativa.
   const { error } = await adminClient
-    .from('profiles')
-    .update({
-      payment_type: input.type,
-      [idColumn]: input.partnerId.trim() || null,
-      monthly_checkin_target: input.monthlyTarget,
-      pending_partner: null,
-    })
-    .eq('id', studentId)
+    .from('memberships')
+    .update(patch)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao definir tipo do aluno.' }
+
+  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
+  await adminClient.from('profiles').update(patch).eq('id', studentId)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
@@ -83,17 +98,18 @@ export async function recordCheckin(
   partner: CheckinPartner,
   opts?: { date?: string; code?: string; createdBy?: string },
 ): Promise<{ error?: string; progress?: CheckinProgress; linkedSessionId?: string | null }> {
-  const { ok } = await requireAdmin()
+  const { ok, orgId } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
   const adminClient = createAdminClient()
   const date = opts?.date ?? format(new Date(), 'yyyy-MM-dd')
 
-  // Perfil: precisa estar vinculado ao parceiro
+  // Vínculo ao parceiro é por-academia: vem da membership da academia ativa.
   const { data: profile } = await adminClient
-    .from('profiles')
+    .from('memberships')
     .select('payment_type, wellhub_id, totalpass_id, monthly_checkin_target')
-    .eq('id', studentId)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!profile) return { error: 'Aluno não encontrado.' }
@@ -114,23 +130,25 @@ export async function recordCheckin(
   })
   if (!result.valid) return { error: result.error ?? 'Check-in inválido.' }
 
-  // Idempotência por external_ref
+  // Idempotência por external_ref (por-academia)
   if (result.externalRef) {
     const { data: existing } = await adminClient
       .from('checkins')
       .select('id')
+      .eq('organization_id', orgId)
       .eq('partner', partner)
       .eq('external_ref', result.externalRef)
       .maybeSingle()
     if (existing) {
-      return { progress: await monthlyProgress(adminClient, studentId, profile.monthly_checkin_target) }
+      return { progress: await monthlyProgress(adminClient, studentId, orgId, profile.monthly_checkin_target) }
     }
   }
 
   // Liga a uma aula fixa do dia, se houver reserva confirmada
-  const linkedSessionId = await findLinkedSession(adminClient, studentId, date)
+  const linkedSessionId = await findLinkedSession(adminClient, studentId, orgId, date)
 
   const { error: insertErr } = await adminClient.from('checkins').insert({
+    organization_id: orgId,
     student_id: studentId,
     partner,
     checkin_date: date,
@@ -144,6 +162,7 @@ export async function recordCheckin(
   if (linkedSessionId) {
     await adminClient.from('attendance').upsert(
       {
+        organization_id: orgId,
         student_id: studentId,
         session_id: linkedSessionId,
         status: 'present',
@@ -156,7 +175,7 @@ export async function recordCheckin(
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {
-    progress: await monthlyProgress(adminClient, studentId, profile.monthly_checkin_target),
+    progress: await monthlyProgress(adminClient, studentId, orgId, profile.monthly_checkin_target),
     linkedSessionId,
   }
 }
@@ -165,12 +184,14 @@ export async function recordCheckin(
 async function findLinkedSession(
   adminClient: ReturnType<typeof createAdminClient>,
   studentId: string,
+  orgId: string,
   date: string,
 ): Promise<string | null> {
   const { data: enrolls } = await adminClient
     .from('enrollments')
     .select('class_id')
     .eq('student_id', studentId)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
   const classIds = (enrolls ?? []).map((e: { class_id: string }) => e.class_id)
   if (classIds.length === 0) return null
@@ -178,6 +199,7 @@ async function findLinkedSession(
   const { data: sessions } = await adminClient
     .from('class_sessions')
     .select('id')
+    .eq('organization_id', orgId)
     .eq('session_date', date)
     .eq('status', 'scheduled')
     .in('class_id', classIds)
@@ -198,16 +220,21 @@ async function findLinkedSession(
 
 /** Recusa a solicitação de parceiro autodeclarada: limpa pending_partner. */
 export async function clearPendingPartner(studentId: string): Promise<{ error?: string }> {
-  const { ok } = await requireAdmin()
+  const { ok, orgId } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
   const adminClient = createAdminClient()
+  // pending_partner é por-academia: fonte é a membership da academia ativa.
   const { error } = await adminClient
-    .from('profiles')
+    .from('memberships')
     .update({ pending_partner: null })
-    .eq('id', studentId)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao recusar solicitação.' }
+
+  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
+  await adminClient.from('profiles').update({ pending_partner: null }).eq('id', studentId)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
@@ -217,6 +244,7 @@ export async function clearPendingPartner(studentId: string): Promise<{ error?: 
 async function monthlyProgress(
   adminClient: ReturnType<typeof createAdminClient>,
   studentId: string,
+  orgId: string,
   target: number,
 ): Promise<CheckinProgress> {
   const { from, to } = getMonthWindow(new Date())
@@ -224,6 +252,7 @@ async function monthlyProgress(
     .from('checkins')
     .select('id', { count: 'exact', head: true })
     .eq('student_id', studentId)
+    .eq('organization_id', orgId)
     .gte('checkin_date', from)
     .lte('checkin_date', to)
   return computeProgress(target, count ?? 0)
