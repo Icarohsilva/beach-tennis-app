@@ -67,6 +67,26 @@ export interface Profile {
   created_at: string
 }
 
+// Vínculo de uma pessoa com uma academia. Fonte da verdade dos dados por-academia
+// (a partir do Plano 2 substitui os campos correspondentes de Profile).
+export interface Membership {
+  id: string
+  user_id: string
+  organization_id: string
+  role: UserRole
+  level: StudentLevel
+  payment_type: PaymentType
+  is_dependent: boolean
+  parent_id: string | null
+  contract_active: boolean
+  credits_balance: number // cache; verdade = credit_transactions
+  monthly_checkin_target: number
+  pending_partner: CheckinPartner | null
+  wellhub_id: string | null
+  totalpass_id: string | null
+  created_at: string
+}
+
 export interface Class {
   id: string
   organization_id: string
