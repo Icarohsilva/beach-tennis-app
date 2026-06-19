@@ -9,22 +9,29 @@ import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
 import { requiresCredit } from '@/lib/utils/reconciliationOps'
 
-async function requireAdmin(): Promise<{ userId: string; error?: string }> {
+async function requireAdmin(): Promise<{ userId: string; orgId: string; error?: string }> {
   const supabase = createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { userId: '', error: 'Não autenticado.' }
+  if (!user) return { userId: '', orgId: '', error: 'Não autenticado.' }
 
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { userId: user.id, orgId: '', error: 'Academia ativa não encontrada.' }
+
+  // Papel é por-academia: vem da membership da academia ativa.
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
+  const { data: membership } = await adminClient
+    .from('memberships')
     .select('role')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (profile?.role !== 'admin') return { userId: user.id, error: 'Sem permissão de administrador.' }
-  return { userId: user.id }
+  if (membership?.role !== 'admin') {
+    return { userId: user.id, orgId, error: 'Sem permissão de administrador.' }
+  }
+  return { userId: user.id, orgId }
 }
 
 // ---------------------------------------------------------------------------
@@ -35,16 +42,22 @@ export async function updateStudentLevel(
   studentId: string,
   level: StudentLevel,
 ): Promise<{ error?: string }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
+  // Nível é por-academia: fonte é a membership da academia ativa.
   const { error } = await adminClient
-    .from('profiles')
+    .from('memberships')
     .update({ level })
-    .eq('id', studentId)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao atualizar nível.' }
+
+  // fonte dupla: espelha em profiles enquanto a coluna não é removida (plano 3)
+  await adminClient.from('profiles').update({ level }).eq('id', studentId)
+
   return {}
 }
 
@@ -56,16 +69,17 @@ export async function enrollStudentInClass(
   studentId: string,
   classId: string,
 ): Promise<{ error?: string }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
 
-  // Check class exists and is active
+  // Check class exists and is active (escopado pela academia ativa)
   const { data: cls } = await adminClient
     .from('classes')
     .select('id, is_active, max_students')
     .eq('id', classId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
@@ -89,18 +103,21 @@ export async function enrollStudentInClass(
 
   if ((enrolled ?? 0) >= cls.max_students) return { error: 'Turma lotada.' }
 
-  // Validação: matrícula fixa exige plano ativo (exceto Wellhub/TotalPass)
-  const { data: validationProfile } = await adminClient
-    .from('profiles')
+  // Validação: matrícula fixa exige plano ativo (exceto Wellhub/TotalPass).
+  // payment_type é por-academia: vem da membership da academia ativa.
+  const { data: validationMembership } = await adminClient
+    .from('memberships')
     .select('payment_type')
-    .eq('id', studentId)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
     .single()
 
-  if (requiresCredit((validationProfile?.payment_type as string) ?? 'subscriber')) {
+  if (requiresCredit((validationMembership?.payment_type as string) ?? 'subscriber')) {
     const { count: activeSubs } = await adminClient
       .from('student_subscriptions')
       .select('id', { count: 'exact', head: true })
       .eq('student_id', studentId)
+      .eq('organization_id', orgId)
       .eq('status', 'active')
     if ((activeSubs ?? 0) === 0) {
       return {
@@ -112,6 +129,7 @@ export async function enrollStudentInClass(
   // Upsert handles re-enrollment of previously cancelled students
   const { error } = await adminClient.from('enrollments').upsert(
     {
+      organization_id: orgId,
       student_id: studentId,
       class_id: classId,
       is_active: true,
@@ -263,12 +281,21 @@ export async function addDependent(
 // ---------------------------------------------------------------------------
 
 export async function deleteClass(classId: string): Promise<{ error?: string }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
   const now = new Date().toISOString()
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  // Garante que a turma pertence à academia ativa antes de mutar.
+  const { data: ownClass } = await adminClient
+    .from('classes')
+    .select('id')
+    .eq('id', classId)
+    .eq('organization_id', orgId)
+    .single()
+  if (!ownClass) return { error: 'Turma não encontrada.' }
 
   // Cancel all future sessions
   await adminClient
@@ -362,7 +389,7 @@ export async function addCreditsManually(
 export async function generateWeeklyBookings(
   classId: string,
 ): Promise<{ error?: string; booked?: string[]; skipped?: string[] }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
@@ -371,11 +398,12 @@ export async function generateWeeklyBookings(
   in14.setDate(in14.getDate() + 14)
   const in14Str = format(in14, 'yyyy-MM-dd')
 
-  // Matrículas ativas da turma com nome do aluno
+  // Matrículas ativas da turma com nome do aluno (escopado pela academia ativa)
   const { data: enrollmentsRaw } = await adminClient
     .from('enrollments')
     .select('student_id, profiles(full_name)')
     .eq('class_id', classId)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
 
   type EnrollRow = {
@@ -422,7 +450,7 @@ export async function generateWeeklyBookings(
 export async function generateSessionsForExistingClass(
   classId: string,
 ): Promise<{ error?: string; count?: number }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
@@ -431,6 +459,7 @@ export async function generateSessionsForExistingClass(
     .from('classes')
     .select('day_of_week, is_active')
     .eq('id', classId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!cls) return { error: 'Turma não encontrada.' }

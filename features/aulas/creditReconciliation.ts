@@ -27,14 +27,7 @@ export async function reconcileEnrollmentCredits(
   const adminClient = injectedClient ?? createAdminClient()
   const result: ReconcileResult = { ...EMPTY }
 
-  // Perfil (payment_type) e turma (capacidade)
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('payment_type')
-    .eq('id', studentId)
-    .single()
-  if (!profile) return result
-
+  // Turma (capacidade + academia)
   const { data: cls } = await adminClient
     .from('classes')
     .select('max_students, organization_id')
@@ -42,7 +35,16 @@ export async function reconcileEnrollmentCredits(
     .single()
   if (!cls) return result
 
-  const paymentType = profile.payment_type as string
+  // payment_type é por-academia: vem da membership do aluno nesta academia.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('payment_type')
+    .eq('user_id', studentId)
+    .eq('organization_id', cls.organization_id)
+    .single()
+  if (!membership) return result
+
+  const paymentType = membership.payment_type as string
   const needsCredit = requiresCredit(paymentType)
 
   // Nome do plano para o log (só relevante quando há crédito)
@@ -52,6 +54,7 @@ export async function reconcileEnrollmentCredits(
       .from('student_subscriptions')
       .select('subscription_plans(name)')
       .eq('student_id', studentId)
+      .eq('organization_id', cls.organization_id)
       .eq('status', 'active')
       .maybeSingle()
     const planRel = (sub as { subscription_plans: { name: string } | { name: string }[] } | null)
@@ -162,31 +165,45 @@ export async function reconcileAllActiveEnrollments(
 
   const { data: enrollmentsRaw } = await adminClient
     .from('enrollments')
-    .select('student_id, class_id, profiles(payment_type)')
+    .select('student_id, class_id, organization_id')
     .eq('is_active', true)
 
   type Row = {
     student_id: string
     class_id: string
-    profiles: { payment_type: string } | { payment_type: string }[] | null
+    organization_id: string
   }
   const enrollments = (enrollmentsRaw ?? []) as unknown as Row[]
 
-  // Alunos com assinatura ativa
+  // payment_type é por-academia: indexado por user_id+organization_id.
+  const { data: membershipsRaw } = await adminClient
+    .from('memberships')
+    .select('user_id, organization_id, payment_type')
+  const paymentTypeByMember = new Map<string, string>(
+    (membershipsRaw ?? []).map(
+      (m: { user_id: string; organization_id: string; payment_type: string }) =>
+        [`${m.user_id}:${m.organization_id}`, m.payment_type],
+    ),
+  )
+
+  // Alunos com assinatura ativa (por-academia: chave student_id:organization_id)
   const { data: subsRaw } = await adminClient
     .from('student_subscriptions')
-    .select('student_id')
+    .select('student_id, organization_id')
     .eq('status', 'active')
   const activeSubStudents = new Set(
-    (subsRaw ?? []).map((s: { student_id: string }) => s.student_id),
+    (subsRaw ?? []).map(
+      (s: { student_id: string; organization_id: string }) =>
+        `${s.student_id}:${s.organization_id}`,
+    ),
   )
 
   const totals = { ...EMPTY, processedEnrollments: 0 }
 
   for (const e of enrollments) {
-    const prof = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
-    const paymentType = prof?.payment_type ?? 'subscriber'
-    const eligible = !requiresCredit(paymentType) || activeSubStudents.has(e.student_id)
+    const memberKey = `${e.student_id}:${e.organization_id}`
+    const paymentType = paymentTypeByMember.get(memberKey) ?? 'subscriber'
+    const eligible = !requiresCredit(paymentType) || activeSubStudents.has(memberKey)
     if (!eligible) continue
 
     const r = await reconcileEnrollmentCredits(e.student_id, e.class_id, from, to, adminClient)
