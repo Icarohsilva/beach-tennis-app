@@ -2,7 +2,7 @@
 // features/aulas/adminActions.ts — admin-only student management server actions
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { format, endOfMonth } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
@@ -332,8 +332,12 @@ export async function addCreditsManually(
 
   const adminClient = createAdminClient()
 
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
   const { error: creditErr } = await adminClient.rpc('adjust_credits', {
     p_student_id: studentId,
+    p_org: orgId,
     p_delta: amount,
     p_type: amount > 0 ? 'renewed' : 'expired',
     p_reason: reason.trim() || (amount > 0 ? 'Créditos adicionados pelo admin' : 'Créditos removidos pelo admin'),

@@ -2,7 +2,7 @@
 // features/aulas/actions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
@@ -209,8 +209,11 @@ export async function bookSession(
 
   // Débito atômico (transação + saldo juntos)
   if (useCredit) {
+    const orgId = await getActiveOrgId()
+    if (!orgId) return { error: 'Academia ativa não encontrada.' }
     const { error: creditErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: user.id,
+      p_org: orgId,
       p_delta: -1,
       p_type: 'used',
       p_reason: `Agendamento avulso — ${cls.name} (${session.session_date})`,
@@ -259,7 +262,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 
   const { data: booking } = await adminClient
     .from('session_bookings')
-    .select('id, student_id, session_id, status, credit_used, from_enrollment')
+    .select('id, student_id, session_id, status, credit_used, from_enrollment, organization_id')
     .eq('id', bookingId)
     .single()
 
@@ -280,6 +283,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
   // Aluno fixo sempre recebe crédito de reposição sem vencimento ao sair de uma aula
   const { error: creditErr } = await adminClient.rpc('adjust_credits', {
     p_student_id: user.id,
+    p_org: booking.organization_id,
     p_delta: 1,
     p_type: 'refunded',
     p_reason: 'Falta em aula fixa — crédito reposição sem vencimento',
@@ -465,6 +469,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
         // Crédito extra: não expira enquanto o contrato estiver ativo
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {
           p_student_id: user.id,
+          p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
           p_reason: `Cancelamento de aula fixa — crédito extra (${session.session_date})`,
@@ -490,6 +495,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
         const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {
           p_student_id: user.id,
+          p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
           p_reason: `Cancelamento com reposição — sessão ${session.session_date}`,

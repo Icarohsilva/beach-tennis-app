@@ -222,7 +222,7 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   // Find active subscription
   const { data: sub, error: subErr } = await adminClient
     .from('student_subscriptions')
-    .select('id')
+    .select('id, organization_id')
     .eq('student_id', user.id)
     .eq('status', 'active')
     .single()
@@ -249,6 +249,7 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   if (remaining > 0) {
     const { error: expireErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: user.id,
+      p_org: sub.organization_id,
       p_delta: -remaining,
       p_type: 'expired',
       p_reason: 'Cancelamento de contrato — créditos expirados',
@@ -282,7 +283,7 @@ export async function adminCancelStudentPlan(
 
   const { data: sub } = await adminClient
     .from('student_subscriptions')
-    .select('id')
+    .select('id, organization_id')
     .eq('student_id', studentId)
     .eq('status', 'active')
     .maybeSingle()
@@ -305,6 +306,7 @@ export async function adminCancelStudentPlan(
     if (balance > 0) {
       const { error: expireErr } = await adminClient.rpc('adjust_credits', {
         p_student_id: studentId,
+        p_org: sub.organization_id,
         p_delta: -balance,
         p_type: 'expired',
         p_reason: 'Cancelamento de plano pelo admin — créditos zerados',

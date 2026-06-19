@@ -37,7 +37,7 @@ export async function reconcileEnrollmentCredits(
 
   const { data: cls } = await adminClient
     .from('classes')
-    .select('max_students')
+    .select('max_students, organization_id')
     .eq('id', classId)
     .single()
   if (!cls) return result
@@ -116,6 +116,7 @@ export async function reconcileEnrollmentCredits(
     //    (cada RPC é atômica) e fica registrado no log para auditoria.
     const { error: grantErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: studentId,
+      p_org: cls.organization_id,
       p_delta: 1,
       p_type: 'renewed',
       p_reason: op.grantReason,
@@ -131,6 +132,7 @@ export async function reconcileEnrollmentCredits(
     // 3. Debita 1 crédito (log, vinculado à sessão)
     const { error: debitErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: studentId,
+      p_org: cls.organization_id,
       p_delta: -1,
       p_type: 'used',
       p_reason: op.debitReason,
