@@ -32,12 +32,14 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    const { data: profile } = await supabase
-      .from('profiles')
+    // Papel vem de memberships (profiles.role foi dropada no cutover de identidade).
+    // Admin em qualquer academia → painel; senão → home do aluno.
+    const { data: memberships } = await supabase
+      .from('memberships')
       .select('role')
-      .eq('id', authData.user.id)
-      .single()
-    router.push(profile?.role === 'admin' ? '/admin/dashboard' : '/home')
+      .eq('user_id', authData.user.id)
+    const isAdmin = (memberships ?? []).some((m) => m.role === 'admin')
+    router.push(isAdmin ? '/admin/dashboard' : '/home')
     router.refresh()
   }
 
