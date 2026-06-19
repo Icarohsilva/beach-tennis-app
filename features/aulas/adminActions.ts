@@ -195,27 +195,34 @@ export async function addDependentSelf(
 
   if (!name.trim()) return { error: 'Nome é obrigatório.' }
 
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
   const adminClient = createAdminClient()
 
-  // Verify caller is not a dependent themselves
-  const { data: callerProfile } = await adminClient
-    .from('profiles')
-    .select('id, is_dependent')
-    .eq('id', user.id)
+  // is_dependent é por-academia: verifica via membership da academia ativa.
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('is_dependent')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
     .single()
 
-  if (!callerProfile) return { error: 'Perfil não encontrado.' }
-  if (callerProfile.is_dependent) return { error: 'Dependentes não podem adicionar dependentes.' }
+  if (!callerMembership) return { error: 'Você não participa desta academia.' }
+  if (callerMembership.is_dependent) return { error: 'Dependentes não podem adicionar dependentes.' }
 
   const newId = crypto.randomUUID()
 
+  // Identidade do dependente (profiles). organization_id = academia ativa (default).
   const { data: newDep, error } = await adminClient
     .from('profiles')
     .insert({
       id: newId,
       full_name: name.trim(),
-      level,
       role: 'student',
+      organization_id: orgId,
+      // fonte dupla: espelha campos por-academia em profiles até o Plano 3
+      level,
       is_dependent: true,
       parent_id: user.id,
       payment_type: 'subscriber',
@@ -226,6 +233,21 @@ export async function addDependentSelf(
     .single()
 
   if (error) return { error: 'Erro ao criar dependente.' }
+
+  // Membership do dependente na academia ativa (fonte da verdade por-academia).
+  const { error: memErr } = await adminClient.from('memberships').insert({
+    user_id: newId,
+    organization_id: orgId,
+    role: 'student',
+    level,
+    is_dependent: true,
+    parent_id: user.id,
+    payment_type: 'subscriber',
+    credits_balance: 0,
+    contract_active: false,
+  })
+
+  if (memErr) return { error: 'Erro ao criar dependente.' }
 
   const { revalidatePath } = await import('next/cache')
   revalidatePath('/perfil')
@@ -242,29 +264,34 @@ export async function addDependent(
   fullName: string,
   level: StudentLevel,
 ): Promise<{ error?: string }> {
-  const { error: authErr } = await requireAdmin()
+  const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   if (!fullName.trim()) return { error: 'Nome é obrigatório.' }
 
   const adminClient = createAdminClient()
 
-  // Verify parent exists and is not a dependent themselves
-  const { data: parent } = await adminClient
-    .from('profiles')
-    .select('id, is_dependent')
-    .eq('id', parentId)
+  // Responsável precisa ser membro desta academia e não ser dependente (por-academia).
+  const { data: parentMembership } = await adminClient
+    .from('memberships')
+    .select('is_dependent')
+    .eq('user_id', parentId)
+    .eq('organization_id', orgId)
     .single()
 
-  if (!parent) return { error: 'Responsável não encontrado.' }
-  if (parent.is_dependent) return { error: 'Dependentes não podem ter dependentes.' }
+  if (!parentMembership) return { error: 'Responsável não encontrado nesta academia.' }
+  if (parentMembership.is_dependent) return { error: 'Dependentes não podem ter dependentes.' }
 
-  // Create the dependent profile (no auth user — managed by parent)
+  const newId = crypto.randomUUID()
+
+  // Identidade do dependente (profiles, sem auth user — gerido pelo responsável).
   const { error } = await adminClient.from('profiles').insert({
-    id: crypto.randomUUID(),
+    id: newId,
     full_name: fullName.trim(),
-    level,
     role: 'student',
+    organization_id: orgId,
+    // fonte dupla: espelha campos por-academia em profiles até o Plano 3
+    level,
     is_dependent: true,
     parent_id: parentId,
     payment_type: 'subscriber',
@@ -273,6 +300,21 @@ export async function addDependent(
   })
 
   if (error) return { error: 'Erro ao criar dependente.' }
+
+  // Membership do dependente na academia do admin (fonte da verdade por-academia).
+  const { error: memErr } = await adminClient.from('memberships').insert({
+    user_id: newId,
+    organization_id: orgId,
+    role: 'student',
+    level,
+    is_dependent: true,
+    parent_id: parentId,
+    payment_type: 'subscriber',
+    contract_active: true,
+    credits_balance: 0,
+  })
+
+  if (memErr) return { error: 'Erro ao criar dependente.' }
   return {}
 }
 
