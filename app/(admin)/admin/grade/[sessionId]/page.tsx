@@ -7,7 +7,7 @@ import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import type { ClassSession, Profile, Attendance } from '@/types'
+import type { ClassSession, Profile, Membership, Attendance } from '@/types'
 
 interface Props {
   params: { sessionId: string }
@@ -61,8 +61,8 @@ export default async function SessionDetailPage({ params }: Props) {
           .eq('organization_id', orgId)
       : { data: [] }
 
-  const memByStudent = new Map<string, { level: Profile['level']; payment_type: Profile['payment_type'] }>()
-  for (const m of (memsRaw ?? []) as { user_id: string; level: Profile['level']; payment_type: Profile['payment_type'] }[]) {
+  const memByStudent = new Map<string, { level: Membership['level']; payment_type: Membership['payment_type'] }>()
+  for (const m of (memsRaw ?? []) as { user_id: string; level: Membership['level']; payment_type: Membership['payment_type'] }[]) {
     memByStudent.set(m.user_id, { level: m.level, payment_type: m.payment_type })
   }
 
@@ -88,8 +88,8 @@ export default async function SessionDetailPage({ params }: Props) {
         student: {
           id: p.id,
           full_name: p.full_name,
-          level: mem?.level ?? ('iniciante' as Profile['level']),
-          payment_type: mem?.payment_type ?? ('per_class' as Profile['payment_type']),
+          level: mem?.level ?? ('iniciante' as Membership['level']),
+          payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
         },
         attendance: attendanceByStudent.get(p.id) ?? null,
       }

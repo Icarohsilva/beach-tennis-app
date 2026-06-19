@@ -46,24 +46,14 @@ export interface Organization {
   created_at: string
 }
 
+// profiles = identidade compartilhada (1 por pessoa). Tudo que é por-academia mora
+// em Membership. NÃO adicione campos por-academia aqui.
 export interface Profile {
   id: string
-  organization_id: string
   full_name: string
   avatar_url: string | null
   phone: string | null
   city: string | null
-  role: UserRole
-  level: StudentLevel
-  payment_type: PaymentType
-  is_dependent: boolean
-  parent_id: string | null
-  contract_active: boolean
-  credits_balance: number // cached; source of truth = credit_transactions
-  monthly_checkin_target: number
-  pending_partner: CheckinPartner | null
-  wellhub_id: string | null
-  totalpass_id: string | null
   created_at: string
 }
 

@@ -4,10 +4,11 @@
 import { useState, useTransition } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import type { Profile, Attendance, AttendanceSource } from '@/types'
+import type { Profile, Membership, Attendance, AttendanceSource } from '@/types'
 
 interface StudentAttendance {
-  student: Pick<Profile, 'id' | 'full_name' | 'level' | 'payment_type'>
+  // id/full_name = identidade (profiles); level/payment_type = por-academia (membership).
+  student: Pick<Profile, 'id' | 'full_name'> & Pick<Membership, 'level' | 'payment_type'>
   attendance: Attendance | null
 }
 

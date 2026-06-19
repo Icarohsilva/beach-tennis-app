@@ -6,7 +6,7 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
-import type { Profile, Enrollment, Class, StudentLevel } from '@/types'
+import type { Profile, Membership, Enrollment, Class, StudentLevel } from '@/types'
 
 interface Props {
   params: { id: string }
@@ -22,6 +22,7 @@ const paymentLabel: Record<string, string> = {
 export default async function StudentProfilePage({ params }: Props) {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
+  if (!orgId) notFound()
 
   // Campos por-academia vêm da membership da academia ativa: um aluno
   // multi-vínculo só é gerenciável aqui se tiver membership nesta org, e seus
@@ -47,14 +48,15 @@ export default async function StudentProfilePage({ params }: Props) {
 
   if (!profile) notFound()
 
+  // Identidade (profiles) + campos por-academia (membership da org ativa).
   const student = {
     ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
     ...(membership as Pick<
-      Profile,
+      Membership,
       'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id'
     >),
     organization_id: orgId,
-  } as Profile
+  }
 
   // Fetch active enrollments with class info
   const { data: enrollmentsRaw } = await adminClient

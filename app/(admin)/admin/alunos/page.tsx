@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Users } from 'lucide-react'
-import type { Profile, StudentLevel } from '@/types'
+import type { Membership, StudentLevel } from '@/types'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -49,21 +49,29 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   const { data: membershipsRaw } = await dbQuery
 
-  type StudentRow = Pick<
-    Profile,
-    'id' | 'full_name' | 'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'pending_partner'
-  >
+  // Identidade (full_name) + campos por-academia (Membership) de cada aluno.
+  type StudentRow = {
+    id: string
+    full_name: string
+    level: Membership['level']
+    payment_type: Membership['payment_type']
+    contract_active: Membership['contract_active']
+    is_dependent: Membership['is_dependent']
+    parent_id: Membership['parent_id']
+    credits_balance: Membership['credits_balance']
+    pending_partner: Membership['pending_partner']
+  }
 
   const students: StudentRow[] = (
     (membershipsRaw ?? []) as unknown as {
       user_id: string
       level: StudentLevel
-      payment_type: Profile['payment_type']
+      payment_type: Membership['payment_type']
       contract_active: boolean
       is_dependent: boolean
       parent_id: string | null
       credits_balance: number
-      pending_partner: Profile['pending_partner']
+      pending_partner: Membership['pending_partner']
       profiles: { full_name: string } | { full_name: string }[] | null
     }[]
   )
