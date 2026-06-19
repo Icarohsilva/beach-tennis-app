@@ -1,7 +1,7 @@
 'use server'
 // features/organizations/actions.ts
 import { revalidatePath } from 'next/cache'
-import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
 import { normalizeSports } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
@@ -257,4 +257,35 @@ export async function completeOnboarding(
   revalidatePath('/arenas')
   revalidatePath('/admin/configuracoes')
   return {}
+}
+
+// Entrada self-service numa 2ª (ou N-ésima) academia por código de convite, com o
+// usuário JÁ logado. Cria a membership student e ativa a academia. Idempotente.
+export async function joinAcademy(inviteCode: string): Promise<{ error?: string; orgId?: string }> {
+  const code = inviteCode.trim().toUpperCase()
+  if (!code) return { error: 'Informe o código de convite.' }
+
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const admin = createAdminClient()
+  const { data: org } = await admin
+    .from('organizations')
+    .select('id, status')
+    .eq('invite_code', code)
+    .maybeSingle()
+  if (!org || org.status !== 'active') return { error: 'Código de convite inválido.' }
+
+  // Cria a membership se ainda não existir (não rebaixa quem já é admin).
+  const { error: insErr } = await admin
+    .from('memberships')
+    .insert({ user_id: user.id, organization_id: org.id, role: 'student' })
+  // 23505 = já participa: tudo bem, segue para ativar.
+  if (insErr && insErr.code !== '23505') {
+    return { error: 'Não foi possível entrar na academia.' }
+  }
+
+  revalidatePath('/home')
+  return { orgId: org.id }
 }
