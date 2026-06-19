@@ -2,24 +2,20 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CalendarX } from 'lucide-react'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { EmptyState } from '@/components/ui/EmptyState'
-import type { Class, ClassSession, Profile } from '@/types'
+import type { Class, ClassSession } from '@/types'
 
 export default async function AgendarPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  const studentProfile = profile as Profile | null
+  // Campos por-academia (level, is_dependent) vêm da membership da academia ativa.
+  const orgId = await getActiveOrgId()
+  const studentProfile = await getActiveMembership()
   if (!studentProfile) redirect('/login')
 
   const { canStudentAttendLevel } = await import('@/lib/utils/levelAccess')
@@ -29,6 +25,7 @@ export default async function AgendarPage() {
     .from('classes')
     .select('*')
     .eq('is_active', true)
+    .eq('organization_id', orgId)
     .order('day_of_week', { ascending: true })
     .order('start_time', { ascending: true })
 
@@ -115,6 +112,7 @@ export default async function AgendarPage() {
     .from('enrollments')
     .select('class_id')
     .eq('student_id', user.id)
+    .eq('organization_id', orgId)
     .eq('is_active', true)
 
   const enrolledClassIds = new Set(
@@ -127,6 +125,7 @@ export default async function AgendarPage() {
         .from('session_bookings')
         .select('id, session_id')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('session_id', nextSessionIds)
         .eq('status', 'confirmed')
     : { data: [] }
@@ -190,6 +189,7 @@ export default async function AgendarPage() {
         .from('waitlists')
         .select('id, session_id, position, status, notified_at')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('session_id', nextSessionIds)
         .in('status', ['waiting', 'offered'])
     : { data: [] }
@@ -227,6 +227,7 @@ export default async function AgendarPage() {
         .from('session_bookings')
         .select('session_id')
         .eq('student_id', user.id)
+        .eq('organization_id', orgId)
         .in('session_id', allSessionIdsForDates)
         .eq('status', 'confirmed')
 
