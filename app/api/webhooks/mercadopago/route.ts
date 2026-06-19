@@ -131,7 +131,7 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
   if (payment.subscription_id) {
     const { data: sub } = await adminClient
       .from('student_subscriptions')
-      .select('id, plan_id, student_id')
+      .select('id, plan_id, student_id, organization_id')
       .eq('id', payment.subscription_id)
       .maybeSingle()
 
@@ -148,6 +148,7 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
         // Insert renewed transaction
         const { error: txErr } = await adminClient.from('credit_transactions').insert({
           student_id: sub.student_id,
+          organization_id: sub.organization_id,
           type: 'renewed',
           amount: creditsPerMonth,
           reason: `Renovação mensal — pagamento ${gatewayPaymentId}`,
@@ -160,7 +161,15 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
           console.error('[webhook/mercadopago] Error inserting credit_transaction:', txErr)
           // Payment was already marked paid — don't fail the whole webhook
         } else {
-          // Update cached balance: renewal replaces, not accumulates
+          // Update cached balance: renewal replaces, not accumulates.
+          // Saldo é por-academia → grava na membership da (aluno, org da assinatura).
+          await adminClient
+            .from('memberships')
+            .update({ credits_balance: creditsPerMonth })
+            .eq('user_id', sub.student_id)
+            .eq('organization_id', sub.organization_id)
+
+          // Fonte dupla: mantém profiles.credits_balance em sincronia (removido no Plano 3).
           await adminClient
             .from('profiles')
             .update({ credits_balance: creditsPerMonth })
