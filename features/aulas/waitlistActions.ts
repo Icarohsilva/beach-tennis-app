@@ -2,7 +2,7 @@
 // features/aulas/waitlistActions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 
@@ -33,10 +33,10 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
     .update({ status: 'offered' as WaitlistStatus, notified_at: now })
     .eq('id', next.id)
 
-  // Fetch session info for notification body
+  // Fetch session info for notification body (org vem da própria sessão)
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('session_date, class:classes(name)')
+    .select('organization_id, session_date, class:classes(name)')
     .eq('id', sessionId)
     .single()
 
@@ -48,6 +48,7 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
 
   // Insert in-app notification
   await adminClient.from('notifications').insert({
+    organization_id: session?.organization_id,
     user_id: next.student_id,
     type: 'waitlist_offer',
     title: 'Vaga disponível!',
@@ -68,12 +69,15 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Fetch session + class
+  // Fetch session + class (escopado pela academia ativa)
   const { data: session } = await adminClient
     .from('class_sessions')
     .select('id, status, class:classes(max_students, level, type)')
     .eq('id', sessionId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!session) return { error: 'Sessão não encontrada.' }
@@ -86,11 +90,8 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
   } | null
   if (!clsInfo) return { error: 'Turma não encontrada.' }
 
-  const { data: joinProfile } = await adminClient
-    .from('profiles')
-    .select('level, is_dependent, payment_type')
-    .eq('id', user.id)
-    .single()
+  // Nível/dependente/pagamento (por-academia) vêm da membership da academia ativa.
+  const joinProfile = await getActiveMembership()
   if (!joinProfile) return { error: 'Perfil não encontrado.' }
 
   const skipsLevel = joinProfile.payment_type === 'wellhub' || joinProfile.payment_type === 'totalpass'
@@ -153,6 +154,7 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
   }
 
   const { error: insertErr } = await adminClient.from('waitlists').insert({
+    organization_id: orgId,
     session_id: sessionId,
     student_id: user.id,
     position,
@@ -217,12 +219,15 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
   if (!user) return { error: 'Não autenticado.' }
 
   const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
   // Fetch waitlist entry
   const { data: entry } = await adminClient
     .from('waitlists')
     .select('id, session_id, student_id, status, notified_at')
     .eq('id', waitlistId)
+    .eq('organization_id', orgId)
     .single()
 
   if (!entry) return { error: 'Entrada não encontrada.' }
@@ -242,6 +247,7 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
     .from('class_sessions')
     .select('id, status, class:classes(max_students)')
     .eq('id', entry.session_id)
+    .eq('organization_id', orgId)
     .single()
 
   if (!session || session.status !== 'scheduled') {
@@ -256,6 +262,7 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
     .from('class_sessions')
     .select('session_date')
     .eq('id', entry.session_id)
+    .eq('organization_id', orgId)
     .single()
 
   if (sessionDateRow) {
@@ -263,6 +270,7 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
       .from('class_sessions')
       .select('id')
       .eq('session_date', sessionDateRow.session_date)
+      .eq('organization_id', orgId)
 
     const sameDayIds = (sameDaySessions ?? []).map((s: { id: string }) => s.id)
     const { count: dailyCount } = await adminClient
