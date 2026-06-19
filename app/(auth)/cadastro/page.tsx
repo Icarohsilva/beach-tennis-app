@@ -4,7 +4,8 @@ import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { resolveInviteCode } from '@/features/organizations/actions'
+import { resolveInviteCode, joinAcademy } from '@/features/organizations/actions'
+import { setActiveOrg } from '@/features/organizations/setActiveOrg'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
@@ -16,6 +17,8 @@ function CadastroInner() {
 
   const [resolving, setResolving] = useState(true)
   const [orgName, setOrgName] = useState<string | null>(null)
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null)
+  const [joining, setJoining] = useState(false)
 
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
   const [partner, setPartner] = useState<'none' | 'wellhub' | 'totalpass'>('none')
@@ -35,6 +38,27 @@ function CadastroInner() {
     })
     return () => { active = false }
   }, [inviteCode])
+
+  // Detecta se já há sessão ativa: com login, o convite ENTRA na academia em vez
+  // de criar conta (multi-vínculo).
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => setLoggedIn(!!data.user))
+  }, [])
+
+  async function handleJoin() {
+    setJoining(true)
+    setError('')
+    const res = await joinAcademy(inviteCode)
+    if (res.error || !res.orgId) {
+      setError(res.error ?? 'Erro ao entrar na academia.')
+      setJoining(false)
+      return
+    }
+    await setActiveOrg(res.orgId)
+    router.push('/home')
+    router.refresh()
+  }
 
   async function handleCadastro(e: React.FormEvent) {
     e.preventDefault()
@@ -73,7 +97,7 @@ function CadastroInner() {
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
 
-  if (resolving) {
+  if (resolving || loggedIn === null) {
     return (
       <Card>
         <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
@@ -101,6 +125,24 @@ function CadastroInner() {
             <Link href="/login" className="text-slate-500 text-sm hover:text-slate-300">Já tem conta? Entrar</Link>
           </div>
         </div>
+      </Card>
+    )
+  }
+
+  // Usuário JÁ logado abrindo um convite válido: entra na 2ª academia (multi-vínculo)
+  // em vez de criar uma nova conta.
+  if (orgName && loggedIn) {
+    return (
+      <Card>
+        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
+        <h2 className="text-lg font-semibold text-white mb-1">Entrar em {orgName}</h2>
+        <p className="text-slate-400 text-sm mb-6">
+          Você já tem uma conta. Deseja entrar também na <span className="text-brand-400">{orgName}</span>?
+        </p>
+        {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+        <Button onClick={handleJoin} loading={joining} size="lg" className="w-full">
+          Entrar nesta academia
+        </Button>
       </Card>
     )
   }
