@@ -1,7 +1,7 @@
 // app/(admin)/layout.tsx
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Clock } from 'lucide-react'
 import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
@@ -53,9 +53,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const isAssinaturaRoute = pathname.startsWith('/admin/assinatura')
   const access = await getPlatformAccess(ctx.organizationId)
   if (!access.allowed && !isAssinaturaRoute) redirect('/admin/assinatura')
-  // Aviso suave na reta final do trial (não repete na própria página de assinatura).
-  const showTrialBanner =
-    !isAssinaturaRoute && access.status === 'trialing' && access.daysLeft <= 7
+  // Banner do trial: visível durante TODO o mês grátis (desde o 1º login), ficando
+  // mais urgente nos últimos 7 dias. Não repete na própria página de assinatura.
+  const isTrialing = !isAssinaturaRoute && access.status === 'trialing'
+  const trialUrgent = isTrialing && access.daysLeft <= 7
+  const trialDaysLabel =
+    access.daysLeft <= 0 ? 'hoje' : access.daysLeft === 1 ? 'em 1 dia' : `em ${access.daysLeft} dias`
 
   // area = chave usada por canAccessArea pra decidir se professor vê o item.
   const allNav: { href: string; label: string; area: AdminArea }[] = [
@@ -95,16 +98,41 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </aside>
       <AdminMobileNav links={navLinks} />
       <main className="flex-1 p-6 mt-14 md:mt-0">
-        {showTrialBanner && (
-          <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-brand-600/40 bg-brand-600/10 px-4 py-3 text-sm text-brand-100">
-            <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
+        {isTrialing && (
+          <div
+            className={
+              'mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-3 text-sm ' +
+              (trialUrgent
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                : 'border-brand-600/40 bg-brand-600/10 text-brand-100')
+            }
+          >
+            {trialUrgent ? (
+              <Clock className="h-4 w-4 shrink-0 text-amber-400" />
+            ) : (
+              <Sparkles className="h-4 w-4 shrink-0 text-brand-400" />
+            )}
             <span>
-              Seu mês grátis termina em{' '}
-              <strong>{access.daysLeft === 1 ? '1 dia' : `${access.daysLeft} dias`}</strong>.
+              {trialUrgent ? (
+                <>
+                  Seu mês grátis termina <strong>{trialDaysLabel}</strong> — assine para não
+                  perder o acesso ao painel.
+                </>
+              ) : (
+                <>
+                  Você está no <strong>mês grátis</strong>. Termina{' '}
+                  <strong>{trialDaysLabel}</strong>.
+                </>
+              )}
             </span>
             <Link
               href="/admin/assinatura"
-              className="font-semibold text-brand-300 underline underline-offset-2 hover:text-brand-200"
+              className={
+                'font-semibold underline underline-offset-2 ' +
+                (trialUrgent
+                  ? 'text-amber-300 hover:text-amber-200'
+                  : 'text-brand-300 hover:text-brand-200')
+              }
             >
               Assinar agora
             </Link>
