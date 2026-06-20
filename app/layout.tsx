@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const sora = Sora({ subsets: ['latin'], weight: ['400', '600', '700', '800'], variable: '--font-sora' })
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

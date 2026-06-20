@@ -3,7 +3,7 @@
 import { requireOwner, createAdminClient } from '@/lib/supabase/server'
 import { PLATFORM_PLAN } from '@/lib/billing/platformPlan'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
 
 // Inicia a assinatura da plataforma (Preapproval no MercadoPago). Owner-only.
 // Devolve init_point (URL hospedada do MP) para o client redirecionar. Não tocamos no cartão.

@@ -191,7 +191,7 @@ export default function LandingPage() {
           <div className={s.logo} style={{ fontSize: 16 }}>
             🏟️ Arena<span className={s.dot}>Hub</span>
           </div>
-          <div>© 2026 ArenaHub · arenahub.pro</div>
+          <div>© 2026 ArenaHub · arenahub.website</div>
         </div>
       </footer>
     </div>

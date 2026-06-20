@@ -7,7 +7,7 @@ import { normalizeSports } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
 
 // Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
-const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.pro'
+const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
 const DOCUMENT_IN_USE_MSG =
   `Já existe uma academia cadastrada com este CPF/CNPJ. Fale com o suporte: ${SUPPORT_CONTACT}`
 

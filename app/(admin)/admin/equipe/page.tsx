@@ -35,7 +35,7 @@ export default async function EquipePage() {
     .filter((p) => p.id !== org?.owner_id)
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.pro'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
   const inviteUrl = `${baseUrl}/cadastro?convite=${org?.invite_code ?? ''}`
 
   return (
