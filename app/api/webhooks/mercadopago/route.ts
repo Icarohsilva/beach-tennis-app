@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { mapPreapprovalStatus } from '@/lib/billing/mpStatus'
-import crypto from 'crypto'
+import { isValidSignature } from '@/lib/billing/webhookSignature'
 
 /**
  * Mercado Pago webhook handler.
@@ -23,30 +23,12 @@ export async function POST(req: NextRequest) {
   if (secret) {
     const xSignature = req.headers.get('x-signature')
     const xRequestId = req.headers.get('x-request-id')
+    // O MP calcula a assinatura sobre o data.id que vem na QUERY STRING da URL
+    // de notificação (não sobre o corpo). Ver lib/billing/webhookSignature.ts.
+    const dataId = req.nextUrl.searchParams.get('data.id')
     const rawBody = await req.text()
 
-    if (!xSignature) {
-      return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
-    }
-
-    // MP sends: ts=<timestamp>,v1=<hash>
-    const parts = Object.fromEntries(
-      xSignature.split(',').map((p) => {
-        const [k, v] = p.split('=', 2)
-        return [k.trim(), v?.trim()]
-      }),
-    )
-    const ts = parts['ts']
-    const v1 = parts['v1']
-
-    if (!ts || !v1) {
-      return NextResponse.json({ error: 'Invalid signature format' }, { status: 401 })
-    }
-
-    const manifest = `id:${xRequestId ?? ''};request-id:${xRequestId ?? ''};ts:${ts};`
-    const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
-
-    if (expected !== v1) {
+    if (!isValidSignature({ xSignature, requestId: xRequestId, dataId, secret })) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
     }
 
