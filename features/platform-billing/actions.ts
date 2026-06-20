@@ -43,7 +43,10 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
         currency_id: PLATFORM_PLAN.currency,
       },
       payer_email: payerEmail,
-      back_url: `${getSiteUrl()}/admin/assinatura?retorno=1`,
+      // back_url SEM query string: o MercadoPago recusa preapproval com
+      // "Invalid value for back_url" se a URL tiver "?param=...". No retorno o
+      // próprio MP anexa ?preapproval_id=..., usado pela página para detectar a volta.
+      back_url: `${getSiteUrl()}/admin/assinatura`,
       external_reference: ctx.organizationId,
       status: 'pending',
     }),

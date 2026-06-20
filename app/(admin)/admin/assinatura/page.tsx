@@ -33,14 +33,16 @@ function dayLabel(n: number): string {
 export default async function AssinaturaPage({
   searchParams,
 }: {
-  searchParams: { retorno?: string }
+  searchParams: { retorno?: string; preapproval_id?: string }
 }) {
   const ctx = await getStaffContext()
   if (!ctx) redirect('/login')
 
   const access = await getPlatformAccess(ctx.organizationId)
   const price = PLATFORM_PLAN.priceMonthly.toFixed(2).replace('.', ',')
-  const justReturned = searchParams?.retorno === '1'
+  // O MercadoPago anexa ?preapproval_id=... ao voltar do checkout. Mantém o
+  // ?retorno=1 como fallback para compatibilidade.
+  const justReturned = !!searchParams?.preapproval_id || searchParams?.retorno === '1'
 
   const isTrialing = access.allowed && access.status === 'trialing'
   const isActive = access.allowed && access.status === 'active'
