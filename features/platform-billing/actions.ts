@@ -28,6 +28,11 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
   const payerEmail = userRes?.user?.email
   if (!payerEmail) return { error: 'Não foi possível obter o e-mail do dono.' }
 
+  // back_url SEM query string: o MercadoPago recusa preapproval com
+  // "Invalid value for back_url" se a URL tiver "?param=...". No retorno o
+  // próprio MP anexa ?preapproval_id=..., usado pela página para detectar a volta.
+  const backUrl = `${getSiteUrl()}/admin/assinatura`
+
   const res = await fetch('https://api.mercadopago.com/preapproval', {
     method: 'POST',
     headers: {
@@ -43,17 +48,22 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
         currency_id: PLATFORM_PLAN.currency,
       },
       payer_email: payerEmail,
-      // back_url SEM query string: o MercadoPago recusa preapproval com
-      // "Invalid value for back_url" se a URL tiver "?param=...". No retorno o
-      // próprio MP anexa ?preapproval_id=..., usado pela página para detectar a volta.
-      back_url: `${getSiteUrl()}/admin/assinatura`,
+      back_url: backUrl,
       external_reference: ctx.organizationId,
       status: 'pending',
     }),
   })
 
   if (!res.ok) {
-    console.error('[platform-billing] MP preapproval failed:', res.status, await res.text())
+    console.error(
+      '[platform-billing] MP preapproval failed:',
+      res.status,
+      'back_url=',
+      JSON.stringify(backUrl),
+      'site_url_env=',
+      JSON.stringify(process.env.NEXT_PUBLIC_SITE_URL ?? null),
+      await res.text(),
+    )
     return { error: 'Não foi possível iniciar a assinatura. Tente novamente.' }
   }
 
