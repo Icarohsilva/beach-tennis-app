@@ -28,10 +28,12 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
   const payerEmail = userRes?.user?.email
   if (!payerEmail) return { error: 'Não foi possível obter o e-mail do dono.' }
 
-  // back_url SEM query string: o MercadoPago recusa preapproval com
-  // "Invalid value for back_url" se a URL tiver "?param=...". No retorno o
-  // próprio MP anexa ?preapproval_id=..., usado pela página para detectar a volta.
-  const backUrl = `${getSiteUrl()}/admin/assinatura`
+  // back_url aponta para a RAIZ do site (sem path). Motivo: o validador de URL do
+  // MercadoPago tem um bug com o TLD ".website" — qualquer back_url com PATH nesse
+  // domínio é recusado com "Invalid value for back_url" (confirmado contra a API real;
+  // ".website" sem path passa, e outros TLDs com path passam). No retorno o MP anexa
+  // ?preapproval_id=... e o middleware redireciona a raiz para /admin/assinatura.
+  const backUrl = getSiteUrl()
 
   const res = await fetch('https://api.mercadopago.com/preapproval', {
     method: 'POST',
@@ -55,15 +57,7 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
   })
 
   if (!res.ok) {
-    console.error(
-      '[platform-billing] MP preapproval failed:',
-      res.status,
-      'back_url=',
-      JSON.stringify(backUrl),
-      'site_url_env=',
-      JSON.stringify(process.env.NEXT_PUBLIC_SITE_URL ?? null),
-      await res.text(),
-    )
+    console.error('[platform-billing] MP preapproval failed:', res.status, await res.text())
     return { error: 'Não foi possível iniciar a assinatura. Tente novamente.' }
   }
 

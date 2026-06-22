@@ -5,7 +5,17 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
+
+  // Retorno do checkout de assinatura do MercadoPago. O validador do MP recusa
+  // back_url com path no TLD .website, então a assinatura é iniciada com back_url
+  // na RAIZ; ao voltar, o MP anexa ?preapproval_id=... Aqui detectamos esse retorno
+  // e levamos o usuário (logado) direto para a página de assinatura.
+  if (pathname === '/' && searchParams.has('preapproval_id')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/admin/assinatura'
+    return NextResponse.redirect(url)
+  }
 
   // Public routes — pass through immediately
   if (
