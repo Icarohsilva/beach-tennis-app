@@ -1,6 +1,7 @@
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { SystemSettingsForm } from './SystemSettingsForm'
 import { VitrineForm } from './VitrineForm'
+import { BrandingForm } from './BrandingForm'
 
 interface SystemSettings {
   credit_expiry_days: number
@@ -26,11 +27,14 @@ export default async function ConfiguracoesPage() {
 
   const { data: orgRow } = await adminClient
     .from('organizations')
-    .select('is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp')
+    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp')
     .eq('id', orgId)
     .single()
 
   const org = (orgRow ?? {}) as {
+    name?: string | null
+    brand_color?: string | null
+    logo_url?: string | null
     is_listed?: boolean
     cep?: string | null
     state?: string | null
@@ -63,6 +67,18 @@ export default async function ConfiguracoesPage() {
         <p className="text-slate-400 text-sm mt-1">Parâmetros globais do sistema</p>
       </div>
       <SystemSettingsForm settings={defaults} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Personalização</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Logo e cor da sua academia nas telas do app, painel e página pública.
+        </p>
+      </div>
+      <BrandingForm
+        brandColor={org.brand_color ?? null}
+        logoUrl={org.logo_url ?? null}
+        orgName={org.name ?? 'Sua Academia'}
+      />
 
       <div>
         <h2 className="text-lg font-bold text-white">Vitrine pública</h2>
