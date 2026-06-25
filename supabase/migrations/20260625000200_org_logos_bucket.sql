@@ -27,11 +27,20 @@ create policy "org-logos owner insert"
     )
   );
 
--- UPDATE restrito ao dono.
+-- UPDATE restrito ao dono. with check espelha using para impedir mover o objeto
+-- para um path de outra org durante o update (defesa em profundidade).
 drop policy if exists "org-logos owner update" on storage.objects;
 create policy "org-logos owner update"
   on storage.objects for update
   using (
+    bucket_id = 'org-logos'
+    and exists (
+      select 1 from organizations o
+      where o.id::text = (storage.foldername(name))[1]
+        and o.owner_id = auth.uid()
+    )
+  )
+  with check (
     bucket_id = 'org-logos'
     and exists (
       select 1 from organizations o
