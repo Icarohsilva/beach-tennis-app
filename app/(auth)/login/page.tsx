@@ -1,15 +1,19 @@
 // app/(auth)/login/page.tsx
 'use client'
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  // Convite na URL: depois do login, volta pro fluxo de entrar na academia.
+  const inviteCode = (searchParams.get('convite') ?? '').trim()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -27,9 +31,15 @@ export default function LoginPage() {
       } else if (error.message.toLowerCase().includes('invalid login credentials') || error.message.toLowerCase().includes('invalid credentials')) {
         setError('Email ou senha incorretos.')
       } else {
-        setError(error.message)
+        setError('Não foi possível entrar. Tente novamente.')
       }
       setLoading(false)
+      return
+    }
+    // Veio de um convite: manda pro fluxo de entrar na academia (já logado).
+    if (inviteCode) {
+      router.push(`/cadastro?convite=${encodeURIComponent(inviteCode)}`)
+      router.refresh()
       return
     }
     // Papel vem de memberships (profiles.role foi dropada no cutover de identidade).
@@ -42,6 +52,8 @@ export default function LoginPage() {
     router.push(isAdmin ? '/admin/dashboard' : '/home')
     router.refresh()
   }
+
+  const cadastroHref = inviteCode ? `/cadastro?convite=${encodeURIComponent(inviteCode)}` : '/cadastro'
 
   return (
     <Card>
@@ -56,7 +68,7 @@ export default function LoginPage() {
         </Button>
       </form>
       <div className="mt-4 flex flex-col gap-2 text-center text-sm text-slate-400">
-        <Link href="/cadastro" className="hover:text-brand-400">Criar conta</Link>
+        <Link href={cadastroHref} className="hover:text-brand-400">Criar conta</Link>
         <Link href="/recuperar-senha" className="hover:text-brand-400">Esqueci minha senha</Link>
       </div>
       <div className="mt-2 text-center">
@@ -65,5 +77,13 @@ export default function LoginPage() {
         </Link>
       </div>
     </Card>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   )
 }

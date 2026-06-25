@@ -19,6 +19,8 @@ function CadastroInner() {
   const [orgName, setOrgName] = useState<string | null>(null)
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null)
   const [joining, setJoining] = useState(false)
+  // Visitante não logado escolhe entre Entrar (já tem conta) e Criar conta.
+  const [showForm, setShowForm] = useState(false)
 
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
   const [partner, setPartner] = useState<'none' | 'wellhub' | 'totalpass'>('none')
@@ -81,7 +83,14 @@ function CadastroInner() {
       options: { data: meta },
     })
     if (error) {
-      setError(error.message)
+      const msg = error.message.toLowerCase()
+      if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
+        setError('Esse email já tem uma conta. Faça login para entrar nesta academia.')
+      } else if (msg.includes('password')) {
+        setError('A senha precisa ter pelo menos 6 caracteres.')
+      } else {
+        setError('Não foi possível criar a conta. Tente novamente.')
+      }
       setLoading(false)
       return
     }
@@ -147,6 +156,35 @@ function CadastroInner() {
     )
   }
 
+  // Visitante NÃO logado com convite válido: pergunta se já tem conta na ArenaHub
+  // antes de mostrar o formulário — evita que quem já tem conta tente recadastrar.
+  if (orgName && !loggedIn && !showForm) {
+    return (
+      <Card>
+        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-3">🎾</div>
+          <h2 className="text-lg font-semibold text-white mb-1">Você foi convidado</h2>
+          <p className="text-slate-400 text-sm">
+            para entrar na <span className="text-brand-400">{orgName}</span>.
+          </p>
+        </div>
+        <p className="text-sm text-slate-300 text-center mb-4">Você já tem conta na ArenaHub?</p>
+        <div className="flex flex-col gap-3">
+          <Link
+            href={`/login?convite=${encodeURIComponent(inviteCode)}`}
+            className="w-full inline-flex items-center justify-center rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-3 text-sm transition-colors"
+          >
+            Já tenho conta — Entrar
+          </Link>
+          <Button onClick={() => setShowForm(true)} variant="secondary" size="lg" className="w-full">
+            É minha primeira vez — Criar conta
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
   if (confirmEmail) {
     return (
       <Card>
@@ -196,7 +234,9 @@ function CadastroInner() {
         <Button type="submit" loading={loading} size="lg" className="w-full">Criar conta</Button>
       </form>
       <div className="mt-4 text-center text-sm text-slate-400">
-        <Link href="/login" className="hover:text-brand-400">Já tem conta? Entrar</Link>
+        <Link href={`/login?convite=${encodeURIComponent(inviteCode)}`} className="hover:text-brand-400">
+          Já tem conta? Entrar
+        </Link>
       </div>
     </Card>
   )
