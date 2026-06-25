@@ -4,6 +4,9 @@ import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveAct
 import { BottomNav } from '@/components/ui/BottomNav'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
+import { Logo } from '@/components/ui/Logo'
+import { accentVars } from '@/lib/branding/theme'
+import { PoweredBy } from '@/components/ui/PoweredBy'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -40,7 +43,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const unreadCount = notifications.filter((n) => !n.read).length
 
   return (
-    <div className="min-h-screen bg-surface text-white">
+    <div style={accentVars(org?.brand_color)} className="min-h-screen bg-surface text-white">
       {/* Top bar */}
       <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-between px-3 bg-surface border-b border-surface-border/40">
         {memberships.length > 1 && activeOrgId ? (
@@ -49,12 +52,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
             activeOrgId={activeOrgId}
           />
         ) : (
-          <span className="text-sm font-semibold text-white truncate max-w-[60%]">{org?.name ?? ''}</span>
+          <span className="inline-flex items-center gap-2 max-w-[60%]">
+            <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />
+            <span className="text-sm font-semibold text-white truncate">{org?.name ?? ''}</span>
+          </span>
         )}
         <NotificationBell initialNotifications={notifications} />
         {unreadCount > 0 && <span className="sr-only">{unreadCount} notificações não lidas</span>}
       </header>
-      <main className="pt-11 pb-24">{children}</main>
+      <main className="pt-11 pb-24">
+        {children}
+        <div className="mt-8 mb-4 flex justify-center">
+          <PoweredBy />
+        </div>
+      </main>
       <BottomNav />
     </div>
   )

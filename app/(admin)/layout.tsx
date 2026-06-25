@@ -9,6 +9,8 @@ import { Logo } from '@/components/ui/Logo'
 import { AdminMobileNav } from '@/components/ui/AdminMobileNav'
 import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { getPlatformAccess } from '@/lib/billing/access'
+import { accentVars } from '@/lib/branding/theme'
+import { PoweredBy } from '@/components/ui/PoweredBy'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -33,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: org } = await adminClient
     .from('organizations')
-    .select('owner_id, name, onboarding_completed')
+    .select('owner_id, name, onboarding_completed, brand_color, logo_url')
     .eq('id', ctx.organizationId)
     .single()
 
@@ -74,10 +76,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const navLinks = allNav.filter((l) => canAccessArea(l.area, isOwner))
 
   return (
-    <div className="min-h-screen bg-surface text-white flex flex-col md:flex-row">
+    <div
+      style={accentVars(org?.brand_color)}
+      className="min-h-screen bg-surface text-white flex flex-col md:flex-row"
+    >
       <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen hidden md:flex flex-col">
         <div className="bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-5 mb-2">
-          <Logo variant="icon" size="sm" />
+          <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />
           <span className="text-sm font-bold text-white mt-1 block truncate">
             {org?.name ?? 'Painel Admin'}
           </span>
@@ -94,6 +99,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <LogoutButton className="mt-4 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-colors text-left w-full">
             Sair
           </LogoutButton>
+          <PoweredBy className="mt-3" />
         </div>
       </aside>
       <AdminMobileNav links={navLinks} />

@@ -7,6 +7,9 @@ import { getOpenTrialSessions } from '@/lib/arenas/sessions'
 import { SPORT_BY_SLUG } from '@/lib/arenas/sports'
 import { formatAddress } from '@/lib/arenas/formatAddress'
 import { Card } from '@/components/ui/Card'
+import { Logo } from '@/components/ui/Logo'
+import { accentVars } from '@/lib/branding/theme'
+import { PoweredBy } from '@/components/ui/PoweredBy'
 import { TrialBookingForm } from './TrialBookingForm'
 
 interface ArenaRow {
@@ -23,6 +26,8 @@ interface ArenaRow {
   no_number: boolean
   sports: string[]
   whatsapp: string | null
+  brand_color: string | null
+  logo_url: string | null
 }
 
 interface PageProps {
@@ -34,7 +39,7 @@ export default async function ArenaPage({ params }: PageProps) {
 
   const { data } = await admin
     .from('organizations')
-    .select('id, name, slug, status, is_listed, city, state, neighborhood, address_line, address_number, no_number, sports, whatsapp')
+    .select('id, name, slug, status, is_listed, city, state, neighborhood, address_line, address_number, no_number, sports, whatsapp, brand_color, logo_url')
     .eq('slug', params.slug)
     .single()
 
@@ -47,9 +52,14 @@ export default async function ArenaPage({ params }: PageProps) {
   const whatsappDigits = org.whatsapp?.replace(/\D/g, '') ?? ''
 
   return (
-    <div className="min-h-screen bg-surface text-white">
+    <div style={accentVars(org.brand_color)} className="min-h-screen bg-surface text-white">
       <div className="max-w-lg mx-auto px-4 py-10">
         <div className="mb-6">
+          {org.logo_url && (
+            <div className="mb-3">
+              <Logo variant="icon" size="lg" logoUrl={org.logo_url} orgName={org.name} />
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-white">{org.name}</h1>
           <p className="text-slate-400 text-sm mt-1">
             {[formatAddress(org), org.neighborhood, org.city, org.state].filter(Boolean).join(' · ')}
@@ -97,6 +107,10 @@ export default async function ArenaPage({ params }: PageProps) {
             <TrialBookingForm organizationId={org.id} sessions={sessions} />
           )}
         </Card>
+
+        <div className="mt-8 flex justify-center">
+          <PoweredBy />
+        </div>
       </div>
     </div>
   )
