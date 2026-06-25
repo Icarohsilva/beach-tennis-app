@@ -29,6 +29,14 @@ export const metadata: Metadata = {
     locale: 'pt_BR',
     type: 'website',
   },
+  // Card grande no X/Twitter — usado em campanhas e ao colar o link na rede.
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ArenaHub — Gestão para arenas e academias de esporte',
+    description:
+      'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
+    images: ['/og.png'],
+  },
 }
 
 export const viewport: Viewport = {

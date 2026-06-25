@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from 'next/link'
+import Image from 'next/image'
 import s from './landing.module.css'
 import { WhatsAppChat } from './_landing/WhatsAppChat'
 
@@ -12,7 +13,14 @@ export default function LandingPage() {
       <nav className={s.nav}>
         <div className={`${s.wrap} ${s.navInner}`}>
           <div className={s.logo}>
-            <span className={s.logoBadge}>🏟️</span>
+            <Image
+              src="/brand/arenahub-symbol-transparent.png"
+              alt=""
+              width={30}
+              height={30}
+              priority
+              className={s.logoBadge}
+            />
             Arena<span className={s.dot}>Hub</span>
           </div>
           <div className={s.navlinks}>
@@ -364,7 +372,13 @@ export default function LandingPage() {
         <div className={`${s.wrap} ${s.footerInner}`}>
           <div className={s.footerLeft}>
             <div className={s.logo} style={{ fontSize: 16 }}>
-              <span className={s.logoBadge} style={{ width: 26, height: 26, fontSize: 13 }}>🏟️</span>
+              <Image
+                src="/brand/arenahub-symbol-transparent.png"
+                alt=""
+                width={26}
+                height={26}
+                className={s.logoBadge}
+              />
               Arena<span className={s.dot}>Hub</span>
             </div>
             <span>© 2026 · arenahub.website</span>

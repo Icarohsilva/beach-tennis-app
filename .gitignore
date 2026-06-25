@@ -41,9 +41,6 @@ next-env.d.ts
 
 .vercel
 
-.octogent
-octogent/
-
 # git worktrees
 .worktrees/
 

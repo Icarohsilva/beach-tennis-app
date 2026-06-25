@@ -151,15 +151,9 @@
   gap: 10px;
 }
 .logoBadge {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--brand), #ec4899);
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
+  object-fit: contain;
+  /* Símbolo da arena (PNG transparente, com brilho próprio) — sem fundo/sombra. */
 }
 .dot { color: var(--brand); }
 
