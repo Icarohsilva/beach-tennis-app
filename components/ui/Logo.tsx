@@ -3,6 +3,10 @@ import Image from 'next/image'
 interface Props {
   size?: 'sm' | 'md' | 'lg'
   variant?: 'full' | 'icon'
+  /** Logo da academia (Supabase Storage). Quando presente, sobrescreve o logo ArenaHub. */
+  logoUrl?: string | null
+  /** Nome da academia — usado como alt da logo. */
+  orgName?: string
 }
 
 const textSizes = {
@@ -20,8 +24,23 @@ const symbolPx = {
 
 const SYMBOL = '/brand/arenahub-symbol-transparent.png'
 
-export function Logo({ size = 'md', variant = 'full' }: Props) {
+export function Logo({ size = 'md', variant = 'full', logoUrl, orgName }: Props) {
   const px = symbolPx[size]
+
+  // Override por academia: renderiza a logo enviada, sem a wordmark ArenaHub.
+  if (logoUrl) {
+    return (
+      <Image
+        src={logoUrl}
+        alt={orgName ?? 'Logo'}
+        width={px}
+        height={px}
+        priority
+        unoptimized
+        className="object-contain"
+      />
+    )
+  }
 
   if (variant === 'icon') {
     return (
