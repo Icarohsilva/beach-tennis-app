@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Defaults da marca ArenaHub (laranja). Academias sobrescrevem via accentVars()
+     injetado no wrapper de cada layout. Triplas RGB para casar com
+     rgb(var(--brand-N) / <alpha-value>) no tailwind.config.ts. */
+  --brand-50: 255 247 237;
+  --brand-100: 255 237 213;
+  --brand-200: 254 215 170;
+  --brand-300: 253 186 116;
+  --brand-400: 251 146 60;
+  --brand-500: 249 115 22;
+  --brand-600: 234 88 12;
+  --brand-700: 194 65 12;
+  --brand-800: 154 52 18;
+  --brand-900: 124 45 18;
+}
+
 html {
   background-color: #0c1220;
 }
