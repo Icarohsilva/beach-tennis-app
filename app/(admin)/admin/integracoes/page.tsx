@@ -1,7 +1,7 @@
 // app/(admin)/admin/integracoes/page.tsx
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { IntegracoesClient } from './IntegracoesClient'
-import type { OrgIntegration, PendingCheckin } from '@/types'
+import type { OrgIntegrationView, PendingCheckin } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,8 +9,13 @@ export default async function IntegracoesPage() {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
+  // NUNCA selecionar webhook_secret aqui: o resultado é serializado para o browser
+  // (props de client component). O segredo só é gravado (write-only no form), nunca lido.
   const [{ data: integrationsRaw }, { data: pendingRaw }, { data: studentsRaw }] = await Promise.all([
-    adminClient.from('org_integrations').select('*').eq('organization_id', orgId),
+    adminClient
+      .from('org_integrations')
+      .select('id, organization_id, partner, gym_id, status, connected_at, created_at')
+      .eq('organization_id', orgId),
     adminClient
       .from('pending_checkins')
       .select('*')
@@ -24,7 +29,7 @@ export default async function IntegracoesPage() {
       .eq('role', 'student'),
   ])
 
-  const integrations = (integrationsRaw ?? []) as OrgIntegration[]
+  const integrations = (integrationsRaw ?? []) as OrgIntegrationView[]
   const pending = (pendingRaw ?? []) as PendingCheckin[]
   const students = ((studentsRaw ?? []) as unknown as {
     user_id: string

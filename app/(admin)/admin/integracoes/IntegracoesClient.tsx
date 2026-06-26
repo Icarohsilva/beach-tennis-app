@@ -12,10 +12,10 @@ import {
   disconnectIntegration,
   resolvePendingCheckin,
 } from '@/features/checkin/actions'
-import type { OrgIntegration, PendingCheckin } from '@/types'
+import type { OrgIntegrationView, PendingCheckin } from '@/types'
 
 interface Props {
-  wellhub: OrgIntegration | null
+  wellhub: OrgIntegrationView | null
   pending: PendingCheckin[]
   students: { id: string; full_name: string }[]
   webhookUrl: string

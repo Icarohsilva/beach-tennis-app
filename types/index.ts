@@ -22,6 +22,10 @@ export interface OrgIntegration {
   created_at: string
 }
 
+// Versão segura para o browser: NUNCA inclui webhook_secret. Use este tipo em
+// qualquer dado de integração serializado para Client Components.
+export type OrgIntegrationView = Omit<OrgIntegration, 'webhook_secret'>
+
 export interface PendingCheckin {
   id: string
   organization_id: string

@@ -75,7 +75,7 @@ export async function recordResolvedCheckin(
 
   const linkedSessionId = await findLinkedSession(client, input.studentId, input.orgId, input.date)
 
-  await client.from('checkins').insert({
+  const { error: insertError } = await client.from('checkins').insert({
     organization_id: input.orgId,
     student_id: input.studentId,
     partner: input.partner,
@@ -85,9 +85,15 @@ export async function recordResolvedCheckin(
     validation: input.validation,
     created_by: input.createdBy ?? null,
   })
+  if (insertError) {
+    // 23505 = violação de índice único. Outra requisição concorrente já gravou
+    // este external_ref → check-in idempotente, no-op (não remarca presença).
+    if (insertError.code === '23505') return { recorded: true, linkedSessionId: null }
+    throw new Error(`Falha ao gravar check-in: ${insertError.message}`)
+  }
 
   if (linkedSessionId) {
-    await client.from('attendance').upsert(
+    const { error: attendanceError } = await client.from('attendance').upsert(
       {
         organization_id: input.orgId,
         student_id: input.studentId,
@@ -98,6 +104,9 @@ export async function recordResolvedCheckin(
       },
       { onConflict: 'student_id,session_id' },
     )
+    if (attendanceError) {
+      throw new Error(`Falha ao marcar presença: ${attendanceError.message}`)
+    }
   }
 
   return { recorded: true, linkedSessionId }
@@ -134,7 +143,7 @@ export async function ingestPartnerCheckin(
     .maybeSingle()
 
   if (!membership) {
-    await client.from('pending_checkins').insert({
+    const { error: pendingError } = await client.from('pending_checkins').insert({
       organization_id: input.orgId,
       partner: input.partner,
       partner_member_id: input.partnerMemberId,
@@ -143,6 +152,10 @@ export async function ingestPartnerCheckin(
       payload: input.payload,
       resolved: false,
     })
+    // 23505 = evento reenviado pela Wellhub (mesmo external_ref) → já enfileirado.
+    if (pendingError && pendingError.code !== '23505') {
+      throw new Error(`Falha ao enfileirar check-in pendente: ${pendingError.message}`)
+    }
     return { recorded: false, pending: true }
   }
 
