@@ -38,6 +38,13 @@ export interface PendingCheckin {
   created_at: string
 }
 
+export interface PartnerCheckinRate {
+  organization_id: string
+  partner: CheckinPartner
+  value: number
+  updated_at: string
+}
+
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled'
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
