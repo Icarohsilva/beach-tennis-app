@@ -3,6 +3,11 @@ import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { PlansManager } from './PlansManager'
+import { PartnerRevenueCard } from './PartnerRevenueCard'
+import {
+  getPartnerCheckinRates,
+  getPartnerRevenueThisMonth,
+} from '@/features/financeiro/partnerRevenueActions'
 import type { SubscriptionPlan, PaymentStatus } from '@/types'
 
 interface RevenueRow {
@@ -94,6 +99,20 @@ export default async function FinanceiroPage() {
 
   const plans: SubscriptionPlan[] = plansRaw ?? []
 
+  // ─── Receita de parceiro (Wellhub/TotalPass) ─────────────────────────────
+  const partnerRates = await getPartnerCheckinRates()
+  const partnerRevenue = await getPartnerRevenueThisMonth()
+
+  // Aviso: aluno de parceiro com meta 0 não soma na receita.
+  const { data: partnerMembershipsRaw } = await adminClient
+    .from('memberships')
+    .select('monthly_checkin_target')
+    .eq('organization_id', orgId)
+    .in('payment_type', ['wellhub', 'totalpass'])
+  const hasZeroTargetStudents = (
+    (partnerMembershipsRaw ?? []) as { monthly_checkin_target: number }[]
+  ).some((m) => (m.monthly_checkin_target ?? 0) === 0)
+
   function formatCurrency(amount: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
   }
@@ -178,6 +197,18 @@ export default async function FinanceiroPage() {
           </div>
         </section>
       )}
+
+      {/* Parceiros (Wellhub/TotalPass) */}
+      <section>
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+          Parceiros (Wellhub/TotalPass)
+        </h2>
+        <PartnerRevenueCard
+          initialRates={partnerRates}
+          initialRevenue={partnerRevenue}
+          hasZeroTargetStudents={hasZeroTargetStudents}
+        />
+      </section>
 
       {/* Gerenciar Planos */}
       <section>
