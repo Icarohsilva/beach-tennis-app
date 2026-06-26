@@ -11,6 +11,9 @@ import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { StatHeader } from '@/components/ui/StatHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { computeProgress } from '@/lib/checkin/progress'
+import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { CalendarPlus } from 'lucide-react'
 import type { Tournament, Profile, Class, ClassSession, DayUseSlot } from '@/types'
 
@@ -81,6 +84,19 @@ export default async function HomePage() {
   const profile = profileData as Pick<Profile, 'full_name'> | null
   const tournaments = (tournamentsData ?? []) as Tournament[]
   const showCredits = membership?.payment_type !== 'wellhub' && membership?.payment_type !== 'totalpass'
+  const isPartner = membership?.payment_type === 'wellhub' || membership?.payment_type === 'totalpass'
+  let checkinProgress: ReturnType<typeof computeProgress> | null = null
+  if (isPartner && membership) {
+    const { from, to } = getMonthWindow(new Date())
+    const { count } = await adminClient
+      .from('checkins')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', user.id)
+      .eq('organization_id', orgId)
+      .gte('checkin_date', from)
+      .lte('checkin_date', to)
+    checkinProgress = computeProgress(membership.monthly_checkin_target, count ?? 0)
+  }
   const todayDayUse = (todayDayUseData ?? []) as Pick<DayUseSlot, 'id' | 'court' | 'start_time' | 'end_time' | 'capacity' | 'notes'>[]
 
   type SessionRow = {
@@ -282,6 +298,13 @@ export default async function HomePage() {
           { label: 'Nível', value: (membership?.level ?? '—').toUpperCase() },
         ]}
       />
+
+      {isPartner && checkinProgress && (
+        <CheckinProgressCard
+          partner={membership!.payment_type as 'wellhub' | 'totalpass'}
+          progress={checkinProgress}
+        />
+      )}
 
       {/* Aulas de hoje com ações inline */}
       {todayClasses.length > 0 && (
