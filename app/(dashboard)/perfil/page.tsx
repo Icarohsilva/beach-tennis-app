@@ -6,6 +6,7 @@ import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
+import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
@@ -137,6 +138,19 @@ export default async function PerfilPage() {
   const isWellhubOrTotalpass =
     profile?.payment_type === 'wellhub' || profile?.payment_type === 'totalpass'
 
+  const currentPartner =
+    profile?.payment_type === 'wellhub' || profile?.payment_type === 'totalpass'
+      ? profile.payment_type
+      : null
+  const currentPartnerId =
+    currentPartner === 'wellhub'
+      ? (membership?.wellhub_id ?? null)
+      : currentPartner === 'totalpass'
+        ? (membership?.totalpass_id ?? null)
+        : null
+  // Mensalista ativo ⇒ trava o autoatendimento (subscription já carregada acima).
+  const isActiveSubscriber = subscription?.status === 'active'
+
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -174,6 +188,23 @@ export default async function PerfilPage() {
           />
         )}
       </section>
+
+      {/* Acesso por parceiro (autoatendimento de ID) — não para dependentes */}
+      {!profile?.is_dependent && (
+        <section>
+          <SectionHeader title="Acesso por parceiro" />
+          <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+            <p className="text-xs text-slate-500 mb-4">
+              Informe seu ID do Wellhub ou TotalPass para registrar seus check-ins automaticamente.
+            </p>
+            <SelfPartnerForm
+              currentPartner={currentPartner}
+              currentPartnerId={currentPartnerId}
+              isActiveSubscriber={isActiveSubscriber}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Histórico de Créditos Extras */}
       {!isWellhubOrTotalpass && creditTransactions.length > 0 && (
