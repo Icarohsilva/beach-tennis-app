@@ -221,7 +221,10 @@ export async function addDependentSelf(
     .select('id')
     .single()
 
-  if (error) return { error: 'Erro ao criar dependente.' }
+  if (error) {
+    console.error('[addDependentSelf] profiles.insert', error)
+    return { error: `Erro ao criar dependente (perfil): ${error.message} [${error.code}]` }
+  }
 
   // Membership do dependente na academia ativa (fonte da verdade por-academia).
   const { error: memErr } = await adminClient.from('memberships').insert({
@@ -236,7 +239,10 @@ export async function addDependentSelf(
     contract_active: false,
   })
 
-  if (memErr) return { error: 'Erro ao criar dependente.' }
+  if (memErr) {
+    console.error('[addDependentSelf] memberships.insert', memErr)
+    return { error: `Erro ao criar dependente (membership): ${memErr.message} [${memErr.code}]` }
+  }
 
   const { revalidatePath } = await import('next/cache')
   revalidatePath('/perfil')
@@ -280,7 +286,10 @@ export async function addDependent(
     full_name: fullName.trim(),
   })
 
-  if (error) return { error: 'Erro ao criar dependente.' }
+  if (error) {
+    console.error('[addDependent] profiles.insert', error)
+    return { error: `Erro ao criar dependente (perfil): ${error.message} [${error.code}]` }
+  }
 
   // Membership do dependente na academia do admin (fonte da verdade por-academia).
   const { error: memErr } = await adminClient.from('memberships').insert({
@@ -295,7 +304,10 @@ export async function addDependent(
     credits_balance: 0,
   })
 
-  if (memErr) return { error: 'Erro ao criar dependente.' }
+  if (memErr) {
+    console.error('[addDependent] memberships.insert', memErr)
+    return { error: `Erro ao criar dependente (membership): ${memErr.message} [${memErr.code}]` }
+  }
   return {}
 }
 
