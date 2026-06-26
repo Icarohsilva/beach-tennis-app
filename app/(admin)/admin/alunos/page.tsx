@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Users } from 'lucide-react'
 import type { Membership, StudentLevel } from '@/types'
+import { CriarAlunoButton } from './CriarAlunoButton'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -136,7 +137,10 @@ export default async function AlunosPage({ searchParams }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Alunos</h1>
-        <span className="text-sm text-slate-400">{students.length} alunos</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-slate-400">{students.length} alunos</span>
+          <CriarAlunoButton />
+        </div>
       </div>
 
       {/* Filters */}

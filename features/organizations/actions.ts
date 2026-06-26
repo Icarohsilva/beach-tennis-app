@@ -5,6 +5,8 @@ import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
 import { normalizeSports } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
+import { generateTempPassword } from '@/lib/auth/tempPassword'
+import { setStudentType } from '@/features/checkin/actions'
 
 // Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
 const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
@@ -181,6 +183,74 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
     .eq('organization_id', ctx.organizationId)
   revalidatePath('/admin/equipe')
   return {}
+}
+
+export interface CreateStudentInput {
+  fullName: string
+  email: string
+  partner?: { type: 'wellhub' | 'totalpass'; partnerId: string; monthlyTarget: number }
+}
+
+// Cria um aluno na academia ativa com senha temporária gerada pelo sistema, forçando
+// a troca no 1º login (must_change_password). Admin-only (qualquer staff role='admin').
+export async function createStudent(
+  input: CreateStudentInput,
+): Promise<{ error?: string; password?: string }> {
+  const ctx = await getStaffContext()
+  if (!ctx) return { error: 'Não autenticado.' }
+
+  const admin = createAdminClient()
+  // Autorização: a membership da academia ativa precisa ser admin (staff).
+  const { data: caller } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', ctx.userId)
+    .eq('organization_id', ctx.organizationId)
+    .single()
+  if (caller?.role !== 'admin') return { error: 'Apenas o staff pode criar alunos.' }
+
+  const email = input.email.trim()
+  const fullName = input.fullName.trim()
+  if (!fullName) return { error: 'Informe o nome do aluno.' }
+  if (!email) return { error: 'Informe o e-mail do aluno.' }
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('invite_code')
+    .eq('id', ctx.organizationId)
+    .single()
+  if (!org) return { error: 'Academia não encontrada.' }
+
+  const password = generateTempPassword()
+
+  const { data: created, error: userErr } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      full_name: fullName,
+      org_invite_code: org.invite_code,
+      must_change_password: true,
+    },
+  })
+  if (userErr || !created?.user) {
+    const msg = userErr?.message?.toLowerCase().includes('already')
+      ? 'Já existe uma conta com esse e-mail.'
+      : 'Não foi possível criar o aluno.'
+    return { error: msg }
+  }
+
+  // Opcional: vincular tipo parceiro (grava wellhub_id/totalpass_id + meta na membership).
+  if (input.partner) {
+    await setStudentType(created.user.id, {
+      type: input.partner.type,
+      partnerId: input.partner.partnerId,
+      monthlyTarget: input.partner.monthlyTarget,
+    })
+  }
+
+  revalidatePath('/admin/alunos')
+  return { password }
 }
 
 // Remove um professor da academia do dono. Owner-only. Não permite remover o dono.
