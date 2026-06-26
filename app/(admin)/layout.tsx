@@ -16,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+  if (user.user_metadata?.must_change_password === true) redirect('/definir-senha')
 
   // Contexto de staff da academia ATIVA (papel/dono vêm da membership, não de profiles).
   const ctx = await getStaffContext()
