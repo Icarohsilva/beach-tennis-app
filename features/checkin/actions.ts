@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { recordResolvedCheckin } from '@/lib/checkin/ingest'
 
 async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
   const supabase = createClient()
@@ -125,92 +126,22 @@ export async function recordCheckin(
   })
   if (!result.valid) return { error: result.error ?? 'Check-in inválido.' }
 
-  // Idempotência por external_ref (por-academia)
-  if (result.externalRef) {
-    const { data: existing } = await adminClient
-      .from('checkins')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('partner', partner)
-      .eq('external_ref', result.externalRef)
-      .maybeSingle()
-    if (existing) {
-      return { progress: await monthlyProgress(adminClient, studentId, orgId, profile.monthly_checkin_target) }
-    }
-  }
-
-  // Liga a uma aula fixa do dia, se houver reserva confirmada
-  const linkedSessionId = await findLinkedSession(adminClient, studentId, orgId, date)
-
-  const { error: insertErr } = await adminClient.from('checkins').insert({
-    organization_id: orgId,
-    student_id: studentId,
+  // Idempotência + inserção + presença ficam no núcleo compartilhado (lib/checkin/ingest).
+  const { linkedSessionId } = await recordResolvedCheckin(adminClient, {
+    orgId,
+    studentId,
     partner,
-    checkin_date: date,
-    session_id: linkedSessionId,
-    external_ref: result.externalRef ?? null,
+    date,
+    externalRef: result.externalRef ?? null,
     validation: result.validation,
-    created_by: opts?.createdBy ?? null,
+    createdBy: opts?.createdBy ?? null,
   })
-  if (insertErr) return { error: 'Erro ao registrar check-in.' }
-
-  if (linkedSessionId) {
-    await adminClient.from('attendance').upsert(
-      {
-        organization_id: orgId,
-        student_id: studentId,
-        session_id: linkedSessionId,
-        status: 'present',
-        source: partner,
-        checked_in_at: new Date().toISOString(),
-      },
-      { onConflict: 'student_id,session_id' },
-    )
-  }
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {
     progress: await monthlyProgress(adminClient, studentId, orgId, profile.monthly_checkin_target),
     linkedSessionId,
   }
-}
-
-/** Sessão agendada na data, de turma com matrícula ativa e reserva confirmada. */
-async function findLinkedSession(
-  adminClient: ReturnType<typeof createAdminClient>,
-  studentId: string,
-  orgId: string,
-  date: string,
-): Promise<string | null> {
-  const { data: enrolls } = await adminClient
-    .from('enrollments')
-    .select('class_id')
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-  const classIds = (enrolls ?? []).map((e: { class_id: string }) => e.class_id)
-  if (classIds.length === 0) return null
-
-  const { data: sessions } = await adminClient
-    .from('class_sessions')
-    .select('id')
-    .eq('organization_id', orgId)
-    .eq('session_date', date)
-    .eq('status', 'scheduled')
-    .in('class_id', classIds)
-  const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id)
-  if (sessionIds.length === 0) return null
-
-  const { data: booking } = await adminClient
-    .from('session_bookings')
-    .select('session_id')
-    .eq('student_id', studentId)
-    .eq('status', 'confirmed')
-    .in('session_id', sessionIds)
-    .limit(1)
-    .maybeSingle()
-
-  return (booking?.session_id as string | undefined) ?? null
 }
 
 /** Recusa a solicitação de parceiro autodeclarada: limpa pending_partner. */
