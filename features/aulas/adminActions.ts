@@ -223,7 +223,7 @@ export async function addDependentSelf(
 
   if (error) {
     console.error('[addDependentSelf] profiles.insert', error)
-    return { error: `Erro ao criar dependente (perfil): ${error.message} [${error.code}]` }
+    return { error: 'Erro ao criar dependente.' }
   }
 
   // Membership do dependente na academia ativa (fonte da verdade por-academia).
@@ -241,7 +241,7 @@ export async function addDependentSelf(
 
   if (memErr) {
     console.error('[addDependentSelf] memberships.insert', memErr)
-    return { error: `Erro ao criar dependente (membership): ${memErr.message} [${memErr.code}]` }
+    return { error: 'Erro ao criar dependente.' }
   }
 
   const { revalidatePath } = await import('next/cache')
@@ -288,7 +288,7 @@ export async function addDependent(
 
   if (error) {
     console.error('[addDependent] profiles.insert', error)
-    return { error: `Erro ao criar dependente (perfil): ${error.message} [${error.code}]` }
+    return { error: 'Erro ao criar dependente.' }
   }
 
   // Membership do dependente na academia do admin (fonte da verdade por-academia).
@@ -306,7 +306,7 @@ export async function addDependent(
 
   if (memErr) {
     console.error('[addDependent] memberships.insert', memErr)
-    return { error: `Erro ao criar dependente (membership): ${memErr.message} [${memErr.code}]` }
+    return { error: 'Erro ao criar dependente.' }
   }
   return {}
 }
