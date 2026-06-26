@@ -163,6 +163,98 @@ export async function clearPendingPartner(studentId: string): Promise<{ error?: 
   return {}
 }
 
+/** Conecta/atualiza a integração do parceiro na academia ativa. Admin-only. */
+export async function connectIntegration(
+  partner: CheckinPartner,
+  input: { gymId: string; webhookSecret: string },
+): Promise<{ error?: string }> {
+  const { ok, orgId } = await requireAdmin()
+  if (!ok) return { error: 'Sem permissão de administrador.' }
+
+  const gymId = input.gymId.trim()
+  const webhookSecret = input.webhookSecret.trim()
+  if (!gymId || !webhookSecret) return { error: 'Informe o gym_id e o webhook secret.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('org_integrations')
+    .upsert(
+      {
+        organization_id: orgId,
+        partner,
+        gym_id: gymId,
+        webhook_secret: webhookSecret,
+        status: 'connected',
+        connected_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,partner' },
+    )
+  if (error) return { error: 'Não foi possível salvar a integração.' }
+
+  revalidatePath('/admin/integracoes')
+  return {}
+}
+
+/** Marca a integração como desconectada (mantém o registro). Admin-only. */
+export async function disconnectIntegration(
+  partner: CheckinPartner,
+): Promise<{ error?: string }> {
+  const { ok, orgId } = await requireAdmin()
+  if (!ok) return { error: 'Sem permissão de administrador.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('org_integrations')
+    .update({ status: 'disconnected' })
+    .eq('organization_id', orgId)
+    .eq('partner', partner)
+  if (error) return { error: 'Não foi possível desconectar.' }
+
+  revalidatePath('/admin/integracoes')
+  return {}
+}
+
+/** Vincula um check-in pendente a um aluno: grava o check-in real e marca resolvido. */
+export async function resolvePendingCheckin(
+  pendingId: string,
+  studentId: string,
+): Promise<{ error?: string }> {
+  const { ok, orgId } = await requireAdmin()
+  if (!ok) return { error: 'Sem permissão de administrador.' }
+
+  const adminClient = createAdminClient()
+  const { data: pending } = await adminClient
+    .from('pending_checkins')
+    .select('id, partner, checkin_date, external_ref, resolved')
+    .eq('id', pendingId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!pending || pending.resolved) return { error: 'Pendência não encontrada.' }
+
+  // Garante que o aluno pertence à academia ativa.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('user_id')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!membership) return { error: 'Aluno não encontrado nesta academia.' }
+
+  await recordResolvedCheckin(adminClient, {
+    orgId,
+    studentId,
+    partner: pending.partner as CheckinPartner,
+    date: pending.checkin_date as string,
+    externalRef: (pending.external_ref as string | null) ?? null,
+    validation: pending.partner as CheckinPartner,
+  })
+
+  await adminClient.from('pending_checkins').update({ resolved: true }).eq('id', pendingId)
+
+  revalidatePath('/admin/integracoes')
+  return {}
+}
+
 /** Conta os check-ins do mês corrente e calcula o progresso. */
 async function monthlyProgress(
   adminClient: ReturnType<typeof createAdminClient>,
