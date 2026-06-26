@@ -163,6 +163,62 @@ export async function clearPendingPartner(studentId: string): Promise<{ error?: 
   return {}
 }
 
+/**
+ * Autoatendimento: o próprio aluno define seu vínculo de parceiro (Wellhub/TotalPass)
+ * na academia ativa. Vale na hora. TRAVADO se o aluno já for mensalista ativo
+ * (assinatura student_subscriptions com status='active'), para não conflitar com o
+ * plano pago. NÃO mexe em monthly_checkin_target (a meta segue com o professor).
+ */
+export async function selfSetPartnerId(
+  partner: CheckinPartner,
+  partnerId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  if (partner !== 'wellhub' && partner !== 'totalpass') {
+    return { error: 'Parceiro inválido.' }
+  }
+  const trimmedId = partnerId.trim()
+  if (!trimmedId) return { error: 'Informe o seu ID do parceiro.' }
+
+  const adminClient = createAdminClient()
+
+  // Trava: mensalista ativo não pode virar parceiro sozinho.
+  const { data: activeSub } = await adminClient
+    .from('student_subscriptions')
+    .select('id')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (activeSub) {
+    return {
+      error: 'Você tem um plano mensalista ativo. Fale com o professor para mudar para parceiro.',
+    }
+  }
+
+  const idColumn = partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
+  const { error } = await adminClient
+    .from('memberships')
+    .update({
+      payment_type: partner,
+      [idColumn]: trimmedId,
+      pending_partner: null,
+    })
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+
+  if (error) return { error: 'Erro ao salvar o vínculo de parceiro.' }
+
+  revalidatePath('/perfil')
+  return {}
+}
+
 /** Conecta/atualiza a integração do parceiro na academia ativa. Admin-only. */
 export async function connectIntegration(
   partner: CheckinPartner,
