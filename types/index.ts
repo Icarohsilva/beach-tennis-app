@@ -50,7 +50,32 @@ export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
 export type PaymentTransactionType = 'subscription' | 'per_class' | 'trial'
 export type CreditTransactionType = 'renewed' | 'used' | 'refunded' | 'expired'
-export type TournamentFormat = 'super8'
+export type Gender = 'M' | 'F'
+export type TournamentCategory = 'masculino' | 'feminino' | 'misto' | 'livre'
+export type ParticipantType = 'individual' | 'dupla_fixa' | 'dupla_revezando'
+// 'super8' mantido p/ leitura de linhas legadas; o motor novo usa 'americano'.
+export type TournamentFormat =
+  | 'americano'
+  | 'round_robin'
+  | 'eliminatoria'
+  | 'ranking'
+  | 'super8'
+
+export interface ScoringConfig {
+  sets_to_win: number
+  games_per_set: number
+  tiebreak_games: boolean
+}
+
+export interface StandingRow {
+  playerId: string
+  played: number
+  wins: number
+  gamesFor: number
+  gamesAgainst: number
+  diff: number
+  points: number
+}
 export type TournamentModality = 'dupla_fixa' | 'dupla_revezando'
 export type TournamentStatus = 'draft' | 'open' | 'in_progress' | 'finished'
 export type TrialStatus = 'pending' | 'attended' | 'no_show' | 'cancelled'
@@ -88,6 +113,7 @@ export interface Profile {
   full_name: string
   avatar_url: string | null
   phone: string | null
+  gender: Gender | null
   city: string | null
   created_at: string
 }
@@ -255,11 +281,27 @@ export interface Tournament {
   organization_id: string
   name: string
   date: string
+  sport: string
+  category: TournamentCategory
+  participant_type: ParticipantType
   format: TournamentFormat
-  modality: TournamentModality
+  modality: TournamentModality | null
   level: StudentLevel
+  sets_to_win: number
+  games_per_set: number
+  tiebreak_games: boolean
   status: TournamentStatus
   created_by: string
+}
+
+export interface TournamentEntry {
+  id: string
+  organization_id: string
+  tournament_id: string
+  player_id: string
+  partner_id: string | null
+  seed: number | null
+  created_at: string
 }
 
 export interface Post {
