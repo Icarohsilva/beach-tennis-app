@@ -214,11 +214,17 @@ export default async function AlunosPage({ searchParams }: Props) {
                   <div className="space-y-1 text-xs text-slate-400">
                     <div className="flex items-center justify-between">
                       <span>Plano</span>
-                      <span className={student.contract_active ? 'text-green-400' : 'text-red-400'}>
+                      <span
+                        className={
+                          student.payment_type !== 'subscriber' || student.contract_active
+                            ? 'text-green-400'
+                            : 'text-red-400'
+                        }
+                      >
                         {student.payment_type === 'subscriber'
                           ? (planNameMap.get(student.id) ?? 'Mensalista (sem plano)')
                           : (paymentLabel[student.payment_type] ?? student.payment_type)}
-                        {!student.contract_active && ' (inativo)'}
+                        {student.payment_type === 'subscriber' && !student.contract_active && ' (inativo)'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">

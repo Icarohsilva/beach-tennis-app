@@ -238,10 +238,14 @@ export default async function StudentProfilePage({ params }: Props) {
           <div className="flex flex-wrap gap-3 text-sm text-slate-400">
             {student.phone && <span>📞 {student.phone}</span>}
             <span
-              className={student.contract_active ? 'text-green-400' : 'text-red-400'}
+              className={
+                student.payment_type !== 'subscriber' || student.contract_active
+                  ? 'text-green-400'
+                  : 'text-red-400'
+              }
             >
               {paymentLabel[student.payment_type] ?? student.payment_type}
-              {!student.contract_active && ' (inativo)'}
+              {student.payment_type === 'subscriber' && !student.contract_active && ' (inativo)'}
             </span>
             {student.payment_type === 'subscriber' && (
               <span className="text-slate-300">
