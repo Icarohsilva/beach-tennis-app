@@ -10,6 +10,30 @@ export type BookingType = 'extra' | 'makeup'
 export type AttendanceStatus = 'present' | 'absent' | 'late'
 export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass'
 export type CheckinPartner = 'wellhub' | 'totalpass'
+
+export interface OrgIntegration {
+  id: string
+  organization_id: string
+  partner: CheckinPartner
+  gym_id: string
+  webhook_secret: string
+  status: 'connected' | 'disconnected'
+  connected_at: string
+  created_at: string
+}
+
+export interface PendingCheckin {
+  id: string
+  organization_id: string
+  partner: CheckinPartner
+  partner_member_id: string
+  checkin_date: string
+  external_ref: string | null
+  payload: unknown
+  resolved: boolean
+  created_at: string
+}
+
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled'
 export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
