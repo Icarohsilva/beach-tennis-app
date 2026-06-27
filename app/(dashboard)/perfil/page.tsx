@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
+import { GenderForm } from '@/features/perfil/GenderForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
@@ -23,7 +24,7 @@ export default async function PerfilPage() {
   // payment_type, level, is_dependent) vêm da membership da academia ativa.
   const { data: identity } = await adminClient
     .from('profiles')
-    .select('full_name')
+    .select('full_name, gender')
     .eq('id', user.id)
     .single()
 
@@ -255,6 +256,17 @@ export default async function PerfilPage() {
           </div>
         </section>
       )}
+
+      {/* Gênero (identidade) — usado em torneios por categoria */}
+      <section>
+        <SectionHeader title="Gênero" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <p className="text-xs text-slate-500 mb-4">
+            Usado para inscrição em torneios das categorias masculino/feminino/misto.
+          </p>
+          <GenderForm current={(identity?.gender ?? null) as 'M' | 'F' | null} />
+        </div>
+      </section>
 
       {/* Ficha Médica */}
       <section>

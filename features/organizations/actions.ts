@@ -188,6 +188,7 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
 export interface CreateStudentInput {
   fullName: string
   email: string
+  gender?: 'M' | 'F'
   partner?: { type: 'wellhub' | 'totalpass'; partnerId: string; monthlyTarget: number }
 }
 
@@ -247,6 +248,11 @@ export async function createStudent(
       partnerId: input.partner.partnerId,
       monthlyTarget: input.partner.monthlyTarget,
     })
+  }
+
+  // Gênero (identidade) — opcional na criação.
+  if (input.gender === 'M' || input.gender === 'F') {
+    await admin.from('profiles').update({ gender: input.gender }).eq('id', created.user.id)
   }
 
   revalidatePath('/admin/alunos')
@@ -367,4 +373,21 @@ export async function joinAcademy(inviteCode: string): Promise<{ error?: string;
 
   revalidatePath('/home')
   return { orgId: org.id }
+}
+
+// Aluno define o próprio gênero (identidade em profiles).
+export async function selfSetGender(
+  gender: 'M' | 'F' | null,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+  if (gender !== 'M' && gender !== 'F' && gender !== null) {
+    return { error: 'Gênero inválido.' }
+  }
+  const admin = createAdminClient()
+  const { error } = await admin.from('profiles').update({ gender }).eq('id', user.id)
+  if (error) return { error: 'Erro ao salvar gênero. Tente novamente.' }
+  revalidatePath('/perfil')
+  return {}
 }
