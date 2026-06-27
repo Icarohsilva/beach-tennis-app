@@ -43,13 +43,12 @@ function shuffle<T>(arr: T[]): T[] {
 export async function createTournament(input: {
   name: string
   date: string
-  sport?: string
-  category?: TournamentCategory
-  participant_type?: ParticipantType
-  modality?: TournamentModality
+  sport: string
+  category: TournamentCategory
+  participant_type: ParticipantType
   format: TournamentFormat
   level: StudentLevel
-  scoring?: ScoringConfig
+  scoring: ScoringConfig
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -76,12 +75,12 @@ export async function createTournament(input: {
       sport: input.sport,
       category: input.category,
       participant_type: input.participant_type,
-      modality: input.modality ?? (input.participant_type ? modalityFromParticipant(input.participant_type) : null),
+      modality: modalityFromParticipant(input.participant_type),
       format: input.format,
       level: input.level,
-      sets_to_win: input.scoring?.sets_to_win ?? null,
-      games_per_set: input.scoring?.games_per_set ?? null,
-      tiebreak_games: input.scoring?.tiebreak_games ?? null,
+      sets_to_win: input.scoring.sets_to_win,
+      games_per_set: input.scoring.games_per_set,
+      tiebreak_games: input.scoring.tiebreak_games,
       status: 'draft' as TournamentStatus,
       created_by: user.id,
     })
@@ -272,8 +271,8 @@ export async function generateBracket(
 
 export async function recordMatchResult(
   matchId: string,
-  score: string,
-  winnerId: string,
+  games1: number,
+  games2: number,
 ): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -291,16 +290,20 @@ export async function recordMatchResult(
     .single()
   if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  if (!winnerId) return { error: 'Selecione o vencedor.' }
+  if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
+    return { error: 'Placar inválido.' }
+  }
 
   const { error: updErr } = await adminClient
     .from('tournament_matches')
     .update({
-      score: score.trim() || null,
+      games1,
+      games2,
+      result: { games1, games2 },
       result_status: 'confirmed',
       reported_by: user.id,
       confirmed_by: user.id,
-      winner_id: winnerId,
+      winner_id: null,
     })
     .eq('id', matchId)
     .eq('organization_id', orgId)
