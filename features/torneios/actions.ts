@@ -3,7 +3,38 @@
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
-import type { StudentLevel, TournamentStatus, TournamentFormat, TournamentModality } from '@/types'
+import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
+import { FORMATS } from '@/lib/torneios/formats'
+import type {
+  StudentLevel,
+  TournamentStatus,
+  TournamentFormat,
+  TournamentCategory,
+  ParticipantType,
+  TournamentModality,
+  Gender,
+  ScoringConfig,
+} from '@/types'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function modalityFromParticipant(pt: ParticipantType): TournamentModality | null {
+  if (pt === 'dupla_fixa') return 'dupla_fixa'
+  if (pt === 'dupla_revezando') return 'dupla_revezando'
+  return null // individual
+}
+
+// Embaralha sem mutar o original (Fisher-Yates).
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
 
 // ---------------------------------------------------------------------------
 // createTournament — admin only
@@ -12,9 +43,12 @@ import type { StudentLevel, TournamentStatus, TournamentFormat, TournamentModali
 export async function createTournament(input: {
   name: string
   date: string
+  sport: string
+  category: TournamentCategory
+  participant_type: ParticipantType
   format: TournamentFormat
-  modality: TournamentModality
   level: StudentLevel
+  scoring: ScoringConfig
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -24,7 +58,6 @@ export async function createTournament(input: {
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role na academia ativa (papel vive na membership).
   const { data: membership } = await adminClient
     .from('memberships')
     .select('role')
@@ -39,9 +72,15 @@ export async function createTournament(input: {
       organization_id: orgId,
       name: input.name,
       date: input.date,
+      sport: input.sport,
+      category: input.category,
+      participant_type: input.participant_type,
+      modality: modalityFromParticipant(input.participant_type),
       format: input.format,
-      modality: input.modality,
       level: input.level,
+      sets_to_win: input.scoring.sets_to_win,
+      games_per_set: input.scoring.games_per_set,
+      tiebreak_games: input.scoring.tiebreak_games,
       status: 'draft' as TournamentStatus,
       created_by: user.id,
     })
@@ -68,65 +107,84 @@ export async function registerForTournament(
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Fetch tournament (escopado pela academia ativa)
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, level, modality')
+    .select('id, status, level, category, participant_type')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
-
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
-
-  // Only open tournaments accept registrations
   if (tournament.status !== 'open') {
     return { error: 'Inscrições encerradas para este torneio.' }
   }
 
-  // Nível do aluno vem da membership da academia ativa.
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
 
-  // Level validation
   if (!canStudentAttendLevel(membership.level as StudentLevel, tournament.level as StudentLevel)) {
     return {
       error: `Seu nível (${membership.level}) não permite participar deste torneio (${tournament.level}).`,
     }
   }
 
-  // Check duplicate registration
+  // Gênero é identidade → vem de profiles.
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('gender')
+    .eq('id', user.id)
+    .single()
+  const myGender = (profile?.gender ?? null) as Gender | null
+
+  const elig = canRegister(myGender, tournament.category as TournamentCategory)
+  if (!elig.ok) return { error: elig.reason ?? 'Inscrição não permitida nesta categoria.' }
+
+  // Duplicidade.
   const { count: dupCount } = await adminClient
-    .from('tournament_registrations')
+    .from('tournament_entries')
     .select('id', { count: 'exact', head: true })
     .eq('tournament_id', tournamentId)
     .eq('player_id', user.id)
+  if ((dupCount ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
 
-  if ((dupCount ?? 0) > 0) {
-    return { error: 'Você já está inscrito neste torneio.' }
+  // Dupla fixa exige parceiro; em misto valida 1 M + 1 F.
+  let partner: string | null = null
+  if (tournament.participant_type === 'dupla_fixa') {
+    if (!partnerId) return { error: 'Selecione um parceiro para dupla fixa.' }
+    partner = partnerId
+    if (tournament.category === 'misto') {
+      const { data: partnerProfile } = await adminClient
+        .from('profiles')
+        .select('gender')
+        .eq('id', partnerId)
+        .single()
+      const partnerGender = (partnerProfile?.gender ?? null) as Gender | null
+      const oneEach =
+        (myGender === 'M' && partnerGender === 'F') ||
+        (myGender === 'F' && partnerGender === 'M')
+      if (!oneEach) {
+        return { error: 'Categoria mista exige uma dupla com 1 homem e 1 mulher.' }
+      }
+    }
   }
 
-  // Insert registration
   const { error: insertErr } = await adminClient
-    .from('tournament_registrations')
+    .from('tournament_entries')
     .insert({
       organization_id: orgId,
       tournament_id: tournamentId,
       player_id: user.id,
-      partner_id: tournament.modality === 'dupla_fixa' ? (partnerId ?? null) : null,
+      partner_id: partner,
     })
-
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
   return {}
 }
 
 // ---------------------------------------------------------------------------
-// recordMatchResult — admin only
+// generateBracket — admin only
 // ---------------------------------------------------------------------------
 
-export async function recordMatchResult(
-  matchId: string,
-  score: string,
-  winnerId: string,
+export async function generateBracket(
+  tournamentId: string,
 ): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -136,7 +194,6 @@ export async function recordMatchResult(
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role na academia ativa (papel vive na membership).
   const { data: membership } = await adminClient
     .from('memberships')
     .select('role')
@@ -145,34 +202,253 @@ export async function recordMatchResult(
     .single()
   if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  // Fetch match with tournament (escopado pela academia ativa)
-  const { data: match, error: matchErr } = await adminClient
+  const { data: tournament, error: tErr } = await adminClient
+    .from('tournaments')
+    .select('id, status, format')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .single()
+  if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
+  if (tournament.status === 'draft') {
+    return { error: 'Abra as inscrições antes de gerar a chave.' }
+  }
+  if (tournament.status === 'finished') {
+    return { error: 'Torneio encerrado.' }
+  }
+
+  const engine = FORMATS[tournament.format]
+  if (!engine) return { error: 'Formato ainda não suportado para geração de chave.' }
+
+  const { data: entriesRaw } = await adminClient
+    .from('tournament_entries')
+    .select('player_id')
+    .eq('tournament_id', tournamentId)
+    .eq('organization_id', orgId)
+  const playerIds = (entriesRaw ?? []).map((e) => e.player_id as string)
+
+  let plan
+  try {
+    plan = engine.generate(shuffle(playerIds))
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Erro ao gerar a chave.' }
+  }
+
+  // Regenerar limpa a chave anterior (idempotente): delete + insert.
+  await adminClient.from('tournament_matches').delete().eq('tournament_id', tournamentId)
+
+  const rows = plan.flatMap((rp) =>
+    rp.matches.map((m, i) => ({
+      organization_id: orgId,
+      tournament_id: tournamentId,
+      round: rp.round,
+      match_no: i + 1,
+      player1_id: m.p1,
+      partner1_id: m.partner1,
+      player2_id: m.p2,
+      partner2_id: m.partner2,
+    })),
+  )
+
+  if (rows.length > 0) {
+    const { error: insErr } = await adminClient.from('tournament_matches').insert(rows)
+    if (insErr) return { error: 'Erro ao salvar a chave. Tente novamente.' }
+  }
+
+  // Gerar a chave coloca o torneio em andamento.
+  if (tournament.status === 'open') {
+    await adminClient
+      .from('tournaments')
+      .update({ status: 'in_progress' })
+      .eq('id', tournamentId)
+  }
+
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// recordMatchResult — admin only (lança direto, já confirmado)
+// ---------------------------------------------------------------------------
+
+export async function recordMatchResult(
+  matchId: string,
+  games1: number,
+  games2: number,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
+    return { error: 'Placar inválido.' }
+  }
+
+  const { error: updErr } = await adminClient
     .from('tournament_matches')
-    .select('id, player1_id, player2_id, tournament_id, tournament:tournaments(status)')
+    .update({
+      games1,
+      games2,
+      result: { games1, games2 },
+      result_status: 'confirmed',
+      reported_by: user.id,
+      confirmed_by: user.id,
+      winner_id: null,
+    })
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+  if (updErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// reportMatchResult — qualquer jogador da partida
+// ---------------------------------------------------------------------------
+
+export async function reportMatchResult(
+  matchId: string,
+  games1: number,
+  games2: number,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
+    return { error: 'Placar inválido.' }
+  }
+
+  const { data: match, error: mErr } = await adminClient
+    .from('tournament_matches')
+    .select('id, player1_id, partner1_id, player2_id, partner2_id, reported_by')
     .eq('id', matchId)
     .eq('organization_id', orgId)
     .single()
+  if (mErr || !match) return { error: 'Confronto não encontrado.' }
 
-  if (matchErr || !match) return { error: 'Confronto não encontrado.' }
-
-  // Tournament must be in_progress
-  const tournamentRaw = Array.isArray(match.tournament) ? match.tournament[0] : match.tournament
-  const tournament = tournamentRaw as { status: TournamentStatus } | null
-  if (tournament?.status !== 'in_progress') {
-    return { error: 'O torneio precisa estar em andamento para lançar resultados.' }
+  if (!canReportResult(user.id, match as EligibilityMatch)) {
+    return { error: 'Você não participa deste confronto.' }
   }
 
-  // winner_id must be player1 or player2
-  if (winnerId !== match.player1_id && winnerId !== match.player2_id) {
-    return { error: 'Vencedor inválido: deve ser um dos participantes do confronto.' }
-  }
-
-  const { error: updateErr } = await adminClient
+  const { error: updErr } = await adminClient
     .from('tournament_matches')
-    .update({ score, winner_id: winnerId })
+    .update({
+      games1,
+      games2,
+      result: { games1, games2 },
+      result_status: 'pending',
+      reported_by: user.id,
+      confirmed_by: null,
+    })
     .eq('id', matchId)
+  if (updErr) return { error: 'Erro ao lançar placar. Tente novamente.' }
+  return {}
+}
 
-  if (updateErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
+// ---------------------------------------------------------------------------
+// confirmMatchResult — dupla adversária ou admin
+// ---------------------------------------------------------------------------
+
+export async function confirmMatchResult(
+  matchId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  const isAdmin = membership?.role === 'admin'
+
+  const { data: match, error: mErr } = await adminClient
+    .from('tournament_matches')
+    .select('id, player1_id, partner1_id, player2_id, partner2_id, reported_by, result_status')
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+    .single()
+  if (mErr || !match) return { error: 'Confronto não encontrado.' }
+  if (match.result_status !== 'pending') {
+    return { error: 'Não há placar pendente de confirmação.' }
+  }
+
+  if (!canConfirmResult(user.id, match as EligibilityMatch, isAdmin)) {
+    return { error: 'Só a dupla adversária ou o admin podem confirmar este placar.' }
+  }
+
+  const { error: updErr } = await adminClient
+    .from('tournament_matches')
+    .update({ result_status: 'confirmed', confirmed_by: user.id })
+    .eq('id', matchId)
+  if (updErr) return { error: 'Erro ao confirmar placar. Tente novamente.' }
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// removeEntry — cancela inscrição
+// ---------------------------------------------------------------------------
+
+export async function removeEntry(
+  tournamentId: string,
+  playerId?: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  const isAdmin = membership?.role === 'admin'
+
+  const target = isAdmin && playerId ? playerId : user.id
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('status')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .single()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+  if (!isAdmin && tournament.status !== 'open') {
+    return { error: 'Só é possível cancelar a inscrição com inscrições abertas.' }
+  }
+
+  const { error: delErr } = await adminClient
+    .from('tournament_entries')
+    .delete()
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', target)
+    .eq('organization_id', orgId)
+  if (delErr) return { error: 'Erro ao cancelar inscrição. Tente novamente.' }
   return {}
 }
 
@@ -194,7 +470,6 @@ export async function updateTournamentStatus(
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Verify admin role na academia ativa (papel vive na membership).
   const { data: membership } = await adminClient
     .from('memberships')
     .select('role')
@@ -203,7 +478,6 @@ export async function updateTournamentStatus(
     .single()
   if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  // Fetch current status (escopado pela academia ativa)
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
     .select('id, status')
@@ -216,7 +490,6 @@ export async function updateTournamentStatus(
   const currentIdx = STATUS_ORDER.indexOf(tournament.status as TournamentStatus)
   const newIdx = STATUS_ORDER.indexOf(newStatus)
 
-  // Enforce unidirectional flow — new status must be exactly one step forward
   if (newIdx !== currentIdx + 1) {
     return { error: 'Transição de status inválida. O fluxo é: rascunho → aberto → em andamento → encerrado.' }
   }
