@@ -24,7 +24,7 @@ const STATUS_VARIANTS: Record<TournamentStatus, 'default' | 'success' | 'warning
   finished: 'danger',
 }
 
-const MODALITY_LABELS: Record<Tournament['modality'], string> = {
+const MODALITY_LABELS: Record<NonNullable<Tournament['modality']>, string> = {
   dupla_fixa: 'Dupla Fixa',
   dupla_revezando: 'Dupla Revezando',
 }
@@ -46,7 +46,7 @@ export function TournamentCard({ tournament, href }: TournamentCardProps) {
 
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="level">Nível {tournament.level.toUpperCase()}</Badge>
-          <Badge variant="default">{MODALITY_LABELS[tournament.modality]}</Badge>
+          {tournament.modality && <Badge variant="default">{MODALITY_LABELS[tournament.modality]}</Badge>}
           <Badge variant="default">Super 8</Badge>
         </div>
       </Card>

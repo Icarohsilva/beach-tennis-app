@@ -112,7 +112,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
           ) : (
             <div className="space-y-2">
               <p className="text-sm text-slate-300">Inscrições abertas. Participe!</p>
-              <RegisterButton tournamentId={t.id} modality={t.modality} />
+              <RegisterButton tournamentId={t.id} modality={t.modality!} />
             </div>
           )}
         </Card>
@@ -121,7 +121,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       {/* Bracket */}
       <div>
         <h2 className="text-base font-semibold text-white mb-3">Chave do Torneio</h2>
-        <BracketView matches={matches} modality={t.modality} />
+        <BracketView matches={matches} modality={t.modality!} />
       </div>
     </div>
   )

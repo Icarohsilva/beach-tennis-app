@@ -50,7 +50,7 @@ export function computeStandings(
     }
   }
 
-  const list = [...rows.values()]
+  const list = Array.from(rows.values())
   for (const r of list) {
     r.diff = r.gamesFor - r.gamesAgainst
     r.points = r.wins

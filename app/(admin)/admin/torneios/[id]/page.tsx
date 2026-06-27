@@ -192,7 +192,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                       </h3>
                       <div className="grid gap-3 sm:grid-cols-2">
                         {roundMatches.map((match) => (
-                          <AdminMatchCard key={match.id} match={match} modality={t.modality} />
+                          <AdminMatchCard key={match.id} match={match} modality={t.modality!} />
                         ))}
                       </div>
                     </div>
@@ -201,7 +201,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             </div>
           )
         ) : (
-          <BracketView matches={matches} modality={t.modality} />
+          <BracketView matches={matches} modality={t.modality!} />
         )}
       </section>
     </div>
