@@ -37,13 +37,35 @@ export function MatchResult({ match, modality, isAdmin = false, onResultSaved }:
   const isP2Winner = match.winner_id === match.player2_id
 
   function handleSave() {
-    if (!winnerId) {
-      setError('Selecione o vencedor.')
+    if (!score.trim()) {
+      setError('Preencha o placar.')
       return
     }
     setError(null)
+    // Parse score like "6-4, 7-5" or "6-4" into individual games
+    const sets = score.split(',').map(s => s.trim())
+    if (sets.length === 0) {
+      setError('Placar inválido.')
+      return
+    }
+    const gamesPerSet = sets.map(s => {
+      const parts = s.split('-')
+      if (parts.length !== 2) return null
+      return parseInt(parts[0], 10)
+    })
+    const gamesPerSet2 = sets.map(s => {
+      const parts = s.split('-')
+      if (parts.length !== 2) return null
+      return parseInt(parts[1], 10)
+    })
+    if (gamesPerSet.includes(null) || gamesPerSet2.includes(null)) {
+      setError('Placar inválido (ex: 6-4, 7-5).')
+      return
+    }
+    const games1 = gamesPerSet[0]!
+    const games2 = gamesPerSet2[0]!
     startTransition(async () => {
-      const result = await recordMatchResult(match.id, score, winnerId)
+      const result = await recordMatchResult(match.id, games1, games2)
       if (result.error) {
         setError(result.error)
       } else {
