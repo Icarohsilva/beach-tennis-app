@@ -12,6 +12,7 @@ import type {
   ParticipantType,
   TournamentFormat,
 } from '@/types'
+import { createClient } from '@/lib/supabase/client'
 
 const LEVEL_OPTIONS: StudentLevel[] = ['iniciante', 'D', 'C', 'B', 'A']
 const CATEGORY_OPTIONS: { value: TournamentCategory; label: string }[] = [
@@ -44,6 +45,8 @@ export function CreateTournamentForm() {
   const [level, setLevel] = useState<StudentLevel>('C')
   const [gamesPerSet, setGamesPerSet] = useState(6)
   const [error, setError] = useState<string | null>(null)
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -55,6 +58,26 @@ export function CreateTournamentForm() {
     }
     setError(null)
     startTransition(async () => {
+      let coverImageUrl: string | null = null
+
+      // Upload de imagem de capa (se selecionada)
+      if (coverFile) {
+        const supabase = createClient()
+        const ext = coverFile.name.split('.').pop() ?? 'jpg'
+        const path = `${crypto.randomUUID()}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('tournament-images')
+          .upload(path, coverFile)
+        if (upErr) {
+          setError('Erro ao fazer upload da imagem de capa.')
+          return
+        }
+        const { data: urlData } = supabase.storage
+          .from('tournament-images')
+          .getPublicUrl(path)
+        coverImageUrl = urlData.publicUrl
+      }
+
       const result = await createTournament({
         name: name.trim(),
         date,
@@ -64,14 +87,24 @@ export function CreateTournamentForm() {
         format,
         level,
         scoring: { sets_to_win: 1, games_per_set: gamesPerSet, tiebreak_games: true },
+        cover_image_url: coverImageUrl,
       })
       if (result.error) setError(result.error)
       else {
         setName('')
         setDate('')
+        setCoverFile(null)
+        setCoverPreview(null)
         router.refresh()
       }
     })
+  }
+
+  function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setCoverFile(file)
+    setCoverPreview(URL.createObjectURL(file))
   }
 
   return (
@@ -125,6 +158,33 @@ export function CreateTournamentForm() {
         <select value={gamesPerSet} onChange={(e) => setGamesPerSet(Number(e.target.value))} className={selectClass}>
           {[4, 6, 8, 9].map((g) => (<option key={g} value={g}>{g} games</option>))}
         </select>
+      </div>
+
+      {/* Campo de imagem de capa */}
+      <div className="sm:col-span-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-slate-300">Imagem de capa <span className="text-slate-500 font-normal">(opcional)</span></span>
+          <div
+            className="border-2 border-dashed border-surface-border rounded-xl p-4 text-center cursor-pointer hover:border-brand-500/50 transition-colors"
+            style={{ background: '#1a1f2e' }}
+          >
+            {coverPreview ? (
+              <img src={coverPreview} alt="Preview" className="w-full h-24 object-cover rounded-lg" />
+            ) : (
+              <>
+                <div className="text-2xl mb-1">🖼️</div>
+                <p className="text-brand-500 text-xs font-semibold">Escolher arquivo</p>
+                <p className="text-slate-500 text-xs mt-1">Aparece no link compartilhado (JPEG / PNG / WebP, max 5 MB)</p>
+              </>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleCoverChange}
+            />
+          </div>
+        </label>
       </div>
 
       {error && <p className="text-xs text-red-400 sm:col-span-2">{error}</p>}
