@@ -2,6 +2,7 @@
 // features/torneios/actions.ts
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
 import { FORMATS } from '@/lib/torneios/formats'
@@ -49,6 +50,7 @@ export async function createTournament(input: {
   format: TournamentFormat
   level: StudentLevel
   scoring: ScoringConfig
+  cover_image_url?: string | null
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -83,6 +85,7 @@ export async function createTournament(input: {
       tiebreak_games: input.scoring.tiebreak_games,
       status: 'draft' as TournamentStatus,
       created_by: user.id,
+      cover_image_url: input.cover_image_url ?? null,
     })
     .select('id')
     .single()
@@ -500,5 +503,218 @@ export async function updateTournamentStatus(
     .eq('id', tournamentId)
 
   if (updateErr) return { error: 'Erro ao atualizar status. Tente novamente.' }
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// closeTournament — admin only: encerra torneio e preenche pódio automático
+// ---------------------------------------------------------------------------
+
+export async function closeTournament(
+  tournamentId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { data: tournament, error: tErr } = await adminClient
+    .from('tournaments')
+    .select('id, status, format, sets_to_win, games_per_set, tiebreak_games')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .single()
+  if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
+  if (tournament.status === 'finished') return { error: 'Torneio já encerrado.' }
+
+  // Buscar entradas e partidas para calcular classificação
+  const { data: entriesRaw } = await adminClient
+    .from('tournament_entries')
+    .select('player_id, partner_id')
+    .eq('tournament_id', tournamentId)
+  const entries = (entriesRaw ?? []).map((e) => ({
+    playerId: e.player_id as string,
+    partnerId: (e.partner_id as string | null) ?? null,
+  }))
+
+  const { data: matchesRaw } = await adminClient
+    .from('tournament_matches')
+    .select('player1_id, partner1_id, player2_id, partner2_id, games1, games2, result_status')
+    .eq('tournament_id', tournamentId)
+  const matches = (matchesRaw ?? []).map((m) => ({
+    player1_id: m.player1_id as string,
+    partner1_id: (m.partner1_id as string | null) ?? null,
+    player2_id: m.player2_id as string,
+    partner2_id: (m.partner2_id as string | null) ?? null,
+    games1: (m.games1 as number | null) ?? 0,
+    games2: (m.games2 as number | null) ?? 0,
+    result_status: (m.result_status as 'pending' | 'confirmed' | null),
+  }))
+
+  // Calcular classificação via motor de formato
+  const scoring: ScoringConfig = {
+    sets_to_win: (tournament.sets_to_win as number) ?? 1,
+    games_per_set: (tournament.games_per_set as number) ?? 6,
+    tiebreak_games: (tournament.tiebreak_games as boolean) ?? true,
+  }
+  const fmt = FORMATS[(tournament.format as string) ?? 'americano']
+  const standings = fmt
+    ? fmt.computeStandings(entries, matches as import('@/lib/torneios/types').MatchResultInput[], scoring)
+    : []
+
+  const [w1, w2, w3] = standings
+
+  const { error: updateErr } = await adminClient
+    .from('tournaments')
+    .update({
+      status: 'finished' as TournamentStatus,
+      winner1_id: w1?.playerId ?? null,
+      winner2_id: w2?.playerId ?? null,
+      winner3_id: w3?.playerId ?? null,
+      winner1_partner_id: null,
+      winner2_partner_id: null,
+      winner3_partner_id: null,
+    })
+    .eq('id', tournamentId)
+  if (updateErr) return { error: 'Erro ao encerrar torneio. Tente novamente.' }
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  revalidatePath(`/t/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateWinners — admin corrige pódio manualmente após encerramento
+// ---------------------------------------------------------------------------
+
+export async function updateWinners(
+  tournamentId: string,
+  winners: {
+    winner1_id: string | null
+    winner2_id: string | null
+    winner3_id: string | null
+  },
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { error: updateErr } = await adminClient
+    .from('tournaments')
+    .update({
+      winner1_id: winners.winner1_id,
+      winner2_id: winners.winner2_id,
+      winner3_id: winners.winner3_id,
+    })
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+  if (updateErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  revalidatePath(`/t/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateTournamentCover — admin troca imagem de capa
+// ---------------------------------------------------------------------------
+
+export async function updateTournamentCover(
+  tournamentId: string,
+  coverImageUrl: string | null,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { error: updateErr } = await adminClient
+    .from('tournaments')
+    .update({ cover_image_url: coverImageUrl })
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+  if (updateErr) return { error: 'Erro ao salvar imagem. Tente novamente.' }
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  revalidatePath(`/t/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// registerExternal — inscrição avulsa (sem membership): acessa via link público
+// ---------------------------------------------------------------------------
+
+export async function registerExternal(
+  tournamentId: string,
+): Promise<{ error?: string }> {
+  // Usa createClient() apenas para ler sessão (uid); não precisa de org do usuário.
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  // adminClient para ler org_id do torneio e inserir sem RLS de membership.
+  const adminClient = createAdminClient()
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, organization_id, status')
+    .eq('id', tournamentId)
+    .single()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+  if (tournament.status !== 'open') return { error: 'Inscrições encerradas.' }
+
+  // Checar duplicidade
+  const { count: dup } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', user.id)
+  if ((dup ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
+
+  const { error: insertErr } = await adminClient
+    .from('tournament_entries')
+    .insert({
+      organization_id: tournament.organization_id,
+      tournament_id: tournamentId,
+      player_id: user.id,
+      partner_id: null,
+    })
+  if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  revalidatePath(`/t/${tournamentId}`)
   return {}
 }
