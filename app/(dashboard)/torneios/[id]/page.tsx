@@ -158,7 +158,6 @@ export default async function TorneioDetailPage({ params }: PageProps) {
           <Badge variant={STATUS_VARIANTS[t.status]}>{STATUS_LABELS[t.status]}</Badge>
           <Badge variant="level">Nível {t.level.toUpperCase()}</Badge>
           {t.category && <Badge variant="default">{t.category}</Badge>}
-          {t.format && <Badge variant="default">{FORMATS[t.format]?.label ?? t.format}</Badge>}
         </div>
       </Card>
 
