@@ -537,6 +537,9 @@ export async function closeTournament(
     .single()
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
   if (tournament.status === 'finished') return { error: 'Torneio já encerrado.' }
+  if (!['open', 'in_progress'].includes(tournament.status as string)) {
+    return { error: 'Só é possível encerrar um torneio aberto ou em andamento.' }
+  }
 
   // Buscar entradas e partidas para calcular classificação
   const { data: entriesRaw } = await adminClient
@@ -621,6 +624,19 @@ export async function updateWinners(
     .eq('organization_id', orgId)
     .single()
   if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  // Validar que os IDs fornecidos são inscritos neste torneio (ou null).
+  const candidateIds = [winners.winner1_id, winners.winner2_id, winners.winner3_id].filter(Boolean) as string[]
+  if (candidateIds.length > 0) {
+    const { data: validEntries } = await adminClient
+      .from('tournament_entries')
+      .select('player_id')
+      .eq('tournament_id', tournamentId)
+      .in('player_id', candidateIds)
+    const validIds = new Set((validEntries ?? []).map((e) => e.player_id as string))
+    const invalid = candidateIds.filter((id) => !validIds.has(id))
+    if (invalid.length > 0) return { error: 'Um ou mais vencedores não estão inscritos neste torneio.' }
+  }
 
   const { error: updateErr } = await adminClient
     .from('tournaments')
@@ -716,5 +732,6 @@ export async function registerExternal(
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
 
   revalidatePath(`/t/${tournamentId}`)
+  revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
 }

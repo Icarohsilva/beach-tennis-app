@@ -9,10 +9,15 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Qualquer admin autenticado pode fazer upload.
+-- Apenas admins de qualquer academia podem fazer upload.
 CREATE POLICY IF NOT EXISTS "tournament-images upload"
   ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'tournament-images');
+  WITH CHECK (
+    bucket_id = 'tournament-images'
+    AND auth.uid() IN (
+      SELECT user_id FROM memberships WHERE role = 'admin'
+    )
+  );
 
 -- Leitura pública (o bucket já é público, mas a policy explicita).
 CREATE POLICY IF NOT EXISTS "tournament-images public read"
