@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/Badge'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
 import { StandingsTable } from '@/features/torneios/StandingsTable'
 import { GenerateBracketButton } from './GenerateBracketButton'
+import { CoverImageCard } from './CoverImageCard'
+import { CloseTournamentButton } from './CloseTournamentButton'
+import { WinnersCard } from './WinnersCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -119,6 +122,16 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     if (pt) nameById[pt.id] = pt.full_name
   }
 
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
+  const shareUrl = `${baseUrl}/t/${t.id}`
+  const isFinished = t.status === 'finished'
+
+  // Lista de jogadores para o WinnersCard
+  const allPlayers = entries
+    .map((e) => normalizeProf(e.player))
+    .filter(Boolean)
+    .map((p) => p as { id: string; full_name: string })
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -135,9 +148,34 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             {t.format && ` · ${t.format}`}
             {t.category && ` · ${t.category}`}
           </p>
-          {t.status === 'open' && (
-            <div className="mt-3"><GenerateBracketButton tournamentId={t.id} /></div>
-          )}
+        </div>
+      </div>
+
+      {/* Ações rápidas */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <CoverImageCard
+          tournamentId={t.id}
+          coverImageUrl={t.cover_image_url ?? null}
+          shareUrl={shareUrl}
+        />
+        <div className="space-y-3">
+          <Card>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Ações</p>
+            <div className="flex flex-wrap gap-2">
+              {t.status === 'open' && <GenerateBracketButton tournamentId={t.id} />}
+              {t.status !== 'finished' && (
+                <CloseTournamentButton tournamentId={t.id} />
+              )}
+            </div>
+          </Card>
+          <WinnersCard
+            tournamentId={t.id}
+            isFinished={isFinished}
+            winner1Id={t.winner1_id ?? null}
+            winner2Id={t.winner2_id ?? null}
+            winner3Id={t.winner3_id ?? null}
+            allPlayers={allPlayers}
+          />
         </div>
       </div>
 
