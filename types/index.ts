@@ -292,6 +292,13 @@ export interface Tournament {
   tiebreak_games: boolean
   status: TournamentStatus
   created_by: string
+  cover_image_url: string | null
+  winner1_id: string | null
+  winner2_id: string | null
+  winner3_id: string | null
+  winner1_partner_id: string | null
+  winner2_partner_id: string | null
+  winner3_partner_id: string | null
 }
 
 export interface TournamentEntry {

@@ -26,7 +26,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/recuperar-senha') ||
     pathname.startsWith('/nova-senha') ||
     pathname.startsWith('/experimental') ||
-    pathname.startsWith('/arenas')
+    pathname.startsWith('/arenas') ||
+    pathname.startsWith('/t/')
   ) {
     return NextResponse.next()
   }
