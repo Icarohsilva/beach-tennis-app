@@ -10,7 +10,8 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Apenas admins de qualquer academia podem fazer upload.
-CREATE POLICY IF NOT EXISTS "tournament-images upload"
+DROP POLICY IF EXISTS "tournament-images upload" ON storage.objects;
+CREATE POLICY "tournament-images upload"
   ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (
     bucket_id = 'tournament-images'
@@ -20,6 +21,7 @@ CREATE POLICY IF NOT EXISTS "tournament-images upload"
   );
 
 -- Leitura pública (o bucket já é público, mas a policy explicita).
-CREATE POLICY IF NOT EXISTS "tournament-images public read"
+DROP POLICY IF EXISTS "tournament-images public read" ON storage.objects;
+CREATE POLICY "tournament-images public read"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'tournament-images');
