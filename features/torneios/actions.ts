@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
 import { FORMATS } from '@/lib/torneios/formats'
+import { getWeekBounds } from '@/lib/utils/weekHelpers'
+import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import type {
   StudentLevel,
   TournamentStatus,
@@ -37,6 +39,45 @@ function shuffle<T>(arr: T[]): T[] {
   return out
 }
 
+// Calcula os campos de pagamento para uma nova inscrição.
+// Retorna payment_status, discount_pct e final_price_cents.
+async function computePaymentFields(
+  adminClient: ReturnType<typeof createAdminClient>,
+  playerId: string,
+  orgId: string,
+  entryPriceCents: number | null,
+  pixKey: string | null,
+): Promise<{ payment_status: 'free' | 'pending'; discount_pct: number; final_price_cents: number }> {
+  const isPaid = (entryPriceCents ?? 0) > 0 && !!pixKey
+  if (!isPaid) return { payment_status: 'free', discount_pct: 0, final_price_cents: 0 }
+
+  // Ler configurações de desconto da academia
+  const { data: orgRow } = await adminClient
+    .from('organizations')
+    .select('tournament_discount_2_pct, tournament_discount_3_pct')
+    .eq('id', orgId)
+    .single()
+  const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
+  const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
+
+  // Contar inscrições pagas nesta semana calendário (BRT)
+  const { start, end } = getWeekBounds(new Date())
+  const { count: weeklyCount } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('player_id', playerId)
+    .eq('organization_id', orgId)
+    .in('payment_status', ['pending', 'paid'])
+    .gt('final_price_cents', 0)
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+
+  const discountPct = computeEntryDiscount(weeklyCount ?? 0, discount2, discount3)
+  const finalPriceCents = applyDiscount(entryPriceCents!, discountPct)
+
+  return { payment_status: 'pending', discount_pct: discountPct, final_price_cents: finalPriceCents }
+}
+
 // ---------------------------------------------------------------------------
 // createTournament — admin only
 // ---------------------------------------------------------------------------
@@ -51,6 +92,8 @@ export async function createTournament(input: {
   level: StudentLevel
   scoring: ScoringConfig
   cover_image_url?: string | null
+  entry_price_cents?: number | null
+  pix_key?: string | null
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -86,6 +129,8 @@ export async function createTournament(input: {
       status: 'draft' as TournamentStatus,
       created_by: user.id,
       cover_image_url: input.cover_image_url ?? null,
+      entry_price_cents: input.entry_price_cents ?? null,
+      pix_key: input.pix_key ?? null,
     })
     .select('id')
     .single()
@@ -112,7 +157,7 @@ export async function registerForTournament(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, level, category, participant_type')
+    .select('id, status, level, category, participant_type, entry_price_cents, pix_key')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -170,6 +215,14 @@ export async function registerForTournament(
     }
   }
 
+  const paymentFields = await computePaymentFields(
+    adminClient,
+    user.id,
+    orgId,
+    (tournament.entry_price_cents as number | null),
+    (tournament.pix_key as string | null),
+  )
+
   const { error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert({
@@ -177,6 +230,9 @@ export async function registerForTournament(
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: partner,
+      payment_status: paymentFields.payment_status,
+      discount_pct: paymentFields.discount_pct,
+      final_price_cents: paymentFields.final_price_cents,
     })
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
   return {}
@@ -707,7 +763,7 @@ export async function registerExternal(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, organization_id, status')
+    .select('id, organization_id, status, entry_price_cents, pix_key')
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
@@ -721,6 +777,14 @@ export async function registerExternal(
     .eq('player_id', user.id)
   if ((dup ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
 
+  const paymentFields = await computePaymentFields(
+    adminClient,
+    user.id,
+    tournament.organization_id as string,
+    (tournament.entry_price_cents as number | null),
+    (tournament.pix_key as string | null),
+  )
+
   const { error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert({
@@ -728,10 +792,79 @@ export async function registerExternal(
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: null,
+      payment_status: paymentFields.payment_status,
+      discount_pct: paymentFields.discount_pct,
+      final_price_cents: paymentFields.final_price_cents,
     })
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// confirmEntryPayment — admin confirma recebimento do PIX
+// ---------------------------------------------------------------------------
+
+export async function confirmEntryPayment(
+  entryId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { data: entry, error: entryErr } = await adminClient
+    .from('tournament_entries')
+    .select('id, tournament_id, payment_status')
+    .eq('id', entryId)
+    .eq('organization_id', orgId)
+    .single()
+  if (entryErr || !entry) return { error: 'Inscrição não encontrada.' }
+  if (entry.payment_status !== 'pending') {
+    return { error: 'Esta inscrição não está aguardando pagamento.' }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('tournament_entries')
+    .update({ payment_status: 'paid' })
+    .eq('id', entryId)
+  if (updateErr) return { error: 'Erro ao confirmar pagamento. Tente novamente.' }
+
+  revalidatePath(`/admin/torneios/${entry.tournament_id as string}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateEntryReceipt — jogador salva path do comprovante após upload
+// ---------------------------------------------------------------------------
+
+export async function updateEntryReceipt(
+  tournamentId: string,
+  receiptPath: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('tournament_entries')
+    .update({ receipt_url: receiptPath })
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', user.id)
+  if (error) return { error: 'Erro ao salvar comprovante. Tente novamente.' }
   return {}
 }
