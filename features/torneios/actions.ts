@@ -768,6 +768,88 @@ export async function cancelEntryForNonPayment(
 }
 
 // ---------------------------------------------------------------------------
+// confirmWaitlistOffer — jogador aceita a oferta de vaga aberta para ele
+// ---------------------------------------------------------------------------
+
+export async function confirmWaitlistOffer(
+  tournamentId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+
+  // Buscar entry do usuário com entry_status = 'offered' nesse torneio
+  const { data: entry } = await adminClient
+    .from('tournament_entries')
+    .select('id, offer_expires_at, payment_status, created_at')
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', user.id)
+    .eq('entry_status', 'offered')
+    .maybeSingle()
+
+  if (!entry) return { error: 'Você não tem uma oferta de vaga ativa.' }
+
+  // Verificar expiração
+  if (isOfferExpired(entry.offer_expires_at as string | null)) {
+    const { data: t } = await adminClient
+      .from('tournaments')
+      .select('max_players')
+      .eq('id', tournamentId)
+      .single()
+    await expireAndPromote(adminClient, tournamentId, (t?.max_players as number | null) ?? null)
+    return { error: 'Sua oferta de vaga expirou. Você voltou para a lista de espera.' }
+  }
+
+  // Buscar dados do torneio para determinar payment_status
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('entry_price_cents, pix_key, organization_id')
+    .eq('id', tournamentId)
+    .single()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  const isPaid =
+    (tournament.entry_price_cents as number | null ?? 0) > 0 &&
+    !!(tournament.pix_key)
+
+  let paymentStatus: 'free' | 'pending' = 'free'
+  let finalPriceCents = 0
+  let discountPct = 0
+
+  if (isPaid) {
+    const paymentFields = await computePaymentFields(
+      adminClient,
+      user.id,
+      tournament.organization_id as string,
+      tournament.entry_price_cents as number | null,
+      tournament.pix_key as string | null,
+    )
+    paymentStatus = paymentFields.payment_status
+    finalPriceCents = paymentFields.final_price_cents
+    discountPct = paymentFields.discount_pct
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('tournament_entries')
+    .update({
+      entry_status: 'confirmed',
+      offer_expires_at: null,
+      payment_status: paymentStatus,
+      final_price_cents: finalPriceCents,
+      discount_pct: discountPct,
+    })
+    .eq('id', entry.id)
+
+  if (updateErr) return { error: 'Erro ao confirmar inscrição. Tente novamente.' }
+
+  revalidatePath(`/t/${tournamentId}`)
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // updateTournamentStatus — admin only
 // ---------------------------------------------------------------------------
 
