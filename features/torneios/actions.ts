@@ -8,6 +8,7 @@ import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch }
 import { FORMATS } from '@/lib/torneios/formats'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
+import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
 import type {
   StudentLevel,
   TournamentStatus,
@@ -79,6 +80,55 @@ async function computePaymentFields(
 }
 
 // ---------------------------------------------------------------------------
+// expireAndPromote — helper interno
+// Chama toda action que remove uma entry. Expira ofertas vencidas e promove
+// a lista de espera para o número de vagas disponíveis.
+// ---------------------------------------------------------------------------
+
+async function expireAndPromote(
+  adminClient: ReturnType<typeof createAdminClient>,
+  tournamentId: string,
+  maxPlayers: number | null,
+): Promise<void> {
+  if (!maxPlayers) return // sem limite, nada a fazer
+
+  // 1. Expirar entradas 'offered' com prazo vencido → volta para 'waitlist'
+  await adminClient
+    .from('tournament_entries')
+    .update({ entry_status: 'waitlist', offer_expires_at: null })
+    .eq('tournament_id', tournamentId)
+    .eq('entry_status', 'offered')
+    .lt('offer_expires_at', new Date().toISOString())
+
+  // 2. Contar vagas ocupadas (confirmed + offered restantes)
+  const { count: occupiedCount } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .in('entry_status', ['confirmed', 'offered'])
+
+  const available = maxPlayers - (occupiedCount ?? 0)
+  if (available <= 0) return
+
+  // 3. Promover os N mais antigos da fila para 'offered'
+  const offerExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+  const { data: toPromote } = await adminClient
+    .from('tournament_entries')
+    .select('id')
+    .eq('tournament_id', tournamentId)
+    .eq('entry_status', 'waitlist')
+    .order('created_at', { ascending: true })
+    .limit(available)
+
+  if (!toPromote?.length) return
+
+  await adminClient
+    .from('tournament_entries')
+    .update({ entry_status: 'offered', offer_expires_at: offerExpiresAt })
+    .in('id', toPromote.map((e) => e.id))
+}
+
+// ---------------------------------------------------------------------------
 // createTournament — admin only
 // ---------------------------------------------------------------------------
 
@@ -94,6 +144,7 @@ export async function createTournament(input: {
   cover_image_url?: string | null
   entry_price_cents?: number | null
   pix_key?: string | null
+  max_players?: number | null
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -131,6 +182,7 @@ export async function createTournament(input: {
       cover_image_url: input.cover_image_url ?? null,
       entry_price_cents: input.entry_price_cents ?? null,
       pix_key: input.pix_key ?? null,
+      max_players: input.max_players ?? null,
     })
     .select('id')
     .single()
@@ -157,7 +209,7 @@ export async function registerForTournament(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, level, category, participant_type, entry_price_cents, pix_key')
+    .select('id, status, level, category, participant_type, entry_price_cents, pix_key, max_players')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -194,6 +246,16 @@ export async function registerForTournament(
     .eq('player_id', user.id)
   if ((dupCount ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
 
+  // Verificar capacidade
+  const { count: occupiedCount } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .in('entry_status', ['confirmed', 'offered'])
+
+  const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
+  const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
+
   // Dupla fixa exige parceiro; em misto valida 1 M + 1 F.
   let partner: string | null = null
   if (tournament.participant_type === 'dupla_fixa') {
@@ -215,25 +277,52 @@ export async function registerForTournament(
     }
   }
 
-  const paymentFields = await computePaymentFields(
-    adminClient,
-    user.id,
-    orgId,
-    (tournament.entry_price_cents as number | null),
-    (tournament.pix_key as string | null),
-  )
+  let insertPayload: {
+    organization_id: string
+    tournament_id: string
+    player_id: string
+    partner_id: string | null
+    entry_status: 'confirmed' | 'waitlist'
+    payment_status: 'free' | 'pending'
+    discount_pct: number
+    final_price_cents: number
+  }
 
-  const { error: insertErr } = await adminClient
-    .from('tournament_entries')
-    .insert({
+  if (entryStatus === 'waitlist') {
+    // Jogador vai para a fila de espera — sem cobrança por enquanto
+    insertPayload = {
       organization_id: orgId,
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: partner,
+      entry_status: 'waitlist',
+      payment_status: 'free',
+      discount_pct: 0,
+      final_price_cents: 0,
+    }
+  } else {
+    const paymentFields = await computePaymentFields(
+      adminClient,
+      user.id,
+      orgId,
+      (tournament.entry_price_cents as number | null),
+      (tournament.pix_key as string | null),
+    )
+    insertPayload = {
+      organization_id: orgId,
+      tournament_id: tournamentId,
+      player_id: user.id,
+      partner_id: partner,
+      entry_status: 'confirmed',
       payment_status: paymentFields.payment_status,
       discount_pct: paymentFields.discount_pct,
       final_price_cents: paymentFields.final_price_cents,
-    })
+    }
+  }
+
+  const { error: insertErr } = await adminClient
+    .from('tournament_entries')
+    .insert(insertPayload)
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
   return {}
 }
@@ -283,6 +372,7 @@ export async function generateBracket(
     .select('player_id')
     .eq('tournament_id', tournamentId)
     .eq('organization_id', orgId)
+    .eq('entry_status', 'confirmed')
   const playerIds = (entriesRaw ?? []).map((e) => e.player_id as string)
 
   let plan
@@ -818,7 +908,7 @@ export async function registerExternal(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, organization_id, status, entry_price_cents, pix_key')
+    .select('id, organization_id, status, entry_price_cents, pix_key, max_players')
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
@@ -832,25 +922,61 @@ export async function registerExternal(
     .eq('player_id', user.id)
   if ((dup ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
 
-  const paymentFields = await computePaymentFields(
-    adminClient,
-    user.id,
-    tournament.organization_id as string,
-    (tournament.entry_price_cents as number | null),
-    (tournament.pix_key as string | null),
-  )
-
-  const { error: insertErr } = await adminClient
+  // Verificar capacidade
+  const { count: occupiedCount } = await adminClient
     .from('tournament_entries')
-    .insert({
-      organization_id: tournament.organization_id,
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .in('entry_status', ['confirmed', 'offered'])
+
+  const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
+  const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
+
+  let insertPayload: {
+    organization_id: string
+    tournament_id: string
+    player_id: string
+    partner_id: null
+    entry_status: 'confirmed' | 'waitlist'
+    payment_status: 'free' | 'pending'
+    discount_pct: number
+    final_price_cents: number
+  }
+
+  if (entryStatus === 'waitlist') {
+    insertPayload = {
+      organization_id: tournament.organization_id as string,
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: null,
+      entry_status: 'waitlist',
+      payment_status: 'free',
+      discount_pct: 0,
+      final_price_cents: 0,
+    }
+  } else {
+    const paymentFields = await computePaymentFields(
+      adminClient,
+      user.id,
+      tournament.organization_id as string,
+      (tournament.entry_price_cents as number | null),
+      (tournament.pix_key as string | null),
+    )
+    insertPayload = {
+      organization_id: tournament.organization_id as string,
+      tournament_id: tournamentId,
+      player_id: user.id,
+      partner_id: null,
+      entry_status: 'confirmed',
       payment_status: paymentFields.payment_status,
       discount_pct: paymentFields.discount_pct,
       final_price_cents: paymentFields.final_price_cents,
-    })
+    }
+  }
+
+  const { error: insertErr } = await adminClient
+    .from('tournament_entries')
+    .insert(insertPayload)
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
 
   revalidatePath(`/t/${tournamentId}`)
