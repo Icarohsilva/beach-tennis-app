@@ -68,16 +68,19 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
 
-  // Signed URLs para comprovantes (válidas por 5 min)
+  // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1
   const receiptSignedUrls: Record<string, string> = {}
-  for (const entry of entries) {
-    if (entry.receipt_url) {
-      const { data: signed } = await adminClient.storage
-        .from('payment-receipts')
-        .createSignedUrl(entry.receipt_url as string, 300)
-      if (signed?.signedUrl) receiptSignedUrls[entry.id] = signed.signedUrl
-    }
-  }
+  await Promise.all(
+    entries
+      .filter((e) => e.receipt_url)
+      .map(async (e) => {
+        const { data: signed, error: signErr } = await adminClient.storage
+          .from('payment-receipts')
+          .createSignedUrl(e.receipt_url as string, 300)
+        if (signErr) console.error('[receipt] signedUrl failed for entry', e.id, signErr.message)
+        else if (signed?.signedUrl) receiptSignedUrls[e.id] = signed.signedUrl
+      })
+  )
 
   // Nível por-academia (membership desta org)
   const playerIds = entries.map((e) => e.player_id)
