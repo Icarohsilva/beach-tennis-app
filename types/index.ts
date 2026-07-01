@@ -102,6 +102,8 @@ export interface Organization {
   cep: string | null
   address_number: string | null
   no_number: boolean
+  tournament_discount_2_pct: number
+  tournament_discount_3_pct: number
   onboarding_completed: boolean
   created_at: string
 }
@@ -299,6 +301,8 @@ export interface Tournament {
   winner1_partner_id: string | null
   winner2_partner_id: string | null
   winner3_partner_id: string | null
+  entry_price_cents: number | null
+  pix_key: string | null
 }
 
 export interface TournamentEntry {
@@ -309,6 +313,10 @@ export interface TournamentEntry {
   partner_id: string | null
   seed: number | null
   created_at: string
+  payment_status: 'free' | 'pending' | 'paid'
+  discount_pct: number
+  final_price_cents: number
+  receipt_url: string | null
 }
 
 export interface Post {
