@@ -47,6 +47,8 @@ export function CreateTournamentForm() {
   const [error, setError] = useState<string | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [entryPrice, setEntryPrice] = useState<string>('')
+  const [pixKey, setPixKey] = useState<string>('')
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -78,6 +80,10 @@ export function CreateTournamentForm() {
         coverImageUrl = urlData.publicUrl
       }
 
+      const entryPriceCents = entryPrice.trim()
+        ? Math.round(parseFloat(entryPrice.replace(',', '.')) * 100)
+        : null
+
       const result = await createTournament({
         name: name.trim(),
         date,
@@ -88,6 +94,8 @@ export function CreateTournamentForm() {
         level,
         scoring: { sets_to_win: 1, games_per_set: gamesPerSet, tiebreak_games: true },
         cover_image_url: coverImageUrl,
+        entry_price_cents: entryPriceCents,
+        pix_key: pixKey.trim() || null,
       })
       if (result.error) setError(result.error)
       else {
@@ -95,6 +103,8 @@ export function CreateTournamentForm() {
         setDate('')
         setCoverFile(null)
         setCoverPreview(null)
+        setEntryPrice('')
+        setPixKey('')
         router.refresh()
       }
     })
@@ -158,6 +168,32 @@ export function CreateTournamentForm() {
         <select value={gamesPerSet} onChange={(e) => setGamesPerSet(Number(e.target.value))} className={selectClass}>
           {[4, 6, 8, 9].map((g) => (<option key={g} value={g}>{g} games</option>))}
         </select>
+      </div>
+
+      {/* Inscrição paga (opcional) */}
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-slate-300">Valor da inscrição (R$)</label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="0 = gratuito"
+          value={entryPrice}
+          onChange={(e) => setEntryPrice(e.target.value)}
+          className="w-full rounded-lg bg-surface-card border border-surface-border px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-slate-300">Chave PIX</label>
+        <input
+          type="text"
+          placeholder="Deixe vazio para torneio gratuito"
+          value={pixKey}
+          onChange={(e) => setPixKey(e.target.value)}
+          className="w-full rounded-lg bg-surface-card border border-surface-border px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        <p className="text-xs text-slate-500">CPF, email, telefone ou chave aleatória. Ambos os campos precisam ser preenchidos para cobrança.</p>
       </div>
 
       {/* Campo de imagem de capa */}
