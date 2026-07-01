@@ -582,7 +582,7 @@ export async function removeEntry(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('status')
+    .select('status, max_players')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -653,6 +653,117 @@ export async function removeEntry(
     }
   }
 
+  // Promover lista de espera se houver limite de vagas
+  await expireAndPromote(adminClient, tournamentId, (tournament.max_players as number | null))
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  revalidatePath(`/t/${tournamentId}`)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// cancelEntryForNonPayment — admin cancela inscrição por falta de pagamento
+// ---------------------------------------------------------------------------
+
+export async function cancelEntryForNonPayment(
+  entryId: string,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  // Verificar role admin
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  // Buscar entry
+  const { data: entry } = await adminClient
+    .from('tournament_entries')
+    .select('id, tournament_id, player_id, payment_status, final_price_cents, created_at')
+    .eq('id', entryId)
+    .eq('organization_id', orgId)
+    .single()
+  if (!entry) return { error: 'Inscrição não encontrada.' }
+
+  // Só faz sentido cancelar pagamento pendente
+  if (entry.payment_status !== 'pending') {
+    return { error: 'Só é possível cancelar inscrições com pagamento pendente.' }
+  }
+
+  const tournamentId = entry.tournament_id as string
+  const target = entry.player_id as string
+
+  // Reversal de desconto: recalcula entradas PENDING do mesmo jogador na mesma semana
+  if ((entry.final_price_cents as number) > 0) {
+    const { data: orgRow } = await adminClient
+      .from('organizations')
+      .select('tournament_discount_2_pct, tournament_discount_3_pct')
+      .eq('id', orgId)
+      .single()
+    const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
+    const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
+
+    const { start, end } = getWeekBounds(new Date(entry.created_at as string))
+
+    type PendingRow = {
+      id: string
+      tournament: { entry_price_cents: number } | { entry_price_cents: number }[] | null
+    }
+    const { data: pendingRaw } = await adminClient
+      .from('tournament_entries')
+      .select('id, tournament:tournaments!inner(entry_price_cents)')
+      .eq('player_id', target)
+      .eq('organization_id', orgId)
+      .eq('payment_status', 'pending')
+      .gt('final_price_cents', 0)
+      .neq('id', entryId) // excluir a própria entry que será deletada
+      .gte('created_at', start.toISOString())
+      .lte('created_at', end.toISOString())
+      .order('created_at', { ascending: true })
+
+    const pending = (pendingRaw ?? []) as unknown as PendingRow[]
+
+    for (let i = 0; i < pending.length; i++) {
+      const tData = pending[i].tournament
+      const tRow = Array.isArray(tData) ? (tData[0] ?? null) : tData
+      if (!tRow) continue
+      const priceCents = tRow.entry_price_cents as number
+      const newDiscountPct = computeEntryDiscount(i, discount2, discount3)
+      const newFinalPrice = applyDiscount(priceCents, newDiscountPct)
+      await adminClient
+        .from('tournament_entries')
+        .update({ discount_pct: newDiscountPct, final_price_cents: newFinalPrice })
+        .eq('id', pending[i].id)
+    }
+  }
+
+  // Deletar entry
+  const { error: delErr } = await adminClient
+    .from('tournament_entries')
+    .delete()
+    .eq('id', entryId)
+    .eq('organization_id', orgId)
+  if (delErr) return { error: 'Erro ao cancelar inscrição. Tente novamente.' }
+
+  // Buscar max_players e promover lista de espera
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('max_players')
+    .eq('id', tournamentId)
+    .single()
+
+  await expireAndPromote(adminClient, tournamentId, (tournament?.max_players as number | null) ?? null)
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
 }
 
