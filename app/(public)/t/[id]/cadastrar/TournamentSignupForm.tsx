@@ -16,7 +16,7 @@ export function TournamentSignupForm({ tournamentId }: Props) {
   const [loading, setLoading] = useState(false)
   const [confirmEmail, setConfirmEmail] = useState(false)
 
-  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
 
   async function handleSubmit(e: React.FormEvent) {
@@ -44,6 +44,7 @@ export function TournamentSignupForm({ tournamentId }: Props) {
       return
     }
     if (data.session) {
+      setLoading(false)
       router.push(`/t/${tournamentId}`)
       router.refresh()
       return
