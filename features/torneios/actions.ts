@@ -90,7 +90,7 @@ async function expireAndPromote(
   tournamentId: string,
   maxPlayers: number | null,
 ): Promise<void> {
-  if (!maxPlayers) return // sem limite, nada a fazer
+  if (maxPlayers === null) return // sem limite, nada a fazer
 
   // 1. Expirar entradas 'offered' com prazo vencido → volta para 'waitlist'
   await adminClient
