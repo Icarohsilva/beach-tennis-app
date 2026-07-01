@@ -104,27 +104,18 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  let isRegistered = false
-  if (user) {
-    const { count } = await adminClient
-      .from('tournament_entries')
-      .select('id', { count: 'exact', head: true })
-      .eq('tournament_id', params.id)
-      .eq('player_id', user.id)
-    isRegistered = (count ?? 0) > 0
-  }
-
   type UserEntryData = { payment_status: 'free' | 'pending' | 'paid'; receipt_url: string | null; final_price_cents: number; discount_pct: number } | null
   let userEntry: UserEntryData = null
-  if (user && isRegistered) {
+  if (user) {
     const { data: entryRaw } = await adminClient
       .from('tournament_entries')
       .select('payment_status, receipt_url, final_price_cents, discount_pct')
       .eq('tournament_id', params.id)
       .eq('player_id', user.id)
-      .single()
+      .maybeSingle()
     userEntry = entryRaw as UserEntryData
   }
+  const isRegistered = userEntry !== null
 
   const isPaid = (t.entry_price_cents ?? 0) > 0 && !!t.pix_key
   const formattedPrice = isPaid

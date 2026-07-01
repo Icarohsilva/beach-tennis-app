@@ -21,7 +21,9 @@ export function ReceiptUploadButton({ tournamentId, userId, hasExistingReceipt }
     setError(null)
     startTransition(async () => {
       const supabase = createClient()
-      const ext = file.name.split('.').pop() ?? 'jpg'
+      // Derive extension from MIME type (safe: not controlled by filename)
+      const MIME_TO_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+      const ext = MIME_TO_EXT[file.type] ?? 'jpg'
       const path = `${tournamentId}/${userId}/receipt.${ext}`
       const { error: upErr } = await supabase.storage
         .from('payment-receipts')
