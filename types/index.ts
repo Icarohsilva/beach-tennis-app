@@ -303,6 +303,7 @@ export interface Tournament {
   winner3_partner_id: string | null
   entry_price_cents: number | null
   pix_key: string | null
+  max_players: number | null
 }
 
 export interface TournamentEntry {
@@ -317,6 +318,8 @@ export interface TournamentEntry {
   discount_pct: number
   final_price_cents: number
   receipt_url: string | null
+  entry_status: 'confirmed' | 'waitlist' | 'offered'
+  offer_expires_at: string | null
 }
 
 export interface Post {
