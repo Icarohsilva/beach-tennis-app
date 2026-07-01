@@ -859,7 +859,23 @@ export async function updateEntryReceipt(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
 
+  // Valida formato do path: deve ser {tournamentId}/{userId}/receipt.*
+  if (!receiptPath.startsWith(`${tournamentId}/`)) {
+    return { error: 'Caminho do comprovante inválido.' }
+  }
+
+  // adminClient usado porque jogadores externos (sem membership) não têm org ativa.
+  // O filtro player_id = user.id garante que só a entrada do próprio jogador é atualizada.
   const adminClient = createAdminClient()
+
+  // Verifica que o jogador está inscrito antes de gravar o comprovante
+  const { count } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', user.id)
+  if ((count ?? 0) === 0) return { error: 'Você não está inscrito neste torneio.' }
+
   const { error } = await adminClient
     .from('tournament_entries')
     .update({ receipt_url: receiptPath })
