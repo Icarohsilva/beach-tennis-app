@@ -504,11 +504,13 @@ export async function removeEntry(
   // Busca dados do entry antes de deletar (para reversal de desconto)
   const { data: deletedEntry } = await adminClient
     .from('tournament_entries')
-    .select('final_price_cents, created_at, payment_status')
+    .select('final_price_cents, created_at')
     .eq('tournament_id', tournamentId)
     .eq('player_id', target)
     .eq('organization_id', orgId)
     .single()
+
+  if (!deletedEntry) return { error: 'Inscrição não encontrada.' }
 
   const { error: delErr } = await adminClient
     .from('tournament_entries')
@@ -519,7 +521,7 @@ export async function removeEntry(
   if (delErr) return { error: 'Erro ao cancelar inscrição. Tente novamente.' }
 
   // Reversal de desconto: recalcula entradas PENDING do mesmo jogador na mesma semana
-  if (deletedEntry && (deletedEntry.final_price_cents as number) > 0) {
+  if ((deletedEntry.final_price_cents as number) > 0) {
     const { data: orgRow } = await adminClient
       .from('organizations')
       .select('tournament_discount_2_pct, tournament_discount_3_pct')
@@ -977,5 +979,6 @@ export async function updateTournamentDiscountSettings(
     })
     .eq('id', orgId)
   if (updateErr) return { error: 'Erro ao salvar configurações. Tente novamente.' }
+  revalidatePath('/admin/configuracoes')
   return {}
 }
