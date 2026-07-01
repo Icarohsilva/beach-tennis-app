@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { RegisterExternalButton } from './RegisterExternalButton'
+import { ReceiptUploadButton } from './ReceiptUploadButton'
 import { ShareButton } from './ShareButton'
 
 interface PageProps { params: { id: string } }
@@ -60,7 +61,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
   const { data: tournamentRaw } = await adminClient
     .from('tournaments')
-    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id')
+    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key')
     .eq('id', params.id)
     .not('status', 'eq', 'draft')
     .single()
@@ -71,6 +72,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     id: string; name: string; date: string; sport: string; category: string
     level: string; status: string; cover_image_url: string | null
     winner1_id: string | null; winner2_id: string | null; winner3_id: string | null
+    entry_price_cents: number | null; pix_key: string | null
   }
   const t = tournamentRaw as unknown as TRow
 
@@ -111,6 +113,23 @@ export default async function PublicTournamentPage({ params }: PageProps) {
       .eq('player_id', user.id)
     isRegistered = (count ?? 0) > 0
   }
+
+  type UserEntryData = { payment_status: 'free' | 'pending' | 'paid'; receipt_url: string | null; final_price_cents: number; discount_pct: number } | null
+  let userEntry: UserEntryData = null
+  if (user && isRegistered) {
+    const { data: entryRaw } = await adminClient
+      .from('tournament_entries')
+      .select('payment_status, receipt_url, final_price_cents, discount_pct')
+      .eq('tournament_id', params.id)
+      .eq('player_id', user.id)
+      .single()
+    userEntry = entryRaw as UserEntryData
+  }
+
+  const isPaid = (t.entry_price_cents ?? 0) > 0 && !!t.pix_key
+  const formattedPrice = isPaid
+    ? `R$ ${((t.entry_price_cents!) / 100).toFixed(2).replace('.', ',')}`
+    : null
 
   const isOpen = t.status === 'open'
   const isFinished = t.status === 'finished'
@@ -177,25 +196,77 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
       {/* CTA de inscrição */}
       {isOpen && (
-        <div className="mx-3 mt-3 bg-surface-card border border-surface-border rounded-xl p-4">
-          <p className="text-slate-300 text-sm mb-2.5">Inscrições abertas — participe!</p>
-          {isRegistered ? (
-            <span className="block bg-green-800/40 text-green-400 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
-              ✓ Você está inscrito
-            </span>
+        <div className="mx-3 mt-3 bg-surface-card border border-surface-border rounded-xl p-4 space-y-3">
+          {/* Preço e desconto */}
+          {isPaid && !isRegistered && (
+            <div>
+              {userEntry === null && (
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-white text-2xl font-bold">{formattedPrice}</span>
+                </div>
+              )}
+              <div className="bg-surface rounded-lg px-3 py-2 mt-2">
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Chave PIX</p>
+                <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
+              </div>
+            </div>
+          )}
+
+          {isRegistered && userEntry ? (
+            <>
+              {userEntry.payment_status === 'paid' && (
+                <span className="block bg-green-800/40 text-green-400 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
+                  ✓ Pagamento confirmado
+                </span>
+              )}
+              {userEntry.payment_status === 'pending' && (
+                <div className="space-y-3">
+                  <span className="block bg-yellow-800/40 text-yellow-400 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
+                    ⏳ Aguardando confirmação do pagamento
+                  </span>
+                  <div className="bg-surface rounded-lg px-3 py-2">
+                    <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Valor a pagar</p>
+                    <p className="text-white text-lg font-bold">
+                      R$ {(userEntry.final_price_cents / 100).toFixed(2).replace('.', ',')}
+                      {userEntry.discount_pct > 0 && (
+                        <span className="text-green-400 text-sm font-normal ml-2">({userEntry.discount_pct}% de desconto)</span>
+                      )}
+                    </p>
+                    <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mt-2 mb-0.5">Chave PIX</p>
+                    <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
+                  </div>
+                  {user && (
+                    <ReceiptUploadButton
+                      tournamentId={t.id}
+                      userId={user.id}
+                      hasExistingReceipt={!!userEntry.receipt_url}
+                    />
+                  )}
+                </div>
+              )}
+              {userEntry.payment_status === 'free' && (
+                <span className="block bg-green-800/40 text-green-400 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
+                  ✓ Você está inscrito
+                </span>
+              )}
+            </>
           ) : user ? (
-            <RegisterExternalButton tournamentId={t.id} />
+            <RegisterExternalButton
+              tournamentId={t.id}
+              isPaid={isPaid}
+              finalPriceCents={isPaid ? (t.entry_price_cents ?? 0) : undefined}
+            />
           ) : (
             <div>
               <Link
                 href={`/login?next=/t/${t.id}`}
                 className="block w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white text-center rounded-xl py-3 text-base font-semibold hover:from-orange-500 hover:to-orange-400 transition-all"
               >
-                Inscrever-se
+                {isPaid ? `Inscrever-se — ${formattedPrice}` : 'Inscrever-se'}
               </Link>
               <p className="text-slate-500 text-xs text-center mt-2">
                 Precisa de uma conta?{' '}
-                <Link href={`/cadastro?next=/t/${t.id}`} className="text-brand-500 hover:underline">
+                <Link href={`/t/${t.id}/cadastrar`} className="text-brand-500 hover:underline">
                   Cadastre-se grátis
                 </Link>
               </p>
