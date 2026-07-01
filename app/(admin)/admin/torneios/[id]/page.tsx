@@ -10,6 +10,7 @@ import { GenerateBracketButton } from './GenerateBracketButton'
 import { CoverImageCard } from './CoverImageCard'
 import { CloseTournamentButton } from './CloseTournamentButton'
 import { WinnersCard } from './WinnersCard'
+import { ConfirmPaymentButton } from './ConfirmPaymentButton'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -50,6 +51,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const { data: entriesRaw } = await adminClient
     .from('tournament_entries')
     .select(`id, player_id, partner_id, seed, created_at,
+      payment_status, discount_pct, final_price_cents, receipt_url,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender),
       partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
     .eq('tournament_id', params.id)
@@ -57,10 +59,25 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
 
   type EntryRow = {
     id: string; player_id: string; partner_id: string | null; seed: number | null; created_at: string
+    payment_status: 'free' | 'pending' | 'paid'
+    discount_pct: number
+    final_price_cents: number
+    receipt_url: string | null
     player: { id: string; full_name: string; gender: string | null } | { id: string; full_name: string; gender: string | null }[] | null
     partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
+
+  // Signed URLs para comprovantes (válidas por 5 min)
+  const receiptSignedUrls: Record<string, string> = {}
+  for (const entry of entries) {
+    if (entry.receipt_url) {
+      const { data: signed } = await adminClient.storage
+        .from('payment-receipts')
+        .createSignedUrl(entry.receipt_url as string, 300)
+      if (signed?.signedUrl) receiptSignedUrls[entry.id] = signed.signedUrl
+    }
+  }
 
   // Nível por-academia (membership desta org)
   const playerIds = entries.map((e) => e.player_id)
@@ -192,13 +209,52 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               const lvl = levelByPlayer.get(entry.player_id)
               return (
                 <Card key={entry.id}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
                       {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
+                      {entry.payment_status === 'pending' && (
+                        <p className="text-xs text-yellow-400 mt-0.5">
+                          Aguardando: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
+                          {entry.discount_pct > 0 && ` (${entry.discount_pct}% desc.)`}
+                        </p>
+                      )}
+                      {entry.payment_status === 'paid' && (
+                        <p className="text-xs text-green-400 mt-0.5">
+                          Pago: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
+                        </p>
+                      )}
                     </div>
-                    {lvl && <Badge variant="level">{lvl.toUpperCase()}</Badge>}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      {lvl && <Badge variant="level">{lvl.toUpperCase()}</Badge>}
+                      {entry.payment_status === 'free' && (
+                        <span className="text-xs text-slate-500 bg-surface rounded px-1.5 py-0.5">Gratuito</span>
+                      )}
+                      {entry.payment_status === 'paid' && (
+                        <span className="text-xs text-green-400 bg-green-900/30 rounded px-1.5 py-0.5">✓ Pago</span>
+                      )}
+                      {entry.payment_status === 'pending' && (
+                        <span className="text-xs text-yellow-400 bg-yellow-900/30 rounded px-1.5 py-0.5">⏳ Pendente</span>
+                      )}
+                    </div>
                   </div>
+                  {receiptSignedUrls[entry.id] && (
+                    <div className="mt-2">
+                      <a
+                        href={receiptSignedUrls[entry.id]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-brand-400 hover:text-brand-300"
+                      >
+                        📎 Ver comprovante
+                      </a>
+                    </div>
+                  )}
+                  {entry.payment_status === 'pending' && (
+                    <div className="mt-2">
+                      <ConfirmPaymentButton entryId={entry.id} />
+                    </div>
+                  )}
                 </Card>
               )
             })}
