@@ -2,6 +2,7 @@ import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase
 import { SystemSettingsForm } from './SystemSettingsForm'
 import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
+import { TournamentDiscountForm } from './TournamentDiscountForm'
 
 interface SystemSettings {
   credit_expiry_days: number
@@ -27,7 +28,7 @@ export default async function ConfiguracoesPage() {
 
   const { data: orgRow } = await adminClient
     .from('organizations')
-    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp')
+    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp, tournament_discount_2_pct, tournament_discount_3_pct')
     .eq('id', orgId)
     .single()
 
@@ -45,6 +46,8 @@ export default async function ConfiguracoesPage() {
     no_number?: boolean
     sports?: string[] | null
     whatsapp?: string | null
+    tournament_discount_2_pct?: number | null
+    tournament_discount_3_pct?: number | null
   }
 
   const listing = {
@@ -87,6 +90,17 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <VitrineForm listing={listing} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Torneios</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Desconto progressivo para inscrições múltiplas na mesma semana.
+        </p>
+      </div>
+      <TournamentDiscountForm
+        discount2Pct={org.tournament_discount_2_pct ?? 30}
+        discount3Pct={org.tournament_discount_3_pct ?? 50}
+      />
     </div>
   )
 }
