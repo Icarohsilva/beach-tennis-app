@@ -24,9 +24,6 @@ const STATUS_LABELS: Record<TournamentStatus, string> = {
   in_progress: 'Em Andamento',
   finished: 'Encerrado',
 }
-const STATUS_VARIANTS: Record<TournamentStatus, 'default' | 'success' | 'warning' | 'danger'> = {
-  draft: 'default', open: 'success', in_progress: 'warning', finished: 'danger',
-}
 
 function normalizeProf<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v
@@ -163,6 +160,16 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
   const maxPlayers = t.max_players
 
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  const heroChips = [
+    formatDate(t.date, "dd 'de' MMMM 'de' yyyy"),
+    STATUS_LABELS[t.status],
+    `Nível ${t.level.toUpperCase()}`,
+    t.sport ? cap(t.sport) : null,
+    t.format ? cap(t.format) : null,
+    t.category ? cap(t.category) : null,
+  ].filter(Boolean) as string[]
+
   // Helper: tempo restante até expiração da oferta
   function formatTimeUntil(isoDate: string): string {
     const ms = new Date(isoDate).getTime() - Date.now()
@@ -174,20 +181,22 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start gap-3">
-        <Link href="/admin/torneios" className="text-slate-400 hover:text-white transition-colors mt-1">←</Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-white">{t.name}</h1>
-            <Badge variant={STATUS_VARIANTS[t.status]}>{STATUS_LABELS[t.status]}</Badge>
-          </div>
-          <p className="text-sm text-slate-400 mt-0.5">
-            {formatDate(t.date, "dd 'de' MMMM 'de' yyyy")} · Nível {t.level.toUpperCase()}
-            {t.sport && ` · ${t.sport}`}
-            {t.format && ` · ${t.format}`}
-            {t.category && ` · ${t.category}`}
-          </p>
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-5">
+        <Link
+          href="/admin/torneios"
+          className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25"
+          aria-label="Voltar"
+        >
+          ←
+        </Link>
+        <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {heroChips.map((c) => (
+            <span key={c} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
+              {c}
+            </span>
+          ))}
         </div>
       </div>
 

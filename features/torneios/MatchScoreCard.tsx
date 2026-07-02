@@ -4,6 +4,9 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { PlayerAvatar } from './PlayerAvatar'
+import { teamLabel } from '@/lib/torneios/display'
+import { cn } from '@/lib/utils/cn'
 import {
   reportMatchResult,
   confirmMatchResult,
@@ -35,14 +38,11 @@ interface MatchScoreCardProps {
   match: ScoreMatch
   currentUserId: string
   isAdmin: boolean
+  /** Rótulo opcional (ex: "Rodada 2") mostrado no topo do card. */
+  roundLabel?: string
 }
 
-function sideLabel(name?: string | null, partner?: string | null): string {
-  const n = name ?? 'TBD'
-  return partner ? `${n} / ${partner}` : n
-}
-
-export function MatchScoreCard({ match, currentUserId, isAdmin }: MatchScoreCardProps) {
+export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: MatchScoreCardProps) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [g1, setG1] = useState<string>(match.games1?.toString() ?? '')
@@ -58,11 +58,31 @@ export function MatchScoreCard({ match, currentUserId, isAdmin }: MatchScoreCard
     reported_by: match.reported_by,
   }
   const iCanReport = isAdmin || canReportResult(currentUserId, elig)
-  const iCanConfirm =
-    match.result_status === 'pending' && canConfirmResult(currentUserId, elig, isAdmin)
+  const confirmed = match.result_status === 'confirmed'
+  const pending = match.result_status === 'pending'
+  const iCanConfirm = pending && canConfirmResult(currentUserId, elig, isAdmin)
 
-  const p1 = sideLabel(match.player1?.full_name, match.partner1?.full_name)
-  const p2 = sideLabel(match.player2?.full_name, match.partner2?.full_name)
+  const team1 = teamLabel([match.player1?.full_name, match.partner1?.full_name])
+  const team2 = teamLabel([match.player2?.full_name, match.partner2?.full_name])
+  const names1 = [match.player1?.full_name, match.partner1?.full_name].filter(Boolean) as string[]
+  const names2 = [match.player2?.full_name, match.partner2?.full_name].filter(Boolean) as string[]
+
+  const mySide: 1 | 2 | null =
+    currentUserId && (currentUserId === match.player1_id || currentUserId === match.partner1_id)
+      ? 1
+      : currentUserId && (currentUserId === match.player2_id || currentUserId === match.partner2_id)
+      ? 2
+      : null
+
+  const hasScore = match.games1 !== null && match.games2 !== null
+  const winner: 1 | 2 | 0 =
+    confirmed && hasScore
+      ? (match.games1 as number) > (match.games2 as number)
+        ? 1
+        : (match.games2 as number) > (match.games1 as number)
+        ? 2
+        : 0
+      : 0
 
   function save() {
     const n1 = Number(g1)
@@ -93,67 +113,149 @@ export function MatchScoreCard({ match, currentUserId, isAdmin }: MatchScoreCard
     })
   }
 
-  const hasScore = match.games1 !== null && match.games2 !== null
+  const showReport = iCanReport && !confirmed
+  const showAdminCorrect = isAdmin && confirmed
+  const showWaiting = pending && !iCanConfirm && !isAdmin
+  const showFooter = editing || showReport || showAdminCorrect || iCanConfirm || showWaiting || !!error
+
+  // Slot de placar (à direita do nome do time). Em edição vira input inline.
+  function scoreSlot(side: 1 | 2) {
+    const value = side === 1 ? match.games1 : match.games2
+    const isWinner = winner === side
+    if (editing) {
+      return (
+        <input
+          type="number"
+          min={0}
+          inputMode="numeric"
+          value={side === 1 ? g1 : g2}
+          onChange={(e) => (side === 1 ? setG1(e.target.value) : setG2(e.target.value))}
+          aria-label={`Games ${side === 1 ? team1 : team2}`}
+          className="h-11 w-12 shrink-0 rounded-lg border border-brand-500/50 bg-surface text-center text-xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+      )
+    }
+    return (
+      <div
+        className={cn(
+          'flex h-11 w-12 shrink-0 items-center justify-center rounded-lg text-xl font-bold tabular-nums',
+          isWinner
+            ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30'
+            : hasScore
+            ? 'bg-surface text-slate-200'
+            : 'bg-surface text-slate-600',
+        )}
+      >
+        {hasScore ? value : '–'}
+      </div>
+    )
+  }
+
+  function teamRow(side: 1 | 2) {
+    const names = side === 1 ? names1 : names2
+    const label = side === 1 ? team1 : team2
+    const tone = side === 1 ? 'brand' : 'sky'
+    const isMine = mySide === side
+    const isWinner = winner === side
+    return (
+      <div className={cn('flex items-center gap-3 px-3 py-2.5', isMine && 'bg-brand-500/[0.07]')}>
+        <div className="flex -space-x-2">
+          {(names.length > 0 ? names : [null]).map((n, i) => (
+            <PlayerAvatar key={i} name={n} tone={tone} className="ring-2 ring-surface-card" />
+          ))}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              'truncate text-sm font-semibold',
+              isWinner ? 'text-white' : confirmed ? 'text-slate-400' : 'text-slate-200',
+            )}
+          >
+            {label}
+          </p>
+          {isMine && (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-brand-400">Seu time</span>
+          )}
+        </div>
+        {isWinner && <span title="Vencedor" className="text-sm">🏆</span>}
+        {scoreSlot(side)}
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-slate-300">{p1}</span>
-        <span className="text-sm font-mono text-white">{hasScore ? match.games1 : '–'}</span>
-      </div>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-slate-300">{p2}</span>
-        <span className="text-sm font-mono text-white">{hasScore ? match.games2 : '–'}</span>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {match.result_status === 'confirmed' && <Badge variant="success">Confirmado</Badge>}
-        {match.result_status === 'pending' && <Badge variant="warning">Aguardando confirmação</Badge>}
-      </div>
-
-      {editing ? (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <input
-              type="number"
-              min={0}
-              value={g1}
-              onChange={(e) => setG1(e.target.value)}
-              placeholder="Games dupla 1"
-              className="w-24 rounded-lg bg-surface border border-surface-border px-2 py-1 text-white text-sm"
-            />
-            <input
-              type="number"
-              min={0}
-              value={g2}
-              onChange={(e) => setG2(e.target.value)}
-              placeholder="Games dupla 2"
-              className="w-24 rounded-lg bg-surface border border-surface-border px-2 py-1 text-white text-sm"
-            />
-          </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          <div className="flex gap-2">
-            <Button size="sm" loading={isPending} onClick={save}>Salvar</Button>
-            <Button size="sm" variant="ghost" disabled={isPending} onClick={() => { setEditing(false); setError(null) }}>Cancelar</Button>
-          </div>
+    <div
+      className={cn(
+        'overflow-hidden rounded-xl border bg-surface-card',
+        mySide ? 'border-brand-500/40' : 'border-surface-border',
+      )}
+    >
+      {(roundLabel || match.result_status) && (
+        <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {roundLabel ?? ''}
+          </span>
+          {confirmed && <Badge variant="success">Confirmado</Badge>}
+          {pending && <Badge variant="warning">Aguardando confirmação</Badge>}
         </div>
-      ) : (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {iCanReport && match.result_status !== 'confirmed' && (
-            <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-              {hasScore ? 'Editar placar' : 'Lançar placar'}
-            </Button>
+      )}
+
+      {teamRow(1)}
+      <div className="relative">
+        <div className="mx-3 border-t border-dashed border-surface-border" />
+        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          vs
+        </span>
+      </div>
+      {teamRow(2)}
+
+      {showFooter && (
+        <div className="border-t border-surface-border px-3 py-2.5">
+          {editing ? (
+            <div className="space-y-2">
+              {error && <p className="text-xs text-red-400">{error}</p>}
+              <div className="flex gap-2">
+                <Button size="sm" loading={isPending} onClick={save}>
+                  Salvar placar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={isPending}
+                  onClick={() => {
+                    setEditing(false)
+                    setError(null)
+                    setG1(match.games1?.toString() ?? '')
+                    setG2(match.games2?.toString() ?? '')
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {showReport && (
+                <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                  {hasScore ? 'Editar placar' : 'Lançar placar'}
+                </Button>
+              )}
+              {showAdminCorrect && (
+                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                  Corrigir
+                </Button>
+              )}
+              {iCanConfirm && (
+                <Button size="sm" onClick={confirm} loading={isPending}>
+                  Confirmar placar
+                </Button>
+              )}
+              {showWaiting && (
+                <span className="text-xs text-slate-500">Aguardando a outra dupla confirmar.</span>
+              )}
+              {error && <p className="w-full text-xs text-red-400">{error}</p>}
+            </div>
           )}
-          {isAdmin && match.result_status === 'confirmed' && (
-            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Corrigir</Button>
-          )}
-          {iCanConfirm && (
-            <Button size="sm" onClick={confirm} loading={isPending}>Confirmar placar</Button>
-          )}
-          {match.result_status === 'pending' && !iCanConfirm && !isAdmin && (
-            <span className="text-xs text-slate-500 self-center">Aguardando a outra dupla confirmar.</span>
-          )}
-          {error && <p className="text-xs text-red-400 w-full">{error}</p>}
         </div>
       )}
     </div>

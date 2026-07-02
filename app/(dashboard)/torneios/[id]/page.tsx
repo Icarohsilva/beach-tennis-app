@@ -1,7 +1,7 @@
 // app/(dashboard)/torneios/[id]/page.tsx
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
@@ -14,9 +14,6 @@ import type { MatchResultInput } from '@/lib/torneios/types'
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: 'Rascunho', open: 'Inscrições Abertas', in_progress: 'Em Andamento', finished: 'Encerrado',
-}
-const STATUS_VARIANTS: Record<TournamentStatus, 'default' | 'success' | 'warning' | 'danger'> = {
-  draft: 'default', open: 'success', in_progress: 'warning', finished: 'danger',
 }
 
 function normalizeProf<T>(v: T | T[] | null): T | null {
@@ -33,6 +30,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   const orgId = await getActiveOrgId()
   if (!orgId) redirect('/login')
 
+  // Tournament via cliente do usuário (valida visibilidade + org via RLS).
   const { data: tournament, error } = await supabase
     .from('tournaments')
     .select('*')
@@ -45,7 +43,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
 
   const t = tournament as Tournament
 
-  // Verificar inscrição do aluno (tournament_entries)
+  // Verificar inscrição do aluno (RLS: própria entrada).
   const { count: regCount } = await supabase
     .from('tournament_entries')
     .select('id', { count: 'exact', head: true })
@@ -53,23 +51,28 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     .eq('player_id', user.id)
   const isRegistered = (regCount ?? 0) > 0
 
-  // Todas as entradas (para classificação e nameById)
-  const { data: entriesRaw } = await supabase
+  // Dados de exibição (nomes dos participantes) via admin client: a RLS de `profiles`
+  // impede o aluno de ler o perfil dos outros participantes, o que fazia a UI mostrar
+  // o ID em vez do nome. O torneio já foi validado como pertencente à org do aluno,
+  // então ler suas entradas/confrontos por tournament_id é seguro (sem vazar entre orgs).
+  const adminClient = createAdminClient()
+
+  const { data: entriesRaw } = await adminClient
     .from('tournament_entries')
-    .select(`player_id, partner_id,
+    .select(`player_id, partner_id, entry_status,
       player:profiles!tournament_entries_player_id_fkey(id, full_name),
       partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
     .eq('tournament_id', params.id)
 
   type EntryRow = {
     player_id: string; partner_id: string | null
+    entry_status: 'confirmed' | 'waitlist' | 'offered'
     player: { id: string; full_name: string } | { id: string; full_name: string }[] | null
     partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
 
-  // Confrontos com colunas de placar
-  const { data: matchesRaw } = await supabase
+  const { data: matchesRaw } = await adminClient
     .from('tournament_matches')
     .select(`id, tournament_id, round, match_no,
       player1_id, player2_id, partner1_id, partner2_id,
@@ -106,8 +109,10 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     m.partner1_id === user.id || m.partner2_id === user.id
   )
 
-  // Classificação
-  const entryRefs = entries.map((e) => ({ playerId: e.player_id, partnerId: e.partner_id ?? null }))
+  // Classificação (apenas inscritos confirmados)
+  const entryRefs = entries
+    .filter((e) => e.entry_status === 'confirmed')
+    .map((e) => ({ playerId: e.player_id, partnerId: e.partner_id ?? null }))
   const scoring: ScoringConfig = {
     sets_to_win: t.sets_to_win ?? 1,
     games_per_set: t.games_per_set ?? 6,
@@ -124,11 +129,12 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     if (pt) nameById[pt.id] = pt.full_name
   }
 
-  // Parceiros disponíveis para dupla_fixa
+  // Parceiros disponíveis para dupla_fixa (admin client: RLS bloqueia leitura de
+  // memberships/profiles de outros alunos).
   const needsPartner = t.participant_type === 'dupla_fixa'
   let potentialPartners: { id: string; full_name: string }[] = []
   if (needsPartner && t.status === 'open') {
-    const { data: membRaw } = await supabase
+    const { data: membRaw } = await adminClient
       .from('memberships')
       .select('user_id, profiles:profiles!memberships_user_id_fkey(full_name)')
       .eq('organization_id', orgId)
@@ -141,29 +147,37 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     }).filter((p) => p.full_name)
   }
 
+  const chips = [
+    formatDate(t.date, "dd 'de' MMMM 'de' yyyy"),
+    STATUS_LABELS[t.status],
+    `Nível ${t.level.toUpperCase()}`,
+    t.category ? t.category.charAt(0).toUpperCase() + t.category.slice(1) : null,
+  ].filter(Boolean) as string[]
+
   return (
     <div className="p-4 space-y-5">
-      {/* Header */}
-      <div className="flex items-start gap-2">
-        <Link href="/torneios" className="text-slate-400 hover:text-white transition-colors mt-0.5">←</Link>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">{t.name}</h1>
-          <p className="text-sm text-slate-400 mt-0.5">{formatDate(t.date, "dd 'de' MMMM 'de' yyyy")}</p>
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-5">
+        <Link
+          href="/torneios"
+          className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white transition-colors hover:bg-white/25"
+          aria-label="Voltar"
+        >
+          ←
+        </Link>
+        <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {chips.map((c) => (
+            <span key={c} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
+              {c}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Info card */}
-      <Card>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant={STATUS_VARIANTS[t.status]}>{STATUS_LABELS[t.status]}</Badge>
-          <Badge variant="level">Nível {t.level.toUpperCase()}</Badge>
-          {t.category && <Badge variant="default">{t.category}</Badge>}
-        </div>
-      </Card>
-
       {/* Inscrição */}
       {t.status === 'open' && (
-        <Card>
+        <Card accent={!isRegistered}>
           {isRegistered ? (
             <div className="flex items-center gap-2">
               <Badge variant="success">Inscrito</Badge>
@@ -185,7 +199,9 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       {/* Meus confrontos */}
       {myMatches.length > 0 && (
         <section>
-          <h2 className="text-base font-semibold text-white mb-3">Meus confrontos</h2>
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+            <span className="text-brand-500">🎾</span> Meus confrontos
+          </h2>
           <div className="space-y-3">
             {myMatches.map((match) => (
               <MatchScoreCard
@@ -198,6 +214,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                 }}
                 currentUserId={user.id}
                 isAdmin={false}
+                roundLabel={`Rodada ${match.round}`}
               />
             ))}
           </div>
@@ -207,15 +224,17 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       {/* Classificação */}
       {standings.length > 0 && (
         <section>
-          <h2 className="text-base font-semibold text-white mb-3">Classificação</h2>
-          <StandingsTable rows={standings} nameById={nameById} />
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+            <span className="text-brand-500">🏆</span> Classificação
+          </h2>
+          <StandingsTable rows={standings} nameById={nameById} highlightId={user.id} />
         </section>
       )}
 
       {/* Todos os confrontos */}
       {matches.length > 0 && (
         <section>
-          <h2 className="text-base font-semibold text-white mb-3">Todos os confrontos</h2>
+          <h2 className="mb-3 text-base font-semibold text-white">Todos os confrontos</h2>
           <div className="space-y-6">
             {Array.from(
               matches.reduce((acc, m) => {
@@ -226,7 +245,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
               .sort(([a], [b]) => a - b)
               .map(([round, roundMatches]) => (
                 <div key={round}>
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Rodada {round}</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Rodada {round}</h3>
                   <div className="space-y-2">
                     {roundMatches.map((match) => (
                       <MatchScoreCard
