@@ -5,6 +5,7 @@ import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
 
 export default async function AdminDashboardPage() {
@@ -34,7 +35,7 @@ export default async function AdminDashboardPage() {
       .neq('status', 'cancelled')
       .eq('organization_id', orgId),
     adminClient.from('trial_bookings')
-      .select('id, name, status, created_at')
+      .select('id, name, phone, email, status, created_at')
       .eq('status', 'pending')
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
@@ -48,7 +49,7 @@ export default async function AdminDashboardPage() {
   }
   const sessions = (todaySessions ?? []) as unknown as SessionRow[]
 
-  const trials = (recentTrials ?? []) as Array<{ id: string; name: string; status: string; created_at: string }>
+  const trials = (recentTrials ?? []) as Array<{ id: string; name: string; phone: string; email: string; status: string; created_at: string }>
 
   return (
     <div className="space-y-6">
@@ -100,9 +101,15 @@ export default async function AdminDashboardPage() {
           <h2 className="text-lg font-semibold text-white mb-3">Aulas Experimentais Pendentes</h2>
           <div className="space-y-2">
             {trials.map((t) => (
-              <Card key={t.id} className="flex items-center justify-between">
-                <span className="text-white text-sm">{t.name}</span>
-                <Badge variant="warning">Pendente</Badge>
+              <Card key={t.id} className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white text-sm font-medium">{t.name}</span>
+                    <Badge variant="warning">Pendente</Badge>
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">{t.phone} · {t.email}</p>
+                </div>
+                <TrialCardActions trialId={t.id} />
               </Card>
             ))}
           </div>
