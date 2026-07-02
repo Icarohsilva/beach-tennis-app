@@ -1,64 +1,99 @@
 // lib/checkin/wellhub.ts
-// Peça ISOLADA da integração Wellhub: formato do payload + verificação de assinatura.
+// Peça ISOLADA da integração Wellhub (Gympass): formato do payload + verificação
+// de assinatura. Contrato confirmado na doc de sandbox do Access Control API.
 //
-// ASSUNÇÃO (até a doc autenticada do Access Control API ser confirmada com as
-// credenciais do Hudson): o evento de check-in chega como JSON no formato abaixo,
-// e a assinatura é o HMAC-SHA256 (hex) do corpo cru com o webhook_secret da academia.
+// Evento de check-in (Gympass envia via webhook quando o usuário faz check-in no app):
 //   {
-//     "id": "evt_abc123",                         // referência única do evento
-//     "event": "checkin.created",
-//     "data": {
-//       "gym":     { "id": "gym_789" },           // unidade → roteia p/ academia
-//       "member":  { "id": "GP123456" },          // ID Wellhub do aluno
-//       "checkin": { "at": "2026-06-25T13:45:00Z" }
+//     "event_type": "checkin",
+//     "event_data": {
+//       "user":  { "unique_token": "0123456789012", ... },  // gympass_id do aluno (13 díg.)
+//       "gym":   { "id": 123456, ... },                       // unidade → roteia p/ academia
+//       "timestamp": 1666629613                               // Unix epoch (ver epochToLocalDate)
 //     }
 //   }
-// Quando a doc real chegar, SÓ este arquivo muda — o núcleo de ingestão não.
+// O evento de check-in NÃO traz event_id; sintetizamos uma chave de dedupe estável
+// (gym:user:timestamp) para idempotência. A assinatura vem no header X-Gympass-Signature.
 import crypto from 'crypto'
 
+// Timezone das academias (app pt-BR). O timestamp do evento é epoch UTC; a data do
+// check-in precisa ser a data LOCAL para casar com as sessões (ex.: check-in 22h BRT
+// não pode virar o dia seguinte em UTC).
+const GYM_TIMEZONE = 'America/Sao_Paulo'
+
 export interface CanonicalCheckinEvent {
+  kind: 'checkin'
   gymId: string
   partnerMemberId: string
-  checkinDate: string // yyyy-MM-dd
-  externalRef: string | null
+  checkinDate: string // yyyy-MM-dd (data local da academia)
+  externalRef: string // chave de dedupe sintetizada (gym:user:timestamp)
+}
+
+// Evento reconhecido mas fora do escopo desta rota (ex.: booking.*): ignorar com 200.
+export interface IgnoredEvent {
+  kind: 'ignored'
 }
 
 interface RawWellhubEvent {
-  id?: string
-  data?: {
-    gym?: { id?: string }
-    member?: { id?: string }
-    checkin?: { at?: string }
+  event_type?: string
+  event_data?: {
+    user?: { unique_token?: string }
+    gym?: { id?: number | string }
+    timestamp?: number
   }
 }
 
-// Normaliza o payload cru da Wellhub. Lança erro se malformado/incompleto.
-export function parseWellhubEvent(rawBody: string): CanonicalCheckinEvent {
+function epochToLocalDate(timestamp: number): string {
+  // A doc da Wellhub é ambígua na unidade: o POST de exemplo usa SEGUNDOS (10 díg.,
+  // ex. 1666629613) e o "response example" usa MILISSEGUNDOS (13 díg.). Detecta pela
+  // magnitude p/ não errar a data (>= 1e12 ⇒ já está em ms).
+  const ms = timestamp >= 1e12 ? timestamp : timestamp * 1000
+  // en-CA formata como yyyy-MM-dd; timeZone converte para a data local da academia.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: GYM_TIMEZONE }).format(new Date(ms))
+}
+
+// Normaliza o payload cru da Wellhub. Eventos não-checkin → { kind: 'ignored' }.
+// Lança erro só quando o JSON é inválido ou um evento de check-in está incompleto.
+export function parseWellhubEvent(rawBody: string): CanonicalCheckinEvent | IgnoredEvent {
   const raw = JSON.parse(rawBody) as RawWellhubEvent
-  const gymId = raw.data?.gym?.id
-  const partnerMemberId = raw.data?.member?.id
-  const at = raw.data?.checkin?.at
-  if (!gymId || !partnerMemberId || !at) {
-    throw new Error('Wellhub event malformado: campos obrigatórios ausentes')
+
+  if (raw.event_type !== 'checkin') {
+    return { kind: 'ignored' }
   }
+
+  const gymId = raw.event_data?.gym?.id
+  const partnerMemberId = raw.event_data?.user?.unique_token
+  const timestamp = raw.event_data?.timestamp
+  if (gymId == null || !partnerMemberId || typeof timestamp !== 'number') {
+    throw new Error('Wellhub checkin malformado: campos obrigatórios ausentes')
+  }
+
+  const gymIdStr = String(gymId)
   return {
-    gymId,
+    kind: 'checkin',
+    gymId: gymIdStr,
     partnerMemberId,
-    checkinDate: at.slice(0, 10),
-    externalRef: raw.id ?? null,
+    checkinDate: epochToLocalDate(timestamp),
+    externalRef: `${gymIdStr}:${partnerMemberId}:${timestamp}`,
   }
 }
 
 // Verifica a assinatura do corpo cru com o segredo da academia, em tempo constante.
+// Contrato confirmado na doc do Access Control API: HMAC-SHA1 do corpo cru, em hex
+// MAIÚSCULO no header X-Gympass-Signature. O exemplo da doc traz um prefixo "0X"
+// (ex.: 0XFBDB…) que os próprios scripts de geração não emitem — então normalizamos
+// removendo o prefixo opcional e comparando em bytes (case-insensitive por natureza do hex).
 export function verifyWellhubSignature(
   rawBody: string,
   signature: string,
   secret: string,
 ): boolean {
   if (!signature) return false
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
+  const normalized = signature.trim().replace(/^0x/i, '')
+  if (!/^[0-9a-fA-F]+$/.test(normalized)) return false
+
+  const expected = crypto.createHmac('sha1', secret).update(rawBody).digest('hex')
   const expectedBuf = Buffer.from(expected, 'hex')
-  const sigBuf = Buffer.from(signature, 'hex')
+  const sigBuf = Buffer.from(normalized, 'hex')
   if (expectedBuf.length !== sigBuf.length) return false
   return crypto.timingSafeEqual(expectedBuf, sigBuf)
 }

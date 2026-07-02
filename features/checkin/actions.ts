@@ -219,10 +219,14 @@ export async function selfSetPartnerId(
   return {}
 }
 
-/** Conecta/atualiza a integração do parceiro na academia ativa. Admin-only. */
+/**
+ * Conecta/atualiza a integração do parceiro na academia ativa. Admin-only.
+ * `apiKey`/`environment` só se aplicam ao Wellhub (validate). apiKey vazio preserva
+ * o valor já salvo (o form nunca recebe o segredo de volta, então "vazio" = "não mexer").
+ */
 export async function connectIntegration(
   partner: CheckinPartner,
-  input: { gymId: string; webhookSecret: string },
+  input: { gymId: string; webhookSecret: string; apiKey?: string; environment?: string },
 ): Promise<{ error?: string }> {
   const { ok, orgId } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
@@ -230,6 +234,9 @@ export async function connectIntegration(
   const gymId = input.gymId.trim()
   const webhookSecret = input.webhookSecret.trim()
   if (!gymId || !webhookSecret) return { error: 'Informe o gym_id e o webhook secret.' }
+
+  const apiKey = input.apiKey?.trim() ?? ''
+  const environment = input.environment === 'sandbox' ? 'sandbox' : 'production'
 
   const adminClient = createAdminClient()
   const { error } = await adminClient
@@ -242,6 +249,9 @@ export async function connectIntegration(
         webhook_secret: webhookSecret,
         status: 'connected',
         connected_at: new Date().toISOString(),
+        environment,
+        // Só sobrescreve a api_key quando o admin digitou uma nova (evita apagar a existente).
+        ...(apiKey ? { api_key: apiKey } : {}),
       },
       { onConflict: 'organization_id,partner' },
     )

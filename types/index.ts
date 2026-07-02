@@ -17,14 +17,19 @@ export interface OrgIntegration {
   partner: CheckinPartner
   gym_id: string
   webhook_secret: string
+  // Chave do Access Control API (Bearer) usada no validate. Segredo — nunca vai ao browser.
+  api_key: string | null
+  environment: 'sandbox' | 'production'
   status: 'connected' | 'disconnected'
   connected_at: string
   created_at: string
 }
 
-// Versão segura para o browser: NUNCA inclui webhook_secret. Use este tipo em
-// qualquer dado de integração serializado para Client Components.
-export type OrgIntegrationView = Omit<OrgIntegration, 'webhook_secret'>
+// Versão segura para o browser: NUNCA inclui os segredos (webhook_secret, api_key).
+// Use este tipo em qualquer dado de integração serializado para Client Components.
+export type OrgIntegrationView = Omit<OrgIntegration, 'webhook_secret' | 'api_key'> & {
+  has_api_key: boolean
+}
 
 export interface PendingCheckin {
   id: string
@@ -206,6 +211,9 @@ export interface Checkin {
   session_id: string | null
   external_ref: string | null
   validation: 'manual' | CheckinPartner
+  // Resultado do validate do parceiro (Wellhub). Só validados geram receita.
+  partner_validated: boolean
+  partner_validation_error: string | null
   created_by: string | null
   created_at: string
 }

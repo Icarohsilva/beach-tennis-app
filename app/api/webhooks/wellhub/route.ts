@@ -7,11 +7,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { parseWellhubEvent, verifyWellhubSignature } from '@/lib/checkin/wellhub'
 import { ingestPartnerCheckin } from '@/lib/checkin/ingest'
+import type { WellhubEnvironment } from '@/lib/checkin/wellhubValidate'
 
 export const runtime = 'nodejs'
 
-// Header de assinatura assumido (ajustar quando a doc real chegar — junto do parser).
-const SIGNATURE_HEADER = 'x-wellhub-signature'
+// Header de assinatura do Access Control API (HMAC-SHA1 do corpo cru, hex maiúsculo).
+const SIGNATURE_HEADER = 'x-gympass-signature'
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
@@ -24,12 +25,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Malformed payload' }, { status: 400 })
   }
 
+  // Evento que não é check-in (ex.: booking) → 200, nada a fazer.
+  if (event.kind !== 'checkin') {
+    return NextResponse.json({ received: true })
+  }
+
   const admin = createAdminClient()
 
   // 2. Roteia gym_id → academia. Gym desconhecido → 200 (nada a fazer).
   const { data: integration } = await admin
     .from('org_integrations')
-    .select('organization_id, webhook_secret')
+    .select('organization_id, webhook_secret, api_key, environment')
     .eq('partner', 'wellhub')
     .eq('gym_id', event.gymId)
     .eq('status', 'connected')
@@ -46,7 +52,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
-  // 4. Ingestão (casa aluno ou parqueia como pendente).
+  // 4. Ingestão (casa aluno ou parqueia como pendente). Com api_key, valida em seguida.
   await ingestPartnerCheckin(
     {
       orgId: integration.organization_id,
@@ -55,6 +61,13 @@ export async function POST(req: NextRequest) {
       date: event.checkinDate,
       externalRef: event.externalRef,
       payload: JSON.parse(rawBody),
+      validate: integration.api_key
+        ? {
+            apiKey: integration.api_key,
+            gymId: event.gymId,
+            environment: (integration.environment as WellhubEnvironment) ?? 'production',
+          }
+        : undefined,
     },
     admin,
   )

@@ -9,12 +9,13 @@ export default async function IntegracoesPage() {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
-  // NUNCA selecionar webhook_secret aqui: o resultado é serializado para o browser
-  // (props de client component). O segredo só é gravado (write-only no form), nunca lido.
+  // NUNCA selecionar webhook_secret nem api_key aqui: o resultado é serializado para o
+  // browser (props de client component). Os segredos são write-only no form, nunca lidos.
+  // api_key só é lido como booleano (has_api_key) para a UI mostrar se já está preenchido.
   const [{ data: integrationsRaw }, { data: pendingRaw }, { data: studentsRaw }] = await Promise.all([
     adminClient
       .from('org_integrations')
-      .select('id, organization_id, partner, gym_id, status, connected_at, created_at')
+      .select('id, organization_id, partner, gym_id, status, connected_at, created_at, environment, api_key')
       .eq('organization_id', orgId),
     adminClient
       .from('pending_checkins')
@@ -29,7 +30,14 @@ export default async function IntegracoesPage() {
       .eq('role', 'student'),
   ])
 
-  const integrations = (integrationsRaw ?? []) as OrgIntegrationView[]
+  // Deriva has_api_key e descarta o valor cru da api_key antes de serializar p/ o browser.
+  const integrations: OrgIntegrationView[] = ((integrationsRaw ?? []) as {
+    api_key: string | null
+    [k: string]: unknown
+  }[]).map(({ api_key, ...rest }) => ({
+    ...(rest as Omit<OrgIntegrationView, 'has_api_key'>),
+    has_api_key: Boolean(api_key),
+  }))
   const pending = (pendingRaw ?? []) as PendingCheckin[]
   const students = ((studentsRaw ?? []) as unknown as {
     user_id: string

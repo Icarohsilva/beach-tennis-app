@@ -25,6 +25,10 @@ export function IntegracoesClient({ wellhub, pending, students, webhookUrl }: Pr
   const router = useRouter()
   const [gymId, setGymId] = useState(wellhub?.gym_id ?? '')
   const [secret, setSecret] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [environment, setEnvironment] = useState<'sandbox' | 'production'>(
+    wellhub?.environment ?? 'production',
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const connected = wellhub?.status === 'connected'
@@ -32,13 +36,19 @@ export function IntegracoesClient({ wellhub, pending, students, webhookUrl }: Pr
   async function handleSave() {
     setError('')
     setSaving(true)
-    const res = await connectIntegration('wellhub', { gymId, webhookSecret: secret })
+    const res = await connectIntegration('wellhub', {
+      gymId,
+      webhookSecret: secret,
+      apiKey,
+      environment,
+    })
     setSaving(false)
     if (res.error) {
       setError(res.error)
       return
     }
     setSecret('')
+    setApiKey('')
     router.refresh()
   }
 
@@ -77,6 +87,24 @@ export function IntegracoesClient({ wellhub, pending, students, webhookUrl }: Pr
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
           />
+          <Input
+            label="API key (Access Control — valida e gera pagamento)"
+            type="password"
+            placeholder={wellhub?.has_api_key ? '••••••• (preencha para alterar)' : ''}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">Ambiente</label>
+            <select
+              value={environment}
+              onChange={(e) => setEnvironment(e.target.value as 'sandbox' | 'production')}
+              className="w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+            >
+              <option value="production">Produção</option>
+              <option value="sandbox">Sandbox (testes)</option>
+            </select>
+          </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <div className="flex gap-2">
             <Button onClick={handleSave} loading={saving} disabled={!gymId || !secret}>

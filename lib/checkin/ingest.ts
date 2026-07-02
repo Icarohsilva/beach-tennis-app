@@ -5,6 +5,7 @@
 // injetável (testável) e não exige sessão de admin (o webhook não tem uma).
 import { createAdminClient } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
+import { validateWellhubCheckin, type WellhubEnvironment } from './wellhubValidate'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -58,10 +59,11 @@ export interface RecordResolvedInput {
 
 // Grava um check-in JÁ resolvido (aluno conhecido). Idempotente por external_ref.
 // Se a data cai em aula fixa com reserva confirmada, marca presença também.
+// `isNew` distingue inserção nova de idempotente (importante para não revalidar resends).
 export async function recordResolvedCheckin(
   client: AdminClient,
   input: RecordResolvedInput,
-): Promise<{ recorded: boolean; linkedSessionId: string | null }> {
+): Promise<{ recorded: boolean; linkedSessionId: string | null; isNew: boolean }> {
   if (input.externalRef) {
     const { data: existing } = await client
       .from('checkins')
@@ -70,7 +72,7 @@ export async function recordResolvedCheckin(
       .eq('partner', input.partner)
       .eq('external_ref', input.externalRef)
       .maybeSingle()
-    if (existing) return { recorded: true, linkedSessionId: null }
+    if (existing) return { recorded: true, linkedSessionId: null, isNew: false }
   }
 
   const linkedSessionId = await findLinkedSession(client, input.studentId, input.orgId, input.date)
@@ -88,7 +90,7 @@ export async function recordResolvedCheckin(
   if (insertError) {
     // 23505 = violação de índice único. Outra requisição concorrente já gravou
     // este external_ref → check-in idempotente, no-op (não remarca presença).
-    if (insertError.code === '23505') return { recorded: true, linkedSessionId: null }
+    if (insertError.code === '23505') return { recorded: true, linkedSessionId: null, isNew: false }
     throw new Error(`Falha ao gravar check-in: ${insertError.message}`)
   }
 
@@ -109,7 +111,7 @@ export async function recordResolvedCheckin(
     }
   }
 
-  return { recorded: true, linkedSessionId }
+  return { recorded: true, linkedSessionId, isNew: true }
 }
 
 export interface IngestPartnerCheckinInput {
@@ -120,6 +122,9 @@ export interface IngestPartnerCheckinInput {
   externalRef: string | null
   payload: unknown
   createdBy?: string | null
+  // Presente só para Wellhub configurado com api_key: dispara o VALIDATE que gera
+  // a transação de pagamento. Ausente → grava sem validar (fica p/ reprocessamento).
+  validate?: { apiKey: string; gymId: string; environment: WellhubEnvironment }
 }
 
 export interface IngestResult {
@@ -159,7 +164,7 @@ export async function ingestPartnerCheckin(
     return { recorded: false, pending: true }
   }
 
-  const { recorded, linkedSessionId } = await recordResolvedCheckin(client, {
+  const { recorded, linkedSessionId, isNew } = await recordResolvedCheckin(client, {
     orgId: input.orgId,
     studentId: membership.user_id as string,
     partner: input.partner,
@@ -168,6 +173,26 @@ export async function ingestPartnerCheckin(
     validation: input.partner,
     createdBy: input.createdBy ?? null,
   })
+
+  // Só valida inserções novas: um reenvio (idempotente) não deve revalidar/recobrar.
+  // Falha na validação NÃO derruba o registro — fica marcado p/ reprocessamento.
+  if (isNew && input.validate && input.externalRef) {
+    const result = await validateWellhubCheckin({
+      environment: input.validate.environment,
+      gymId: input.validate.gymId,
+      apiKey: input.validate.apiKey,
+      gympassId: input.partnerMemberId,
+    })
+    await client
+      .from('checkins')
+      .update({
+        partner_validated: result.valid,
+        partner_validation_error: result.valid ? null : (result.error ?? 'erro desconhecido'),
+      })
+      .eq('organization_id', input.orgId)
+      .eq('partner', input.partner)
+      .eq('external_ref', input.externalRef)
+  }
 
   return { recorded, pending: false, linkedSessionId }
 }
