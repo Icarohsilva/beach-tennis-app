@@ -1313,3 +1313,57 @@ export async function updateTournamentDiscountSettings(
   revalidatePath('/admin/configuracoes')
   return {}
 }
+
+// ---------------------------------------------------------------------------
+// scheduleMatch — admin OU qualquer jogador do confronto (last-write-wins)
+// ---------------------------------------------------------------------------
+
+export async function scheduleMatch(
+  matchId: string,
+  playedAtIso: string | null,
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: match, error: mErr } = await adminClient
+    .from('tournament_matches')
+    .select('id, tournament_id, player1_id, partner1_id, player2_id, partner2_id, reported_by')
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+    .single()
+  if (mErr || !match) return { error: 'Confronto não encontrado.' }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  const isAdmin = membership?.role === 'admin'
+
+  if (!isAdmin && !canReportResult(user.id, match as EligibilityMatch)) {
+    return { error: 'Sem permissão para marcar este confronto.' }
+  }
+
+  if (playedAtIso !== null) {
+    const d = new Date(playedAtIso)
+    if (Number.isNaN(d.getTime())) return { error: 'Data/hora inválida.' }
+  }
+
+  const { error: updErr } = await adminClient
+    .from('tournament_matches')
+    .update({ played_at: playedAtIso })
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+  if (updErr) return { error: 'Erro ao salvar a data/hora. Tente novamente.' }
+
+  revalidatePath(`/torneios/${match.tournament_id}`)
+  revalidatePath(`/admin/torneios/${match.tournament_id}`)
+  revalidatePath('/home')
+  return {}
+}
