@@ -11,6 +11,7 @@ import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { getPlatformAccess } from '@/lib/billing/access'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
+import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -36,9 +37,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: org } = await adminClient
     .from('organizations')
-    .select('owner_id, name, onboarding_completed, brand_color, logo_url')
+    .select('owner_id, name, onboarding_completed, brand_color, logo_url, status')
     .eq('id', ctx.organizationId)
     .single()
+
+  // Academia suspensa: bloqueia o painel admin (precede gates de onboarding/cobrança).
+  if (org?.status === 'suspended') return <SuspendedNotice />
 
   const isOwner = ctx.isOwner
 

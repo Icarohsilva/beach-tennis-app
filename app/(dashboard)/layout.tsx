@@ -7,6 +7,7 @@ import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 import { Logo } from '@/components/ui/Logo'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
+import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -21,6 +22,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (res.status === 'choose') redirect('/selecionar-academia')
 
   const org = await getCurrentOrg()
+  // Academia suspensa: bloqueia o acesso do aluno (tela terminal, sem navegação).
+  if (org?.status === 'suspended') return <SuspendedNotice />
   const memberships = await getMemberships()
   const activeOrgId = await getActiveOrgId()
 
