@@ -161,7 +161,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const confirmedEntries = entries.filter((e) => e.entry_status === 'confirmed')
   const offeredEntries = entries.filter((e) => e.entry_status === 'offered')
   const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
-  const maxPlayers = (t as unknown as { max_players: number | null }).max_players
+  const maxPlayers = t.max_players
 
   // Helper: tempo restante até expiração da oferta
   function formatTimeUntil(isoDate: string): string {
@@ -236,10 +236,10 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
                 const lvl = levelByPlayer.get(entry.player_id)
-                const waUrl = entry.payment_status === 'pending' && p?.phone
+                const waUrl = entry.payment_status === 'pending' && p?.phone && t.pix_key
                   ? buildWhatsAppUrl(
                       p.phone,
-                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${(t as unknown as { pix_key: string | null }).pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
                     )
                   : null
                 return (
