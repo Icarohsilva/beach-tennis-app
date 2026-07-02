@@ -214,7 +214,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
           {/* Contador de vagas */}
           {t.max_players && (
             <p className="text-slate-400 text-xs text-center">
-              {players.length} / {t.max_players} inscritos
+              {players.length} confirmados / {t.max_players} vagas
             </p>
           )}
           {/* Preço e desconto */}
@@ -288,7 +288,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                   {userEntry.offer_expires_at && new Date(userEntry.offer_expires_at) > new Date() ? (
                     <div className="space-y-3">
                       <span className="block bg-green-900/40 text-green-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
-                        🎉 Vaga disponível! Confirme até {new Date(userEntry.offer_expires_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        🎉 Vaga disponível! Confirme até {new Date(userEntry.offer_expires_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}
                       </span>
                       <ConfirmWaitlistButton tournamentId={t.id} />
                     </div>
