@@ -122,6 +122,7 @@ export interface Profile {
   phone: string | null
   gender: Gender | null
   city: string | null
+  is_platform_admin: boolean
   created_at: string
 }
 
