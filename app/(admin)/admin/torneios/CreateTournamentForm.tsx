@@ -49,6 +49,7 @@ export function CreateTournamentForm() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [entryPrice, setEntryPrice] = useState<string>('')
   const [pixKey, setPixKey] = useState<string>('')
+  const [maxPlayers, setMaxPlayers] = useState<string>('')
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -85,6 +86,12 @@ export function CreateTournamentForm() {
         ? Math.round(parsedPrice * 100)
         : null
 
+      const parsedMax = parseInt(maxPlayers, 10)
+      const maxPlayersValue: number | null =
+        maxPlayers.trim() && !isNaN(parsedMax) && parsedMax >= 2
+          ? parsedMax
+          : null
+
       const result = await createTournament({
         name: name.trim(),
         date,
@@ -97,6 +104,7 @@ export function CreateTournamentForm() {
         cover_image_url: coverImageUrl,
         entry_price_cents: entryPriceCents,
         pix_key: pixKey.trim() || null,
+        max_players: maxPlayersValue,
       })
       if (result.error) setError(result.error)
       else {
@@ -106,6 +114,7 @@ export function CreateTournamentForm() {
         setCoverPreview(null)
         setEntryPrice('')
         setPixKey('')
+        setMaxPlayers('')
         router.refresh()
       }
     })
@@ -192,6 +201,15 @@ export function CreateTournamentForm() {
         />
         <p className="text-xs text-slate-500">CPF, email, telefone ou chave aleatória. Ambos os campos precisam ser preenchidos para cobrança.</p>
       </div>
+
+      <Input
+        label="Limite de vagas"
+        type="number"
+        min="2"
+        placeholder="Sem limite (deixe vazio)"
+        value={maxPlayers}
+        onChange={(e) => setMaxPlayers(e.target.value)}
+      />
 
       {/* Campo de imagem de capa */}
       <div className="sm:col-span-2">
