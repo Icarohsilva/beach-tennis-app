@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils/cn'
 
 const navItems = [
   { href: '/home', icon: Home, label: 'Home' },
-  { href: '/aulas', icon: Calendar, label: 'Aulas' },
+  { href: '/aulas', icon: Calendar, label: 'Aulas', dataTour: 'tour-aluno-aulas' },
   { href: '/comunidade', icon: Users, label: 'Comunidade' },
-  { href: '/perfil', icon: User, label: 'Perfil' },
+  { href: '/perfil', icon: User, label: 'Perfil', dataTour: 'tour-aluno-perfil' },
 ]
 
 export function BottomNav() {
@@ -21,7 +21,7 @@ export function BottomNav() {
           <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />
         ))}
 
-        <Link href="/agendar" className="relative -top-5">
+        <Link href="/agendar" data-tour="tour-aluno-agendar" className="relative -top-5">
           <div className={cn(
             'flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-600/40 border-4 border-surface transition-transform active:scale-95',
             pathname.startsWith('/agendar') && 'from-brand-400 to-brand-600',
@@ -38,9 +38,9 @@ export function BottomNav() {
   )
 }
 
-function NavItem({ href, icon: Icon, label, active }: { href: string; icon: typeof Home; label: string; active: boolean }) {
+function NavItem({ href, icon: Icon, label, active, dataTour }: { href: string; icon: typeof Home; label: string; active: boolean; dataTour?: string }) {
   return (
-    <Link href={href} className="flex flex-col items-center gap-0.5 py-2 px-3">
+    <Link href={href} data-tour={dataTour} className="flex flex-col items-center gap-0.5 py-2 px-3">
       <Icon className={cn('h-5 w-5', active ? 'text-brand-500' : 'text-slate-500')} />
       <span className={cn('text-[10px] font-medium', active ? 'text-brand-500' : 'text-slate-500')}>{label}</span>
     </Link>

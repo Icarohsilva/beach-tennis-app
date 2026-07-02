@@ -294,16 +294,18 @@ export default async function HomePage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
-      <StatHeader
-        name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
-        stats={[
-          ...(showCredits
-            ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
-            : [{ label: 'Plano', value: membership?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
-          { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-          { label: 'Nível', value: (membership?.level ?? '—').toUpperCase() },
-        ]}
-      />
+      <div data-tour="tour-aluno-progresso">
+        <StatHeader
+          name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
+          stats={[
+            ...(showCredits
+              ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
+              : [{ label: 'Plano', value: membership?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
+            { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
+            { label: 'Nível', value: (membership?.level ?? '—').toUpperCase() },
+          ]}
+        />
+      </div>
 
       {isPartner && checkinProgress && (
         <CheckinProgressCard
