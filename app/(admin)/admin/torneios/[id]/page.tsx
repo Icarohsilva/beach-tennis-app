@@ -99,7 +99,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .from('tournament_matches')
     .select(`id, tournament_id, round, match_no,
       player1_id, player2_id, partner1_id, partner2_id,
-      games1, games2, result_status, reported_by, confirmed_by,
+      games1, games2, result_status, reported_by, confirmed_by, played_at,
       player1:profiles!player1_id(id, full_name),
       player2:profiles!player2_id(id, full_name),
       partner1:profiles!partner1_id(id, full_name),
@@ -112,7 +112,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     id: string; tournament_id: string; round: number; match_no: number | null
     player1_id: string | null; player2_id: string | null; partner1_id: string | null; partner2_id: string | null
     games1: number | null; games2: number | null; result_status: string | null
-    reported_by: string | null; confirmed_by: string | null
+    reported_by: string | null; confirmed_by: string | null; played_at: string | null
     player1: { id: string; full_name: string } | { id: string; full_name: string }[] | null
     player2: { id: string; full_name: string } | { id: string; full_name: string }[] | null
     partner1: { id: string; full_name: string } | { id: string; full_name: string }[] | null
@@ -431,6 +431,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           player1_id: match.player1_id ?? '',
                           player2_id: match.player2_id ?? '',
                           result_status: match.result_status as 'pending' | 'confirmed' | null,
+                          played_at: match.played_at,
                         }}
                         isAdmin
                         currentUserId=""
