@@ -123,6 +123,8 @@ export interface Profile {
   gender: Gender | null
   city: string | null
   is_platform_admin: boolean
+  tour_aluno_seen_at: string | null
+  tour_admin_seen_at: string | null
   created_at: string
 }
 
