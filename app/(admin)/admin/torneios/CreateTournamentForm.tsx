@@ -87,6 +87,10 @@ export function CreateTournamentForm() {
         : null
 
       const parsedMax = parseInt(maxPlayers, 10)
+      if (maxPlayers.trim() && (isNaN(parsedMax) || parsedMax < 2)) {
+        setError('Limite de vagas deve ser um número inteiro de no mínimo 2.')
+        return
+      }
       const maxPlayersValue: number | null =
         maxPlayers.trim() && !isNaN(parsedMax) && parsedMax >= 2
           ? parsedMax
@@ -206,6 +210,7 @@ export function CreateTournamentForm() {
         label="Limite de vagas"
         type="number"
         min="2"
+        step="1"
         placeholder="Sem limite (deixe vazio)"
         value={maxPlayers}
         onChange={(e) => setMaxPlayers(e.target.value)}
