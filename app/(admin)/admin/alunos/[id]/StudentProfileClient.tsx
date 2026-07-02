@@ -70,6 +70,7 @@ interface StudentProfileClientProps {
   wellhubId: string | null
   totalpassId: string | null
   monthlyTarget: number
+  orgDefaultTarget: number
   pendingPartner: 'wellhub' | 'totalpass' | null
   checkins: {
     id: string
@@ -102,6 +103,7 @@ export function StudentProfileClient({
   wellhubId,
   totalpassId,
   monthlyTarget,
+  orgDefaultTarget,
   pendingPartner,
   checkins,
 }: StudentProfileClientProps) {
@@ -125,7 +127,10 @@ export function StudentProfileClient({
   const [partnerId, setPartnerId] = useState(
     (paymentType === 'totalpass' ? totalpassId : wellhubId) ?? '',
   )
-  const [targetInput, setTargetInput] = useState(String(monthlyTarget))
+  // Aluno sem meta própria (0) herda a meta padrão da academia como sugestão.
+  const [targetInput, setTargetInput] = useState(
+    String(monthlyTarget > 0 ? monthlyTarget : orgDefaultTarget),
+  )
   const [linkedPartner, setLinkedPartner] = useState<string>(paymentType)
   const [checkinList, setCheckinList] = useState(checkins)
   const [checkinsDone, setCheckinsDone] = useState(checkins.length)
@@ -742,6 +747,9 @@ export function StudentProfileClient({
                   onChange={(e) => setTargetInput(e.target.value)}
                   className="mt-1 w-24"
                 />
+                <span className="mt-1 block text-[10px] text-slate-500">
+                  Padrão da academia: {orgDefaultTarget}
+                </span>
               </label>
             </>
           )}

@@ -10,6 +10,7 @@ interface SystemSettingsFormProps {
   settings: {
     credit_expiry_days: number
     cancellation_window_hours: number
+    default_checkin_target: number
   }
 }
 
@@ -17,6 +18,9 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
   const [creditExpiryDays, setCreditExpiryDays] = useState(String(settings.credit_expiry_days))
   const [cancellationWindowHours, setCancellationWindowHours] = useState(
     String(settings.cancellation_window_hours),
+  )
+  const [defaultCheckinTarget, setDefaultCheckinTarget] = useState(
+    String(settings.default_checkin_target),
   )
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -29,6 +33,7 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
 
     const expiry = parseInt(creditExpiryDays, 10)
     const window = parseInt(cancellationWindowHours, 10)
+    const checkinTarget = parseInt(defaultCheckinTarget, 10)
 
     if (isNaN(expiry) || expiry < 1) {
       setError('Validade dos créditos deve ser um número inteiro positivo.')
@@ -38,11 +43,16 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
       setError('Janela de cancelamento deve ser um número inteiro não-negativo.')
       return
     }
+    if (isNaN(checkinTarget) || checkinTarget < 0) {
+      setError('Meta mensal de check-ins deve ser um número inteiro não-negativo.')
+      return
+    }
 
     startTransition(async () => {
       const result = await updateSystemSettings({
         credit_expiry_days: expiry,
         cancellation_window_hours: window,
+        default_checkin_target: checkinTarget,
       })
       if (result.error) {
         setError(result.error)
@@ -93,6 +103,22 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
             min="0"
             value={cancellationWindowHours}
             onChange={(e) => setCancellationWindowHours(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm text-slate-300 font-medium">
+            Meta mensal de check-ins (Wellhub/TotalPass)
+          </label>
+          <p className="text-xs text-slate-400">
+            Meta padrão de check-ins no mês para alunos de parceiro. Pode ser ajustada por aluno no
+            cadastro. Padrão: 12
+          </p>
+          <Input
+            type="number"
+            min="0"
+            value={defaultCheckinTarget}
+            onChange={(e) => setDefaultCheckinTarget(e.target.value)}
           />
         </div>
 

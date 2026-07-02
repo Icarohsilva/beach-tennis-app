@@ -52,6 +52,20 @@ describe('parseWellhubEvent', () => {
     if (parsed.kind === 'checkin') expect(parsed.checkinDate).toBe('2022-10-24')
   })
 
+  it('aceita a variação "checkin-booking-occurred" (emitida pelo simulador do sandbox)', () => {
+    const simulated = JSON.stringify({
+      event_type: 'checkin-booking-occurred',
+      event_data: {
+        user: { unique_token: '1000000000004' },
+        gym: { id: 129 },
+        timestamp: 1666629613,
+      },
+    })
+    const parsed = parseWellhubEvent(simulated)
+    expect(parsed.kind).toBe('checkin')
+    if (parsed.kind === 'checkin') expect(parsed.gymId).toBe('129')
+  })
+
   it('ignora eventos que não são check-in (ex.: booking)', () => {
     const booking = JSON.stringify({ event_type: 'booking-requested', event_data: {} })
     expect(parseWellhubEvent(booking)).toEqual({ kind: 'ignored' })

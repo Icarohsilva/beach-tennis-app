@@ -406,6 +406,7 @@ export async function applyDiscount(
 export async function updateSystemSettings(settings: {
   credit_expiry_days?: number
   cancellation_window_hours?: number
+  default_checkin_target?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -424,6 +425,13 @@ export async function updateSystemSettings(settings: {
     .single()
 
   if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  if (
+    settings.default_checkin_target !== undefined &&
+    (!Number.isInteger(settings.default_checkin_target) || settings.default_checkin_target < 0)
+  ) {
+    return { error: 'Meta mensal de check-ins inválida.' }
+  }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
   const rows = Object.entries(settings)

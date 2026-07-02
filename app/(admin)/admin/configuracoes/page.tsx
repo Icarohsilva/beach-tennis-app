@@ -4,9 +4,12 @@ import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
 
+import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
+
 interface SystemSettings {
   credit_expiry_days: number
   cancellation_window_hours: number
+  default_checkin_target: number
 }
 
 export default async function ConfiguracoesPage() {
@@ -24,6 +27,7 @@ export default async function ConfiguracoesPage() {
   const defaults: SystemSettings = {
     credit_expiry_days: Number(map.get('credit_expiry_days') ?? 30),
     cancellation_window_hours: Number(map.get('cancellation_window_hours') ?? 5),
+    default_checkin_target: Number(map.get('default_checkin_target') ?? DEFAULT_CHECKIN_TARGET),
   }
 
   const { data: orgRow } = await adminClient

@@ -9,6 +9,7 @@ import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { recordResolvedCheckin } from '@/lib/checkin/ingest'
+import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 
 async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
   const supabase = createClient()
@@ -291,33 +292,52 @@ export async function resolvePendingCheckin(
   const adminClient = createAdminClient()
   const { data: pending } = await adminClient
     .from('pending_checkins')
-    .select('id, partner, checkin_date, external_ref, resolved')
+    .select('id, partner, partner_member_id, checkin_date, external_ref, resolved')
     .eq('id', pendingId)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!pending || pending.resolved) return { error: 'Pendência não encontrada.' }
 
+  const partner = pending.partner as CheckinPartner
+
   // Garante que o aluno pertence à academia ativa.
   const { data: membership } = await adminClient
     .from('memberships')
-    .select('user_id')
+    .select('user_id, monthly_checkin_target')
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!membership) return { error: 'Aluno não encontrado nesta academia.' }
 
+  // Vincula o aluno ao parceiro: tipo + o ID que gerou o check-in. Sem isso, o
+  // check-in ficaria "solto" (não aparece na aba do parceiro) e o próximo evento
+  // do mesmo ID cairia em pendentes de novo. Meta zerada assume o padrão da academia.
+  const idColumn = partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
+  const memberId = (pending.partner_member_id as string | null)?.trim() || null
+  const patch: Record<string, unknown> = { payment_type: partner, pending_partner: null }
+  if (memberId) patch[idColumn] = memberId
+  if (!membership.monthly_checkin_target) {
+    patch.monthly_checkin_target = await getOrgDefaultCheckinTarget(adminClient, orgId)
+  }
+  await adminClient
+    .from('memberships')
+    .update(patch)
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+
   await recordResolvedCheckin(adminClient, {
     orgId,
     studentId,
-    partner: pending.partner as CheckinPartner,
+    partner,
     date: pending.checkin_date as string,
     externalRef: (pending.external_ref as string | null) ?? null,
-    validation: pending.partner as CheckinPartner,
+    validation: partner,
   })
 
   await adminClient.from('pending_checkins').update({ resolved: true }).eq('id', pendingId)
 
   revalidatePath('/admin/integracoes')
+  revalidatePath(`/admin/alunos/${studentId}`)
   return {}
 }
 

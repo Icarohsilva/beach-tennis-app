@@ -6,6 +6,7 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
+import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import type { Profile, Membership, Enrollment, Class, StudentLevel } from '@/types'
 
 interface Props {
@@ -57,6 +58,10 @@ export default async function StudentProfilePage({ params }: Props) {
     >),
     organization_id: orgId,
   }
+
+  // Meta mensal padrão da academia: pré-preenche o campo de meta quando o aluno
+  // ainda não tem uma própria (ex.: recém-vinculado a parceiro).
+  const orgDefaultTarget = await getOrgDefaultCheckinTarget(adminClient, orgId)
 
   // Fetch active enrollments with class info
   const { data: enrollmentsRaw } = await adminClient
@@ -273,6 +278,7 @@ export default async function StudentProfilePage({ params }: Props) {
           wellhubId={student.wellhub_id}
           totalpassId={student.totalpass_id}
           monthlyTarget={student.monthly_checkin_target}
+          orgDefaultTarget={orgDefaultTarget}
           pendingPartner={student.pending_partner}
           checkins={checkins}
         />

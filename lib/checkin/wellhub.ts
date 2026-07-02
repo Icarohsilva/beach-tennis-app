@@ -56,7 +56,9 @@ function epochToLocalDate(timestamp: number): string {
 export function parseWellhubEvent(rawBody: string): CanonicalCheckinEvent | IgnoredEvent {
   const raw = JSON.parse(rawBody) as RawWellhubEvent
 
-  if (raw.event_type !== 'checkin') {
+  // Aceita qualquer variação de check-in. Produção envia "checkin"; o simulador do
+  // sandbox emite "checkin-booking-occurred". Demais eventos (ex.: "booking-*") → ignora.
+  if (!raw.event_type?.startsWith('checkin')) {
     return { kind: 'ignored' }
   }
 
