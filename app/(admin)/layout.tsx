@@ -81,6 +81,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   ]
   const navLinks = allNav.filter((l) => canAccessArea(l.area, isOwner))
 
+  const tourTargets: Record<string, string> = {
+    '/admin/dashboard': 'tour-admin-dashboard',
+    '/admin/alunos': 'tour-admin-cadastro',
+    '/admin/torneios': 'tour-admin-torneios',
+    '/admin/financeiro': 'tour-admin-financeiro',
+    '/admin/configuracoes': 'tour-admin-config',
+  }
+
   return (
     <div
       style={accentVars(org?.brand_color)}
@@ -97,7 +105,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="px-4 pb-4 flex flex-col flex-1">
           <nav className="flex flex-col gap-1 text-sm text-slate-400 flex-1">
             {navLinks.map(link => (
-              <Link key={link.href} href={link.href} className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">
+              <Link key={link.href} href={link.href} data-tour={tourTargets[link.href]} className="px-3 py-2 rounded hover:bg-surface-border hover:text-white transition-colors">
                 {link.label}
               </Link>
             ))}
