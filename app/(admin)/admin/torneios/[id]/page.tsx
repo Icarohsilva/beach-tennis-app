@@ -11,6 +11,8 @@ import { CoverImageCard } from './CoverImageCard'
 import { CloseTournamentButton } from './CloseTournamentButton'
 import { WinnersCard } from './WinnersCard'
 import { ConfirmPaymentButton } from './ConfirmPaymentButton'
+import { CancelForNonPaymentButton } from './CancelForNonPaymentButton'
+import { buildWhatsAppUrl } from '@/lib/torneios/waitlist'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -52,7 +54,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .from('tournament_entries')
     .select(`id, player_id, partner_id, seed, created_at,
       payment_status, discount_pct, final_price_cents, receipt_url,
-      player:profiles!tournament_entries_player_id_fkey(id, full_name, gender),
+      entry_status, offer_expires_at,
+      player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
       partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
     .eq('tournament_id', params.id)
     .order('created_at', { ascending: true })
@@ -63,7 +66,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     discount_pct: number
     final_price_cents: number
     receipt_url: string | null
-    player: { id: string; full_name: string; gender: string | null } | { id: string; full_name: string; gender: string | null }[] | null
+    entry_status: 'confirmed' | 'waitlist' | 'offered'
+    offer_expires_at: string | null
+    player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
     partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
@@ -152,6 +157,21 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .filter(Boolean)
     .map((p) => p as { id: string; full_name: string })
 
+  // Separar entradas por status
+  const confirmedEntries = entries.filter((e) => e.entry_status === 'confirmed')
+  const offeredEntries = entries.filter((e) => e.entry_status === 'offered')
+  const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
+  const maxPlayers = (t as unknown as { max_players: number | null }).max_players
+
+  // Helper: tempo restante até expiração da oferta
+  function formatTimeUntil(isoDate: string): string {
+    const ms = new Date(isoDate).getTime() - Date.now()
+    if (ms <= 0) return 'Expirada'
+    const hours = Math.floor(ms / (1000 * 60 * 60))
+    const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60))
+    return `${hours}h ${minutes}m`
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -201,67 +221,168 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
 
       {/* Inscrições */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-3">Inscrições ({entries.length})</h2>
-        {entries.length === 0 ? (
-          <p className="text-slate-400 text-sm">Nenhuma inscrição ainda.</p>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {entries.map((entry) => {
-              const p = normalizeProf(entry.player)
-              const pt = normalizeProf(entry.partner)
-              const lvl = levelByPlayer.get(entry.player_id)
-              return (
-                <Card key={entry.id}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
-                      {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
-                      {entry.payment_status === 'pending' && (
-                        <p className="text-xs text-yellow-400 mt-0.5">
-                          Aguardando: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
-                          {entry.discount_pct > 0 && ` (${entry.discount_pct}% desc.)`}
-                        </p>
-                      )}
-                      {entry.payment_status === 'paid' && (
-                        <p className="text-xs text-green-400 mt-0.5">
-                          Pago: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
-                        </p>
-                      )}
+        <h2 className="text-lg font-semibold text-white mb-3">
+          {maxPlayers
+            ? `Inscrições — ${confirmedEntries.length + offeredEntries.length} / ${maxPlayers} vagas`
+            : `Inscrições (${confirmedEntries.length} confirmados)`}
+        </h2>
+
+        {/* ① Confirmados */}
+        {confirmedEntries.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Confirmados</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {confirmedEntries.map((entry) => {
+                const p = normalizeProf(entry.player)
+                const pt = normalizeProf(entry.partner)
+                const lvl = levelByPlayer.get(entry.player_id)
+                const waUrl = entry.payment_status === 'pending' && p?.phone
+                  ? buildWhatsAppUrl(
+                      p.phone,
+                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${(t as unknown as { pix_key: string | null }).pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                    )
+                  : null
+                return (
+                  <Card key={entry.id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
+                        {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
+                        {entry.payment_status === 'pending' && (
+                          <p className="text-xs text-yellow-400 mt-0.5">
+                            Aguardando: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
+                            {entry.discount_pct > 0 && ` (${entry.discount_pct}% desc.)`}
+                          </p>
+                        )}
+                        {entry.payment_status === 'paid' && (
+                          <p className="text-xs text-green-400 mt-0.5">
+                            Pago: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        {lvl && <Badge variant="level">{lvl.toUpperCase()}</Badge>}
+                        {entry.payment_status === 'free' && (
+                          <span className="text-xs text-slate-500 bg-surface rounded px-1.5 py-0.5">Gratuito</span>
+                        )}
+                        {entry.payment_status === 'paid' && (
+                          <span className="text-xs text-green-400 bg-green-900/30 rounded px-1.5 py-0.5">✓ Pago</span>
+                        )}
+                        {entry.payment_status === 'pending' && (
+                          <span className="text-xs text-yellow-400 bg-yellow-900/30 rounded px-1.5 py-0.5">⏳ Pendente</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      {lvl && <Badge variant="level">{lvl.toUpperCase()}</Badge>}
-                      {entry.payment_status === 'free' && (
-                        <span className="text-xs text-slate-500 bg-surface rounded px-1.5 py-0.5">Gratuito</span>
-                      )}
-                      {entry.payment_status === 'paid' && (
-                        <span className="text-xs text-green-400 bg-green-900/30 rounded px-1.5 py-0.5">✓ Pago</span>
-                      )}
-                      {entry.payment_status === 'pending' && (
-                        <span className="text-xs text-yellow-400 bg-yellow-900/30 rounded px-1.5 py-0.5">⏳ Pendente</span>
-                      )}
-                    </div>
-                  </div>
-                  {receiptSignedUrls[entry.id] && (
-                    <div className="mt-2">
-                      <a
-                        href={receiptSignedUrls[entry.id]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-brand-400 hover:text-brand-300"
-                      >
-                        📎 Ver comprovante
-                      </a>
-                    </div>
-                  )}
-                  {entry.payment_status === 'pending' && (
-                    <div className="mt-2">
-                      <ConfirmPaymentButton entryId={entry.id} />
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
+                    {receiptSignedUrls[entry.id] && (
+                      <div className="mt-2">
+                        <a
+                          href={receiptSignedUrls[entry.id]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-400 hover:text-brand-300"
+                        >
+                          📎 Ver comprovante
+                        </a>
+                      </div>
+                    )}
+                    {entry.payment_status === 'pending' && (
+                      <div className="mt-2 flex flex-wrap gap-2 items-center">
+                        <ConfirmPaymentButton entryId={entry.id} />
+                        {waUrl && (
+                          <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-400 hover:text-green-300"
+                          >
+                            📱 Cobrar via WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {entry.payment_status === 'pending' && (
+                      <CancelForNonPaymentButton entryId={entry.id} />
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
           </div>
+        )}
+
+        {/* ② Ofertas pendentes */}
+        {offeredEntries.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Vaga oferecida</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {offeredEntries.map((entry) => {
+                const p = normalizeProf(entry.player)
+                const expiresAt = entry.offer_expires_at as string | null
+                const expired = expiresAt ? new Date(expiresAt) < new Date() : false
+                const waUrl = p?.phone
+                  ? buildWhatsAppUrl(
+                      p.phone,
+                      `Olá ${p.full_name}! Uma vaga abriu no torneio ${t.name}. Acesse ${shareUrl} e confirme sua inscrição em até 48h.`,
+                    )
+                  : null
+                return (
+                  <Card key={entry.id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
+                        {expired ? (
+                          <span className="text-xs text-slate-400 bg-slate-800 rounded px-1.5 py-0.5 mt-1 inline-block">
+                            Expirada — será reprocessada na próxima ação
+                          </span>
+                        ) : (
+                          <span className="text-xs text-yellow-400 bg-yellow-900/30 rounded px-1.5 py-0.5 mt-1 inline-block">
+                            Vaga oferecida · Expira em {expiresAt ? formatTimeUntil(expiresAt) : '?'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {waUrl && (
+                      <div className="mt-2">
+                        <a
+                          href={waUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-green-400 hover:text-green-300"
+                        >
+                          📱 Notificar via WhatsApp
+                        </a>
+                      </div>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ③ Lista de espera */}
+        {waitlistEntries.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Lista de espera</p>
+            <div className="space-y-1">
+              {waitlistEntries.map((entry, idx) => {
+                const p = normalizeProf(entry.player)
+                return (
+                  <div key={entry.id} className="flex items-center gap-3 py-1.5 px-3 bg-surface-card rounded-lg border border-surface-border">
+                    <span className="text-xs text-slate-500 font-mono w-6">#{idx + 1}</span>
+                    <span className="text-sm text-white flex-1">{p?.full_name ?? entry.player_id}</span>
+                    <span className="text-xs text-slate-500">
+                      {new Date(entry.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {entries.length === 0 && (
+          <p className="text-slate-400 text-sm">Nenhuma inscrição ainda.</p>
         )}
       </section>
 
