@@ -740,16 +740,14 @@ export function StudentProfileClient({
                 <Input value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="mt-1" />
               </label>
               <label className="text-xs text-slate-400">
-                Meta mensal
+                Meta mensal{' '}
+                <span className="text-slate-500">(padrão da academia: {orgDefaultTarget})</span>
                 <Input
                   type="number"
                   value={targetInput}
                   onChange={(e) => setTargetInput(e.target.value)}
                   className="mt-1 w-24"
                 />
-                <span className="mt-1 block text-[10px] text-slate-500">
-                  Padrão da academia: {orgDefaultTarget}
-                </span>
               </label>
             </>
           )}
