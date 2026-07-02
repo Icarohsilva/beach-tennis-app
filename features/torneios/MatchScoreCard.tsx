@@ -11,12 +11,18 @@ import {
   reportMatchResult,
   confirmMatchResult,
   recordMatchResult,
+  scheduleMatch,
 } from './actions'
 import {
   canReportResult,
   canConfirmResult,
   type EligibilityMatch,
 } from '@/lib/torneios/eligibility'
+import {
+  formatMatchDateTime,
+  isoToBrtLocalInput,
+  brtLocalToIso,
+} from '@/lib/torneios/matchTime'
 
 export interface ScoreMatch {
   id: string
@@ -28,6 +34,7 @@ export interface ScoreMatch {
   games2: number | null
   result_status: 'pending' | 'confirmed' | null
   reported_by: string | null
+  played_at: string | null
   player1?: { full_name: string } | null
   partner1?: { full_name: string } | null
   player2?: { full_name: string } | null
@@ -73,6 +80,43 @@ export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: Ma
       : currentUserId && (currentUserId === match.player2_id || currentUserId === match.partner2_id)
       ? 2
       : null
+
+  const canSchedule = isAdmin || mySide !== null
+  const [schedOpen, setSchedOpen] = useState(false)
+  const [schedValue, setSchedValue] = useState<string>(
+    match.played_at ? isoToBrtLocalInput(match.played_at) : '',
+  )
+  const [schedError, setSchedError] = useState<string | null>(null)
+  const [schedPending, startSchedTransition] = useTransition()
+
+  function saveSchedule() {
+    const iso = brtLocalToIso(schedValue)
+    if (!iso) {
+      setSchedError('Informe uma data e hora válidas.')
+      return
+    }
+    setSchedError(null)
+    startSchedTransition(async () => {
+      const res = await scheduleMatch(match.id, iso)
+      if (res.error) setSchedError(res.error)
+      else {
+        setSchedOpen(false)
+        router.refresh()
+      }
+    })
+  }
+
+  function clearSchedule() {
+    setSchedError(null)
+    startSchedTransition(async () => {
+      const res = await scheduleMatch(match.id, null)
+      if (res.error) setSchedError(res.error)
+      else {
+        setSchedOpen(false)
+        router.refresh()
+      }
+    })
+  }
 
   const hasScore = match.games1 !== null && match.games2 !== null
   const winner: 1 | 2 | 0 =
@@ -197,6 +241,60 @@ export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: Ma
           </span>
           {confirmed && <Badge variant="success">Confirmado</Badge>}
           {pending && <Badge variant="warning">Aguardando confirmação</Badge>}
+        </div>
+      )}
+
+      {/* Data/hora do confronto */}
+      <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2">
+        <span className="flex items-center gap-1.5 text-xs text-slate-400">
+          <span aria-hidden>📅</span>
+          {match.played_at ? formatMatchDateTime(match.played_at) : 'Sem data/hora'}
+        </span>
+        {canSchedule && !schedOpen && (
+          <button
+            type="button"
+            onClick={() => {
+              setSchedValue(match.played_at ? isoToBrtLocalInput(match.played_at) : '')
+              setSchedError(null)
+              setSchedOpen(true)
+            }}
+            className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+          >
+            {match.played_at ? 'Editar' : 'Marcar data/hora'}
+          </button>
+        )}
+      </div>
+      {schedOpen && (
+        <div className="space-y-2 border-b border-surface-border px-3 py-2.5">
+          {schedError && <p className="text-xs text-red-400">{schedError}</p>}
+          <input
+            type="datetime-local"
+            value={schedValue}
+            onChange={(e) => setSchedValue(e.target.value)}
+            aria-label="Data e hora do confronto"
+            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" loading={schedPending} onClick={saveSchedule}>
+              Salvar
+            </Button>
+            {match.played_at && (
+              <Button size="sm" variant="ghost" disabled={schedPending} onClick={clearSchedule}>
+                Limpar
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={schedPending}
+              onClick={() => {
+                setSchedOpen(false)
+                setSchedError(null)
+              }}
+            >
+              Cancelar
+            </Button>
+          </div>
         </div>
       )}
 
