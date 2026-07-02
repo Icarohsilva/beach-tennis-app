@@ -15,6 +15,8 @@ import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { CalendarPlus } from 'lucide-react'
+import { getStudentTournamentHome } from '@/features/torneios/studentHome'
+import { NextMatchCard } from '@/features/torneios/NextMatchCard'
 import type { Tournament, Profile, Class, ClassSession, DayUseSlot } from '@/types'
 
 export default async function HomePage() {
@@ -49,7 +51,7 @@ export default async function HomePage() {
       .eq('status', 'open')
       .eq('organization_id', orgId)
       .order('date', { ascending: true })
-      .limit(3),
+      .limit(6),
     supabase
       .from('session_bookings')
       .select('id, session:class_sessions(id, session_date, class:classes(name, start_time, end_time, level, type))')
@@ -83,6 +85,10 @@ export default async function HomePage() {
 
   const profile = profileData as Pick<Profile, 'full_name'> | null
   const tournaments = (tournamentsData ?? []) as Tournament[]
+  const { myTournaments, myTournamentIds, nextMatch } = await getStudentTournamentHome({
+    orgId,
+    userId: user.id,
+  })
   const showCredits = membership?.payment_type !== 'wellhub' && membership?.payment_type !== 'totalpass'
   const isPartner = membership?.payment_type === 'wellhub' || membership?.payment_type === 'totalpass'
   let checkinProgress: ReturnType<typeof computeProgress> | null = null
@@ -306,6 +312,8 @@ export default async function HomePage() {
         />
       )}
 
+      {nextMatch && <NextMatchCard match={nextMatch} />}
+
       {/* Aulas de hoje com ações inline */}
       {todayClasses.length > 0 && (
         <section>
@@ -415,25 +423,53 @@ export default async function HomePage() {
         )}
       </section>
 
-      {tournaments.length > 0 && (
+      {myTournaments.length > 0 && (
         <section>
-          <SectionHeader title="Próximos Torneios" href="/torneios" />
+          <SectionHeader title="Meus Torneios" href="/torneios" />
           <div className="space-y-2">
-            {tournaments.map((tournament) => (
-              <Link key={tournament.id} href={`/torneios/${tournament.id}`}>
-                <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
+            {myTournaments.map((t) => (
+              <Link key={t.id} href={`/torneios/${t.id}`}>
+                <Card accent className="hover:border-brand-600/50 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{tournament.name}</p>
+                      <p className="text-sm font-semibold text-white truncate">{t.name}</p>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {formatDate(tournament.date, "dd 'de' MMMM")}
+                        {formatDate(t.date, "dd 'de' MMMM")}
                       </p>
                     </div>
-                    <Badge variant="level">Nível {tournament.level.toUpperCase()}</Badge>
+                    <Badge variant={t.status === 'in_progress' ? 'warning' : 'success'}>
+                      {t.status === 'in_progress' ? 'Em andamento' : 'Inscrito'}
+                    </Badge>
                   </div>
                 </Card>
               </Link>
             ))}
+          </div>
+        </section>
+      )}
+
+      {tournaments.filter((t) => !myTournamentIds.has(t.id)).length > 0 && (
+        <section>
+          <SectionHeader title="Próximos Torneios" href="/torneios" />
+          <div className="space-y-2">
+            {tournaments
+              .filter((t) => !myTournamentIds.has(t.id))
+              .slice(0, 3)
+              .map((tournament) => (
+                <Link key={tournament.id} href={`/torneios/${tournament.id}`}>
+                  <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{tournament.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {formatDate(tournament.date, "dd 'de' MMMM")}
+                        </p>
+                      </div>
+                      <Badge variant="level">Nível {tournament.level.toUpperCase()}</Badge>
+                    </div>
+                  </Card>
+                </Link>
+              ))}
           </div>
         </section>
       )}
