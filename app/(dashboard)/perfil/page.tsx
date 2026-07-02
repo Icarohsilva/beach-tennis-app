@@ -5,6 +5,8 @@ import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { GenderForm } from '@/features/perfil/GenderForm'
+import { PersonalDataForm } from '@/features/perfil/PersonalDataForm'
+import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
@@ -24,7 +26,7 @@ export default async function PerfilPage() {
   // payment_type, level, is_dependent) vêm da membership da academia ativa.
   const { data: identity } = await adminClient
     .from('profiles')
-    .select('full_name, gender')
+    .select('full_name, gender, phone')
     .eq('id', user.id)
     .single()
 
@@ -161,6 +163,32 @@ export default async function PerfilPage() {
           <p className="text-slate-400 text-sm mt-0.5">{profile.full_name}</p>
         )}
       </div>
+
+      {/* Dados pessoais */}
+      <section>
+        <SectionHeader title="Dados pessoais" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <PersonalDataForm
+            initial={{
+              full_name: identity?.full_name ?? '',
+              phone: identity?.phone ?? null,
+              birth_date: medicalProfile?.birth_date ?? null,
+            }}
+          />
+        </div>
+      </section>
+
+      {/* Conta e segurança */}
+      <section>
+        <SectionHeader title="Conta e segurança" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <p className="text-xs text-slate-500 mb-4">
+            Altere seu email de acesso ou defina uma nova senha. A troca de email exige
+            confirmação por um link enviado ao novo endereço.
+          </p>
+          <AccountSecurityForm currentEmail={user.email ?? ''} />
+        </div>
+      </section>
 
       {/* Stats: Créditos + Nível */}
       {!isWellhubOrTotalpass && (

@@ -1106,6 +1106,19 @@ export async function registerExternal(
   if (!tournament) return { error: 'Torneio não encontrado.' }
   if (tournament.status !== 'open') return { error: 'Inscrições encerradas.' }
 
+  const tournamentOrgId = tournament.organization_id as string
+
+  // Vincula o jogador à academia do torneio (membership de aluno). Idempotente:
+  // se ele já tem cadastro nesta academia — ou em qualquer outra — o vínculo é
+  // apenas adicionado, sem remover os existentes ("sem sair da outra"). Isso corrige
+  // o caso em que o cadastro avulso caiu na academia padrão (Hudson) em vez da do torneio.
+  await adminClient
+    .from('memberships')
+    .upsert(
+      { user_id: user.id, organization_id: tournamentOrgId, role: 'student' },
+      { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
+    )
+
   // Checar duplicidade
   const { count: dup } = await adminClient
     .from('tournament_entries')
@@ -1137,7 +1150,7 @@ export async function registerExternal(
 
   if (entryStatus === 'waitlist') {
     insertPayload = {
-      organization_id: tournament.organization_id as string,
+      organization_id: tournamentOrgId,
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: null,
@@ -1150,12 +1163,12 @@ export async function registerExternal(
     const paymentFields = await computePaymentFields(
       adminClient,
       user.id,
-      tournament.organization_id as string,
+      tournamentOrgId,
       (tournament.entry_price_cents as number | null),
       (tournament.pix_key as string | null),
     )
     insertPayload = {
-      organization_id: tournament.organization_id as string,
+      organization_id: tournamentOrgId,
       tournament_id: tournamentId,
       player_id: user.id,
       partner_id: null,

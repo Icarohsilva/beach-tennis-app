@@ -29,7 +29,6 @@ export function MedicalForm({ initial }: Props) {
     setError(null)
     const fd = new FormData(e.currentTarget)
     const result = await saveMedicalProfile({
-      birth_date: (fd.get('birth_date') as string) || undefined,
       blood_type: (fd.get('blood_type') as string) || undefined,
       emergency_name: (fd.get('emergency_name') as string) || undefined,
       emergency_phone: (fd.get('emergency_phone') as string) || undefined,
@@ -42,28 +41,18 @@ export function MedicalForm({ initial }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-xs text-slate-400 block mb-1">Data de nascimento</label>
-          <Input
-            name="birth_date"
-            type="date"
-            defaultValue={initial?.birth_date ?? ''}
-          />
-        </div>
-        <div>
-          <label className="text-xs text-slate-400 block mb-1">Tipo sanguíneo</label>
-          <select
-            name="blood_type"
-            defaultValue={initial?.blood_type ?? ''}
-            className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-          >
-            <option value="">Não informado</option>
-            {BLOOD_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </div>
+      <div>
+        <label className="text-xs text-slate-400 block mb-1">Tipo sanguíneo</label>
+        <select
+          name="blood_type"
+          defaultValue={initial?.blood_type ?? ''}
+          className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+        >
+          <option value="">Não informado</option>
+          {BLOOD_TYPES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
       </div>
 
       <div>

@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 
-interface Props { tournamentId: string }
+interface Props { tournamentId: string; orgInviteCode: string | null }
 
-export function TournamentSignupForm({ tournamentId }: Props) {
+export function TournamentSignupForm({ tournamentId, orgInviteCode }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
   const [error, setError] = useState('')
@@ -25,11 +25,17 @@ export function TournamentSignupForm({ tournamentId }: Props) {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    // Sem org_invite_code nos metadados → handle_new_user cria profiles sem membership
+    // Envia o convite da academia do torneio → handle_new_user vincula o novo usuário
+    // à academia correta (não à padrão). A inscrição (registerExternal) reforça o vínculo.
     const { data, error: signUpErr } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { full_name: form.full_name.trim() } },
+      options: {
+        data: {
+          full_name: form.full_name.trim(),
+          ...(orgInviteCode ? { org_invite_code: orgInviteCode } : {}),
+        },
+      },
     })
     if (signUpErr) {
       const msg = signUpErr.message.toLowerCase()
