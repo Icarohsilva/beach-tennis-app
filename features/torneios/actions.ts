@@ -324,6 +324,8 @@ export async function registerForTournament(
     .from('tournament_entries')
     .insert(insertPayload)
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+  revalidatePath(`/t/${tournamentId}`)
+  revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
 }
 
@@ -780,12 +782,21 @@ export async function confirmWaitlistOffer(
 
   const adminClient = createAdminClient()
 
-  // Buscar entry do usuário com entry_status = 'offered' nesse torneio
+  // Buscar dados do torneio primeiro para obter organization_id (necessário para escopo da entry)
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('entry_price_cents, pix_key, organization_id, max_players')
+    .eq('id', tournamentId)
+    .single()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  // Buscar entry do usuário com entry_status = 'offered' nesse torneio (escopo por org)
   const { data: entry } = await adminClient
     .from('tournament_entries')
     .select('id, offer_expires_at, payment_status, created_at')
     .eq('tournament_id', tournamentId)
     .eq('player_id', user.id)
+    .eq('organization_id', tournament.organization_id as string)
     .eq('entry_status', 'offered')
     .maybeSingle()
 
@@ -793,22 +804,9 @@ export async function confirmWaitlistOffer(
 
   // Verificar expiração
   if (isOfferExpired(entry.offer_expires_at as string | null)) {
-    const { data: t } = await adminClient
-      .from('tournaments')
-      .select('max_players')
-      .eq('id', tournamentId)
-      .single()
-    await expireAndPromote(adminClient, tournamentId, (t?.max_players as number | null) ?? null)
+    await expireAndPromote(adminClient, tournamentId, (tournament.max_players as number | null) ?? null)
     return { error: 'Sua oferta de vaga expirou. Você voltou para a lista de espera.' }
   }
-
-  // Buscar dados do torneio para determinar payment_status
-  const { data: tournament } = await adminClient
-    .from('tournaments')
-    .select('entry_price_cents, pix_key, organization_id')
-    .eq('id', tournamentId)
-    .single()
-  if (!tournament) return { error: 'Torneio não encontrado.' }
 
   const isPaid =
     (tournament.entry_price_cents as number | null ?? 0) > 0 &&
@@ -935,11 +933,12 @@ export async function closeTournament(
     return { error: 'Só é possível encerrar um torneio aberto ou em andamento.' }
   }
 
-  // Buscar entradas e partidas para calcular classificação
+  // Buscar entradas confirmadas e partidas para calcular classificação
   const { data: entriesRaw } = await adminClient
     .from('tournament_entries')
     .select('player_id, partner_id')
     .eq('tournament_id', tournamentId)
+    .eq('entry_status', 'confirmed')
   const entries = (entriesRaw ?? []).map((e) => ({
     playerId: e.player_id as string,
     partnerId: (e.partner_id as string | null) ?? null,

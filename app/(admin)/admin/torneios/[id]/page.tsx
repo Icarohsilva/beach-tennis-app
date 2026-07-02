@@ -130,7 +130,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   }))
 
   // Classificação computada no servidor pelo formato
-  const entryRefs = entries.map((e) => ({ playerId: e.player_id, partnerId: e.partner_id ?? null }))
+  const entryRefs = entries.filter((e) => e.entry_status === 'confirmed').map((e) => ({ playerId: e.player_id, partnerId: e.partner_id ?? null }))
   const scoring: ScoringConfig = {
     sets_to_win: t.sets_to_win ?? 1,
     games_per_set: t.games_per_set ?? 6,
