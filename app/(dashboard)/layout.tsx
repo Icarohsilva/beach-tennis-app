@@ -8,6 +8,8 @@ import { Logo } from '@/components/ui/Logo'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
+import { TourProvider } from '@/components/tour/TourProvider'
+import { HelpButton } from '@/components/tour/HelpButton'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -46,6 +48,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
+  const { data: tourProfile } = await supabase
+    .from('profiles')
+    .select('tour_aluno_seen_at')
+    .eq('id', user.id)
+    .single()
+
   return (
     <div style={accentVars(org?.brand_color)} className="min-h-screen bg-surface text-white">
       {/* Top bar */}
@@ -71,6 +79,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </main>
       <BottomNav />
+      <TourProvider variant="aluno" seenAt={tourProfile?.tour_aluno_seen_at ?? null} />
+      <HelpButton variant="aluno" className="bottom-24 right-4" />
     </div>
   )
 }

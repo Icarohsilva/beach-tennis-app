@@ -12,6 +12,8 @@ import { getPlatformAccess } from '@/lib/billing/access'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
+import { TourProvider } from '@/components/tour/TourProvider'
+import { HelpButton } from '@/components/tour/HelpButton'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -45,6 +47,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (org?.status === 'suspended') return <SuspendedNotice />
 
   const isOwner = ctx.isOwner
+
+  const { data: tourProfile } = await adminClient
+    .from('profiles')
+    .select('tour_admin_seen_at')
+    .eq('id', ctx.userId)
+    .single()
 
   // Gate: academia sem onboarding concluído não acessa o painel. Só o dono é
   // mandado pra /onboarding (só ele conclui); professor não fica em loop de
@@ -160,6 +168,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         )}
         {children}
       </main>
+      <TourProvider variant="admin" seenAt={tourProfile?.tour_admin_seen_at ?? null} />
+      <HelpButton variant="admin" className="bottom-4 right-4" />
     </div>
   )
 }
