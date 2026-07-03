@@ -844,4 +844,14 @@
   border-color: transparent;
   color: #fff;
 }
+.footerSoc.yt:hover {
+  background: #ff0000;
+  border-color: transparent;
+  color: #fff;
+}
+.footerSoc.li:hover {
+  background: #0a66c2;
+  border-color: transparent;
+  color: #fff;
+}
 .footerSoc svg { width: 16px; height: 16px; }
