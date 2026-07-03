@@ -3,6 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import s from './landing.module.css'
 import { WhatsAppChat } from './_landing/WhatsAppChat'
+import { Reveal } from './_landing/Reveal'
 import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/arenahub.app/'
@@ -154,11 +155,13 @@ export default function LandingPage() {
       {/* PROBLEMA */}
       <section className={`${s.blk} ${s.blkFade}`}>
         <div className={s.wrap}>
-          <div className={s.khead}>
-            <div className={s.labelUp}>Você reconhece isso?</div>
-            <h2>Sua arena merece mais do que <span className={s.hl}>grupo de WhatsApp</span>.</h2>
-            <p>Se algum desses já travou seu dia, a gente entende — e tem solução.</p>
-          </div>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Você reconhece isso?</div>
+              <h2>Sua arena merece mais do que <span className={s.hl}>grupo de WhatsApp</span>.</h2>
+              <p>Se algum desses já travou seu dia, a gente entende — e tem solução.</p>
+            </div>
+          </Reveal>
           <div className={s.problemGrid}>
             <div className={s.problemCard}>
               <div className={s.emoji}>😵‍💫</div>
@@ -182,124 +185,136 @@ export default function LandingPage() {
       {/* FEATURES */}
       <section className={s.blk} id="rec">
         <div className={s.wrap}>
-          <div className={s.khead}>
-            <div className={s.labelUp}>Recursos</div>
-            <h2>Tudo num app só. <span className={s.hl}>Feito pra arena.</span></h2>
-            <p>Não é ERP genérico adaptado. É construído pra quem vive de quadra cheia.</p>
-          </div>
-          <div className={s.featGrid}>
-            <div className={s.feat}>
-              <div className={s.featIc}><CalendarClock size={26} strokeWidth={2} /></div>
-              <h3>Grade inteligente</h3>
-              <p>Turmas recorrentes por nível e horário. Aluno agenda, repõe e entra na fila de espera sozinho — sem você no meio.</p>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Recursos</div>
+              <h2>Tudo num app só. <span className={s.hl}>Feito pra arena.</span></h2>
+              <p>Não é ERP genérico adaptado. É construído pra quem vive de quadra cheia.</p>
             </div>
-            <div className={s.feat}>
-              <div className={s.featIc}><CreditCard size={26} strokeWidth={2} /></div>
-              <h3>Créditos &amp; reposição</h3>
-              <p>Cancelou com 5h de antecedência? Crédito automático na conta do aluno. Sem dor de cabeça com remarcação.</p>
+          </Reveal>
+          <Reveal>
+            <div className={s.featGrid}>
+              <div className={s.feat}>
+                <div className={s.featIc}><CalendarClock size={26} strokeWidth={2} /></div>
+                <h3>Grade inteligente</h3>
+                <p>Turmas recorrentes por nível e horário. Aluno agenda, repõe e entra na fila de espera sozinho — sem você no meio.</p>
+              </div>
+              <div className={s.feat}>
+                <div className={s.featIc}><CreditCard size={26} strokeWidth={2} /></div>
+                <h3>Créditos &amp; reposição</h3>
+                <p>Cancelou com 5h de antecedência? Crédito automático na conta do aluno. Sem dor de cabeça com remarcação.</p>
+              </div>
+              <div className={s.feat}>
+                <div className={s.featIc}><BadgeCheck size={26} strokeWidth={2} /></div>
+                <h3>Wellhub &amp; TotalPass</h3>
+                <p>Check-in integrado, presença registrada sem fila. Sua recepção volta a respirar.</p>
+              </div>
+              <div className={s.feat}>
+                <div className={s.featIc}><BarChart3 size={26} strokeWidth={2} /></div>
+                <h3>Financeiro claro</h3>
+                <p>Mensalidades por Pix, cartão recorrente ou avulso. Inadimplência num painel — você sabe quanto entra.</p>
+              </div>
+              <div className={s.feat}>
+                <div className={s.featIc}><Trophy size={26} strokeWidth={2} /></div>
+                <h3>Torneios completos</h3>
+                <p>Monte chaves, divulgue, cobre inscrição e gera ranking. Engaja a comunidade e movimenta a quadra no fim de semana.</p>
+              </div>
+              <div className={s.feat}>
+                <div className={s.featIc}><MessagesSquare size={26} strokeWidth={2} /></div>
+                <h3>Comunidade no app</h3>
+                <p>Feed da arena: avisos, fotos, ranking. Seus alunos viram torcida e fazem o marketing por você.</p>
+              </div>
             </div>
-            <div className={s.feat}>
-              <div className={s.featIc}><BadgeCheck size={26} strokeWidth={2} /></div>
-              <h3>Wellhub &amp; TotalPass</h3>
-              <p>Check-in integrado, presença registrada sem fila. Sua recepção volta a respirar.</p>
-            </div>
-            <div className={s.feat}>
-              <div className={s.featIc}><BarChart3 size={26} strokeWidth={2} /></div>
-              <h3>Financeiro claro</h3>
-              <p>Mensalidades por Pix, cartão recorrente ou avulso. Inadimplência num painel — você sabe quanto entra.</p>
-            </div>
-            <div className={s.feat}>
-              <div className={s.featIc}><Trophy size={26} strokeWidth={2} /></div>
-              <h3>Torneios completos</h3>
-              <p>Monte chaves, divulgue, cobre inscrição e gera ranking. Engaja a comunidade e movimenta a quadra no fim de semana.</p>
-            </div>
-            <div className={s.feat}>
-              <div className={s.featIc}><MessagesSquare size={26} strokeWidth={2} /></div>
-              <h3>Comunidade no app</h3>
-              <p>Feed da arena: avisos, fotos, ranking. Seus alunos viram torcida e fazem o marketing por você.</p>
-            </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* COMO FUNCIONA */}
       <section className={`${s.blk} ${s.blkAlt}`} id="como">
         <div className={s.wrap}>
-          <div className={s.khead}>
-            <div className={s.labelUp}>Como funciona</div>
-            <h2>Da inscrição à <span className={s.hl}>primeira aula</span> em 5 minutos.</h2>
-          </div>
-          <div className={s.steps}>
-            <div className={s.step}>
-              <div className={s.stepN}>1</div>
-              <h3>Cria a conta</h3>
-              <p>Cadastra a arena, os horários e os professores. 5 minutos. Sem cartão.</p>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Como funciona</div>
+              <h2>Da inscrição à <span className={s.hl}>primeira aula</span> em 5 minutos.</h2>
             </div>
-            <div className={s.step}>
-              <div className={s.stepN}>2</div>
-              <h3>Convida os alunos</h3>
-              <p>Link único pra cada turma. Aluno baixa o app, escolhe a aula e tá dentro.</p>
+          </Reveal>
+          <Reveal>
+            <div className={s.steps}>
+              <div className={s.step}>
+                <div className={s.stepN}>1</div>
+                <h3>Cria a conta</h3>
+                <p>Cadastra a arena, os horários e os professores. 5 minutos. Sem cartão.</p>
+              </div>
+              <div className={s.step}>
+                <div className={s.stepN}>2</div>
+                <h3>Convida os alunos</h3>
+                <p>Link único pra cada turma. Aluno baixa o app, escolhe a aula e tá dentro.</p>
+              </div>
+              <div className={s.step}>
+                <div className={s.stepN}>3</div>
+                <h3>Foca em jogar</h3>
+                <p>O sistema cuida de agenda, cobrança e reposição. Você cuida da bola.</p>
+              </div>
             </div>
-            <div className={s.step}>
-              <div className={s.stepN}>3</div>
-              <h3>Foca em jogar</h3>
-              <p>O sistema cuida de agenda, cobrança e reposição. Você cuida da bola.</p>
-            </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* PARA ALUNOS */}
       <section className={s.blk} id="alunos">
         <div className={s.wrap}>
-          <div className={s.split}>
-            <div
-              className={s.shot}
-              style={{
-                backgroundImage:
-                  "linear-gradient(180deg, rgba(4,6,13,0.2), rgba(4,6,13,0.55)), url('/landing/aluno.jpg')",
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            >
-              <div className={`${s.floatingStat} ${s.fsTop}`}>
-                <div className={s.fsV}>Grátis</div>
-                <div className={s.fsL}>Aula experimental</div>
+          <Reveal>
+            <div className={s.split}>
+              <div
+                className={s.shot}
+                style={{
+                  backgroundImage:
+                    "linear-gradient(180deg, rgba(4,6,13,0.2), rgba(4,6,13,0.55)), url('/landing/aluno.jpg')",
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+                <div className={`${s.floatingStat} ${s.fsTop}`}>
+                  <div className={s.fsV}>Grátis</div>
+                  <div className={s.fsL}>Aula experimental</div>
+                </div>
+                <div className={`${s.floatingStat} ${s.fsBot}`}>
+                  <div className={s.fsV}>Sem</div>
+                  <div className={s.fsL}>Compromisso</div>
+                </div>
               </div>
-              <div className={`${s.floatingStat} ${s.fsBot}`}>
-                <div className={s.fsV}>Sem</div>
-                <div className={s.fsL}>Compromisso</div>
+              <div className={s.splitContent}>
+                <div className={s.labelUp}>Para quem joga</div>
+                <h2>Achou um tempo? <span className={s.hl}>Achou uma arena.</span></h2>
+                <p>
+                  Descobre arenas perto de você, vê horários, vibe e nível. Marca uma{' '}
+                  <b>aula experimental gratuita</b> em segundos. Direto pelo app.
+                </p>
+                <div className={s.pin}><span className={s.pinIc}>📍</span> Busca por região e esporte</div>
+                <div className={s.pin}><span className={s.pinIc}>🎾</span> Aula experimental sem compromisso</div>
+                <div className={s.pin}><span className={s.pinIc}>⭐</span> Vê nível, horários e a galera da arena</div>
+                <div className={s.pin}><span className={s.pinIc}>🏆</span> Encontra torneios abertos na sua região</div>
+                <div style={{ marginTop: 24 }}>
+                  <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/arenas">
+                    Encontrar uma arena →
+                  </Link>
+                </div>
               </div>
             </div>
-            <div className={s.splitContent}>
-              <div className={s.labelUp}>Para quem joga</div>
-              <h2>Achou um tempo? <span className={s.hl}>Achou uma arena.</span></h2>
-              <p>
-                Descobre arenas perto de você, vê horários, vibe e nível. Marca uma{' '}
-                <b>aula experimental gratuita</b> em segundos. Direto pelo app.
-              </p>
-              <div className={s.pin}><span className={s.pinIc}>📍</span> Busca por região e esporte</div>
-              <div className={s.pin}><span className={s.pinIc}>🎾</span> Aula experimental sem compromisso</div>
-              <div className={s.pin}><span className={s.pinIc}>⭐</span> Vê nível, horários e a galera da arena</div>
-              <div className={s.pin}><span className={s.pinIc}>🏆</span> Encontra torneios abertos na sua região</div>
-              <div style={{ marginTop: 24 }}>
-                <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/arenas">
-                  Encontrar uma arena →
-                </Link>
-              </div>
-            </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* PRICING */}
       <section className={s.blk} id="preco">
         <div className={s.wrap}>
-          <div className={s.khead}>
-            <div className={s.labelUp}>Preço</div>
-            <h2>Um preço. <span className={s.hl}>Sem pegadinha.</span></h2>
-            <p>Sem taxa por aluno. Sem cobrança por funcionalidade. Sem surpresa na fatura.</p>
-          </div>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Preço</div>
+              <h2>Um preço. <span className={s.hl}>Sem pegadinha.</span></h2>
+              <p>Sem taxa por aluno. Sem cobrança por funcionalidade. Sem surpresa na fatura.</p>
+            </div>
+          </Reveal>
           <div className={s.priceCard}>
             <div className={s.priceBadge}>🎁 1º mês grátis</div>
             <h2>Arena profissional</h2>
@@ -329,10 +344,12 @@ export default function LandingPage() {
       {/* FAQ */}
       <section className={`${s.blk} ${s.blkAlt}`} id="faq">
         <div className={s.wrap}>
-          <div className={s.khead}>
-            <div className={s.labelUp}>Perguntas</div>
-            <h2>Antes de criar a conta.</h2>
-          </div>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Perguntas</div>
+              <h2>Antes de criar a conta.</h2>
+            </div>
+          </Reveal>
           <div className={s.faq}>
             <details className={s.faqItem}>
               <summary>Preciso instalar alguma coisa?</summary>
