@@ -4,6 +4,7 @@ import Image from 'next/image'
 import s from './landing.module.css'
 import { WhatsAppChat } from './_landing/WhatsAppChat'
 import { Reveal } from './_landing/Reveal'
+import { LiveDemo } from './_landing/LiveDemo'
 import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/arenahub.app/'
@@ -76,8 +77,8 @@ export default function LandingPage() {
               <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">
                 Criar conta grátis →
               </Link>
-              <a className={`${s.btn} ${s.btnGhost} ${s.btnLg}`} href="#rec">
-                ▶ Ver em 2 minutos
+              <a className={`${s.btn} ${s.btnGhost} ${s.btnLg}`} href="#demo">
+                ▶ Ver funcionando
               </a>
             </div>
             <div className={s.freebie}>
@@ -257,6 +258,20 @@ export default function LandingPage() {
               </div>
             </div>
           </Reveal>
+        </div>
+      </section>
+
+      {/* DEMO INTERATIVO */}
+      <section className={`${s.blk} ${s.blkFade}`} id="demo">
+        <div className={s.wrap}>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Veja rodando</div>
+              <h2>A arena inteira <span className={s.hl}>num fluxo só</span>.</h2>
+              <p>Do agendamento ao dinheiro no painel — sem caderno, sem WhatsApp.</p>
+            </div>
+          </Reveal>
+          <LiveDemo />
         </div>
       </section>
 
