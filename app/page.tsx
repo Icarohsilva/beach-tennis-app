@@ -260,6 +260,44 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* DEPOIMENTOS — PLACEHOLDER: trocar [Nome]/[Arena]/[Cidade] e o texto por clientes reais antes de divulgar. */}
+      <section className={s.blk}>
+        <div className={s.wrap}>
+          <Reveal>
+            <div className={s.khead}>
+              <div className={s.labelUp}>Quem já trocou o caderninho</div>
+              <h2>Donos de arena, <span className={s.hl}>como você</span>.</h2>
+              <p>Exemplos de depoimento — serão substituídos por clientes reais.</p>
+            </div>
+          </Reveal>
+          <Reveal>
+            <div className={s.testimonials}>
+              <figure className={s.tCard}>
+                <div className={s.tQuote}>"Parei de responder 'sobrou vaga?' o dia inteiro. A quadra enche sozinha e eu foco em dar aula."</div>
+                <figcaption className={s.tWho}>
+                  <span className={s.tAvatar} aria-hidden="true">RA</span>
+                  <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
+                </figcaption>
+              </figure>
+              <figure className={s.tCard}>
+                <div className={s.tQuote}>"A inadimplência sumiu do escuro. Agora eu abro o painel e sei exatamente quanto entrou no mês."</div>
+                <figcaption className={s.tWho}>
+                  <span className={s.tAvatar} aria-hidden="true">MC</span>
+                  <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
+                </figcaption>
+              </figure>
+              <figure className={s.tCard}>
+                <div className={s.tQuote}>"Configurei em uma tarde. Os alunos entraram pelo link e no fim de semana já rodou o primeiro torneio."</div>
+                <figcaption className={s.tWho}>
+                  <span className={s.tAvatar} aria-hidden="true">JP</span>
+                  <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
+                </figcaption>
+              </figure>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* PARA ALUNOS */}
       <section className={s.blk} id="alunos">
         <div className={s.wrap}>
