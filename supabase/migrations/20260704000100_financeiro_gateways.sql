@@ -2,6 +2,9 @@
 -- Financeiro das academias: conta MP por academia (OAuth), periodicidades por
 -- plano, solicitações de gateway, indicações de plano, day use pago.
 -- Spec: docs/superpowers/specs/2026-07-03-financeiro-academias-mercadopago-design.md
+-- ATENÇÃO (sequenciamento): esta migration DROPA subscription_plans.price_* .
+-- Aplicar junto do deploy do código desta feature (o código antigo lê essas
+-- colunas). Janela de incompatibilidade documentada no plano (seção Riscos).
 
 -- ── 1. Conta de gateway por academia (tokens criptografados no app) ─────────
 create table if not exists org_gateway_accounts (
@@ -37,7 +40,7 @@ create table if not exists plan_billing_options (
 );
 alter table plan_billing_options enable row level security;
 create policy plan_billing_options_select on plan_billing_options
-  for select using (organization_id = auth_org_id());
+  for select using (organization_id in (select auth_org_ids()));
 
 -- Backfill: preços fixos atuais viram opções (só os > 0).
 insert into plan_billing_options (organization_id, plan_id, periodicity, price, is_enabled)
@@ -83,7 +86,7 @@ create table if not exists plan_recommendations (
 );
 alter table plan_recommendations enable row level security;
 create policy plan_recommendations_select_own on plan_recommendations
-  for select using (student_id = auth.uid() and organization_id = auth_org_id());
+  for select using (student_id = auth.uid() and organization_id in (select auth_org_ids()));
 
 -- ── 5. student_subscriptions: snapshot + ciclo de vida gateway ───────────────
 alter table student_subscriptions
@@ -115,6 +118,10 @@ alter table organizations
 alter table dayuse_bookings drop constraint if exists dayuse_bookings_status_check;
 alter table dayuse_bookings add constraint dayuse_bookings_status_check
   check (status in ('confirmed','cancelled','pending_payment'));
+
+-- Único caminho de INSERT é a RPC (service role): a policy de insert direto
+-- permitia burlar o lock de capacidade via PostgREST.
+drop policy if exists dayuse_bookings_insert_own on dayuse_bookings;
 
 -- Substitui a RPC (drop explícito: overload de 2-args + default de 3-args
 -- deixaria a chamada PostgREST ambígua).
