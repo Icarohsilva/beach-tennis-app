@@ -163,9 +163,10 @@ function PendingRow({
 
   return (
     <div className="border border-surface-border rounded-lg p-3 space-y-2">
-      <div className="text-sm text-white">
+      <div className="text-sm text-white flex flex-wrap items-center gap-2">
         ID <span className="text-brand-400">{pending.partner_member_id}</span> ·{' '}
         <span className="text-slate-400">{pending.checkin_date}</span>
+        {pending.partner_validated && <Badge variant="success">Validado</Badge>}
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         <select

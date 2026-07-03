@@ -148,19 +148,49 @@ export async function ingestPartnerCheckin(
     .maybeSingle()
 
   if (!membership) {
-    const { error: pendingError } = await client.from('pending_checkins').insert({
-      organization_id: input.orgId,
-      partner: input.partner,
-      partner_member_id: input.partnerMemberId,
-      checkin_date: input.date,
-      external_ref: input.externalRef,
-      payload: input.payload,
-      resolved: false,
-    })
-    // 23505 = evento reenviado pela Wellhub (mesmo external_ref) → já enfileirado.
-    if (pendingError && pendingError.code !== '23505') {
-      throw new Error(`Falha ao enfileirar check-in pendente: ${pendingError.message}`)
+    const { data: pendingRow, error: pendingError } = await client
+      .from('pending_checkins')
+      .insert({
+        organization_id: input.orgId,
+        partner: input.partner,
+        partner_member_id: input.partnerMemberId,
+        checkin_date: input.date,
+        external_ref: input.externalRef,
+        payload: input.payload,
+        resolved: false,
+      })
+      .select('id')
+      .single()
+
+    if (pendingError) {
+      // 23505 = evento reenviado pela Wellhub (mesmo external_ref) → já enfileirado
+      // (e já validado, se for o caso) — não repete a chamada ao validate.
+      if (pendingError.code !== '23505') {
+        throw new Error(`Falha ao enfileirar check-in pendente: ${pendingError.message}`)
+      }
+      return { recorded: false, pending: true }
     }
+
+    // Valida mesmo sem aluno casado: o validate só precisa de gym_id + gympass_id +
+    // api_key (já vêm do webhook). Esperar o vínculo interno deixaria sem validar
+    // tanto testes da Wellhub (tokens que nunca vão casar com um aluno nosso) quanto
+    // usuários reais ainda não cadastrados — e sem validate não há pagamento.
+    if (input.validate) {
+      const result = await validateWellhubCheckin({
+        environment: input.validate.environment,
+        gymId: input.validate.gymId,
+        apiKey: input.validate.apiKey,
+        gympassId: input.partnerMemberId,
+      })
+      await client
+        .from('pending_checkins')
+        .update({
+          partner_validated: result.valid,
+          partner_validation_error: result.valid ? null : (result.error ?? 'erro desconhecido'),
+        })
+        .eq('id', (pendingRow as { id: string }).id)
+    }
+
     return { recorded: false, pending: true }
   }
 

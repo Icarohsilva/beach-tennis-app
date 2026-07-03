@@ -40,6 +40,8 @@ export interface PendingCheckin {
   external_ref: string | null
   payload: unknown
   resolved: boolean
+  partner_validated: boolean
+  partner_validation_error: string | null
   created_at: string
 }
 

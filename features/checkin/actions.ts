@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
-import { format } from 'date-fns'
+import { todayInBrt } from '@/lib/utils/sessionTime'
 import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
@@ -99,7 +99,7 @@ export async function recordCheckin(
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
   const adminClient = createAdminClient()
-  const date = opts?.date ?? format(new Date(), 'yyyy-MM-dd')
+  const date = opts?.date ?? todayInBrt()
 
   // Vínculo ao parceiro é por-academia: vem da membership da academia ativa.
   const { data: profile } = await adminClient
@@ -292,7 +292,9 @@ export async function resolvePendingCheckin(
   const adminClient = createAdminClient()
   const { data: pending } = await adminClient
     .from('pending_checkins')
-    .select('id, partner, partner_member_id, checkin_date, external_ref, resolved')
+    .select(
+      'id, partner, partner_member_id, checkin_date, external_ref, resolved, partner_validated',
+    )
     .eq('id', pendingId)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -333,6 +335,19 @@ export async function resolvePendingCheckin(
     externalRef: (pending.external_ref as string | null) ?? null,
     validation: partner,
   })
+
+  // O check-in pendente já pode ter sido validado no momento em que chegou (ver
+  // ingest.ts). Herda o status pro check-in recém-criado para não mostrar "não
+  // validado" em algo que já foi confirmado — e não revalida (evitaria o erro
+  // "already validated" do endpoint da Wellhub).
+  if (pending.partner_validated && pending.external_ref) {
+    await adminClient
+      .from('checkins')
+      .update({ partner_validated: true })
+      .eq('organization_id', orgId)
+      .eq('partner', partner)
+      .eq('external_ref', pending.external_ref as string)
+  }
 
   await adminClient.from('pending_checkins').update({ resolved: true }).eq('id', pendingId)
 
