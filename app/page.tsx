@@ -352,7 +352,7 @@ export default function LandingPage() {
             </details>
             <details className={s.faqItem}>
               <summary>Preciso migrar os dados do meu caderno?</summary>
-              <p>Não precisa digitar tudo de uma vez. Você cadastra as turmas e vai adicionando os alunos conforme eles entram pelo link. Se quiser, a gente ajuda a importar sua lista atual no primeiro dia.</p>
+              <p>Não precisa digitar tudo de uma vez. Você cadastra as turmas e vai adicionando os alunos conforme eles entram pelo link — sem planilha, sem migração forçada.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Meus alunos vão conseguir usar sozinhos?</summary>
