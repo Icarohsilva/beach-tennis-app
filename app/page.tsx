@@ -350,6 +350,18 @@ export default function LandingPage() {
               <summary>Como funciona o Wellhub e TotalPass?</summary>
               <p>A gente recebe o check-in direto deles. Não tem fila na recepção, não tem digitação de matrícula. Plugar e usar.</p>
             </details>
+            <details className={s.faqItem}>
+              <summary>Preciso migrar os dados do meu caderno?</summary>
+              <p>Não precisa digitar tudo de uma vez. Você cadastra as turmas e vai adicionando os alunos conforme eles entram pelo link. Se quiser, a gente ajuda a importar sua lista atual no primeiro dia.</p>
+            </details>
+            <details className={s.faqItem}>
+              <summary>Meus alunos vão conseguir usar sozinhos?</summary>
+              <p>Sim. O aluno recebe um link, entra em segundos e já vê as aulas, créditos e o próximo torneio. Sem manual, sem treinamento — é feito pra quem só quer jogar.</p>
+            </details>
+            <details className={s.faqItem}>
+              <summary>Funciona sem internet boa na quadra?</summary>
+              <p>Funciona. O app é leve e o check-in do Wellhub/TotalPass chega direto pra gente. Mesmo com sinal fraco na areia, a presença é registrada sem fila na recepção.</p>
+            </details>
           </div>
         </div>
       </section>
