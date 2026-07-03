@@ -304,6 +304,7 @@ export default function LandingPage() {
             <div className={s.priceBadge}>🎁 1º mês grátis</div>
             <h2>Arena profissional</h2>
             <div className={s.priceBig}>R$ 49,90<small> /mês</small></div>
+            <div className={s.priceAnchor}>menos que uma aula avulsa · ~R$ 1,66/dia</div>
             <p>Depois do mês grátis. Cancele quando quiser.</p>
             <div className={s.priceFeats}>
               <span className={s.priceFeat}>✓ Alunos ilimitados</span>
@@ -312,6 +313,11 @@ export default function LandingPage() {
               <span className={s.priceFeat}>✓ Torneios</span>
               <span className={s.priceFeat}>✓ Pix automático</span>
               <span className={s.priceFeat}>✓ Suporte por WhatsApp</span>
+            </div>
+            <div className={s.priceReassure}>
+              <span>✓ 1º mês grátis</span>
+              <span>✓ Sem cartão</span>
+              <span>✓ Cancela em 1 clique</span>
             </div>
             <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">
               Criar conta grátis →

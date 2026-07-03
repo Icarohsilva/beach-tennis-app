@@ -696,6 +696,24 @@
   color: var(--mut);
   font-weight: 500;
 }
+.priceAnchor {
+  position: relative;
+  font-size: 13.5px;
+  color: var(--brand-2);
+  font-weight: 600;
+  margin: -4px 0 10px;
+}
+.priceReassure {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  font-size: 13px;
+  color: var(--mut-2);
+}
+.priceReassure span { white-space: nowrap; }
 .priceCard > p { color: var(--mut-2); font-size: 16px; margin-bottom: 28px; position: relative; }
 .priceFeats {
   display: flex;
