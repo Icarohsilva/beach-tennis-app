@@ -267,7 +267,7 @@ export default function LandingPage() {
                 <div className={s.fsL}>Aula experimental</div>
               </div>
               <div className={`${s.floatingStat} ${s.fsBot}`}>
-                <div className={s.fsV}>0</div>
+                <div className={s.fsV}>Sem</div>
                 <div className={s.fsL}>Compromisso</div>
               </div>
             </div>
