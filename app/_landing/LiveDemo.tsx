@@ -12,6 +12,7 @@ const STEPS = [
 export function LiveDemo() {
   const [active, setActive] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [paused, setPaused] = useState(false)
   const reduced = useRef(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -27,10 +28,10 @@ export function LiveDemo() {
   }, [])
 
   useEffect(() => {
-    if (!playing || reduced.current) return
+    if (!playing || paused || reduced.current) return
     const t = setInterval(() => setActive((a) => (a + 1) % STEPS.length), 2800)
     return () => clearInterval(t)
-  }, [playing])
+  }, [playing, paused])
 
   return (
     <div className={s.demo} ref={rootRef}>
@@ -40,7 +41,7 @@ export function LiveDemo() {
           <span className={s.url}>app.arenahub.website</span>
         </div>
         <div className={s.stage}>
-          <div className={`${s.screen} ${active === 0 ? s.on : ''}`}>
+          <div className={`${s.screen} ${active === 0 ? s.on : ''}`} aria-hidden={active !== 0}>
             <div className={s.scLabel}>Painel da arena · Grade</div>
             <div className={s.days}>
               {['Seg', 'Ter', 'Qua', 'Qui', 'Sex'].map((d, i) => (
@@ -56,7 +57,7 @@ export function LiveDemo() {
             </div>
           </div>
 
-          <div className={`${s.screen} ${active === 1 ? s.on : ''}`}>
+          <div className={`${s.screen} ${active === 1 ? s.on : ''}`} aria-hidden={active !== 1}>
             <div className={s.scLabel}>App do aluno</div>
             <div className={s.card}>
               <div>
@@ -68,7 +69,7 @@ export function LiveDemo() {
             <div className={s.hintRow}>1 crédito usado · reposição liberada</div>
           </div>
 
-          <div className={`${s.screen} ${active === 2 ? s.on : ''}`}>
+          <div className={`${s.screen} ${active === 2 ? s.on : ''}`} aria-hidden={active !== 2}>
             <div className={s.scLabel}>Recepção · Check-in</div>
             <div className={s.card}>
               <div>
@@ -80,7 +81,7 @@ export function LiveDemo() {
             <div className={s.hintRow}>Sem fila, sem digitar matrícula.</div>
           </div>
 
-          <div className={`${s.screen} ${active === 3 ? s.on : ''}`}>
+          <div className={`${s.screen} ${active === 3 ? s.on : ''}`} aria-hidden={active !== 3}>
             <div className={s.scLabel}>Painel · Financeiro</div>
             <div className={s.finRow}>
               <div className={s.finBig}>R$ 1.240</div>
@@ -102,7 +103,10 @@ export function LiveDemo() {
             key={st.k}
             type="button"
             className={`${s.step} ${active === i ? s.stepOn : ''}`}
-            onClick={() => setActive(i)}
+            onClick={() => {
+              setActive(i)
+              setPaused(true)
+            }}
             aria-label={`Passo ${i + 1}: ${st.k}`}
           >
             <span className={s.stepNum}>{i + 1}</span>
