@@ -263,12 +263,12 @@ export default function LandingPage() {
               }}
             >
               <div className={`${s.floatingStat} ${s.fsTop}`}>
-                <div className={s.fsV}>+200</div>
-                <div className={s.fsL}>Arenas na rede</div>
+                <div className={s.fsV}>Grátis</div>
+                <div className={s.fsL}>Aula experimental</div>
               </div>
               <div className={`${s.floatingStat} ${s.fsBot}`}>
-                <div className={s.fsV}>⭐ 4.9</div>
-                <div className={s.fsL}>Avaliação média</div>
+                <div className={s.fsV}>0</div>
+                <div className={s.fsL}>Compromisso</div>
               </div>
             </div>
             <div className={s.splitContent}>
