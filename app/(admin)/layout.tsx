@@ -124,7 +124,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <PoweredBy className="mt-3" />
         </div>
       </aside>
-      <AdminMobileNav links={navLinks} />
+      <AdminMobileNav links={navLinks} tourTargets={tourTargets} />
       <main className="flex-1 p-6 mt-14 md:mt-0">
         {isTrialing && (
           <div

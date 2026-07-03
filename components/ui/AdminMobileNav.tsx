@@ -1,13 +1,32 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { LogoutButton } from './LogoutButton'
 
 interface NavLink { href: string; label: string }
 
-export function AdminMobileNav({ links }: { links: NavLink[] }) {
+export function AdminMobileNav({
+  links,
+  tourTargets,
+}: {
+  links: NavLink[]
+  tourTargets?: Record<string, string>
+}) {
   const [open, setOpen] = useState(false)
+
+  // O tour (mobile) abre/fecha a lista para destacar cada seção.
+  useEffect(() => {
+    const openMenu = () => setOpen(true)
+    const closeMenu = () => setOpen(false)
+    window.addEventListener('tour:admin-menu-open', openMenu)
+    window.addEventListener('tour:admin-menu-close', closeMenu)
+    return () => {
+      window.removeEventListener('tour:admin-menu-open', openMenu)
+      window.removeEventListener('tour:admin-menu-close', closeMenu)
+    }
+  }, [])
+
   return (
     <>
       {/* Fixed topbar — only visible on mobile */}
@@ -22,7 +41,7 @@ export function AdminMobileNav({ links }: { links: NavLink[] }) {
         <div className="fixed top-12 left-0 right-0 z-40 bg-surface-card border-b border-surface-border shadow-lg md:hidden">
           <nav className="flex flex-col py-2">
             {links.map(link => (
-              <Link key={link.href} href={link.href} onClick={() => setOpen(false)}
+              <Link key={link.href} href={link.href} data-tour={tourTargets?.[link.href]} onClick={() => setOpen(false)}
                 className="px-4 py-3 text-sm text-slate-300 hover:bg-surface-border hover:text-white transition-colors">
                 {link.label}
               </Link>

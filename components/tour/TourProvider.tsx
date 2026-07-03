@@ -18,26 +18,50 @@ export function TourProvider({
   const pathname = usePathname()
   const startedRef = useRef(false)
 
+  // Resolve o alvo VISÍVEL. O mesmo data-tour existe no menu lateral (desktop,
+  // hidden no mobile) e na lista do menu hambúrguer (mobile). getClientRects()
+  // ignora elementos display:none e lida corretamente com position:fixed.
+  function resolveVisible(selector: string): HTMLElement {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector))
+    return nodes.find((n) => n.getClientRects().length > 0) ?? nodes[0]
+  }
+
   function runTour(markOnFinish: boolean) {
+    const isMobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+    // No mobile o menu admin fica no hambúrguer: abrimos a lista antes de guiar.
+    const needsMobileMenu = variant === 'admin' && isMobile
+
     const steps = getTourSteps(variant).map((s) => ({
-      element: s.element,
+      element: s.element ? () => resolveVisible(s.element!) : undefined,
       popover: {
         title: s.popover.title,
         description: s.popover.description,
       },
     }))
 
-    const d: Driver = driver({
-      showProgress: true,
-      nextBtnText: 'Próximo',
-      prevBtnText: 'Voltar',
-      doneBtnText: 'Concluir',
-      steps,
-      onDestroyed: () => {
-        if (markOnFinish) void markTourSeen(variant)
-      },
-    })
-    d.drive()
+    const start = () => {
+      const d: Driver = driver({
+        showProgress: true,
+        nextBtnText: 'Próximo',
+        prevBtnText: 'Voltar',
+        doneBtnText: 'Concluir',
+        steps,
+        onDestroyed: () => {
+          if (needsMobileMenu) window.dispatchEvent(new Event('tour:admin-menu-close'))
+          if (markOnFinish) void markTourSeen(variant)
+        },
+      })
+      d.drive()
+    }
+
+    if (needsMobileMenu) {
+      window.dispatchEvent(new Event('tour:admin-menu-open'))
+      // dá um tick pro dropdown renderar antes de destacar o 1º item
+      setTimeout(start, 150)
+    } else {
+      start()
+    }
   }
 
   // Auto-start no primeiro login (uma vez por montagem).
