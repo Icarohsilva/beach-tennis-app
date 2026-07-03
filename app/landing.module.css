@@ -482,6 +482,11 @@
   line-height: 1.55;
 }
 
+/* A seção-problema é curta; encurta o respiro pro bloco seguinte não "flutuar". */
+.blkFade {
+  padding-bottom: 64px;
+}
+
 /* ===== Features (glass cards) ===== */
 .featGrid {
   display: grid;
