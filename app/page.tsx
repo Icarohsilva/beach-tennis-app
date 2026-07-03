@@ -3,6 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import s from './landing.module.css'
 import { WhatsAppChat } from './_landing/WhatsAppChat'
+import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/arenahub.app/'
 const YOUTUBE_URL = 'https://www.youtube.com/@arenahub-app'
@@ -188,32 +189,32 @@ export default function LandingPage() {
           </div>
           <div className={s.featGrid}>
             <div className={s.feat}>
-              <div className={s.featIc}>📅</div>
+              <div className={s.featIc}><CalendarClock size={26} strokeWidth={2} /></div>
               <h3>Grade inteligente</h3>
               <p>Turmas recorrentes por nível e horário. Aluno agenda, repõe e entra na fila de espera sozinho — sem você no meio.</p>
             </div>
             <div className={s.feat}>
-              <div className={s.featIc}>💳</div>
+              <div className={s.featIc}><CreditCard size={26} strokeWidth={2} /></div>
               <h3>Créditos &amp; reposição</h3>
               <p>Cancelou com 5h de antecedência? Crédito automático na conta do aluno. Sem dor de cabeça com remarcação.</p>
             </div>
             <div className={s.feat}>
-              <div className={s.featIc}>✅</div>
+              <div className={s.featIc}><BadgeCheck size={26} strokeWidth={2} /></div>
               <h3>Wellhub &amp; TotalPass</h3>
               <p>Check-in integrado, presença registrada sem fila. Sua recepção volta a respirar.</p>
             </div>
             <div className={s.feat}>
-              <div className={s.featIc}>📊</div>
+              <div className={s.featIc}><BarChart3 size={26} strokeWidth={2} /></div>
               <h3>Financeiro claro</h3>
               <p>Mensalidades por Pix, cartão recorrente ou avulso. Inadimplência num painel — você sabe quanto entra.</p>
             </div>
             <div className={s.feat}>
-              <div className={s.featIc}>🏆</div>
+              <div className={s.featIc}><Trophy size={26} strokeWidth={2} /></div>
               <h3>Torneios completos</h3>
               <p>Monte chaves, divulgue, cobre inscrição e gera ranking. Engaja a comunidade e movimenta a quadra no fim de semana.</p>
             </div>
             <div className={s.feat}>
-              <div className={s.featIc}>💬</div>
+              <div className={s.featIc}><MessagesSquare size={26} strokeWidth={2} /></div>
               <h3>Comunidade no app</h3>
               <p>Feed da arena: avisos, fotos, ranking. Seus alunos viram torcida e fazem o marketing por você.</p>
             </div>

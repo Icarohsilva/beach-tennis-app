@@ -534,6 +534,7 @@
   font-size: 24px;
   margin-bottom: 18px;
   border: 1px solid rgba(249, 115, 22, 0.25);
+  color: var(--brand-2);
 }
 .feat h3 { font-size: 19px; margin-bottom: 8px; }
 .feat p { color: var(--mut); font-size: 14.5px; line-height: 1.55; }
