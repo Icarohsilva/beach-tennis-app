@@ -6,6 +6,8 @@ import type { PaymentType } from '@/types'
 import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { normalizeSports } from '@/lib/arenas/sports'
+import { getMpAccount } from '@/lib/billing/gatewayAccounts'
+import { mpCancelPreapproval } from '@/lib/billing/mpClient'
 
 // ---------------------------------------------------------------------------
 // subscribeToPlan
@@ -233,13 +235,25 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   // Find active subscription (na academia ativa)
   const { data: sub, error: subErr } = await adminClient
     .from('student_subscriptions')
-    .select('id, organization_id')
+    .select('id, organization_id, gateway, gateway_subscription_id')
     .eq('student_id', user.id)
     .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .single()
+    .in('status', ['active', 'past_due'])
+    .maybeSingle()
 
   if (subErr || !sub) return { error: 'Nenhuma assinatura ativa encontrada.' }
+
+  // MP primeiro: nunca deixar o MP cobrando um plano morto. Falhou → aborta.
+  if (sub.gateway === 'mercadopago' && sub.gateway_subscription_id) {
+    const account = await getMpAccount(sub.organization_id)
+    if (!account) return { error: 'Não foi possível cancelar no Mercado Pago. Fale com a academia.' }
+    try {
+      await mpCancelPreapproval(account.accessToken, sub.gateway_subscription_id)
+    } catch (e) {
+      console.error('[cancelSubscription] MP cancel falhou', e)
+      return { error: 'Não foi possível cancelar no Mercado Pago. Tente novamente.' }
+    }
+  }
 
   // Cancel subscription
   const { error: cancelErr } = await adminClient
@@ -305,13 +319,25 @@ export async function adminCancelStudentPlan(
 
   const { data: sub } = await adminClient
     .from('student_subscriptions')
-    .select('id, organization_id')
+    .select('id, organization_id, gateway, gateway_subscription_id')
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
-    .eq('status', 'active')
+    .in('status', ['active', 'past_due'])
     .maybeSingle()
 
   if (!sub) return { error: 'Nenhum plano ativo encontrado.' }
+
+  // MP primeiro: nunca deixar o MP cobrando um plano morto. Falhou → aborta.
+  if (sub.gateway === 'mercadopago' && sub.gateway_subscription_id) {
+    const account = await getMpAccount(sub.organization_id)
+    if (!account) return { error: 'Não foi possível cancelar no Mercado Pago. Fale com a academia.' }
+    try {
+      await mpCancelPreapproval(account.accessToken, sub.gateway_subscription_id)
+    } catch (e) {
+      console.error('[adminCancelStudentPlan] MP cancel falhou', e)
+      return { error: 'Não foi possível cancelar no Mercado Pago. Tente novamente.' }
+    }
+  }
 
   await adminClient
     .from('student_subscriptions')
