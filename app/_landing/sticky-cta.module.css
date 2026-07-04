@@ -29,3 +29,4 @@
   box-shadow: 0 8px 28px rgba(249, 115, 22, 0.45);
 }
 @media (max-width: 720px) { .bar { display: block; } }
+@media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
