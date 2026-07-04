@@ -150,7 +150,7 @@ export default async function StudentProfilePage({ params }: Props) {
   // Fetch active subscription plans (for plan assignment)
   const { data: plansRaw } = await adminClient
     .from('subscription_plans')
-    .select('id, name, classes_per_week, credits_per_month, price_monthly, is_active')
+    .select('id, name, classes_per_week, credits_per_month, is_active')
     .eq('is_active', true)
     .eq('organization_id', orgId)
     .order('classes_per_week', { ascending: true })
@@ -160,7 +160,6 @@ export default async function StudentProfilePage({ params }: Props) {
     name: string
     classes_per_week: number
     credits_per_month: number
-    price_monthly: number
     is_active: boolean
   }[]
 

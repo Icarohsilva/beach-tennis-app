@@ -257,9 +257,6 @@ export interface SubscriptionPlan {
   description: string | null
   classes_per_week: number
   credits_per_month: number
-  price_monthly: number
-  price_quarterly: number
-  price_annual: number
   is_active: boolean
 }
 

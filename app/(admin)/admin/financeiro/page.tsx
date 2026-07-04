@@ -2,13 +2,13 @@
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { PlansManager } from './PlansManager'
+import { FinanceiroSubnav } from './FinanceiroSubnav'
 import { PartnerRevenueCard } from './PartnerRevenueCard'
 import {
   getPartnerCheckinRates,
   getPartnerRevenueThisMonth,
 } from '@/features/financeiro/partnerRevenueActions'
-import type { SubscriptionPlan, PaymentStatus } from '@/types'
+import type { PaymentStatus } from '@/types'
 
 interface RevenueRow {
   amount: number
@@ -90,15 +90,6 @@ export default async function FinanceiroPage() {
 
   const pendingPayments: PendingPayment[] = (pendingPaymentsRaw as unknown as PendingPayment[]) ?? []
 
-  // ─── Planos ──────────────────────────────────────────────────────────────
-  const { data: plansRaw } = await adminClient
-    .from('subscription_plans')
-    .select('*')
-    .eq('organization_id', orgId)
-    .order('classes_per_week', { ascending: true })
-
-  const plans: SubscriptionPlan[] = plansRaw ?? []
-
   // ─── Receita de parceiro (Wellhub/TotalPass) ─────────────────────────────
   const partnerRates = await getPartnerCheckinRates()
   const partnerRevenue = await getPartnerRevenueThisMonth()
@@ -127,6 +118,7 @@ export default async function FinanceiroPage() {
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
         <p className="text-slate-400 text-sm mt-1">Visão geral das finanças da academia</p>
       </div>
+      <FinanceiroSubnav />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -208,14 +200,6 @@ export default async function FinanceiroPage() {
           initialRevenue={partnerRevenue}
           hasZeroTargetStudents={hasZeroTargetStudents}
         />
-      </section>
-
-      {/* Gerenciar Planos */}
-      <section>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
-          Gerenciar Planos
-        </h2>
-        <PlansManager plans={plans} />
       </section>
     </div>
   )
