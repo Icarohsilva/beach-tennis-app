@@ -34,7 +34,12 @@ export async function GET(req: NextRequest) {
   for (const row of (rows ?? []) as { organization_id: string; refresh_token_enc: string }[]) {
     try {
       const tokens = await mpRefreshOAuthToken(decryptSecret(row.refresh_token_enc))
-      await saveMpAccount(row.organization_id, tokens, null)
+      // MP costuma rotacionar o refresh_token a cada uso — se o upsert falhar
+      // aqui, ficamos com o token velho salvo e SÓ descobriríamos isso na
+      // próxima semana como um 401/403 genuíno (falso "precisa reconectar").
+      // Trata como falha transitória, não como sucesso.
+      const { error } = await saveMpAccount(row.organization_id, tokens, null)
+      if (error) throw new Error(`saveMpAccount falhou: ${error}`)
       refreshed++
     } catch (e) {
       const isAuthRejection = e instanceof MpApiError && (e.status === 401 || e.status === 403)
