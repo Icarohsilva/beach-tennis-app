@@ -289,21 +289,21 @@ export default function LandingPage() {
           <Reveal>
             <div className={s.testimonials}>
               <figure className={s.tCard}>
-                <div className={s.tQuote}>"Parei de responder 'sobrou vaga?' o dia inteiro. A quadra enche sozinha e eu foco em dar aula."</div>
+                <div className={s.tQuote}>&ldquo;Parei de responder &lsquo;sobrou vaga?&rsquo; o dia inteiro. A quadra enche sozinha e eu foco em dar aula.&rdquo;</div>
                 <figcaption className={s.tWho}>
                   <span className={s.tAvatar} aria-hidden="true">RA</span>
                   <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
                 </figcaption>
               </figure>
               <figure className={s.tCard}>
-                <div className={s.tQuote}>"A inadimplência sumiu do escuro. Agora eu abro o painel e sei exatamente quanto entrou no mês."</div>
+                <div className={s.tQuote}>&ldquo;A inadimplência sumiu do escuro. Agora eu abro o painel e sei exatamente quanto entrou no mês.&rdquo;</div>
                 <figcaption className={s.tWho}>
                   <span className={s.tAvatar} aria-hidden="true">MC</span>
                   <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
                 </figcaption>
               </figure>
               <figure className={s.tCard}>
-                <div className={s.tQuote}>"Configurei em uma tarde. Os alunos entraram pelo link e no fim de semana já rodou o primeiro torneio."</div>
+                <div className={s.tQuote}>&ldquo;Configurei em uma tarde. Os alunos entraram pelo link e no fim de semana já rodou o primeiro torneio.&rdquo;</div>
                 <figcaption className={s.tWho}>
                   <span className={s.tAvatar} aria-hidden="true">JP</span>
                   <span className={s.tMeta}><strong>[Nome do dono]</strong><em>[Arena] · [Cidade]</em></span>
