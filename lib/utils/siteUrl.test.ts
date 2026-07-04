@@ -24,4 +24,11 @@ describe('getSiteUrl', () => {
     process.env.NEXT_PUBLIC_SITE_URL = 'https://arenahub.website//'
     expect(getSiteUrl()).toBe('https://arenahub.website')
   })
+
+  it('usa o default quando a env está vazia ou só espaços', () => {
+    process.env.NEXT_PUBLIC_SITE_URL = ''
+    expect(getSiteUrl()).toBe('https://arenahub.website')
+    process.env.NEXT_PUBLIC_SITE_URL = '   '
+    expect(getSiteUrl()).toBe('https://arenahub.website')
+  })
 })
