@@ -2,6 +2,12 @@
 // Criptografia dos tokens OAuth das academias (AES-256-GCM). A chave vem de
 // GATEWAY_TOKEN_KEY (64 chars hex = 32 bytes). Tokens NUNCA ficam em texto
 // puro no banco nem chegam ao client.
+//
+// Sem versionamento de chave no payload: rotacionar GATEWAY_TOKEN_KEY torna
+// TODAS as linhas de org_gateway_accounts existentes indecifráveis (a
+// academia precisaria reconectar via OAuth). Aceito para v1 — se a rotação
+// virar necessidade real, decriptar com a chave antiga e regravar com a nova
+// ANTES de trocar a env var.
 import crypto from 'crypto'
 
 function getKey(explicit?: string): Buffer {
