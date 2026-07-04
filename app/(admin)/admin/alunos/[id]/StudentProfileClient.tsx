@@ -274,10 +274,9 @@ export function StudentProfileClient({
         setError(result.error)
         return
       }
-      // #10: `warning` = plano cancelado, mas com aviso (ex.: falha ao zerar créditos).
       setActiveSub(null)
-      if (clearCredits && !result.warning) setCreditsBalance(0)
-      notify(result.warning ?? 'Plano cancelado.')
+      if (clearCredits) setCreditsBalance(0)
+      notify('Plano cancelado.')
     })
   }
 
