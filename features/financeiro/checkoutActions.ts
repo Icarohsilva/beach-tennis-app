@@ -4,7 +4,7 @@
 // Nenhum efeito de crédito/ativação acontece aqui — só o webhook confirma.
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
-import { mpCreatePreapproval } from '@/lib/billing/mpClient'
+import { mpCancelPreapproval, mpCreatePreapproval } from '@/lib/billing/mpClient'
 import { addPeriod, PERIODICITY_MONTHS, PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import type { PaymentType, Periodicity } from '@/types'
@@ -121,7 +121,16 @@ export async function subscribeToPlanCheckout(
     })
     .select('id')
     .single()
-  if (insErr || !sub) return { error: 'Erro ao iniciar assinatura. Tente novamente.' }
+  if (insErr) {
+    // 23505 = violação do índice único parcial (student_subscriptions_one_live_per_student)
+    // — corrida entre duas chamadas concorrentes (ex.: duplo clique, duas
+    // abas). A outra já está cuidando da assinatura; não criar duplicata.
+    if (insErr.code === '23505') {
+      return { error: 'Já existe uma assinatura em andamento. Aguarde ou tente novamente em instantes.' }
+    }
+    return { error: 'Erro ao iniciar assinatura. Tente novamente.' }
+  }
+  if (!sub) return { error: 'Erro ao iniciar assinatura. Tente novamente.' }
 
   try {
     const pre = await mpCreatePreapproval(token, {
@@ -141,10 +150,29 @@ export async function subscribeToPlanCheckout(
       notification_url: `${getSiteUrl()}/api/webhooks/mercadopago?org=${orgId}`,
       status: 'pending',
     })
-    await admin
+    const { error: linkErr } = await admin
       .from('student_subscriptions')
       .update({ gateway_subscription_id: pre.id })
       .eq('id', sub.id)
+    if (linkErr) {
+      // Preapproval foi criado no MP mas não conseguimos salvar o id local —
+      // o webhook resolve assinaturas por gateway_subscription_id, então sem
+      // isso o pagamento futuro ficaria "órfão" (aluno paga, ninguém ativa).
+      // Cancela o preapproval no MP e força o aluno a tentar de novo, em vez
+      // de devolver um initPoint que levaria a um pagamento sem dono.
+      console.error('[checkout] falhou ao salvar gateway_subscription_id — cancelando preapproval órfão', {
+        subId: sub.id, preapprovalId: pre.id, error: linkErr.message,
+      })
+      try {
+        await mpCancelPreapproval(token, pre.id)
+      } catch (cancelErr) {
+        console.error('[checkout] falha ao cancelar preapproval órfão — requer intervenção manual', {
+          subId: sub.id, preapprovalId: pre.id, error: cancelErr,
+        })
+      }
+      await admin.from('student_subscriptions').update({ status: 'cancelled' }).eq('id', sub.id)
+      return { error: 'Não foi possível concluir a preparação do pagamento. Tente novamente.' }
+    }
     return { initPoint: pre.init_point }
   } catch (e) {
     console.error('[checkout] preapproval falhou', e)
