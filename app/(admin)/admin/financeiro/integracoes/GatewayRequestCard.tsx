@@ -63,7 +63,13 @@ export function GatewayRequestCard({ requests }: { requests: GatewayIntegrationR
         {success && (
           <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">{success}</p>
         )}
-        <Button size="sm" variant="primary" loading={pending} onClick={handleSubmit}>
+        <Button
+          size="sm"
+          variant="primary"
+          loading={pending}
+          disabled={!gatewayName.trim()}
+          onClick={handleSubmit}
+        >
           Enviar solicitação
         </Button>
       </div>

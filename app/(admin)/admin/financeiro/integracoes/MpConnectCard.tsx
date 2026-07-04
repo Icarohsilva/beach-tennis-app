@@ -1,7 +1,7 @@
 'use client'
 // app/(admin)/admin/financeiro/integracoes/MpConnectCard.tsx
-import { useState, useTransition } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useEffect, useState, useTransition } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -23,13 +23,28 @@ const CALLBACK_MESSAGES: Record<string, { text: string; ok: boolean }> = {
 }
 
 export function MpConnectCard({ account }: MpConnectCardProps) {
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const feedback = CALLBACK_MESSAGES[searchParams.get('mp') ?? '']
+  // Captura o feedback do retorno do OAuth uma única vez (estado local) e
+  // limpa o ?mp= da URL logo em seguida — sem isso, um refresh/voltar do
+  // navegador reexibiria "conectado com sucesso!" mesmo que a conta tenha
+  // sido desconectada/expirado depois, contradizendo o badge (fonte real
+  // de verdade, vinda do prop `account`).
+  const [feedback] = useState(() => {
+    const mpParam = searchParams.get('mp')
+    return mpParam ? CALLBACK_MESSAGES[mpParam] : undefined
+  })
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   const connected = account?.status === 'connected'
   const expired = account?.status === 'expired'
+
+  useEffect(() => {
+    if (searchParams.get('mp')) router.replace(pathname, { scroll: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleConnect() {
     setError(null)
