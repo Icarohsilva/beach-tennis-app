@@ -14,13 +14,15 @@ function statusLabel(status: SubscriptionStatus): string {
     active: 'Ativo',
     paused: 'Pausado',
     cancelled: 'Cancelado',
+    pending_payment: 'Aguardando pagamento',
+    past_due: 'Pagamento vencido',
   }
   return labels[status] ?? status
 }
 
 function statusVariant(status: SubscriptionStatus): 'success' | 'warning' | 'danger' {
   if (status === 'active') return 'success'
-  if (status === 'paused') return 'warning'
+  if (status === 'paused' || status === 'pending_payment') return 'warning'
   return 'danger'
 }
 

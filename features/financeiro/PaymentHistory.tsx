@@ -35,6 +35,7 @@ function typeLabel(type: PaymentTransactionType): string {
     subscription: 'Assinatura',
     per_class: 'Avulso',
     trial: 'Aula Trial',
+    day_use: 'Day Use',
   }
   return labels[type] ?? type
 }
