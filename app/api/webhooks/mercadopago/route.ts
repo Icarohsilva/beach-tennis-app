@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { mapPreapprovalStatus } from '@/lib/billing/mpStatus'
 import { isValidSignature } from '@/lib/billing/webhookSignature'
+import {
+  handleStudentPreapprovalEvent,
+  handleStudentRecurringPayment,
+} from './studentHandlers'
 
 /**
  * Mercado Pago webhook handler.
@@ -19,39 +23,69 @@ import { isValidSignature } from '@/lib/billing/webhookSignature'
  */
 export async function POST(req: NextRequest) {
   // ─── Signature validation ───────────────────────────────────────────────
+  // Fail-closed (auditoria #4): sem o secret configurado NÃO processamos o
+  // webhook. Caso contrário qualquer requisição não autenticada marcaria
+  // pagamentos como pagos e concederia créditos.
   const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET
-  if (secret) {
-    const xSignature = req.headers.get('x-signature')
-    const xRequestId = req.headers.get('x-request-id')
-    // O MP calcula a assinatura sobre o data.id que vem na QUERY STRING da URL
-    // de notificação (não sobre o corpo). Ver lib/billing/webhookSignature.ts.
-    const dataId = req.nextUrl.searchParams.get('data.id')
-    const rawBody = await req.text()
-
-    if (!isValidSignature({ xSignature, requestId: xRequestId, dataId, secret })) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
-    }
-
-    // Parse JSON body from rawBody
-    let body: unknown
-    try {
-      body = JSON.parse(rawBody)
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
-    }
-
-    return handleWebhook(body as WebhookPayload)
+  if (!secret) {
+    console.error('[webhook/mercadopago] MERCADOPAGO_WEBHOOK_SECRET ausente — recusando webhook')
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 401 })
   }
 
-  // No secret configured — parse body normally (dev/test mode)
+  const xSignature = req.headers.get('x-signature')
+  const xRequestId = req.headers.get('x-request-id')
+  // O MP calcula a assinatura sobre o data.id que vem na QUERY STRING da URL
+  // de notificação (não sobre o corpo). Ver lib/billing/webhookSignature.ts.
+  const dataId = req.nextUrl.searchParams.get('data.id')
+  const rawBody = await req.text()
+
+  // ?org= identifica a academia dona da notificação de assinatura de ALUNO
+  // (Checkout Pro/preapproval criado com notification_url contendo ?org=).
+  // Essas notificações não carregam HMAC — a segurança vem inteiramente de
+  // re-confirmar na API do MP com o token da própria academia no handler,
+  // nunca deste parâmetro ou do corpo da requisição.
+  const orgParam = req.nextUrl.searchParams.get('org')
+  const signatureOk = isValidSignature({ xSignature, requestId: xRequestId, dataId, secret })
+  if (!signatureOk && !orgParam) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  }
+  if (!signatureOk && orgParam) {
+    console.warn('[webhook/mercadopago] notificação ?org= sem assinatura válida — seguindo como gatilho não confiável')
+  }
+
+  // Parse JSON body from rawBody
   let body: unknown
   try {
-    body = await req.json()
+    body = JSON.parse(rawBody)
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  return handleWebhook(body as WebhookPayload)
+  return handleWebhook(body as WebhookPayload, orgParam)
+}
+
+/**
+ * Confirma na API do MP que o pagamento está realmente aprovado (auditoria #4).
+ * Retorna:
+ *   true  → status === 'approved' (pode creditar)
+ *   false → qualquer outro status (recusado/estornado/pendente → NÃO creditar)
+ *   null  → não foi possível confirmar (token ausente ou erro na API)
+ */
+async function isMpPaymentApproved(paymentId: string): Promise<boolean | null> {
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN
+  if (!token) {
+    console.error('[webhook/mercadopago] MERCADOPAGO_ACCESS_TOKEN ausente — não dá para confirmar status do pagamento')
+    return null
+  }
+  const res = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    console.error('[webhook/mercadopago] GET payment falhou:', res.status)
+    return null
+  }
+  const pay = (await res.json()) as { status?: string }
+  return pay.status === 'approved'
 }
 
 interface WebhookPayload {
@@ -60,13 +94,33 @@ interface WebhookPayload {
   data?: { id?: string | number }
 }
 
-async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
+async function handleWebhook(body: WebhookPayload, orgParam: string | null): Promise<NextResponse> {
   const action = body.action ?? body.type
+  const resourceId = String(body.data?.id ?? '')
 
-  // Eventos de assinatura da PLATAFORMA (cobrança academia→plataforma).
-  // Separado do fluxo payment.* (billing aluno→academia), que segue abaixo intocado.
-  if (action === 'subscription_preapproval' || action === 'subscription_authorized_payment') {
-    return handlePlatformSubscription(action, String(body.data?.id ?? ''))
+  try {
+    // Assinaturas: primeiro tenta ALUNO (billing aluno→academia, lookup por
+    // preapproval id); se não for, cai no fluxo de PLATAFORMA (SaaS
+    // academia→plataforma) já existente, que segue abaixo intocado.
+    if (action === 'subscription_preapproval') {
+      if (!resourceId) return NextResponse.json({ error: 'Missing data.id' }, { status: 400 })
+      const result = await handleStudentPreapprovalEvent(resourceId)
+      if (result === 'handled') return NextResponse.json({ received: true })
+      return handlePlatformSubscription(action, resourceId)
+    }
+
+    if (action === 'subscription_authorized_payment') {
+      if (!resourceId) return NextResponse.json({ error: 'Missing data.id' }, { status: 400 })
+      if (orgParam) {
+        await handleStudentRecurringPayment(resourceId, orgParam)
+        return NextResponse.json({ received: true })
+      }
+      return handlePlatformSubscription(action, resourceId)
+    }
+  } catch (e) {
+    // Falha transitória (API MP fora, DB): 500 → MP reentrega o evento.
+    console.error('[webhook/mercadopago] handler falhou', e)
+    return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
 
   const gatewayPaymentId = String(body.data?.id ?? '')
@@ -101,6 +155,15 @@ async function handleWebhook(body: WebhookPayload): Promise<NextResponse> {
 
   // Only process if not already paid
   if (payment.status === 'paid') {
+    return NextResponse.json({ received: true })
+  }
+
+  // Confirma na API do MP que o pagamento está aprovado ANTES de marcar como
+  // pago e conceder créditos (auditoria #4). Evento de pagamento recusado/
+  // estornado/pendente não credita. Sem confirmação → não processa (o MP
+  // reentrega o evento depois).
+  const approved = await isMpPaymentApproved(gatewayPaymentId)
+  if (approved !== true) {
     return NextResponse.json({ received: true })
   }
 

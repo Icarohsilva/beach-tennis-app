@@ -9,6 +9,7 @@ import {
   getPartnerCheckinRates,
   getPartnerRevenueThisMonth,
 } from '@/features/financeiro/partnerRevenueActions'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import type { PaymentStatus } from '@/types'
 
 interface RevenueRow {
@@ -54,17 +55,25 @@ export default async function FinanceiroPage() {
     .filter((p) => p.status === 'pending')
     .reduce((sum, p) => sum + p.amount, 0)
 
-  // ─── Inadimplentes: active subscription + last payment failed ────────────
+  // ─── Inadimplentes: assinatura ativa/vencida OU último pagamento falhou ───
   const { data: inadimplentesRaw } = await adminClient
     .from('student_subscriptions')
-    .select('student_id, profiles:profiles!student_subscriptions_student_id_fkey(full_name)')
-    .eq('status', 'active')
+    .select('student_id, status, gateway, current_period_end, profiles:profiles!student_subscriptions_student_id_fkey(full_name)')
+    .in('status', ['active', 'past_due'])
     .eq('organization_id', orgId)
 
-  // Filter: students whose last payment has status = 'failed'
+  const now = new Date()
   const inadimplentes: InadimplentRow[] = []
   if (inadimplentesRaw) {
-    for (const sub of inadimplentesRaw as unknown as InadimplentRow[]) {
+    for (const sub of inadimplentesRaw as unknown as (InadimplentRow & {
+      status: string
+      gateway: string
+      current_period_end: string | null
+    })[]) {
+      if (sub.status === 'past_due' || !isSubscriptionCurrent(sub, now)) {
+        inadimplentes.push(sub)
+        continue
+      }
       const { data: lastPayment } = await adminClient
         .from('payments')
         .select('status')
@@ -73,10 +82,7 @@ export default async function FinanceiroPage() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-
-      if (lastPayment?.status === 'failed') {
-        inadimplentes.push(sub)
-      }
+      if (lastPayment?.status === 'failed') inadimplentes.push(sub)
     }
   }
 
@@ -141,7 +147,7 @@ export default async function FinanceiroPage() {
         <Card>
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Inadimplentes</p>
           <p className="text-2xl font-bold text-red-400">{inadimplentes.length}</p>
-          <p className="text-xs text-slate-400 mt-1">assinaturas ativas com último pagamento falhou</p>
+          <p className="text-xs text-slate-400 mt-1">assinaturas vencidas ou com último pagamento falhou</p>
         </Card>
         <Card>
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Pagamentos pendentes</p>
@@ -183,7 +189,7 @@ export default async function FinanceiroPage() {
                   <span className="text-sm text-white">
                     {item.profiles?.full_name ?? item.student_id}
                   </span>
-                  <Badge variant="danger">Pagamento falhou</Badge>
+                  <Badge variant="danger">Inadimplente</Badge>
                 </div>
               </Card>
             ))}
