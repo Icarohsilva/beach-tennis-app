@@ -34,6 +34,11 @@ export function addMonthsClamped(date: Date, months: number): Date {
   return d
 }
 
+// ATENÇÃO (drift de dia-âncora): encadear addPeriod a partir do próprio
+// current_period_end anterior (em vez de uma data-âncora fixa) faz o dia
+// derivar para baixo permanentemente após um clamp (ex.: assinante do dia 31
+// vira 28/fev e nunca mais volta a cair no 31). Aceito para este produto —
+// documentado para quem for construir a renovação recorrente do webhook.
 export function addPeriod(date: Date, periodicity: Periodicity): Date {
   return addMonthsClamped(date, PERIODICITY_MONTHS[periodicity])
 }
