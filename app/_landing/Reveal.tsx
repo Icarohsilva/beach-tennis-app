@@ -21,6 +21,13 @@ export function Reveal({
       setShown(true)
       return
     }
+    // threshold: 0 (fire as soon as any pixel is visible) instead of a higher
+    // threshold like 0.15 — with a higher threshold, fast scrolling (trackpad
+    // flicks, Page Down, scroll-to-anchor) can carry a short element fully
+    // across the viewport between two sampled frames without ever reaching
+    // 15% visibility, leaving it permanently stuck at opacity: 0. A 0
+    // threshold only needs a single visible pixel to trigger, which is far
+    // more robust to fast/large scroll jumps.
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -30,7 +37,7 @@ export function Reveal({
           }
         })
       },
-      { threshold: 0.15 },
+      { threshold: 0, rootMargin: '0px 0px -5% 0px' },
     )
     io.observe(el)
     return () => io.disconnect()
