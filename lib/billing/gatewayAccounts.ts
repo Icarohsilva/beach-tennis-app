@@ -28,22 +28,37 @@ interface AccountRow {
 
 export async function getMpAccount(orgId: string): Promise<MpAccount | null> {
   const admin = createAdminClient()
-  const { data } = await admin
+  const { data, error } = await admin
     .from('org_gateway_accounts')
     .select('status, mp_user_id, access_token_enc, refresh_token_enc, public_key, token_expires_at')
     .eq('organization_id', orgId)
     .eq('gateway', 'mercadopago')
     .maybeSingle()
+  if (error) {
+    // Erro transitório de leitura (rede/DB) é diferente de "não conectado" —
+    // sem logar, um blip vira silenciosamente "pagamento indisponível" com
+    // causa raiz perdida.
+    console.error('[gatewayAccounts] select falhou', { orgId, error: error.message })
+    return null
+  }
   if (!data) return null
   const row = data as AccountRow
-  return {
-    organizationId: orgId,
-    status: row.status,
-    accessToken: decryptSecret(row.access_token_enc),
-    refreshToken: decryptSecret(row.refresh_token_enc),
-    mpUserId: row.mp_user_id,
-    publicKey: row.public_key,
-    tokenExpiresAt: row.token_expires_at,
+  try {
+    return {
+      organizationId: orgId,
+      status: row.status,
+      accessToken: decryptSecret(row.access_token_enc),
+      refreshToken: decryptSecret(row.refresh_token_enc),
+      mpUserId: row.mp_user_id,
+      publicKey: row.public_key,
+      tokenExpiresAt: row.token_expires_at,
+    }
+  } catch (e) {
+    // GATEWAY_TOKEN_KEY mal configurada ou ciphertext corrompido: melhor
+    // degradar para "não conectado" (o caller já sabe mostrar essa mensagem)
+    // do que estourar sem tratamento no meio de um checkout do aluno.
+    console.error('[gatewayAccounts] decrypt falhou', { orgId, error: e instanceof Error ? e.message : e })
+    return null
   }
 }
 
