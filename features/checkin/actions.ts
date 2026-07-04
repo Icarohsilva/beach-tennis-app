@@ -4,12 +4,24 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
-import { todayInBrt } from '@/lib/utils/sessionTime'
 import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { recordResolvedCheckin } from '@/lib/checkin/ingest'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
+
+// "Hoje" (YYYY-MM-DD) no fuso de Brasília, independente do fuso do servidor
+// (Vercel roda em UTC — sem isso, o dia vira o seguinte depois das 21h BRT).
+// Definido aqui (em vez de importado de lib/utils/sessionTime) para não depender
+// de um export ainda não disponível nesse módulo compartilhado.
+function todayInBrt(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+}
 
 async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
   const supabase = createClient()
