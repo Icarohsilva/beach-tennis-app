@@ -2,16 +2,7 @@
 // features/platform-billing/actions.ts
 import { requireOwner, createAdminClient } from '@/lib/supabase/server'
 import { PLATFORM_PLAN } from '@/lib/billing/platformPlan'
-
-// Base URL do site para o back_url do MercadoPago. Normaliza para garantir uma URL
-// absoluta e válida: força o esquema https:// (se a env vier sem ele, ex.
-// "www.arenahub.website") e remove barra(s) final(is). Sem o https://, o MP
-// recusa com "Invalid value for back_url, must be a valid URL".
-function getSiteUrl(): string {
-  const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website').trim()
-  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
-  return withScheme.replace(/\/+$/, '')
-}
+import { getSiteUrl } from '@/lib/utils/siteUrl'
 
 // Inicia a assinatura da plataforma (Preapproval no MercadoPago). Owner-only.
 // Devolve init_point (URL hospedada do MP) para o client redirecionar. Não tocamos no cartão.
