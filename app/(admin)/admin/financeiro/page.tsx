@@ -1,4 +1,5 @@
 // app/(admin)/financeiro/page.tsx
+import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
@@ -104,6 +105,14 @@ export default async function FinanceiroPage() {
     (partnerMembershipsRaw ?? []) as { monthly_checkin_target: number }[]
   ).some((m) => (m.monthly_checkin_target ?? 0) === 0)
 
+  // ─── Status da conexão Mercado Pago ──────────────────────────────────────
+  const { data: mpAccount } = await adminClient
+    .from('org_gateway_accounts')
+    .select('status, mp_user_id')
+    .eq('organization_id', orgId)
+    .eq('gateway', 'mercadopago')
+    .maybeSingle()
+
   function formatCurrency(amount: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
   }
@@ -139,6 +148,27 @@ export default async function FinanceiroPage() {
           <p className="text-2xl font-bold text-yellow-400">{pendingPayments.length}</p>
         </Card>
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Mercado Pago</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {mpAccount?.status === 'connected'
+                ? `Conectado (conta ${mpAccount.mp_user_id ?? ''}) — alunos podem pagar pelo app.`
+                : mpAccount?.status === 'expired'
+                  ? 'Conexão expirada — reconecte para voltar a receber pelo app.'
+                  : 'Conecte a conta da academia para receber planos, aula avulsa e day use pelo app.'}
+            </p>
+          </div>
+          <Link
+            href="/admin/financeiro/integracoes"
+            className="shrink-0 text-sm font-medium text-brand-500"
+          >
+            {mpAccount?.status === 'connected' ? 'Gerenciar →' : 'Conectar →'}
+          </Link>
+        </div>
+      </Card>
 
       {/* Inadimplentes list */}
       {inadimplentes.length > 0 && (
