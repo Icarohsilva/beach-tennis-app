@@ -6,11 +6,28 @@
 // decide retry/mensagem amigável é o caller.
 const MP_BASE = 'https://api.mercadopago.com'
 
+// Erro tipado (não só string) para o caller distinguir falha transitória
+// (5xx/rede → vale retry) de falha de autorização (401/403 → token/refresh
+// realmente revogado, ex. no cron de renovação). status=0 quando o fetch em
+// si falhou (rede/DNS), sem resposta HTTP nenhuma.
+export class MpApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message)
+    this.name = 'MpApiError'
+  }
+}
+
 async function mpFetch<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${MP_BASE}${path}`, init)
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`MP ${init.method ?? 'GET'} ${path} → ${res.status}: ${body.slice(0, 300)}`)
+    throw new MpApiError(
+      `MP ${init.method ?? 'GET'} ${path} → ${res.status}: ${body.slice(0, 300)}`,
+      res.status,
+    )
   }
   return (await res.json()) as T
 }

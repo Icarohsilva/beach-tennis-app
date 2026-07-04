@@ -9,6 +9,7 @@ import {
   mpGetAuthorizedPayment,
   mpCreatePreference,
   mpGetPayment,
+  MpApiError,
 } from './mpClient'
 
 function jsonResponse(body: unknown, status = 200) {
@@ -58,9 +59,17 @@ describe('mpExchangeOAuthCode', () => {
     expect(body.redirect_uri).toBe('https://site/callback')
   })
 
-  it('resposta não-ok → lança com status', async () => {
+  it('resposta não-ok → lança MpApiError com status', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'invalid_grant' }, 400))
     await expect(mpExchangeOAuthCode('code-x', 'https://site/cb')).rejects.toThrow(/400/)
+    fetchMock.mockResolvedValueOnce(jsonResponse({ message: 'invalid_grant' }, 401))
+    try {
+      await mpExchangeOAuthCode('code-x', 'https://site/cb')
+      expect.unreachable('deveria ter lançado')
+    } catch (e) {
+      expect(e).toBeInstanceOf(MpApiError)
+      expect((e as MpApiError).status).toBe(401)
+    }
   })
 })
 
@@ -92,6 +101,18 @@ describe('preapproval', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://api.mercadopago.com/preapproval')
     expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer seller-token' })
+  })
+
+  it('mpCreatePreapproval: 200 sem init_point → lança', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'pre-1' })) // sem init_point
+    await expect(mpCreatePreapproval('seller-token', {
+      reason: 'Plano 2x — Mensal',
+      auto_recurring: { frequency: 1, frequency_type: 'months', transaction_amount: 199.9, currency_id: 'BRL' },
+      payer_email: 'aluno@x.com',
+      back_url: 'https://site',
+      external_reference: 'sub-1',
+      status: 'pending',
+    })).rejects.toThrow(/init_point/)
   })
 
   it('mpGetPreapproval faz GET no id', async () => {
@@ -141,5 +162,15 @@ describe('pagamentos', () => {
     })
     expect(res).toEqual({ id: 'pref-1', init_point: 'https://mp/pref' })
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.mercadopago.com/checkout/preferences')
+  })
+
+  it('mpCreatePreference: 200 sem id/init_point → lança', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}))
+    await expect(mpCreatePreference('tok', {
+      items: [{ title: 'Aula avulsa (1x)', quantity: 1, unit_price: 40, currency_id: 'BRL' }],
+      external_reference: 'pay-row-2',
+      notification_url: 'https://site/api/webhooks/mercadopago?org=o1',
+      back_urls: { success: 'https://site', pending: 'https://site', failure: 'https://site' },
+    })).rejects.toThrow(/init_point/)
   })
 })
