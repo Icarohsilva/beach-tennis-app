@@ -56,5 +56,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   // Exclui /api: rotas de API (crons, webhooks) têm autenticação própria
   // (CRON_SECRET / assinatura) e não devem ser redirecionadas para /login.
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico|manifest.json|robots.txt|sitemap.xml|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|json|txt|xml|ico|webmanifest)$).*)'],
 }

@@ -1,0 +1,134 @@
+.demo {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 32px;
+  align-items: center;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+@media (max-width: 860px) { .demo { grid-template-columns: 1fr; gap: 24px; } }
+
+.window {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, #10162a, #0a0f1c);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55), 0 0 90px rgba(249, 115, 22, 0.12);
+  overflow: hidden;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+}
+.tdot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,0.18); }
+.url {
+  margin-left: 10px;
+  font-size: 11.5px;
+  color: var(--mut);
+  background: rgba(255,255,255,0.04);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.stage { position: relative; height: 250px; padding: 20px; }
+.screen {
+  position: absolute;
+  inset: 20px;
+  opacity: 0;
+  transform: translateY(10px) scale(0.99);
+  transition: opacity .5s ease, transform .5s ease;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.on { opacity: 1; transform: none; pointer-events: auto; }
+
+.scLabel { font-size: 11px; color: var(--brand-2); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; }
+.days { display: flex; gap: 8px; }
+.day {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--mut);
+  padding: 8px 0;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+}
+.dayOn { color: #fff; border-color: rgba(249,115,22,0.5); background: rgba(249,115,22,0.12); }
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.cardNew { border-color: rgba(249,115,22,0.4); background: linear-gradient(135deg, rgba(249,115,22,0.18), rgba(236,72,153,0.08)); }
+.cTitle { font-size: 14px; color: #fff; font-weight: 600; }
+.cSub { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px; }
+.okTag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4ade80;
+  background: rgba(34,197,94,0.14);
+  border: 1px solid rgba(34,197,94,0.3);
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.hintRow { font-size: 12px; color: var(--mut); }
+
+.finRow { display: flex; align-items: baseline; gap: 10px; }
+.finBig { font-family: var(--font-sora), sans-serif; font-size: 34px; font-weight: 800; color: #fff; }
+.finLbl { font-size: 13px; color: var(--mut); }
+.bars { display: flex; align-items: flex-end; gap: 8px; height: 70px; }
+.bars span {
+  flex: 1;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, var(--brand-2), var(--brand-3));
+  opacity: 0.85;
+}
+
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: inherit;
+  cursor: pointer;
+  transition: all .25s;
+  font-family: inherit;
+}
+.step:hover { background: var(--card-strong); }
+.stepOn { border-color: rgba(249,115,22,0.45); background: rgba(249,115,22,0.08); }
+.stepNum {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff;
+  background: rgba(255,255,255,0.08);
+}
+.stepOn .stepNum { background: linear-gradient(135deg, var(--brand), var(--brand-3)); box-shadow: 0 4px 14px rgba(249,115,22,0.35); }
+.stepText { display: flex; flex-direction: column; }
+.stepText strong { font-size: 14.5px; color: var(--ink); }
+.stepText em { font-size: 12.5px; color: var(--mut); font-style: normal; margin-top: 2px; }
