@@ -5,6 +5,7 @@ import s from './landing.module.css'
 import { WhatsAppChat } from './_landing/WhatsAppChat'
 import { Reveal } from './_landing/Reveal'
 import { LiveDemo } from './_landing/LiveDemo'
+import { StickyCta } from './_landing/StickyCta'
 import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/arenahub.app/'
@@ -437,7 +438,7 @@ export default function LandingPage() {
       </section>
 
       {/* FINAL CTA */}
-      <section className={s.finalCta}>
+      <section className={s.finalCta} data-final-cta>
         <div className={s.finalCtaBg} />
         <div className={s.wrap}>
           <h2>Sua arena lotada começa <span className={s.hl}>hoje</span>.</h2>
@@ -521,6 +522,7 @@ export default function LandingPage() {
 
       {/* Floating chat WhatsApp */}
       <WhatsAppChat />
+      <StickyCta />
     </div>
   )
 }
