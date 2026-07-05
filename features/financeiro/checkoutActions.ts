@@ -4,7 +4,8 @@
 // Nenhum efeito de crédito/ativação acontece aqui — só o webhook confirma.
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
-import { mpCancelPreapproval, mpCreatePreapproval } from '@/lib/billing/mpClient'
+import { mpCancelPreapproval, mpCreatePreapproval, mpCreatePreference } from '@/lib/billing/mpClient'
+import { computeMarketplaceFee } from '@/lib/billing/fees'
 import { addPeriod, PERIODICITY_MONTHS, PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import type { PaymentType, Periodicity } from '@/types'
@@ -177,6 +178,87 @@ export async function subscribeToPlanCheckout(
   } catch (e) {
     console.error('[checkout] preapproval falhou', e)
     await admin.from('student_subscriptions').update({ status: 'cancelled' }).eq('id', sub.id)
+    return { error: 'Não foi possível iniciar o pagamento. Tente novamente.' }
+  }
+}
+
+// Compra N créditos de aula avulsa (Checkout Pro: PIX/cartão). O crédito só
+// entra no saldo quando o webhook confirmar o pagamento aprovado.
+export async function buySingleClassCredits(qty: number): Promise<CheckoutResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  if (!Number.isInteger(qty) || qty < 1 || qty > 20) {
+    return { error: 'Quantidade inválida (1 a 20).' }
+  }
+
+  const admin = createAdminClient()
+
+  // Venda habilitada + preço (system_settings key/value por academia).
+  const { data: settingsRaw } = await admin
+    .from('system_settings')
+    .select('key, value')
+    .eq('organization_id', orgId)
+    .in('key', ['single_class_price', 'single_class_sale_enabled'])
+  const settings = Object.fromEntries(
+    ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
+  )
+  const price = parseFloat(settings.single_class_price ?? '0') || 0
+  if (settings.single_class_sale_enabled !== 'true' || price <= 0) {
+    return { error: 'Venda de aula avulsa indisponível. Fale com a academia.' }
+  }
+
+  const token = await getConnectedMpToken(orgId)
+  if (!token) return { error: 'Pagamento online indisponível. Fale com a academia.' }
+
+  const amount = Math.round(qty * price * 100) / 100
+
+  const { data: payment, error: payErr } = await admin
+    .from('payments')
+    .insert({
+      organization_id: orgId,
+      student_id: user.id,
+      subscription_id: null,
+      session_id: null,
+      amount,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'per_class',
+      gateway: 'mercadopago',
+      gateway_payment_id: null,
+      credits_qty: qty,
+    })
+    .select('id')
+    .single()
+  if (payErr || !payment) return { error: 'Erro ao iniciar a compra. Tente novamente.' }
+
+  const { data: org } = await admin
+    .from('organizations')
+    .select('platform_fee_pct')
+    .eq('id', orgId)
+    .single()
+  const feePct = Number((org as { platform_fee_pct?: number } | null)?.platform_fee_pct ?? 0)
+
+  try {
+    const pref = await mpCreatePreference(token, {
+      items: [
+        { title: `Aula avulsa (${qty}x)`, quantity: qty, unit_price: price, currency_id: 'BRL' },
+      ],
+      external_reference: payment.id as string,
+      notification_url: `${getSiteUrl()}/api/webhooks/mercadopago?org=${orgId}`,
+      // Mesmo bug de back_url do TLD .website: sempre a raiz (o MP anexa
+      // ?external_reference=... e /retorno-pagamento roteia).
+      back_urls: { success: getSiteUrl(), pending: getSiteUrl(), failure: getSiteUrl() },
+      marketplace_fee: computeMarketplaceFee(amount, feePct),
+    })
+    return { initPoint: pref.init_point }
+  } catch (e) {
+    console.error('[checkout] preference avulsa falhou', e)
+    await admin.from('payments').update({ status: 'failed' }).eq('id', payment.id)
     return { error: 'Não foi possível iniciar o pagamento. Tente novamente.' }
   }
 }

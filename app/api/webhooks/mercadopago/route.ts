@@ -7,6 +7,7 @@ import {
   handleStudentPreapprovalEvent,
   handleStudentRecurringPayment,
 } from './studentHandlers'
+import { handleOrgCheckoutPayment } from './checkoutHandlers'
 
 /**
  * Mercado Pago webhook handler.
@@ -116,6 +117,13 @@ async function handleWebhook(body: WebhookPayload, orgParam: string | null): Pro
         return NextResponse.json({ received: true })
       }
       return handlePlatformSubscription(action, resourceId)
+    }
+
+    // Checkout Pro das academias (aula avulsa / day use): notificação com ?org=.
+    if (orgParam && action && action.startsWith('payment')) {
+      if (!resourceId) return NextResponse.json({ error: 'Missing data.id' }, { status: 400 })
+      await handleOrgCheckoutPayment(resourceId, orgParam)
+      return NextResponse.json({ received: true })
     }
   } catch (e) {
     // Falha transitória (API MP fora, DB): 500 → MP reentrega o evento.

@@ -1,6 +1,6 @@
 // app/(dashboard)/financeiro/page.tsx
-// Financeiro do aluno: meu plano, vitrine de planos, histórico.
-// (Compra de aula avulsa entra em task futura; banner de indicação também.)
+// Financeiro do aluno: meu plano, vitrine de planos, compra de aula avulsa,
+// histórico. (Banner de indicação de plano ainda entra em task futura.)
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
@@ -8,6 +8,7 @@ import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { PlanStorefront } from '@/features/financeiro/PlanStorefront'
 import { CancelPlanButton } from '@/features/financeiro/CancelPlanButton'
 import { CheckoutReturnBanner } from '@/features/financeiro/CheckoutReturnBanner'
+import { BuyCreditsCard } from '@/features/financeiro/BuyCreditsCard'
 import type { Payment, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
 export default async function FinanceiroAlunoPage({
@@ -88,6 +89,18 @@ export default async function FinanceiroAlunoPage({
     .limit(50)
   const payments: Payment[] = paymentsRaw ?? []
 
+  const { data: salesRaw } = await admin
+    .from('system_settings')
+    .select('key, value')
+    .eq('organization_id', orgId)
+    .in('key', ['single_class_price', 'single_class_sale_enabled'])
+  const sales = Object.fromEntries(
+    ((salesRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
+  )
+  const singleClassPrice = parseFloat(sales.single_class_price ?? '0') || 0
+  const singleClassEnabled =
+    sales.single_class_sale_enabled === 'true' && singleClassPrice > 0 && mpConnected
+
   const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
 
   return (
@@ -99,6 +112,10 @@ export default async function FinanceiroAlunoPage({
 
       {searchParams.retorno === 'assinatura' && (
         <CheckoutReturnBanner message="Recebemos seu retorno do Mercado Pago. Assim que o pagamento for confirmado, seu plano é ativado automaticamente — isso costuma levar alguns segundos." />
+      )}
+
+      {searchParams.retorno === 'avulso' && (
+        <CheckoutReturnBanner message="Recebemos seu pagamento. Os créditos entram no seu saldo assim que o Mercado Pago confirmar — normalmente em segundos." />
       )}
 
       <section>
@@ -120,6 +137,13 @@ export default async function FinanceiroAlunoPage({
           hasActivePlan={hasActivePlan}
         />
       </section>
+
+      {singleClassEnabled && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Aula avulsa</h2>
+          <BuyCreditsCard unitPrice={singleClassPrice} />
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Histórico de pagamentos</h2>

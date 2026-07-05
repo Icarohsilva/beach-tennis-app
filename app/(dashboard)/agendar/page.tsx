@@ -249,6 +249,12 @@ export default async function AgendarPage() {
         <span className="text-xs text-slate-400">Nível {studentProfile.level.toUpperCase()}</span>
       </div>
 
+      {studentProfile.credits_balance <= 0 && (
+        <Link href="/financeiro" className="text-sm text-brand-500 font-medium">
+          Sem créditos? Compre uma aula avulsa →
+        </Link>
+      )}
+
       <Link
         href="/agendar/dayuse"
         className="flex items-center justify-between bg-green-900/20 border border-green-700/40 rounded-xl px-4 py-3 hover:bg-green-900/30 transition-colors"
