@@ -72,14 +72,16 @@ export async function handleStudentPreapprovalEvent(
   const admin = createAdminClient()
   if (mapped === 'active') {
     const firstActivation = sub.status === 'pending_payment'
-    const periodicity = (sub.periodicity ?? 'monthly') as Periodicity
+    // current_period_end NÃO é setado aqui — é responsabilidade exclusiva de
+    // handleStudentRecurringPayment (a cobrança real). Setar aqui também
+    // causava um bug determinístico: a primeira cobrança do MP chega ~1h
+    // após a autorização, e handleStudentRecurringPayment sempre AVANÇA a
+    // partir do current_period_end vigente — se este handler já tivesse
+    // setado um período "grátis" na ativação, o aluno ganhava um período
+    // extra silenciosamente em toda assinatura nova.
     await admin
       .from('student_subscriptions')
-      .update({
-        status: 'active',
-        current_period_end:
-          sub.current_period_end ?? addPeriod(new Date(), periodicity).toISOString(),
-      })
+      .update({ status: 'active' })
       .eq('id', sub.id)
 
     if (firstActivation) {
@@ -123,24 +125,6 @@ export async function handleStudentRecurringPayment(
   const admin = createAdminClient()
   const gatewayPaymentId = String(ap.payment?.id ?? resourceId)
 
-  // Idempotência: unique (gateway, gateway_payment_id). 23505 = reentrega.
-  const { error: insErr } = await admin.from('payments').insert({
-    organization_id: orgId,
-    student_id: sub.student_id,
-    subscription_id: sub.id,
-    amount: sub.price ?? 0,
-    currency: 'BRL',
-    status: 'paid',
-    type: 'subscription',
-    gateway: 'mercadopago',
-    gateway_payment_id: gatewayPaymentId,
-    paid_at: new Date().toISOString(),
-  })
-  if (insErr) {
-    if ((insErr as { code?: string }).code === '23505') return
-    throw new Error(`[webhook/mp] insert payment falhou: ${insErr.message}`)
-  }
-
   // Avança o período pago: a partir do fim vigente (se futuro) ou de agora.
   const periodicity = (sub.periodicity ?? 'monthly') as Periodicity
   const base =
@@ -148,8 +132,26 @@ export async function handleStudentRecurringPayment(
       ? new Date(sub.current_period_end)
       : new Date()
   const nextEnd = addPeriod(base, periodicity).toISOString()
-  await admin
-    .from('student_subscriptions')
-    .update({ status: 'active', current_period_end: nextEnd, next_billing_at: nextEnd })
-    .eq('id', sub.id)
+
+  // Insert do pagamento + avanço do período na MESMA transação (RPC) — as
+  // duas escritas eram chamadas separadas antes; se a segunda falhasse (ou o
+  // processo caísse entre as duas), o pagamento ficava "pago" mas o período
+  // nunca avançava, e uma reentrega do MP (mesmo gateway_payment_id) batia no
+  // unique index e retornava sem tentar de novo. A RPC garante tudo ou nada.
+  const { data: processed, error: rpcErr } = await admin.rpc('record_student_subscription_payment', {
+    p_subscription_id: sub.id,
+    p_organization_id: orgId,
+    p_student_id: sub.student_id,
+    p_amount: sub.price ?? 0,
+    p_gateway_payment_id: gatewayPaymentId,
+    p_next_period_end: nextEnd,
+  })
+  if (rpcErr) {
+    throw new Error(`[webhook/mp] record_student_subscription_payment falhou: ${rpcErr.message}`)
+  }
+  if (!processed) {
+    // false = reentrega do MP (gateway_payment_id já processado) — período já
+    // avançou na entrega original, nada a fazer.
+    return
+  }
 }
