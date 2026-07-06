@@ -79,52 +79,15 @@ export async function handleOrgCheckoutPayment(
   }
 
   if (pay.type === 'day_use' && pay.dayuse_booking_id) {
-    // ATENÇÃO: ainda não é caminho vivo hoje (nenhum código cria payment
-    // type='day_use') — nenhuma reserva de day use é criada por este task.
-    // Quando a task de day use pago ligar este fluxo, o mesmo problema de
-    // atomicidade do per_class se aplica aqui (marcar paid + confirmar booking
-    // são hoje duas escritas separadas) — precisa da mesma RPC atômica antes
-    // de virar um caminho real.
-    const { data: updated } = await admin
-      .from('payments')
-      .update({ status: 'paid', paid_at: new Date().toISOString(), gateway_payment_id: gatewayPaymentId })
-      .eq('id', pay.id)
-      .eq('status', 'pending')
-      .select('id')
-    if (!updated || updated.length === 0) return
-    await confirmDayUseBooking(pay.dayuse_booking_id)
-  }
-}
-
-// Confirma o booking de day use SE ainda estiver pendente dentro do prazo de
-// 30 min. Fora do prazo: booking fica/vira cancelado e o pagamento pago
-// aparece como "reembolso pendente" no financeiro do admin (spec §3.5).
-async function confirmDayUseBooking(bookingId: string): Promise<void> {
-  const admin = createAdminClient()
-  const { data: booking } = await admin
-    .from('dayuse_bookings')
-    .select('id, status, booked_at')
-    .eq('id', bookingId)
-    .maybeSingle()
-  if (!booking) return
-
-  const freshLimit = Date.now() - 30 * 60 * 1000
-  const isFreshPending =
-    booking.status === 'pending_payment' &&
-    new Date(booking.booked_at as string).getTime() > freshLimit
-
-  if (isFreshPending) {
-    await admin
-      .from('dayuse_bookings')
-      .update({ status: 'confirmed' })
-      .eq('id', bookingId)
-      .eq('status', 'pending_payment')
-  } else if (booking.status === 'pending_payment') {
-    // Pagou tarde demais: a vaga já pode ter sido retomada.
-    await admin
-      .from('dayuse_bookings')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-      .eq('id', bookingId)
-      .eq('status', 'pending_payment')
+    // Atômico (RPC record_dayuse_checkout_payment): marca o pagamento pago E
+    // confirma/cancela a reserva conforme o prazo de 30min, na mesma
+    // transação — mesma razão do record_checkout_credit_purchase acima.
+    const { error: rpcErr } = await admin.rpc('record_dayuse_checkout_payment', {
+      p_payment_id: pay.id,
+      p_gateway_payment_id: gatewayPaymentId,
+    })
+    if (rpcErr) {
+      throw new Error(`[webhook/mp] record_dayuse_checkout_payment falhou: ${rpcErr.message}`)
+    }
   }
 }

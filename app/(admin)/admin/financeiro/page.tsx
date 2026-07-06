@@ -97,6 +97,24 @@ export default async function FinanceiroPage() {
 
   const pendingPayments: PendingPayment[] = (pendingPaymentsRaw as unknown as PendingPayment[]) ?? []
 
+  // Day use pago fora do prazo: pagamento entrou mas a reserva expirou →
+  // estornar manualmente no painel do MP (spec §3.5).
+  const { data: refundsRaw } = await adminClient
+    .from('payments')
+    .select('id, amount, created_at, profiles:profiles!payments_student_id_fkey(full_name), dayuse_bookings!payments_dayuse_booking_id_fkey!inner(status)')
+    .eq('organization_id', orgId)
+    .eq('type', 'day_use')
+    .eq('status', 'paid')
+    .eq('dayuse_bookings.status', 'cancelled')
+
+  interface RefundRow {
+    id: string
+    amount: number
+    created_at: string
+    profiles: { full_name: string } | null
+  }
+  const pendingRefunds = (refundsRaw as unknown as RefundRow[]) ?? []
+
   // ─── Receita de parceiro (Wellhub/TotalPass) ─────────────────────────────
   const partnerRates = await getPartnerCheckinRates()
   const partnerRevenue = await getPartnerRevenueThisMonth()
@@ -219,6 +237,29 @@ export default async function FinanceiroPage() {
                     </span>
                     <Badge variant="warning">Pendente</Badge>
                   </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {pendingRefunds.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Reembolsos pendentes (day use)
+          </h2>
+          <div className="space-y-2">
+            {pendingRefunds.map((r) => (
+              <Card key={r.id}>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm text-white">{r.profiles?.full_name ?? r.id}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Pagou o day use, mas a reserva expirou — estorne no painel do Mercado Pago.
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-white">{formatCurrency(r.amount)}</span>
                 </div>
               </Card>
             ))}

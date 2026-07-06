@@ -413,7 +413,7 @@ export interface DayUseBooking {
   organization_id: string
   slot_id: string
   student_id: string
-  status: 'confirmed' | 'cancelled'
+  status: 'confirmed' | 'cancelled' | 'pending_payment'
   booked_at: string
   cancelled_at: string | null
 }
