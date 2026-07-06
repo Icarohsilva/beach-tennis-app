@@ -7,7 +7,6 @@
 // de "precisa reconectar" para uma academia que na verdade está tudo bem.
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { isAuthorizedCron } from '@/lib/utils/cronAuth'
 import { decryptSecret } from '@/lib/billing/tokenCrypto'
 import { mpRefreshOAuthToken, MpApiError } from '@/lib/billing/mpClient'
 import { saveMpAccount, setMpAccountStatus } from '@/lib/billing/gatewayAccounts'
@@ -15,7 +14,8 @@ import { saveMpAccount, setMpAccountStatus } from '@/lib/billing/gatewayAccounts
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorizedCron(req.headers.get('authorization'))) {
+  const authHeader = req.headers.get('authorization')
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
