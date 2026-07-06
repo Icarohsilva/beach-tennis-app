@@ -44,50 +44,54 @@ export async function handleOrgCheckoutPayment(
   const pay = payRaw as PaymentRow | null
   if (!pay || pay.status === 'paid') return
 
-  // Valor precisa bater com o cobrado (defesa contra ref reaproveitada).
+  // Valor não pode ser MENOR que o esperado (ref reaproveitada). Maior é
+  // tolerado: cartão parcelado com juros faz o transaction_amount aprovado
+  // exceder legitimamente o valor cobrado — rejeitar por excesso deixaria um
+  // pagamento genuinamente aprovado preso em 'pending' para sempre.
   if (
     mpPay.transaction_amount != null &&
-    Math.abs(Number(mpPay.transaction_amount) - Number(pay.amount)) > 0.01
+    Number(mpPay.transaction_amount) < Number(pay.amount) - 0.01
   ) {
-    console.error('[webhook/mp] valor divergente', {
+    console.error('[webhook/mp] valor menor que o esperado', {
       payment: pay.id, esperado: pay.amount, recebido: mpPay.transaction_amount,
     })
     return
   }
 
-  // Marca paid condicionado a ainda estar pending (corrida entre reentregas:
-  // só quem atualizar a linha aplica os efeitos).
-  const { data: updated } = await admin
-    .from('payments')
-    .update({
-      status: 'paid',
-      paid_at: new Date().toISOString(),
-      gateway_payment_id: String(mpPay.id),
-    })
-    .eq('id', pay.id)
-    .eq('status', 'pending')
-    .select('id')
-  if (!updated || updated.length === 0) return
+  const gatewayPaymentId = String(mpPay.id)
 
-  if (pay.type === 'per_class' && pay.credits_qty && pay.credits_qty > 0) {
-    // Crédito comprado não expira (spec §3.4).
-    const { error: creditErr } = await admin.rpc('adjust_credits', {
-      p_student_id: pay.student_id,
-      p_org: orgId,
-      p_delta: pay.credits_qty,
-      p_type: 'purchased',
-      p_reason: `Compra de aula avulsa (${pay.credits_qty}x) — pagamento ${mpPay.id}`,
+  if (pay.type === 'per_class') {
+    // Marca paid + concede crédito (não expira, spec §3.4) na MESMA
+    // transação (RPC) — as duas escritas eram chamadas separadas antes; se a
+    // segunda falhasse (ou o processo caísse entre as duas), o pagamento
+    // ficava "pago" para sempre sem crédito nenhum, e uma reentrega do MP
+    // batia no status='paid' já setado e retornava sem tentar de novo.
+    // Retorno (true = aplicado agora, false = reentrega já processada) não
+    // muda a ação daqui — em ambos os casos não há mais nada a fazer.
+    const { error: rpcErr } = await admin.rpc('record_checkout_credit_purchase', {
+      p_payment_id: pay.id,
+      p_gateway_payment_id: gatewayPaymentId,
     })
-    if (creditErr) {
-      // Pagamento já está paid; falha de crédito precisa de intervenção manual.
-      console.error('[webhook/mp] adjust_credits da compra falhou', {
-        payment: pay.id, error: creditErr.message,
-      })
+    if (rpcErr) {
+      throw new Error(`[webhook/mp] record_checkout_credit_purchase falhou: ${rpcErr.message}`)
     }
     return
   }
 
   if (pay.type === 'day_use' && pay.dayuse_booking_id) {
+    // ATENÇÃO: ainda não é caminho vivo hoje (nenhum código cria payment
+    // type='day_use') — nenhuma reserva de day use é criada por este task.
+    // Quando a task de day use pago ligar este fluxo, o mesmo problema de
+    // atomicidade do per_class se aplica aqui (marcar paid + confirmar booking
+    // são hoje duas escritas separadas) — precisa da mesma RPC atômica antes
+    // de virar um caminho real.
+    const { data: updated } = await admin
+      .from('payments')
+      .update({ status: 'paid', paid_at: new Date().toISOString(), gateway_payment_id: gatewayPaymentId })
+      .eq('id', pay.id)
+      .eq('status', 'pending')
+      .select('id')
+    if (!updated || updated.length === 0) return
     await confirmDayUseBooking(pay.dayuse_booking_id)
   }
 }
