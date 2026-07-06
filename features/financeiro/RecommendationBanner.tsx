@@ -1,6 +1,6 @@
 'use client'
 // features/financeiro/RecommendationBanner.tsx
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
@@ -24,12 +24,15 @@ export function RecommendationBanner({
   price,
 }: RecommendationBannerProps) {
   const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   function handleDismiss() {
+    setError(null)
     startTransition(async () => {
-      await dismissPlanRecommendation(recommendationId)
-      router.refresh()
+      const result = await dismissPlanRecommendation(recommendationId)
+      if (result.error) setError(result.error)
+      else router.refresh()
     })
   }
 
@@ -50,6 +53,7 @@ export function RecommendationBanner({
           Agora não
         </Button>
       </div>
+      {error && <p className="text-white/90 text-xs mt-2">{error}</p>}
     </div>
   )
 }

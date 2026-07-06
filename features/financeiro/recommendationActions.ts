@@ -36,6 +36,19 @@ export async function recommendPlanToStudent(
   if ('error' in ctx) return { error: ctx.error }
   const { adminClient, orgId, userId } = ctx
 
+  // studentId precisa ser um aluno da academia ativa — sem isso, a server
+  // action (invocável direto, não só pela tela) aceitaria studentId de
+  // qualquer perfil/outra academia.
+  const { data: studentMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (studentMembership?.role !== 'student') {
+    return { error: 'Aluno não encontrado nesta academia.' }
+  }
+
   // Opção precisa ser do plano e da academia, e estar à venda.
   const { data: option } = await adminClient
     .from('plan_billing_options')
