@@ -9,6 +9,15 @@
 -- acontecer DENTRO da transação (não numa leitura anterior), senão uma
 -- reserva que expira bem no meio do processamento do webhook poderia ser
 -- confirmada com base num estado já stale.
+--
+-- Toma o MESMO advisory lock de book_dayuse_atomic (hashtext('dayuse:'||slot_id))
+-- antes de decidir confirmar/cancelar. Sem isso, um webhook lento processando
+-- perto da fronteira dos 30min e uma nova reserva concorrente no mesmo slot
+-- usam relógios (`now()`) independentes: o webhook pode confirmar a reserva
+-- pendente como "fresca" enquanto a nova reserva, rodando alguns segundos
+-- depois, já a considera "vencida" na contagem de capacidade — as duas
+-- prosseguem sem se ver, e o slot fica com mais ocupantes que a capacidade.
+-- O lock compartilhado serializa as duas RPCs sobre o mesmo slot.
 create or replace function public.record_dayuse_checkout_payment(
   p_payment_id uuid,
   p_gateway_payment_id text,
@@ -20,8 +29,21 @@ set search_path = public
 as $$
 declare
   v_booking_id uuid;
+  v_slot_id uuid;
   v_rows int;
 begin
+  -- Descobre o slot da reserva ligada a este pagamento ANTES de decidir
+  -- confirmar/cancelar, para poder travar no mesmo lock de book_dayuse_atomic.
+  -- slot_id é imutável por reserva, então essa leitura é segura sem o lock.
+  select b.slot_id into v_slot_id
+  from payments p
+  join dayuse_bookings b on b.id = p.dayuse_booking_id
+  where p.id = p_payment_id;
+
+  if v_slot_id is not null then
+    perform pg_advisory_xact_lock(hashtext('dayuse:' || v_slot_id::text));
+  end if;
+
   update payments
   set status = 'paid',
       paid_at = now(),
