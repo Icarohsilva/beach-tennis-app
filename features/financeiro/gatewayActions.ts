@@ -27,7 +27,10 @@ export async function getMercadoPagoAuthUrl(): Promise<{ url?: string; error?: s
     state,
     redirect_uri: redirectUri,
   })
-  return { url: `https://auth.mercadopago.com.br/authorization?${params.toString()}` }
+  // Domínio correto é auth.mercadopago.com (sem sufixo de país) — confirmado
+  // na documentação oficial. auth.mercadopago.com.br (usado antes aqui)
+  // devolve 400 Bad Request na chamada de autorização.
+  return { url: `https://auth.mercadopago.com/authorization?${params.toString()}` }
 }
 
 // Desconecta: novos checkouts bloqueados; assinaturas MP existentes seguem
