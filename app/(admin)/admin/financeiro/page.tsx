@@ -1,14 +1,16 @@
 // app/(admin)/financeiro/page.tsx
+import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { PlansManager } from './PlansManager'
+import { FinanceiroSubnav } from './FinanceiroSubnav'
 import { PartnerRevenueCard } from './PartnerRevenueCard'
 import {
   getPartnerCheckinRates,
   getPartnerRevenueThisMonth,
 } from '@/features/financeiro/partnerRevenueActions'
-import type { SubscriptionPlan, PaymentStatus } from '@/types'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import type { PaymentStatus } from '@/types'
 
 interface RevenueRow {
   amount: number
@@ -53,17 +55,25 @@ export default async function FinanceiroPage() {
     .filter((p) => p.status === 'pending')
     .reduce((sum, p) => sum + p.amount, 0)
 
-  // ─── Inadimplentes: active subscription + last payment failed ────────────
+  // ─── Inadimplentes: assinatura ativa/vencida OU último pagamento falhou ───
   const { data: inadimplentesRaw } = await adminClient
     .from('student_subscriptions')
-    .select('student_id, profiles:profiles!student_subscriptions_student_id_fkey(full_name)')
-    .eq('status', 'active')
+    .select('student_id, status, gateway, current_period_end, profiles:profiles!student_subscriptions_student_id_fkey(full_name)')
+    .in('status', ['active', 'past_due'])
     .eq('organization_id', orgId)
 
-  // Filter: students whose last payment has status = 'failed'
+  const now = new Date()
   const inadimplentes: InadimplentRow[] = []
   if (inadimplentesRaw) {
-    for (const sub of inadimplentesRaw as unknown as InadimplentRow[]) {
+    for (const sub of inadimplentesRaw as unknown as (InadimplentRow & {
+      status: string
+      gateway: string
+      current_period_end: string | null
+    })[]) {
+      if (sub.status === 'past_due' || !isSubscriptionCurrent(sub, now)) {
+        inadimplentes.push(sub)
+        continue
+      }
       const { data: lastPayment } = await adminClient
         .from('payments')
         .select('status')
@@ -72,10 +82,7 @@ export default async function FinanceiroPage() {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-
-      if (lastPayment?.status === 'failed') {
-        inadimplentes.push(sub)
-      }
+      if (lastPayment?.status === 'failed') inadimplentes.push(sub)
     }
   }
 
@@ -90,14 +97,23 @@ export default async function FinanceiroPage() {
 
   const pendingPayments: PendingPayment[] = (pendingPaymentsRaw as unknown as PendingPayment[]) ?? []
 
-  // ─── Planos ──────────────────────────────────────────────────────────────
-  const { data: plansRaw } = await adminClient
-    .from('subscription_plans')
-    .select('*')
+  // Day use pago fora do prazo: pagamento entrou mas a reserva expirou →
+  // estornar manualmente no painel do MP (spec §3.5).
+  const { data: refundsRaw } = await adminClient
+    .from('payments')
+    .select('id, amount, created_at, profiles:profiles!payments_student_id_fkey(full_name), dayuse_bookings!payments_dayuse_booking_id_fkey!inner(status)')
     .eq('organization_id', orgId)
-    .order('classes_per_week', { ascending: true })
+    .eq('type', 'day_use')
+    .eq('status', 'paid')
+    .eq('dayuse_bookings.status', 'cancelled')
 
-  const plans: SubscriptionPlan[] = plansRaw ?? []
+  interface RefundRow {
+    id: string
+    amount: number
+    created_at: string
+    profiles: { full_name: string } | null
+  }
+  const pendingRefunds = (refundsRaw as unknown as RefundRow[]) ?? []
 
   // ─── Receita de parceiro (Wellhub/TotalPass) ─────────────────────────────
   const partnerRates = await getPartnerCheckinRates()
@@ -113,6 +129,14 @@ export default async function FinanceiroPage() {
     (partnerMembershipsRaw ?? []) as { monthly_checkin_target: number }[]
   ).some((m) => (m.monthly_checkin_target ?? 0) === 0)
 
+  // ─── Status da conexão Mercado Pago ──────────────────────────────────────
+  const { data: mpAccount } = await adminClient
+    .from('org_gateway_accounts')
+    .select('status, mp_user_id')
+    .eq('organization_id', orgId)
+    .eq('gateway', 'mercadopago')
+    .maybeSingle()
+
   function formatCurrency(amount: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
   }
@@ -127,6 +151,7 @@ export default async function FinanceiroPage() {
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
         <p className="text-slate-400 text-sm mt-1">Visão geral das finanças da academia</p>
       </div>
+      <FinanceiroSubnav />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -140,13 +165,34 @@ export default async function FinanceiroPage() {
         <Card>
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Inadimplentes</p>
           <p className="text-2xl font-bold text-red-400">{inadimplentes.length}</p>
-          <p className="text-xs text-slate-400 mt-1">assinaturas ativas com último pagamento falhou</p>
+          <p className="text-xs text-slate-400 mt-1">assinaturas vencidas ou com último pagamento falhou</p>
         </Card>
         <Card>
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Pagamentos pendentes</p>
           <p className="text-2xl font-bold text-yellow-400">{pendingPayments.length}</p>
         </Card>
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Mercado Pago</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {mpAccount?.status === 'connected'
+                ? `Conectado (conta ${mpAccount.mp_user_id ?? ''}) — alunos podem pagar pelo app.`
+                : mpAccount?.status === 'expired'
+                  ? 'Conexão expirada — reconecte para voltar a receber pelo app.'
+                  : 'Conecte a conta da academia para receber planos, aula avulsa e day use pelo app.'}
+            </p>
+          </div>
+          <Link
+            href="/admin/financeiro/integracoes"
+            className="shrink-0 text-sm font-medium text-brand-500"
+          >
+            {mpAccount?.status === 'connected' ? 'Gerenciar →' : 'Conectar →'}
+          </Link>
+        </div>
+      </Card>
 
       {/* Inadimplentes list */}
       {inadimplentes.length > 0 && (
@@ -161,7 +207,7 @@ export default async function FinanceiroPage() {
                   <span className="text-sm text-white">
                     {item.profiles?.full_name ?? item.student_id}
                   </span>
-                  <Badge variant="danger">Pagamento falhou</Badge>
+                  <Badge variant="danger">Inadimplente</Badge>
                 </div>
               </Card>
             ))}
@@ -198,6 +244,29 @@ export default async function FinanceiroPage() {
         </section>
       )}
 
+      {pendingRefunds.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Reembolsos pendentes (day use)
+          </h2>
+          <div className="space-y-2">
+            {pendingRefunds.map((r) => (
+              <Card key={r.id}>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm text-white">{r.profiles?.full_name ?? r.id}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Pagou o day use, mas a reserva expirou — estorne no painel do Mercado Pago.
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-white">{formatCurrency(r.amount)}</span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Parceiros (Wellhub/TotalPass) */}
       <section>
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
@@ -208,14 +277,6 @@ export default async function FinanceiroPage() {
           initialRevenue={partnerRevenue}
           hasZeroTargetStudents={hasZeroTargetStudents}
         />
-      </section>
-
-      {/* Gerenciar Planos */}
-      <section>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
-          Gerenciar Planos
-        </h2>
-        <PlansManager plans={plans} />
       </section>
     </div>
   )

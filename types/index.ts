@@ -53,10 +53,12 @@ export interface PartnerCheckinRate {
 }
 
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled'
-export type SubscriptionStatus = 'active' | 'paused' | 'cancelled'
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'pending_payment' | 'past_due'
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded'
-export type PaymentTransactionType = 'subscription' | 'per_class' | 'trial'
-export type CreditTransactionType = 'renewed' | 'used' | 'refunded' | 'expired'
+export type PaymentTransactionType = 'subscription' | 'per_class' | 'trial' | 'day_use'
+export type CreditTransactionType = 'renewed' | 'used' | 'refunded' | 'expired' | 'purchased'
+export type Periodicity = 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' | 'annual'
+export type SubscriptionGateway = 'manual' | 'mercadopago'
 export type Gender = 'M' | 'F'
 export type TournamentCategory = 'masculino' | 'feminino' | 'misto' | 'livre'
 export type ParticipantType = 'individual' | 'dupla_fixa' | 'dupla_revezando'
@@ -255,10 +257,37 @@ export interface SubscriptionPlan {
   description: string | null
   classes_per_week: number
   credits_per_month: number
-  price_monthly: number
-  price_quarterly: number
-  price_annual: number
   is_active: boolean
+}
+
+export interface PlanBillingOption {
+  id: string
+  organization_id: string
+  plan_id: string
+  periodicity: Periodicity
+  price: number
+  is_enabled: boolean
+}
+
+export interface GatewayIntegrationRequest {
+  id: string
+  organization_id: string
+  requested_by: string
+  gateway_name: string
+  notes: string | null
+  status: 'pending' | 'reviewed'
+  created_at: string
+}
+
+export interface PlanRecommendation {
+  id: string
+  organization_id: string
+  student_id: string
+  plan_id: string
+  billing_option_id: string
+  created_by: string
+  status: 'pending' | 'completed' | 'dismissed'
+  created_at: string
 }
 
 export interface StudentSubscription {
@@ -273,6 +302,11 @@ export interface StudentSubscription {
   next_billing_at: string
   discount_pct: number
   gateway_subscription_id: string | null
+  billing_option_id: string | null
+  periodicity: Periodicity | null
+  price: number | null
+  current_period_end: string | null
+  gateway: SubscriptionGateway
 }
 
 export interface Payment {
@@ -287,6 +321,8 @@ export interface Payment {
   type: PaymentTransactionType
   gateway_payment_id: string | null
   gateway: string
+  dayuse_booking_id: string | null
+  credits_qty: number | null
   paid_at: string | null
   created_at: string
 }
@@ -377,7 +413,7 @@ export interface DayUseBooking {
   organization_id: string
   slot_id: string
   student_id: string
-  status: 'confirmed' | 'cancelled'
+  status: 'confirmed' | 'cancelled' | 'pending_payment'
   booked_at: string
   cancelled_at: string | null
 }

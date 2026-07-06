@@ -6,8 +6,9 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
+import { RecommendPlanCard } from './RecommendPlanCard'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
-import type { Profile, Membership, Enrollment, Class, StudentLevel } from '@/types'
+import type { Profile, Membership, Enrollment, Class, StudentLevel, PlanBillingOption } from '@/types'
 
 interface Props {
   params: { id: string }
@@ -150,7 +151,7 @@ export default async function StudentProfilePage({ params }: Props) {
   // Fetch active subscription plans (for plan assignment)
   const { data: plansRaw } = await adminClient
     .from('subscription_plans')
-    .select('id, name, classes_per_week, credits_per_month, price_monthly, is_active')
+    .select('id, name, classes_per_week, credits_per_month, is_active')
     .eq('is_active', true)
     .eq('organization_id', orgId)
     .order('classes_per_week', { ascending: true })
@@ -160,14 +161,20 @@ export default async function StudentProfilePage({ params }: Props) {
     name: string
     classes_per_week: number
     credits_per_month: number
-    price_monthly: number
     is_active: boolean
   }[]
+
+  // Opções de cobrança à venda (para o card "Indicar plano")
+  const { data: billingOptionsRaw } = await adminClient
+    .from('plan_billing_options')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('is_enabled', true)
 
   // Fetch current active subscription for this student
   const { data: currentSubRaw } = await adminClient
     .from('student_subscriptions')
-    .select('id, plan_id, status, starts_at, plan:subscription_plans(id, name)')
+    .select('id, plan_id, status, starts_at, gateway, current_period_end, plan:subscription_plans(id, name)')
     .eq('student_id', params.id)
     .eq('organization_id', orgId)
     .eq('status', 'active')
@@ -180,6 +187,8 @@ export default async function StudentProfilePage({ params }: Props) {
     plan_id: string
     status: string
     starts_at: string
+    gateway: string
+    current_period_end: string | null
     plan: { id: string; name: string } | null
   } | null
 
@@ -283,6 +292,19 @@ export default async function StudentProfilePage({ params }: Props) {
           checkins={checkins}
         />
       </Card>
+
+      <RecommendPlanCard
+        studentId={params.id}
+        plans={availablePlans.map((p) => ({ id: p.id, name: p.name }))}
+        options={(billingOptionsRaw ?? []) as PlanBillingOption[]}
+        mpSubscription={currentSubscription
+          ? {
+              status: currentSubscription.status,
+              gateway: currentSubscription.gateway,
+              current_period_end: currentSubscription.current_period_end,
+            }
+          : null}
+      />
 
       {/* Credit management + history — visible for all students */}
       <section>

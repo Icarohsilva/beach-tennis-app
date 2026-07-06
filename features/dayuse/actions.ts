@@ -3,6 +3,10 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient, createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { validateDayUseSlot } from './validation'
+import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
+import { mpCreatePreference } from '@/lib/billing/mpClient'
+import { computeMarketplaceFee } from '@/lib/billing/fees'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
 
 export { validateDayUseSlot }
 
@@ -51,41 +55,112 @@ export async function deactivateDayUseSlot(slotId: string): Promise<{ error?: st
   return {}
 }
 
-export async function bookDayUse(slotId: string): Promise<{ error?: string }> {
+export async function bookDayUse(slotId: string): Promise<{ error?: string; initPoint?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
-  const { data: slot } = await supabase
+  const adminClient = createAdminClient()
+
+  // Org do slot (day use pago é configuração por academia).
+  const { data: slot } = await adminClient
     .from('dayuse_slots')
-    .select('id, capacity')
+    .select('organization_id')
     .eq('id', slotId)
-    .single()
+    .eq('is_active', true)
+    .maybeSingle()
   if (!slot) return { error: 'Slot não encontrado' }
+  const orgId = slot.organization_id as string
 
-  // Capacity check: count confirmed bookings for this slot
-  const { count: confirmedCount } = await supabase
-    .from('dayuse_bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('slot_id', slotId)
-    .eq('status', 'confirmed')
+  const { data: settingsRaw } = await adminClient
+    .from('system_settings')
+    .select('key, value')
+    .eq('organization_id', orgId)
+    .in('key', ['day_use_price', 'day_use_sale_enabled'])
+  const settings = Object.fromEntries(
+    ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
+  )
+  const price = parseFloat(settings.day_use_price ?? '0') || 0
+  const token = settings.day_use_sale_enabled === 'true' && price > 0
+    ? await getConnectedMpToken(orgId)
+    : null
+  const isPaid = Boolean(token)
 
-  if ((confirmedCount ?? 0) >= (slot as { id: string; capacity: number }).capacity) {
-    return { error: 'Este horário está lotado.' }
-  }
-
-  const { error } = await supabase.from('dayuse_bookings').insert({
-    slot_id: slotId,
-    student_id: user.id,
-    status: 'confirmed',
+  // Capacidade + insert atômicos via RPC (advisory lock por slot). Caminho
+  // pago reserva como pending_payment: ocupa a vaga por 30 min (a RPC conta
+  // pendentes frescos) até o webhook confirmar.
+  const { data: bookingId, error } = await adminClient.rpc('book_dayuse_atomic', {
+    p_student_id: user.id,
+    p_slot_id: slotId,
+    p_status: isPaid ? 'pending_payment' : 'confirmed',
   })
 
-  if (error?.code === '23505') return { error: 'Você já tem uma reserva neste horário' }
-  if (error) return { error: error.message }
+  if (error) {
+    if (error.message.includes('SLOT_FULL')) return { error: 'Este horário está lotado.' }
+    if (error.message.includes('ALREADY_BOOKED')) return { error: 'Você já tem uma reserva neste horário' }
+    if (error.message.includes('SLOT_NOT_FOUND')) return { error: 'Slot não encontrado' }
+    return { error: 'Erro ao reservar. Tente novamente.' }
+  }
 
-  revalidatePath('/agendar/dayuse')
-  revalidatePath('/home')
-  return {}
+  if (!isPaid) {
+    revalidatePath('/agendar/dayuse')
+    revalidatePath('/home')
+    return {}
+  }
+
+  // Caminho pago: payment pending + preferência de checkout.
+  const { data: payment, error: payErr } = await adminClient
+    .from('payments')
+    .insert({
+      organization_id: orgId,
+      student_id: user.id,
+      subscription_id: null,
+      session_id: null,
+      amount: price,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'day_use',
+      gateway: 'mercadopago',
+      gateway_payment_id: null,
+      dayuse_booking_id: bookingId as string,
+    })
+    .select('id')
+    .single()
+
+  if (payErr || !payment) {
+    await adminClient
+      .from('dayuse_bookings')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('id', bookingId as string)
+    return { error: 'Erro ao iniciar o pagamento. Tente novamente.' }
+  }
+
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('platform_fee_pct')
+    .eq('id', orgId)
+    .single()
+  const feePct = Number((org as { platform_fee_pct?: number } | null)?.platform_fee_pct ?? 0)
+
+  try {
+    const pref = await mpCreatePreference(token as string, {
+      items: [{ title: 'Day Use', quantity: 1, unit_price: price, currency_id: 'BRL' }],
+      external_reference: payment.id as string,
+      notification_url: `${getSiteUrl()}/api/webhooks/mercadopago?org=${orgId}`,
+      back_urls: { success: getSiteUrl(), pending: getSiteUrl(), failure: getSiteUrl() },
+      marketplace_fee: computeMarketplaceFee(price, feePct),
+    })
+    revalidatePath('/agendar/dayuse')
+    return { initPoint: pref.init_point }
+  } catch (e) {
+    console.error('[dayuse] preference falhou', e)
+    await adminClient
+      .from('dayuse_bookings')
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+      .eq('id', bookingId as string)
+    await adminClient.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    return { error: 'Não foi possível iniciar o pagamento. Tente novamente.' }
+  }
 }
 
 export async function cancelDayUseBooking(bookingId: string): Promise<{ error?: string }> {

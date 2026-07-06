@@ -43,7 +43,6 @@ interface PlanSummary {
   name: string
   classes_per_week: number
   credits_per_month: number
-  price_monthly: number
   is_active: boolean
 }
 
@@ -672,7 +671,7 @@ export function StudentProfileClient({
                 <option value="">Selecione um plano...</option>
                 {availablePlans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.classes_per_week}x/sem · R$ {(p.price_monthly / 100).toFixed(0)}/mês
+                    {p.name} — {p.classes_per_week}x/sem · {p.credits_per_month} créditos/mês
                   </option>
                 ))}
               </select>

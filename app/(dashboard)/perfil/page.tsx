@@ -1,6 +1,7 @@
 // app/(dashboard)/perfil/page.tsx
 import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
@@ -210,11 +211,19 @@ export default async function PerfilPage() {
             </p>
           </div>
         ) : (
-          <SubscriptionCard
-            subscription={subscription}
-            plan={plan}
-            creditsBalance={profile?.credits_balance ?? 0}
-          />
+          <>
+            <Link
+              href="/financeiro"
+              className="block text-sm text-brand-500 font-medium mb-3"
+            >
+              Ver financeiro completo (planos, pagamentos) →
+            </Link>
+            <SubscriptionCard
+              subscription={subscription}
+              plan={plan}
+              creditsBalance={profile?.credits_balance ?? 0}
+            />
+          </>
         )}
       </section>
 

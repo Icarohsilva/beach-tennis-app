@@ -12,13 +12,15 @@ interface Props {
   slot: DayUseSlot
   bookingsCount: number
   myBookingId: string | null
+  myBookingStatus?: string | null
   attendees: string[]
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, attendees }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
+  const [status, setStatus] = useState<string | null>(myBookingStatus)
   const [localCount, setLocalCount] = useState(bookingsCount)
   const [showAttendees, setShowAttendees] = useState(false)
   const isFull = localCount >= slot.capacity
@@ -27,13 +29,20 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, attendees 
     setLoading(true)
     setError(null)
     const result = await bookDayUse(slot.id)
-    setLoading(false)
     if (result.error) {
+      setLoading(false)
       setError(result.error)
       return
     }
+    if (result.initPoint) {
+      // Redireciona para o Checkout Pro; mantém o loading até a navegação ocorrer.
+      window.location.href = result.initPoint
+      return
+    }
+    setLoading(false)
     setLocalCount((c) => c + 1)
     setBookingId('pending')
+    setStatus('confirmed')
   }
 
   async function handleCancel() {
@@ -90,7 +99,11 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, attendees 
         <div className="shrink-0">
           {bookingId ? (
             <div className="flex flex-col items-end gap-1">
-              <Badge variant="success">Reservado</Badge>
+              {status === 'pending_payment' ? (
+                <Badge variant="warning">Aguardando pagamento</Badge>
+              ) : (
+                <Badge variant="success">Reservado</Badge>
+              )}
               {bookingId !== 'pending' && (
                 <button
                   onClick={handleCancel}

@@ -2,6 +2,8 @@
 // app/(admin)/financeiro/adminActions.ts
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
+import { PERIODICITIES } from '@/lib/billing/periodicity'
+import type { Periodicity } from '@/types'
 
 async function assertAdmin() {
   const supabase = createClient()
@@ -44,68 +46,115 @@ export async function togglePlanActive(
   }
 }
 
-export async function updatePlanPrice(
+export interface CreatePlanData {
+  name: string
+  description?: string
+  classes_per_week: number
+  credits_per_month: number
+}
+
+export async function createPlan(data: CreatePlanData): Promise<{ error?: string; planId?: string }> {
+  try {
+    const { adminClient, orgId } = await assertAdmin()
+
+    if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
+    if (data.credits_per_month < 1) return { error: 'Créditos por mês deve ser ≥ 1.' }
+
+    const { data: plan, error } = await adminClient
+      .from('subscription_plans')
+      .insert({
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        classes_per_week: data.classes_per_week,
+        credits_per_month: data.credits_per_month,
+        is_active: true,
+        organization_id: orgId,
+      })
+      .select('id')
+      .single()
+
+    if (error || !plan) return { error: error?.message ?? 'Erro ao criar plano.' }
+    revalidatePath('/admin/financeiro/planos')
+    return { planId: plan.id as string }
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
+  }
+}
+
+// Liga/desliga e precifica uma periodicidade do plano (upsert por plan+periodicity).
+export async function saveBillingOption(
   planId: string,
-  prices: { price_monthly?: number; price_quarterly?: number; price_annual?: number },
+  periodicity: Periodicity,
+  price: number,
+  isEnabled: boolean,
 ): Promise<{ error?: string }> {
   try {
     const { adminClient, orgId } = await assertAdmin()
 
-    // Validate
-    for (const [key, val] of Object.entries(prices)) {
-      if (val !== undefined && (typeof val !== 'number' || val < 0)) {
-        return { error: `Valor inválido para ${key}.` }
-      }
+    if (!PERIODICITIES.includes(periodicity)) return { error: 'Periodicidade inválida.' }
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) {
+      return { error: 'Preço inválido.' }
     }
+    if (isEnabled && price <= 0) return { error: 'Defina um preço para habilitar a periodicidade.' }
 
-    const { error } = await adminClient
+    // Plano precisa ser da academia ativa (adminClient bypassa RLS).
+    const { data: plan } = await adminClient
       .from('subscription_plans')
-      .update(prices)
+      .select('id')
       .eq('id', planId)
       .eq('organization_id', orgId)
+      .single()
+    if (!plan) return { error: 'Plano não encontrado.' }
 
-    if (error) return { error: 'Erro ao atualizar preço.' }
-    revalidatePath('/admin/financeiro')
+    const { error } = await adminClient.from('plan_billing_options').upsert(
+      {
+        organization_id: orgId,
+        plan_id: planId,
+        periodicity,
+        price,
+        is_enabled: isEnabled,
+      },
+      { onConflict: 'plan_id,periodicity' },
+    )
+    if (error) return { error: 'Erro ao salvar a periodicidade.' }
+    revalidatePath('/admin/financeiro/planos')
     return {}
   } catch (e: unknown) {
     return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
   }
 }
 
-export interface CreatePlanData {
-  name: string
-  description?: string
-  classes_per_week: number
-  credits_per_month: number
-  price_monthly: number
-  price_quarterly: number
-  price_annual: number
+// Preço/toggle de aula avulsa e day use (system_settings key/value por academia).
+export interface SalesSettingsData {
+  single_class_price: number
+  single_class_sale_enabled: boolean
+  day_use_price: number
+  day_use_sale_enabled: boolean
 }
 
-export async function createPlan(data: CreatePlanData): Promise<{ error?: string }> {
+export async function updateSalesSettings(data: SalesSettingsData): Promise<{ error?: string }> {
   try {
     const { adminClient, orgId } = await assertAdmin()
 
-    if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
-    if (data.credits_per_month < 1) return { error: 'Créditos por mês deve ser ≥ 1.' }
-    if (data.price_monthly < 0 || data.price_quarterly < 0 || data.price_annual < 0) {
-      return { error: 'Preço inválido.' }
+    if (data.single_class_price < 0 || data.day_use_price < 0) return { error: 'Preço inválido.' }
+    if (data.single_class_sale_enabled && data.single_class_price <= 0) {
+      return { error: 'Defina o preço da aula avulsa para ativar a venda.' }
+    }
+    if (data.day_use_sale_enabled && data.day_use_price <= 0) {
+      return { error: 'Defina o preço do day use para ativar a venda.' }
     }
 
-    const { error } = await adminClient.from('subscription_plans').insert({
-      name: data.name.trim(),
-      description: data.description?.trim() || null,
-      classes_per_week: data.classes_per_week,
-      credits_per_month: data.credits_per_month,
-      price_monthly: data.price_monthly,
-      price_quarterly: data.price_quarterly,
-      price_annual: data.price_annual,
-      is_active: true,
-      organization_id: orgId,
-    })
-
-    if (error) return { error: error.message }
-    revalidatePath('/admin/financeiro')
+    const rows = [
+      { organization_id: orgId, key: 'single_class_price', value: String(data.single_class_price) },
+      { organization_id: orgId, key: 'single_class_sale_enabled', value: String(data.single_class_sale_enabled) },
+      { organization_id: orgId, key: 'day_use_price', value: String(data.day_use_price) },
+      { organization_id: orgId, key: 'day_use_sale_enabled', value: String(data.day_use_sale_enabled) },
+    ]
+    const { error } = await adminClient
+      .from('system_settings')
+      .upsert(rows, { onConflict: 'organization_id,key' })
+    if (error) return { error: 'Erro ao salvar configurações de venda.' }
+    revalidatePath('/admin/financeiro/planos')
     return {}
   } catch (e: unknown) {
     return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
