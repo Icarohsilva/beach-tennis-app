@@ -1,6 +1,6 @@
 // app/(dashboard)/financeiro/page.tsx
 // Financeiro do aluno: meu plano, vitrine de planos, compra de aula avulsa,
-// histórico. (Banner de indicação de plano ainda entra em task futura.)
+// histórico, banner de indicação de plano pelo admin.
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
@@ -9,7 +9,9 @@ import { PlanStorefront } from '@/features/financeiro/PlanStorefront'
 import { CancelPlanButton } from '@/features/financeiro/CancelPlanButton'
 import { CheckoutReturnBanner } from '@/features/financeiro/CheckoutReturnBanner'
 import { BuyCreditsCard } from '@/features/financeiro/BuyCreditsCard'
-import type { Payment, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
+import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
+import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
+import type { Payment, Periodicity, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
 export default async function FinanceiroAlunoPage({
   searchParams,
@@ -103,12 +105,36 @@ export default async function FinanceiroAlunoPage({
 
   const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
 
+  const { data: recRaw } = await admin
+    .from('plan_recommendations')
+    .select('id, plan_id, billing_option_id, subscription_plans(name), plan_billing_options(periodicity, price)')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  const recPlan = recRaw
+    ? ((Array.isArray(recRaw.subscription_plans) ? recRaw.subscription_plans[0] : recRaw.subscription_plans) as { name: string } | null)
+    : null
+  const recOption = recRaw
+    ? ((Array.isArray(recRaw.plan_billing_options) ? recRaw.plan_billing_options[0] : recRaw.plan_billing_options) as { periodicity: Periodicity; price: number } | null)
+    : null
+
   return (
     <div className="space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
         <p className="text-slate-400 text-sm mt-1">Seu plano, pagamentos e contratação</p>
       </div>
+
+      {recRaw && (
+        <RecommendationBanner
+          recommendationId={recRaw.id as string}
+          planName={recPlan?.name ?? 'Plano'}
+          periodicityLabel={PERIODICITY_LABELS[recOption?.periodicity ?? 'monthly']}
+          price={recOption?.price ?? 0}
+        />
+      )}
 
       {searchParams.retorno === 'assinatura' && (
         <CheckoutReturnBanner message="Recebemos seu retorno do Mercado Pago. Assim que o pagamento for confirmado, seu plano é ativado automaticamente — isso costuma levar alguns segundos." />

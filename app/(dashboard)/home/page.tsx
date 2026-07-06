@@ -17,7 +17,9 @@ import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { CalendarPlus } from 'lucide-react'
 import { getStudentTournamentHome } from '@/features/torneios/studentHome'
 import { NextMatchCard } from '@/features/torneios/NextMatchCard'
-import type { Tournament, Profile, Class, ClassSession, DayUseSlot } from '@/types'
+import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
+import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
+import type { Tournament, Profile, Class, ClassSession, DayUseSlot, Periodicity } from '@/types'
 
 export default async function HomePage() {
   const supabase = createClient()
@@ -31,6 +33,21 @@ export default async function HomePage() {
   // Campos por-academia vêm da membership da academia ativa; identidade (full_name) de profiles.
   const orgId = await getActiveOrgId()
   const membership = await getActiveMembership()
+
+  const { data: recRaw } = await adminClient
+    .from('plan_recommendations')
+    .select('id, plan_id, billing_option_id, subscription_plans(name), plan_billing_options(periodicity, price)')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  const recPlan = recRaw
+    ? ((Array.isArray(recRaw.subscription_plans) ? recRaw.subscription_plans[0] : recRaw.subscription_plans) as { name: string } | null)
+    : null
+  const recOption = recRaw
+    ? ((Array.isArray(recRaw.plan_billing_options) ? recRaw.plan_billing_options[0] : recRaw.plan_billing_options) as { periodicity: Periodicity; price: number } | null)
+    : null
 
   const [
     { data: profileData },
@@ -294,6 +311,15 @@ export default async function HomePage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
+      {recRaw && (
+        <RecommendationBanner
+          recommendationId={recRaw.id as string}
+          planName={recPlan?.name ?? 'Plano'}
+          periodicityLabel={PERIODICITY_LABELS[recOption?.periodicity ?? 'monthly']}
+          price={recOption?.price ?? 0}
+        />
+      )}
+
       <div data-tour="tour-aluno-progresso">
         <StatHeader
           name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
