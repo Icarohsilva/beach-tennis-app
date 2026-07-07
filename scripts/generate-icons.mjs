@@ -1,12 +1,12 @@
 // scripts/generate-icons.mjs
 // Gera os ícones do app (favicon, PWA 192/512, Apple touch) e a OG image a partir
-// das artes de marca em public/brand/. Rode com: node scripts/generate-icons.mjs
+// da arte de marca em public/brand/arenahub-symbol.png. Rode com:
+//   node scripts/generate-icons.mjs
 //
-// - arenahub-symbol.png  → ícone (só o símbolo da arena)
-// - arenahub-logo.png    → OG image (símbolo + wordmark)
-//
-// O símbolo vem com fundo preto; achatamos sobre o navy da marca (#0c1220) para
-// casar com bg-surface e garantir um quadrado cheio (bom para ícones maskable).
+// A arte-fonte (arenahub-symbol.png) já vem com transparência real (canto
+// alpha=0) e o próprio quadrado arredondado laranja preenchido — diferente da
+// versão anterior (glow sobre fundo preto puro, que exigia extrair a silhueta
+// via luminância). Por isso aqui só resize + composição direta.
 import sharp from 'sharp'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -14,14 +14,14 @@ import { dirname, join } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BRAND_NAVY = '#0c1220'
+const BRAND_ORANGE = '#f97316'
 
 const symbol = join(root, 'public/brand/arenahub-symbol.png')
-const logo = join(root, 'public/brand/arenahub-logo.png')
 
-// Gera um ícone quadrado: símbolo com folga, achatado sobre o navy da marca.
-async function icon(size, out, { padRatio = 0.12 } = {}) {
-  const pad = Math.round(size * padRatio)
-  const inner = size - pad * 2
+// Gera um ícone quadrado: símbolo com folga (safe-zone para maskable icons),
+// achatado sobre o navy da marca (#0c1220) para casar com bg-surface.
+async function icon(size, out, { padRatio = 0.14 } = {}) {
+  const inner = Math.round(size * (1 - padRatio * 2))
   const fg = await sharp(symbol)
     .resize(inner, inner, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .toBuffer()
@@ -34,43 +34,34 @@ async function icon(size, out, { padRatio = 0.12 } = {}) {
   console.log('✓', out)
 }
 
-// Extrai o símbolo do fundo preto: a arte é um brilho laranja sobre preto puro,
-// então a luminância vira o canal alfa (preto → transparente, brilho → opaco).
-// Resultado: símbolo com fundo transparente para uso inline na UI.
+// Símbolo transparente para uso inline na UI (sidebar, login, landing, etc.).
+// A arte-fonte já tem fundo transparente nativo — só normalizamos via sharp.
 async function transparentSymbol(out) {
-  // RGB original (3 canais) + luminância (1 canal) interpolados manualmente em
-  // RGBA: a luminância vira o alfa (preto → 0/transparente, brilho → 255/opaco).
-  const { data: rgb, info } = await sharp(symbol)
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-  const { data: lum } = await sharp(symbol)
-    .removeAlpha()
-    .greyscale()
-    .toColourspace('b-w')
-    .raw()
-    .toBuffer({ resolveWithObject: true })
-  const { width, height } = info
-  const rgba = Buffer.alloc(width * height * 4)
-  for (let i = 0; i < width * height; i++) {
-    rgba[i * 4] = rgb[i * 3]
-    rgba[i * 4 + 1] = rgb[i * 3 + 1]
-    rgba[i * 4 + 2] = rgb[i * 3 + 2]
-    rgba[i * 4 + 3] = lum[i]
-  }
-  await sharp(rgba, { raw: { width, height, channels: 4 } }).png().toFile(out)
+  await sharp(symbol).png().toFile(out)
   console.log('✓', out)
 }
 
-// OG image 1200×630: logo com wordmark centralizada sobre o navy.
+// OG image 1200×630: símbolo + wordmark "ArenaHub" centralizados sobre o navy.
 async function og(out) {
   const W = 1200
   const H = 630
-  const art = await sharp(logo)
-    .resize(540, 540, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+  const iconSize = 320
+  const fg = await sharp(symbol)
+    .resize(iconSize, iconSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .toBuffer()
+
+  const svgText = `<svg width="${W}" height="120" xmlns="http://www.w3.org/2000/svg">
+    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
+      font-family="Arial, Helvetica, sans-serif" font-weight="800" font-size="72">
+      <tspan fill="#ffffff">Arena</tspan><tspan fill="${BRAND_ORANGE}">Hub</tspan>
+    </text>
+  </svg>`
+
   await sharp({ create: { width: W, height: H, channels: 4, background: BRAND_NAVY } })
-    .composite([{ input: art, gravity: 'center' }])
+    .composite([
+      { input: fg, top: 90, left: Math.round((W - iconSize) / 2) },
+      { input: Buffer.from(svgText), top: 420, left: 0 },
+    ])
     .png()
     .toFile(out)
   console.log('✓', out)
