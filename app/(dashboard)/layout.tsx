@@ -69,7 +69,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="text-sm font-semibold text-white truncate">{org?.name ?? ''}</span>
           </span>
         )}
-        <NotificationBell initialNotifications={notifications} />
+        <div className="flex items-center gap-1">
+          <HelpButton variant="aluno" inline />
+          <NotificationBell initialNotifications={notifications} orgName={org?.name ?? null} />
+        </div>
         {unreadCount > 0 && <span className="sr-only">{unreadCount} notificações não lidas</span>}
       </header>
       <main className="pt-11 pb-24">
@@ -80,7 +83,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </main>
       <BottomNav />
       <TourProvider variant="aluno" seenAt={tourProfile?.tour_aluno_seen_at ?? null} />
-      <HelpButton variant="aluno" className="bottom-24 right-4" />
     </div>
   )
 }
