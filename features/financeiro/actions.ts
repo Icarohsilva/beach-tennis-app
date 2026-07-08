@@ -319,12 +319,14 @@ export async function adminCancelStudentPlan(
     .single()
   if (caller?.role !== 'admin') return { error: 'Sem permissão.' }
 
+  // Inclui pending_payment: a academia também precisa poder cancelar uma
+  // assinatura travada aguardando pagamento, não só um plano já ativo.
   const { data: sub } = await adminClient
     .from('student_subscriptions')
     .select('id, organization_id, gateway, gateway_subscription_id')
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
-    .in('status', ['active', 'past_due'])
+    .in('status', ['active', 'past_due', 'pending_payment'])
     .maybeSingle()
 
   if (!sub) return { error: 'Nenhum plano ativo encontrado.' }

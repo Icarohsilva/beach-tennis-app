@@ -604,9 +604,15 @@ export function StudentProfileClient({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-white text-sm font-medium">{activeSub.plan.name}</p>
-                  <p className="text-xs text-green-400 mt-0.5">
-                    Ativo desde {new Date(activeSub.starts_at).toLocaleDateString('pt-BR')}
-                  </p>
+                  {activeSub.status === 'pending_payment' ? (
+                    <p className="text-xs text-yellow-400 mt-0.5">Aguardando pagamento</p>
+                  ) : activeSub.status === 'past_due' ? (
+                    <p className="text-xs text-red-400 mt-0.5">Pagamento vencido</p>
+                  ) : (
+                    <p className="text-xs text-green-400 mt-0.5">
+                      Ativo desde {new Date(activeSub.starts_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -614,7 +620,7 @@ export function StudentProfileClient({
                   onClick={() => setShowCancelPlanDialog(true)}
                   className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50 shrink-0"
                 >
-                  Remover plano
+                  {activeSub.status === 'pending_payment' ? 'Cancelar' : 'Remover plano'}
                 </button>
               </div>
             </div>

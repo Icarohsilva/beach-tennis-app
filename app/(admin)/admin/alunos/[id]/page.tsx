@@ -171,13 +171,15 @@ export default async function StudentProfilePage({ params }: Props) {
     .eq('organization_id', orgId)
     .eq('is_enabled', true)
 
-  // Fetch current active subscription for this student
+  // Fetch current subscription for this student — inclui pending_payment e
+  // past_due, não só active: sem isso a academia não vê (nem consegue
+  // cancelar) uma assinatura travada aguardando pagamento.
   const { data: currentSubRaw } = await adminClient
     .from('student_subscriptions')
     .select('id, plan_id, status, starts_at, gateway, current_period_end, plan:subscription_plans(id, name)')
     .eq('student_id', params.id)
     .eq('organization_id', orgId)
-    .eq('status', 'active')
+    .in('status', ['active', 'past_due', 'pending_payment'])
     .order('starts_at', { ascending: false })
     .limit(1)
     .maybeSingle()
