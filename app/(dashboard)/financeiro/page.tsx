@@ -104,6 +104,7 @@ export default async function FinanceiroAlunoPage({
     sales.single_class_sale_enabled === 'true' && singleClassPrice > 0 && mpConnected
 
   const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
+  const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
 
   const { data: recRaw } = await admin
     .from('plan_recommendations')
@@ -121,7 +122,7 @@ export default async function FinanceiroAlunoPage({
     : null
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="p-4 space-y-6 pb-24">
       <div>
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
         <p className="text-slate-400 text-sm mt-1">Seu plano, pagamentos e contratação</p>
@@ -151,7 +152,7 @@ export default async function FinanceiroAlunoPage({
           plan={plan}
           creditsBalance={(membership?.credits_balance as number | undefined) ?? 0}
         />
-        {hasActivePlan && <div className="mt-2"><CancelPlanButton /></div>}
+        {canCancel && <div className="mt-2"><CancelPlanButton /></div>}
       </section>
 
       <section>

@@ -15,6 +15,14 @@ import type { PaymentStatus } from '@/types'
 interface RevenueRow {
   amount: number
   status: PaymentStatus
+  type: string
+}
+
+const REVENUE_SOURCE_LABELS: Record<string, string> = {
+  subscription: 'Assinaturas',
+  per_class: 'Aula avulsa',
+  day_use: 'Day use',
+  trial: 'Aula trial',
 }
 
 interface InadimplentRow {
@@ -43,17 +51,30 @@ export default async function FinanceiroPage() {
 
   const { data: monthlyPayments } = await adminClient
     .from('payments')
-    .select('amount, status')
+    .select('amount, status, type')
     .eq('organization_id', orgId)
     .gte('created_at', startOfMonth.toISOString())
 
-  const monthlyRevenue = (monthlyPayments as RevenueRow[] ?? [])
+  const monthlyPaymentRows = (monthlyPayments as RevenueRow[]) ?? []
+
+  const monthlyRevenue = monthlyPaymentRows
     .filter((p) => p.status === 'paid')
     .reduce((sum, p) => sum + p.amount, 0)
 
-  const pendingRevenue = (monthlyPayments as RevenueRow[] ?? [])
+  const pendingRevenue = monthlyPaymentRows
     .filter((p) => p.status === 'pending')
     .reduce((sum, p) => sum + p.amount, 0)
+
+  // Receita paga do mês, agrupada por origem (assinatura/avulso/day use), pra
+  // dono da academia entender de onde vem o dinheiro sem abrir o extrato inteiro.
+  const revenueByType = new Map<string, number>()
+  for (const p of monthlyPaymentRows) {
+    if (p.status !== 'paid') continue
+    revenueByType.set(p.type, (revenueByType.get(p.type) ?? 0) + p.amount)
+  }
+  const revenueBreakdown = Array.from(revenueByType.entries())
+    .filter(([, amount]) => amount > 0)
+    .sort((a, b) => b[1] - a[1])
 
   // ─── Inadimplentes: assinatura ativa/vencida OU último pagamento falhou ───
   const { data: inadimplentesRaw } = await adminClient
@@ -172,6 +193,20 @@ export default async function FinanceiroPage() {
           <p className="text-2xl font-bold text-yellow-400">{pendingPayments.length}</p>
         </Card>
       </div>
+
+      {revenueBreakdown.length > 0 && (
+        <Card>
+          <p className="text-slate-400 text-xs uppercase tracking-wide mb-3">Receita do mês por origem</p>
+          <div className="space-y-2">
+            {revenueBreakdown.map(([type, amount]) => (
+              <div key={type} className="flex items-center justify-between text-sm">
+                <span className="text-white">{REVENUE_SOURCE_LABELS[type] ?? type}</span>
+                <span className="font-semibold text-green-400">{formatCurrency(amount)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card>
         <div className="flex items-center justify-between gap-3">

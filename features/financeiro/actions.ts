@@ -232,13 +232,15 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  // Find active subscription (na academia ativa)
+  // Find active subscription (na academia ativa). Inclui pending_payment:
+  // o aluno pode desistir de uma assinatura que criou mas nunca autorizou o
+  // pagamento no MP, sem esperar a limpeza automática de 24h.
   const { data: sub, error: subErr } = await adminClient
     .from('student_subscriptions')
     .select('id, organization_id, gateway, gateway_subscription_id')
     .eq('student_id', user.id)
     .eq('organization_id', orgId)
-    .in('status', ['active', 'past_due'])
+    .in('status', ['active', 'past_due', 'pending_payment'])
     .maybeSingle()
 
   if (subErr || !sub) return { error: 'Nenhuma assinatura ativa encontrada.' }

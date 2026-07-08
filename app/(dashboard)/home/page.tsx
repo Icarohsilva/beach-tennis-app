@@ -49,6 +49,17 @@ export default async function HomePage() {
     ? ((Array.isArray(recRaw.plan_billing_options) ? recRaw.plan_billing_options[0] : recRaw.plan_billing_options) as { periodicity: Periodicity; price: number } | null)
     : null
 
+  // CTA de assinatura: só para quem não é Wellhub/TotalPass puro (esses não
+  // precisam assinar no app) e ainda não tem plano ativo/pendente. Aluno
+  // híbrido (parceiro + assinatura própria) cai fora do CTA porque já tem sub.
+  const { data: existingSub } = await adminClient
+    .from('student_subscriptions')
+    .select('id')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .in('status', ['active', 'past_due', 'pending_payment'])
+    .maybeSingle()
+
   const [
     { data: profileData },
     { data: tournamentsData },
@@ -108,6 +119,9 @@ export default async function HomePage() {
   })
   const showCredits = membership?.payment_type !== 'wellhub' && membership?.payment_type !== 'totalpass'
   const isPartner = membership?.payment_type === 'wellhub' || membership?.payment_type === 'totalpass'
+  // Não mostra o CTA genérico se já existe uma recomendação de plano do admin
+  // (mais específica) ou se o aluno já tem plano/pendência em andamento.
+  const showPlanCTA = !isPartner && !existingSub && !recRaw
   let checkinProgress: ReturnType<typeof computeProgress> | null = null
   if (isPartner && membership) {
     const { from, to } = getMonthWindow(new Date())
@@ -338,6 +352,22 @@ export default async function HomePage() {
           partner={membership!.payment_type as 'wellhub' | 'totalpass'}
           progress={checkinProgress}
         />
+      )}
+
+      {showPlanCTA && (
+        <Link href="/financeiro">
+          <Card className="bg-gradient-to-br from-brand-600 to-brand-800 border-none hover:opacity-90 transition-opacity cursor-pointer">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">Assine um plano</p>
+                <p className="text-xs text-white/80 mt-0.5">
+                  Aulas incluídas todo mês, sem pagar aula avulsa.
+                </p>
+              </div>
+              <span className="text-white text-xl shrink-0">→</span>
+            </div>
+          </Card>
+        </Link>
       )}
 
       {nextMatch && <NextMatchCard match={nextMatch} />}
