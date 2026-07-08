@@ -104,7 +104,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     >
       <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen hidden md:flex flex-col">
         <div className="bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-5 mb-2">
-          <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />
+          <div className="flex items-start justify-between">
+            <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />
+            <HelpButton variant="admin" inline />
+          </div>
           <span className="text-sm font-bold text-white mt-1 block truncate">
             {org?.name ?? 'Painel Admin'}
           </span>
@@ -124,7 +127,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <PoweredBy className="mt-3" />
         </div>
       </aside>
-      <AdminMobileNav links={navLinks} tourTargets={tourTargets} />
+      <AdminMobileNav
+        links={navLinks}
+        tourTargets={tourTargets}
+        helpSlot={<HelpButton variant="admin" inline />}
+      />
       <main className="flex-1 p-6 mt-14 md:mt-0">
         {isTrialing && (
           <div
@@ -169,7 +176,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         {children}
       </main>
       <TourProvider variant="admin" seenAt={tourProfile?.tour_admin_seen_at ?? null} />
-      <HelpButton variant="admin" className="bottom-4 right-4" />
     </div>
   )
 }

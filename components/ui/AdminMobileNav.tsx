@@ -9,9 +9,11 @@ interface NavLink { href: string; label: string }
 export function AdminMobileNav({
   links,
   tourTargets,
+  helpSlot,
 }: {
   links: NavLink[]
   tourTargets?: Record<string, string>
+  helpSlot?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
 
@@ -32,9 +34,12 @@ export function AdminMobileNav({
       {/* Fixed topbar — only visible on mobile */}
       <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-surface-card border-b border-surface-border md:hidden">
         <span className="text-white font-semibold text-sm">Painel Admin</span>
-        <button onClick={() => setOpen(v => !v)} className="text-slate-400 hover:text-white p-1" aria-label="Menu">
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {helpSlot}
+          <button onClick={() => setOpen(v => !v)} className="text-slate-400 hover:text-white p-1" aria-label="Menu">
+            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
       {/* Dropdown */}
       {open && (
