@@ -249,7 +249,6 @@ export default async function StudentProfilePage({ params }: Props) {
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-2xl font-bold text-white">{student.full_name}</h1>
             {student.is_dependent && <Badge variant="kids">KIDS</Badge>}
-            <Badge variant="level">{student.level.toUpperCase()}</Badge>
           </div>
           <div className="flex flex-wrap gap-3 text-sm text-slate-400">
             {student.phone && <span>📞 {student.phone}</span>}

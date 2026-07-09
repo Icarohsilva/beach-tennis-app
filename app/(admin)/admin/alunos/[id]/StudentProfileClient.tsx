@@ -443,7 +443,6 @@ export function StudentProfileClient({
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="level">{cls.level.toUpperCase()}</Badge>
                     <Button
                       variant="danger"
                       size="sm"

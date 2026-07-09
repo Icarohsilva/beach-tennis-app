@@ -189,7 +189,6 @@ export default async function GradePage() {
                         <span className="text-white text-sm font-medium truncate">{c.name}</span>
                         <div className="flex items-center gap-1 shrink-0">
                           {c.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
-                          <Badge variant="level">{c.level.toUpperCase()}</Badge>
                           <Link
                             href={`/admin/grade/${c.id}/editar`}
                             className="text-xs text-slate-400 hover:text-brand-500 ml-1"

@@ -80,10 +80,7 @@ export default async function AdminDashboardPage() {
                   <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <span className="text-white text-sm font-medium truncate">{cls.name}</span>
-                      {cls.type === 'kids'
-                        ? <Badge variant="kids">KIDS</Badge>
-                        : <Badge variant="level">{cls.level.toUpperCase()}</Badge>
-                      }
+                      {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
                     </div>
                     <p className="text-xs text-slate-400">{cls.start_time.slice(0,5)} – {cls.end_time.slice(0,5)}</p>
                     <p className="text-xs text-brand-500 mt-1">Fazer chamada →</p>

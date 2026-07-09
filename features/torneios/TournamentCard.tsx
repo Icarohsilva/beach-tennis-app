@@ -45,7 +45,6 @@ export function TournamentCard({ tournament, href }: TournamentCardProps) {
         </p>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="level">Nível {tournament.level.toUpperCase()}</Badge>
           {tournament.modality && <Badge variant="default">{MODALITY_LABELS[tournament.modality]}</Badge>}
           <Badge variant="default">Super 8</Badge>
         </div>

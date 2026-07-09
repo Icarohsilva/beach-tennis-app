@@ -108,7 +108,6 @@ export default async function SessionDetailPage({ params }: Props) {
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-2xl font-bold text-white">{cls.name}</h1>
           {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
-          <Badge variant="level">Nível {cls.level}</Badge>
         </div>
         <p className="text-slate-400 text-sm">
           {formatDate(typedSession.session_date)} · {formatTime(cls.start_time)} – {formatTime(cls.end_time)}

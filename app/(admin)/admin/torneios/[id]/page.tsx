@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
 import { StandingsTable } from '@/features/torneios/StandingsTable'
 import { GenerateBracketButton } from './GenerateBracketButton'
@@ -83,16 +82,6 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         else if (signed?.signedUrl) receiptSignedUrls[e.id] = signed.signedUrl
       })
   )
-
-  // Nível por-academia (membership desta org)
-  const playerIds = entries.map((e) => e.player_id)
-  const { data: levelMemsRaw } = playerIds.length > 0
-    ? await adminClient.from('memberships').select('user_id, level').in('user_id', playerIds).eq('organization_id', orgId)
-    : { data: [] }
-  const levelByPlayer = new Map<string, string>()
-  for (const m of (levelMemsRaw ?? []) as { user_id: string; level: string }[]) {
-    levelByPlayer.set(m.user_id, m.level)
-  }
 
   // Confrontos com colunas de placar/status
   const { data: matchesRaw } = await adminClient
@@ -244,7 +233,6 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               {confirmedEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
-                const lvl = levelByPlayer.get(entry.player_id)
                 const waUrl = entry.payment_status === 'pending' && p?.phone && t.pix_key
                   ? buildWhatsAppUrl(
                       p.phone,
@@ -270,7 +258,6 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                         )}
                       </div>
                       <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {lvl && <Badge variant="level">{lvl.toUpperCase()}</Badge>}
                         {entry.payment_status === 'free' && (
                           <span className="text-xs text-slate-500 bg-surface rounded px-1.5 py-0.5">Gratuito</span>
                         )}

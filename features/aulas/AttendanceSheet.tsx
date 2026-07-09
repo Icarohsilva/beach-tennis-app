@@ -104,7 +104,6 @@ export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheet
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{student.full_name}</p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <Badge variant="level">{student.level.toUpperCase()}</Badge>
                     {source && (
                       <Badge variant={SOURCE_VARIANT[source]}>{SOURCE_LABEL[source]}</Badge>
                     )}

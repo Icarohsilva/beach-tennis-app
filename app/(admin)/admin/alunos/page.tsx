@@ -2,7 +2,6 @@
 import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Users } from 'lucide-react'
 import type { Membership, StudentLevel } from '@/types'
@@ -208,7 +207,6 @@ export default async function AlunosPage({ searchParams }: Props) {
                         </span>
                       )}
                     </div>
-                    <Badge variant="level">{student.level.toUpperCase()}</Badge>
                   </div>
 
                   <div className="space-y-1 text-xs text-slate-400">

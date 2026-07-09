@@ -4,7 +4,6 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { createTrialBooking } from './actions'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import type { TrialSessionOption } from '@/lib/arenas/sessions'
@@ -79,7 +78,6 @@ export function TrialBookingForm({ organizationId, sessions }: TrialBookingFormP
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                  <Badge variant="level">{s.level.toUpperCase()}</Badge>
                   <span className="text-xs text-slate-500">{s.spots_left} vagas</span>
                 </div>
               </div>
