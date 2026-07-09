@@ -25,7 +25,6 @@ export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCa
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <h3 className="text-white font-semibold text-sm truncate">{c.name}</h3>
             {isKids && <Badge variant="kids">KIDS</Badge>}
-            <Badge variant="level">Nível {c.level.toUpperCase()}</Badge>
           </div>
 
           {c.description && (

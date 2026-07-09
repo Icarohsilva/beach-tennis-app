@@ -337,7 +337,6 @@ export default async function HomePage() {
               ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
               : [{ label: 'Plano', value: membership?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
             { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-            { label: 'Nível', value: (membership?.level ?? '—').toUpperCase() },
           ]}
         />
       </div>
@@ -464,10 +463,7 @@ export default async function HomePage() {
                         {formatDate(session.session_date, "EEE, dd 'de' MMM")} · {formatTime(cls.start_time)}
                       </p>
                     </div>
-                    {cls.type === 'kids'
-                      ? <Badge variant="kids">KIDS</Badge>
-                      : <Badge variant="level">{cls.level.toUpperCase()}</Badge>
-                    }
+                    {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
                   </div>
                 </Card>
               )
@@ -518,7 +514,6 @@ export default async function HomePage() {
                           {formatDate(tournament.date, "dd 'de' MMMM")}
                         </p>
                       </div>
-                      <Badge variant="level">Nível {tournament.level.toUpperCase()}</Badge>
                     </div>
                   </Card>
                 </Link>
