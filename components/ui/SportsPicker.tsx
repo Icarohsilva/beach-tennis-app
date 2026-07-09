@@ -36,6 +36,7 @@ export function SportsPicker({ value, onChange }: SportsPickerProps) {
             key={sport.slug}
             type="button"
             onClick={() => toggle(sport.slug)}
+            aria-pressed={value.includes(sport.slug)}
             className={[chipBase, value.includes(sport.slug) ? chipOn : chipOff].join(' ')}
           >
             {sport.emoji} {sport.label}
@@ -46,6 +47,8 @@ export function SportsPicker({ value, onChange }: SportsPickerProps) {
             key={slug}
             type="button"
             onClick={() => toggle(slug)}
+            aria-pressed={true}
+            aria-label={`Remover ${sportLabel(slug)}`}
             className={[chipBase, chipOn].join(' ')}
           >
             {sportLabel(slug)} ✕
