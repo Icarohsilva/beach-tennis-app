@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/server'
 import { buildDirectoryFilter } from '@/lib/arenas/filters'
-import { SPORT_BY_SLUG } from '@/lib/arenas/sports'
+import { sportLabel } from '@/lib/arenas/sports'
 import { ArenaFilters } from './ArenaFilters'
 
 interface DirectoryArena {
@@ -86,18 +86,14 @@ export default async function ArenasPage({ searchParams }: PageProps) {
                   {[a.neighborhood, a.city, a.state].filter(Boolean).join(' · ')}
                 </p>
                 <div className="flex flex-wrap gap-1.5 mt-3">
-                  {a.sports.map((slug) => {
-                    const sport = SPORT_BY_SLUG.get(slug)
-                    if (!sport) return null
-                    return (
-                      <span
-                        key={slug}
-                        className="text-xs text-slate-300 bg-surface-border rounded-full px-2.5 py-1"
-                      >
-                        {sport.emoji} {sport.label}
-                      </span>
-                    )
-                  })}
+                  {a.sports.map((slug) => (
+                    <span
+                      key={slug}
+                      className="text-xs text-slate-300 bg-surface-border rounded-full px-2.5 py-1"
+                    >
+                      {sportLabel(slug)}
+                    </span>
+                  ))}
                 </div>
                 <span className="inline-block mt-4 text-brand-500 text-sm font-semibold">
                   Ver horários →

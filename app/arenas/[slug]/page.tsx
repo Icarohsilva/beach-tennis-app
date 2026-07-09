@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getOpenTrialSessions } from '@/lib/arenas/sessions'
-import { SPORT_BY_SLUG } from '@/lib/arenas/sports'
+import { sportLabel } from '@/lib/arenas/sports'
 import { formatAddress } from '@/lib/arenas/formatAddress'
 import { Card } from '@/components/ui/Card'
 import { Logo } from '@/components/ui/Logo'
@@ -65,18 +65,14 @@ export default async function ArenaPage({ params }: PageProps) {
             {[formatAddress(org), org.neighborhood, org.city, org.state].filter(Boolean).join(' · ')}
           </p>
           <div className="flex flex-wrap gap-1.5 mt-3">
-            {org.sports.map((slug) => {
-              const sport = SPORT_BY_SLUG.get(slug)
-              if (!sport) return null
-              return (
-                <span
-                  key={slug}
-                  className="text-xs text-slate-300 bg-surface-border rounded-full px-2.5 py-1"
-                >
-                  {sport.emoji} {sport.label}
-                </span>
-              )
-            })}
+            {org.sports.map((slug) => (
+              <span
+                key={slug}
+                className="text-xs text-slate-300 bg-surface-border rounded-full px-2.5 py-1"
+              >
+                {sportLabel(slug)}
+              </span>
+            ))}
           </div>
           {whatsappDigits && (
             <a

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { formatDate } from '@/lib/utils/dateHelpers'
+import { sportLabel } from '@/lib/arenas/sports'
 import { RegisterExternalButton } from './RegisterExternalButton'
 import { ReceiptUploadButton } from './ReceiptUploadButton'
 import { ShareButton } from './ShareButton'
@@ -191,7 +192,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
             </span>
           )}
           <span className="bg-surface-border text-slate-400 text-xs px-2.5 py-1 rounded-full">
-            {SPORT_LABELS[t.sport] ?? t.sport}
+            {SPORT_LABELS[t.sport] ?? sportLabel(t.sport)}
           </span>
           <span className="bg-surface-border text-slate-400 text-xs px-2.5 py-1 rounded-full">
             Nível {t.level.toUpperCase()}
