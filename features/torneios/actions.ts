@@ -3,7 +3,6 @@
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
 import { FORMATS } from '@/lib/torneios/formats'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
@@ -220,12 +219,6 @@ export async function registerForTournament(
 
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
-
-  if (!canStudentAttendLevel(membership.level as StudentLevel, tournament.level as StudentLevel)) {
-    return {
-      error: `Seu nível (${membership.level}) não permite participar deste torneio (${tournament.level}).`,
-    }
-  }
 
   // Gênero é identidade → vem de profiles.
   const { data: profile } = await adminClient
