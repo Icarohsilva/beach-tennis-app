@@ -309,7 +309,7 @@ export default async function PerfilPage() {
         <SectionHeader title="Ficha Médica" />
         <div className="bg-surface-card border border-surface-border rounded-xl p-4">
           <p className="text-xs text-slate-500 mb-4">
-            Informações de saúde para uso em caso de emergência na quadra. Visível apenas para você e o professor.
+            Informações de saúde para uso em caso de emergência durante a aula. Visível apenas para você e o professor.
           </p>
           <MedicalForm initial={medicalProfile ?? null} />
         </div>

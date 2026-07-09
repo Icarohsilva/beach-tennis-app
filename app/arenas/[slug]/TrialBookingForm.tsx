@@ -48,7 +48,7 @@ export function TrialBookingForm({ organizationId, sessions }: TrialBookingFormP
         <div className="text-4xl">🎾</div>
         <h2 className="text-white font-bold text-lg">Agendamento confirmado!</h2>
         <p className="text-slate-400 text-sm">
-          Enviamos as instruções para o seu e-mail. Nos vemos na quadra!
+          Enviamos as instruções para o seu e-mail. Nos vemos por aí!
         </p>
       </div>
     )

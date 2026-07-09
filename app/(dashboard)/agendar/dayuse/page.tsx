@@ -91,7 +91,7 @@ export default async function AgendarDayUsePage({
       </div>
       <div>
         <h1 className="text-xl font-bold text-white">Day Use</h1>
-        <p className="text-slate-400 text-sm mt-1">Reserva de quadra sem usar créditos</p>
+        <p className="text-slate-400 text-sm mt-1">Reserva de espaço sem usar créditos</p>
       </div>
       {searchParams?.retorno === '1' && (
         <Card>
