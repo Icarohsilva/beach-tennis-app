@@ -141,12 +141,12 @@ export async function bookSession(
     name: string
   }
 
-  // 4. Kids check
+  // 3. Kids check
   if (cls.type === 'kids' && !profile.is_dependent) {
     return { error: 'Esta turma é exclusiva para alunos kids (dependentes).' }
   }
 
-  // 5. Daily limit
+  // 4. Daily limit
   const { count: dailyCount } = await adminClient
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
@@ -167,7 +167,7 @@ export async function bookSession(
     return { error: 'Você já atingiu o limite de 2 aulas por dia nessa data.' }
   }
 
-  // 6. Duplicate check
+  // 5. Duplicate check
   const { count: dupCount } = await adminClient
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
