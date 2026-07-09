@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { SPORTS } from '@/lib/arenas/sports'
+import { SportsPicker } from '@/components/ui/SportsPicker'
 import { formatCep, isCompleteCep, fetchAddressByCep } from '@/lib/arenas/cep'
 import { completeOnboarding } from '@/features/organizations/actions'
 
@@ -42,10 +42,6 @@ export function OnboardingForm({ initial }: { initial: OnboardingInitial }) {
   const [cepStatus, setCepStatus] = useState<'idle' | 'loading' | 'notfound'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-
-  function toggleSport(slug: string) {
-    setSports((cur) => (cur.includes(slug) ? cur.filter((s) => s !== slug) : [...cur, slug]))
-  }
 
   async function handleCepChange(raw: string) {
     const masked = formatCep(raw)
@@ -150,29 +146,7 @@ export function OnboardingForm({ initial }: { initial: OnboardingInitial }) {
           <span className="text-sm text-slate-200">Sem número</span>
         </label>
 
-        <div className="space-y-2">
-          <label className="text-sm text-slate-300 font-medium">Esportes oferecidos</label>
-          <div className="flex flex-wrap gap-2">
-            {SPORTS.map((sport) => {
-              const active = sports.includes(sport.slug)
-              return (
-                <button
-                  key={sport.slug}
-                  type="button"
-                  onClick={() => toggleSport(sport.slug)}
-                  className={[
-                    'text-sm rounded-full px-3 py-1.5 border transition-colors',
-                    active
-                      ? 'border-brand-500 bg-brand-500/15 text-white'
-                      : 'border-surface-border bg-surface-card text-slate-400 hover:border-slate-500',
-                  ].join(' ')}
-                >
-                  {sport.emoji} {sport.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <SportsPicker value={sports} onChange={setSports} />
 
         <Input label="WhatsApp" placeholder="(11) 99999-9999" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
 
