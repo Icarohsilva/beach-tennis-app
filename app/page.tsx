@@ -64,15 +64,15 @@ export default function LandingPage() {
         <div className={`${s.wrap} ${s.heroGrid}`}>
           <div>
             <span className={s.eyebrow}>
-              <span className={s.pulse} /> Plataforma para arenas de esporte de areia
+              <span className={s.pulse} /> Plataforma de gestão para academias e escolas esportivas
             </span>
             <h1 className={s.heroTitle}>
               O fim do <span className={s.hl}>caderninho</span> e do grupo de{' '}
               <span className={s.hl}>WhatsApp lotado</span>.
             </h1>
             <p className={s.heroSub}>
-              Aulas, créditos, check-in, pagamentos e torneios — tudo num app só. Sua arena
-              lotada no automático e seus alunos felizes sem precisar te mandar mensagem.
+              Aulas, créditos, check-in, pagamentos e torneios — tudo num app só. Sua agenda
+              cheia no automático e seus alunos felizes sem precisar te mandar mensagem.
             </p>
             <div className={s.cluster}>
               <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">
@@ -112,8 +112,8 @@ export default function LandingPage() {
                 <div className={s.glass}>
                   <div className={s.phRow}>
                     <div>
-                      <div className={s.phTitle}>Beach Tennis · Avançado</div>
-                      <div className={s.phTime}>19:00 — 20:00 · Quadra 1</div>
+                      <div className={s.phTitle}>Funcional · Turma da manhã</div>
+                      <div className={s.phTime}>19:00 — 20:00 · Espaço 1</div>
                     </div>
                     <span className={s.phPill}>B</span>
                   </div>
@@ -123,7 +123,7 @@ export default function LandingPage() {
                   <div className={s.phRow}>
                     <div>
                       <div className={s.phTitle}>Funcional</div>
-                      <div className={s.phTime}>20:15 — 21:00 · Quadra 2</div>
+                      <div className={s.phTime}>20:15 — 21:00 · Espaço 2</div>
                     </div>
                     <span className={`${s.phPill} ${s.phPillBlue}`}>livre</span>
                   </div>
@@ -147,9 +147,9 @@ export default function LandingPage() {
           <span className={s.proofText}>Feito para</span>
           <span className={s.chip}>🎾 Beach Tennis</span>
           <span className={s.chip}>🟢 Padel</span>
-          <span className={s.chip}>⚽ Futevôlei</span>
-          <span className={s.chip}>🏐 Vôlei de Praia</span>
-          <span className={s.chip}>🎾 Tênis</span>
+          <span className={s.chip}>🏋️ CrossFit</span>
+          <span className={s.chip}>🧘 Pilates</span>
+          <span className={s.chip}>⚽ Futebol</span>
           <span className={s.chip}>➕ e mais</span>
         </div>
       </div>
@@ -191,7 +191,7 @@ export default function LandingPage() {
             <div className={s.khead}>
               <div className={s.labelUp}>Recursos</div>
               <h2>Tudo num app só. <span className={s.hl}>Feito pra arena.</span></h2>
-              <p>Não é ERP genérico adaptado. É construído pra quem vive de quadra cheia.</p>
+              <p>Não é ERP genérico adaptado. É construído pra quem vive de agenda cheia.</p>
             </div>
           </Reveal>
           <Reveal>
@@ -219,7 +219,7 @@ export default function LandingPage() {
               <div className={s.feat}>
                 <div className={s.featIc}><Trophy size={26} strokeWidth={2} /></div>
                 <h3>Torneios completos</h3>
-                <p>Monte chaves, divulgue, cobre inscrição e gera ranking. Engaja a comunidade e movimenta a quadra no fim de semana.</p>
+                <p>Monte chaves, divulgue, cobre inscrição e gera ranking. Engaja a comunidade e movimenta a academia no fim de semana.</p>
               </div>
               <div className={s.feat}>
                 <div className={s.featIc}><MessagesSquare size={26} strokeWidth={2} /></div>
@@ -376,8 +376,8 @@ export default function LandingPage() {
               <p>Zero taxa de cancelamento. Você cancela com um clique no painel. Os dados ficam disponíveis pra exportar por 30 dias.</p>
             </details>
             <details className={s.faqItem}>
-              <summary>Funciona pra outros esportes além de beach tennis?</summary>
-              <p>Sim. Padel, futevôlei, vôlei de praia, tênis. Qualquer modalidade que tenha turma por horário e nível.</p>
+              <summary>Funciona pra qualquer modalidade?</summary>
+              <p>Sim. Beach tennis, padel, futevôlei, crossfit, pilates, funcional, futebol, luta e mais — qualquer academia ou escola que dá aulas e tem alunos.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Como funciona o Wellhub e TotalPass?</summary>
@@ -392,8 +392,8 @@ export default function LandingPage() {
               <p>Sim. O aluno recebe um link, entra em segundos e já vê as aulas, créditos e o próximo torneio. Sem manual, sem treinamento — é feito pra quem só quer jogar.</p>
             </details>
             <details className={s.faqItem}>
-              <summary>Funciona sem internet boa na quadra?</summary>
-              <p>Funciona. O app é leve e o check-in do Wellhub/TotalPass chega direto pra gente. Mesmo com sinal fraco na areia, a presença é registrada sem fila na recepção.</p>
+              <summary>Funciona sem internet boa no local?</summary>
+              <p>Funciona. O app é leve e o check-in do Wellhub/TotalPass chega direto pra gente. Mesmo com sinal fraco no local, a presença é registrada sem fila na recepção.</p>
             </details>
           </div>
         </div>
@@ -404,7 +404,7 @@ export default function LandingPage() {
         <div className={s.finalCtaBg} />
         <div className={s.wrap}>
           <h2>Sua arena lotada começa <span className={s.hl}>hoje</span>.</h2>
-          <p>1º mês grátis. Sem cartão. 5 minutos pra configurar. Depois disso, é só ver a quadra encher.</p>
+          <p>1º mês grátis. Sem cartão. 5 minutos pra configurar. Depois disso, é só ver a agenda encher.</p>
           <div className={s.cluster}>
             <Link className={`${s.btn} ${s.btnPrimary} ${s.btnLg}`} href="/criar-academia">
               Criar conta grátis →
