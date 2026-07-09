@@ -28,7 +28,7 @@ export function DayUseSlotCard({ slot, bookingsCount }: Props) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full">
-            Quadra {slot.court}
+            Espaço {slot.court}
           </span>
           {isFull
             ? <Badge variant="danger">Lotado</Badge>

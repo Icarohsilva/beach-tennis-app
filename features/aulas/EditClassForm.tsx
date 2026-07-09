@@ -65,10 +65,10 @@ export function EditClassForm({ class_: c }: Props) {
           </select>
         </div>
         <div>
-          <label className="text-sm text-slate-400 block mb-1">Quadra</label>
+          <label className="text-sm text-slate-400 block mb-1">Espaço</label>
           <select name="court" required className={SELECT_CLS} defaultValue={c.court}>
-            <option value="1">Quadra 1</option>
-            <option value="2">Quadra 2</option>
+            <option value="1">Espaço 1</option>
+            <option value="2">Espaço 2</option>
           </select>
         </div>
       </div>

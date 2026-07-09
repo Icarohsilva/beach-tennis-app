@@ -425,7 +425,7 @@ export default async function HomePage() {
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full">
-                        Quadra {slot.court}
+                        Espaço {slot.court}
                       </span>
                       <span className="text-xs text-slate-400">Day Use · Gratuito</span>
                     </div>

@@ -39,10 +39,10 @@ export function CreateDayUseForm() {
           <Input name="date" type="date" required />
         </div>
         <div>
-          <label className="text-xs text-slate-400 block mb-1">Quadra</label>
+          <label className="text-xs text-slate-400 block mb-1">Espaço</label>
           <select name="court" className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500">
-            <option value="1">Quadra 1</option>
-            <option value="2">Quadra 2</option>
+            <option value="1">Espaço 1</option>
+            <option value="2">Espaço 2</option>
           </select>
         </div>
       </div>
