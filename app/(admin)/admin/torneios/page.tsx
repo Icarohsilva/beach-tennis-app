@@ -74,8 +74,7 @@ export default async function AdminTorneiosPage() {
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-400">
-                    {formatDate(tournament.date, "dd 'de' MMMM 'de' yyyy")} · Nível{' '}
-                    {tournament.level.toUpperCase()} ·{' '}
+                    {formatDate(tournament.date, "dd 'de' MMMM 'de' yyyy")} ·{' '}
                     {tournament.modality === 'dupla_fixa' ? 'Dupla Fixa' : 'Dupla Revezando'}
                   </p>
                 </div>

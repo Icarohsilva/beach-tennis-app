@@ -144,9 +144,7 @@ export default async function GradePage() {
                   <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <span className="text-white font-semibold text-sm">{clsRaw.name}</span>
-                      <Badge variant={clsRaw.type === 'kids' ? 'kids' : 'level'}>
-                        {clsRaw.type === 'kids' ? 'KIDS' : `Nível ${clsRaw.level}`}
-                      </Badge>
+                      {clsRaw.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
                     </div>
                     <p className="text-xs text-slate-400 mb-2">
                       {formatTime(clsRaw.start_time)} – {formatTime(clsRaw.end_time)}

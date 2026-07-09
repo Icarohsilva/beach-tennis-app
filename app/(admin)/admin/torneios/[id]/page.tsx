@@ -153,7 +153,6 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const heroChips = [
     formatDate(t.date, "dd 'de' MMMM 'de' yyyy"),
     STATUS_LABELS[t.status],
-    `Nível ${t.level.toUpperCase()}`,
     t.sport ? cap(t.sport) : null,
     t.format ? cap(t.format) : null,
     t.category ? cap(t.category) : null,

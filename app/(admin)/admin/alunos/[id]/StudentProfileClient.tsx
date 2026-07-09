@@ -471,7 +471,7 @@ export function StudentProfileClient({
                 <option value="">Selecione uma turma...</option>
                 {eligibleClasses.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} — {DAY_ABBR[c.day_of_week]} {formatTime(c.start_time)} (Nível {c.level})
+                    {c.name} — {DAY_ABBR[c.day_of_week]} {formatTime(c.start_time)}
                   </option>
                 ))}
               </select>
@@ -504,7 +504,7 @@ export function StudentProfileClient({
                   className="flex items-center justify-between px-4 py-2 bg-surface-card border border-surface-border rounded-xl"
                 >
                   <span className="text-white text-sm">{d.full_name}</span>
-                  <Badge variant="kids">KIDS · {d.level.toUpperCase()}</Badge>
+                  <Badge variant="kids">KIDS</Badge>
                 </li>
               ))}
             </ul>

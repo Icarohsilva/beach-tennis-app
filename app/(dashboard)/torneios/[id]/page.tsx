@@ -150,7 +150,6 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   const chips = [
     formatDate(t.date, "dd 'de' MMMM 'de' yyyy"),
     STATUS_LABELS[t.status],
-    `Nível ${t.level.toUpperCase()}`,
     t.category ? t.category.charAt(0).toUpperCase() + t.category.slice(1) : null,
   ].filter(Boolean) as string[]
 

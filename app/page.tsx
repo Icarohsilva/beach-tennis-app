@@ -103,7 +103,7 @@ export default function LandingPage() {
                   <div className={s.phStats}>
                     <div className={s.phStat}><div className={s.phStatV}>12</div><div className={s.phStatL}>Créditos</div></div>
                     <div className={s.phStat}><div className={s.phStatV}>3</div><div className={s.phStatL}>Aulas/sem</div></div>
-                    <div className={s.phStat}><div className={s.phStatV}>B</div><div className={s.phStatL}>Nível</div></div>
+                    <div className={s.phStat}><div className={s.phStatV}>98%</div><div className={s.phStatL}>Presença</div></div>
                   </div>
                 </div>
 
@@ -115,7 +115,7 @@ export default function LandingPage() {
                       <div className={s.phTitle}>Funcional · Turma da manhã</div>
                       <div className={s.phTime}>19:00 — 20:00 · Espaço 1</div>
                     </div>
-                    <span className={s.phPill}>B</span>
+                    <span className={s.phPill}>confirmada</span>
                   </div>
                 </div>
 
@@ -133,7 +133,7 @@ export default function LandingPage() {
 
                 <div className={`${s.glass} ${s.glassPurple}`}>
                   <div className={s.phTitle}>🏆 Open ArenaHub 2026</div>
-                  <div className={s.phTime}>Sáb, 12 jul · Nível B/C</div>
+                  <div className={s.phTime}>Sáb, 12 jul · Todos os níveis</div>
                 </div>
               </div>
             </div>

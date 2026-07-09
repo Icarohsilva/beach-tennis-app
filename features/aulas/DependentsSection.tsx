@@ -81,7 +81,7 @@ export function DependentsSection({ initialDependents }: DependentsSectionProps)
               className="flex items-center justify-between px-4 py-2 bg-surface-card border border-surface-border rounded-xl"
             >
               <span className="text-white text-sm">{d.full_name}</span>
-              <Badge variant="kids">KIDS · {d.level.toUpperCase()}</Badge>
+              <Badge variant="kids">KIDS</Badge>
             </li>
           ))}
         </ul>

@@ -240,10 +240,7 @@ export default async function AgendarPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Agendar</h1>
-        <span className="text-xs text-slate-400">Nível {studentProfile.level.toUpperCase()}</span>
-      </div>
+      <h1 className="text-xl font-bold text-white">Agendar</h1>
 
       {studentProfile.credits_balance <= 0 && (
         <Link href="/financeiro" className="text-sm text-brand-500 font-medium">

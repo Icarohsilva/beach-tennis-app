@@ -194,9 +194,6 @@ export default async function PublicTournamentPage({ params }: PageProps) {
           <span className="bg-surface-border text-slate-400 text-xs px-2.5 py-1 rounded-full">
             {SPORT_LABELS[t.sport] ?? sportLabel(t.sport)}
           </span>
-          <span className="bg-surface-border text-slate-400 text-xs px-2.5 py-1 rounded-full">
-            Nível {t.level.toUpperCase()}
-          </span>
           {t.category && t.category !== 'livre' && (
             <span className="bg-surface-border text-slate-400 text-xs px-2.5 py-1 rounded-full">
               {CATEGORY_LABELS[t.category] ?? t.category}
