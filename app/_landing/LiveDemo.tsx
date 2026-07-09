@@ -50,8 +50,8 @@ export function LiveDemo() {
             </div>
             <div className={`${s.card} ${s.cardNew}`}>
               <div>
-                <div className={s.cTitle}>Beach Tennis · Nível B</div>
-                <div className={s.cSub}>Ter 19:00 — 20:00 · Quadra 1</div>
+                <div className={s.cTitle}>Funcional · Turma A</div>
+                <div className={s.cSub}>Ter 19:00 — 20:00 · Espaço 1</div>
               </div>
               <span className={s.okTag}>+ Turma criada</span>
             </div>
@@ -61,8 +61,8 @@ export function LiveDemo() {
             <div className={s.scLabel}>App do aluno</div>
             <div className={s.card}>
               <div>
-                <div className={s.cTitle}>Beach Tennis · Avançado</div>
-                <div className={s.cSub}>Ter 19:00 · Quadra 1 · resta 1 vaga</div>
+                <div className={s.cTitle}>Pilates · Intermediário</div>
+                <div className={s.cSub}>Ter 19:00 · Espaço 1 · resta 1 vaga</div>
               </div>
               <span className={s.okTag}>Agendado ✓</span>
             </div>

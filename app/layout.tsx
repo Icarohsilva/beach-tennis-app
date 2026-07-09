@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: 'ArenaHub — Gestão para arenas e academias de esporte',
   description:
-    'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
+    'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'ArenaHub — Gestão para arenas e academias de esporte',
     description:
-      'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
+      'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
     url: SITE_URL,
     siteName: 'ArenaHub',
     images: ['/og.png'],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'ArenaHub — Gestão para arenas e academias de esporte',
     description:
-      'Aulas, turmas, créditos, check-in e pagamentos para arenas de beach tennis, padel, futevôlei e mais. 1º mês grátis.',
+      'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
     images: ['/og.png'],
   },
 }

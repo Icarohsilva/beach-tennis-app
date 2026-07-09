@@ -4,5 +4,5 @@
 export const PLATFORM_PLAN = {
   priceMonthly: 49.9,
   currency: 'BRL',
-  reason: 'Assinatura Plataforma — Beach Tennis App',
+  reason: 'ArenaHub — Assinatura Plataforma',
 } as const
