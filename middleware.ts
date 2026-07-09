@@ -30,6 +30,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/nova-senha') ||
     pathname.startsWith('/experimental') ||
     pathname.startsWith('/arenas') ||
+    pathname.startsWith('/ajuda') ||
     pathname.startsWith('/t/')
   ) {
     return NextResponse.next()

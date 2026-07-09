@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { HelpCircle, PlayCircle, MessageCircleQuestion, MessageSquarePlus } from 'lucide-react'
+import { HelpCircle, PlayCircle, MessageCircleQuestion, MessageSquarePlus, BookOpen } from 'lucide-react'
 import type { TourVariant } from '@/lib/tour/autostart'
 import { FaqModal } from './FaqModal'
 import { FeedbackModal } from '@/components/feedback/FeedbackModal'
@@ -64,6 +64,16 @@ export function HelpButton({
                 <MessageCircleQuestion className="h-4 w-4 text-brand-500" />
                 Perguntas frequentes
               </button>
+              <a
+                href={`/ajuda/${variant === 'aluno' ? 'aluno' : 'academia'}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)}
+                className="flex w-full items-center gap-2 px-4 py-3 text-sm text-slate-200 hover:bg-surface-border transition-colors border-t border-surface-border"
+              >
+                <BookOpen className="h-4 w-4 text-brand-500" />
+                Documentação
+              </a>
               <button
                 onClick={() => {
                   setMenuOpen(false)

@@ -1,0 +1,132 @@
+{
+  "generatedAt": "2026-07-09T00:12:50.424Z",
+  "academy": {
+    "name": "Arena FAQ Demo 1783555847471",
+    "fullName": "Professor Demonstração",
+    "email": "faq.academia.1783555847471@example.com",
+    "password": "senha123",
+    "document": "14611067530",
+    "phone": "(11) 98888-7777"
+  },
+  "managedStudent": {
+    "fullName": "Aluno Gerenciado Demo",
+    "email": "faq.aluno.gerenciado.1783555847471@example.com",
+    "tempPassword": "hmcTEGJ7GF"
+  },
+  "inviteStudent": {
+    "fullName": "Aluna Convidada Demo",
+    "email": "faq.aluno.convite.1783555847471@example.com",
+    "password": "senha123"
+  },
+  "inviteCode": "1O2LVJCW",
+  "results": [
+    {
+      "name": "landing",
+      "ok": true
+    },
+    {
+      "name": "login",
+      "ok": true
+    },
+    {
+      "name": "criar-academia",
+      "ok": true
+    },
+    {
+      "name": "onboarding",
+      "ok": true
+    },
+    {
+      "name": "admin-dashboard",
+      "ok": true
+    },
+    {
+      "name": "admin-alunos-e-criar",
+      "ok": true
+    },
+    {
+      "name": "admin-grade",
+      "ok": true
+    },
+    {
+      "name": "admin-grade-nova-turma",
+      "ok": true
+    },
+    {
+      "name": "admin-financeiro",
+      "ok": true
+    },
+    {
+      "name": "admin-financeiro-planos",
+      "ok": true
+    },
+    {
+      "name": "admin-financeiro-integracoes",
+      "ok": true
+    },
+    {
+      "name": "admin-integracoes",
+      "ok": true
+    },
+    {
+      "name": "admin-configuracoes",
+      "ok": true
+    },
+    {
+      "name": "admin-equipe",
+      "ok": true
+    },
+    {
+      "name": "admin-torneios",
+      "ok": true
+    },
+    {
+      "name": "admin-notificacoes",
+      "ok": true
+    },
+    {
+      "name": "admin-assinatura",
+      "ok": true
+    },
+    {
+      "name": "aluno-gerenciado-definir-senha",
+      "ok": true
+    },
+    {
+      "name": "convite",
+      "ok": true
+    },
+    {
+      "name": "aluno-home",
+      "ok": true
+    },
+    {
+      "name": "aluno-agendar",
+      "ok": true
+    },
+    {
+      "name": "aluno-agendar-dayuse",
+      "ok": true
+    },
+    {
+      "name": "aluno-aulas",
+      "ok": true
+    },
+    {
+      "name": "aluno-financeiro",
+      "ok": true
+    },
+    {
+      "name": "aluno-comunidade",
+      "ok": true
+    },
+    {
+      "name": "aluno-torneios",
+      "ok": true
+    },
+    {
+      "name": "aluno-perfil",
+      "ok": true
+    }
+  ]
+}
