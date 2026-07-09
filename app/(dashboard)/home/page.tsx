@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/Badge'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { StatHeader } from '@/components/ui/StatHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -150,14 +149,10 @@ export default async function HomePage() {
   }
   const nextSessions = (nextSessionsData ?? []) as unknown as SessionRow[]
 
-  // Filter today's classes by student level
+  // Filtra as turmas de hoje apenas por kids (nível não bloqueia mais).
   const allTodayClasses = (todayClassesData ?? []) as Class[]
   const todayClasses = membership
-    ? allTodayClasses.filter((c) => {
-        const levelOk = canStudentAttendLevel(membership.level, c.level)
-        const kidsOk = c.type !== 'kids' || membership.is_dependent
-        return levelOk && kidsOk
-      })
+    ? allTodayClasses.filter((c) => c.type !== 'kids' || membership.is_dependent)
     : []
 
   // ── Fetch action data for today's classes ─────────────────────────────────

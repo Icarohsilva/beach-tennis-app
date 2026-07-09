@@ -18,8 +18,6 @@ export default async function AgendarPage() {
   const studentProfile = await getActiveMembership()
   if (!studentProfile) redirect('/login')
 
-  const { canStudentAttendLevel } = await import('@/lib/utils/levelAccess')
-
   // Fetch all active classes
   const { data: classes } = await supabase
     .from('classes')
@@ -31,12 +29,10 @@ export default async function AgendarPage() {
 
   const allClasses = (classes ?? []) as Class[]
 
-  // Filter by level + kids
-  const availableClasses = allClasses.filter((c) => {
-    const levelOk = canStudentAttendLevel(studentProfile.level, c.level)
-    const kidsOk = c.type !== 'kids' || studentProfile.is_dependent
-    return levelOk && kidsOk
-  })
+  // Filtra apenas por kids (nível não bloqueia mais).
+  const availableClasses = allClasses.filter(
+    (c) => c.type !== 'kids' || studentProfile.is_dependent,
+  )
 
   if (availableClasses.length === 0) {
     return (
@@ -55,7 +51,7 @@ export default async function AgendarPage() {
         <EmptyState
           icon={CalendarX}
           title="Nenhuma turma disponível"
-          description="Não há turmas ativas compatíveis com seu nível."
+          description="Não há turmas ativas no momento."
         />
       </div>
     )
