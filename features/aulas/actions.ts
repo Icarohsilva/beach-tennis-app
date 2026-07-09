@@ -3,7 +3,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
-import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
@@ -95,11 +94,10 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
  * Validations (in order):
  *   1. Student exists
  *   2. Session exists and is scheduled
- *   3. Level check via canStudentAttendLevel
- *   4. Kids check: turma kids → student must be a dependent
- *   5. Daily limit: ≤2 confirmed bookings on the same date
- *   6. No duplicate confirmed booking on the same session
- *   7. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
+ *   3. Kids check: turma kids → student must be a dependent
+ *   4. Daily limit: ≤2 confirmed bookings on the same date
+ *   5. No duplicate confirmed booking on the same session
+ *   6. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
  */
 export async function bookSession(
   sessionId: string,
@@ -141,12 +139,6 @@ export async function bookSession(
     type: ClassType
     max_students: number
     name: string
-  }
-
-  // 3. Level check (Wellhub/TotalPass entram em qualquer turma)
-  const skipsLevel = profile.payment_type === 'wellhub' || profile.payment_type === 'totalpass'
-  if (!skipsLevel && !canStudentAttendLevel(profile.level as StudentLevel, cls.level)) {
-    return { error: `Seu nível (${profile.level}) não permite participar desta turma (${cls.level}).` }
   }
 
   // 4. Kids check

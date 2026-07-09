@@ -3,7 +3,6 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
-import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -94,10 +93,6 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
   const joinProfile = await getActiveMembership()
   if (!joinProfile) return { error: 'Perfil não encontrado.' }
 
-  const skipsLevel = joinProfile.payment_type === 'wellhub' || joinProfile.payment_type === 'totalpass'
-  if (!skipsLevel && !canStudentAttendLevel(joinProfile.level as StudentLevel, clsInfo.level)) {
-    return { error: `Seu nível (${joinProfile.level}) não permite participar desta turma (${clsInfo.level}).` }
-  }
   if (clsInfo.type === 'kids' && !joinProfile.is_dependent) {
     return { error: 'Esta turma é exclusiva para alunos kids (dependentes).' }
   }
