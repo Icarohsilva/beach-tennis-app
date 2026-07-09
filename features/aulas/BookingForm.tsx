@@ -5,13 +5,11 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils/dateHelpers'
-import { canStudentAttendLevel } from '@/lib/utils/levelAccess'
-import type { Class, ClassSession, StudentLevel } from '@/types'
+import type { Class, ClassSession } from '@/types'
 
 interface BookingFormProps {
   class_: Class
   sessions: ClassSession[]
-  studentLevel: StudentLevel
   isDependent: boolean
   /** Number of confirmed bookings per session_date (to enforce ≤2/day) */
   dailyBookingCounts: Record<string, number>
@@ -22,7 +20,6 @@ interface BookingFormProps {
 export function BookingForm({
   class_: c,
   sessions,
-  studentLevel,
   isDependent,
   dailyBookingCounts,
   sessionBookedCounts,
@@ -32,11 +29,8 @@ export function BookingForm({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  // Client-side pre-validation
-  const levelOk = canStudentAttendLevel(studentLevel, c.level)
-  const kidsOk = c.type !== 'kids' || isDependent
-
-  const canBook = levelOk && kidsOk
+  // Client-side pre-validation (nível não bloqueia mais).
+  const canBook = c.type !== 'kids' || isDependent
 
   function getSessionWarning(session: ClassSession): string | null {
     if ((sessionBookedCounts[session.id] ?? 0) >= c.max_students) return 'Lotada'
@@ -69,16 +63,9 @@ export function BookingForm({
   if (!canBook) {
     return (
       <div className="mt-3">
-        {!levelOk && (
-          <p className="text-xs text-red-400">
-            Seu nível ({studentLevel}) não permite esta turma (nível {c.level}).
-          </p>
-        )}
-        {!kidsOk && (
-          <p className="text-xs text-red-400">
-            Esta turma é exclusiva para dependentes (kids).
-          </p>
-        )}
+        <p className="text-xs text-red-400">
+          Esta turma é exclusiva para dependentes (kids).
+        </p>
       </div>
     )
   }
