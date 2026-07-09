@@ -4,12 +4,11 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { format } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
-import type { StudentLevel, ClassType } from '@/types'
+import type { ClassType } from '@/types'
 
 export interface ClassFormData {
   name: string
   description: string
-  level: StudentLevel
   type: ClassType
   day_of_week: number
   start_time: string
@@ -28,7 +27,7 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   const adminClient = createAdminClient()
   const { data: newClass, error } = await adminClient
     .from('classes')
-    .insert({ ...data, is_active: true, organization_id: orgId })
+    .insert({ ...data, level: 'iniciante', is_active: true, organization_id: orgId })
     .select('id')
     .single()
   if (error) return { error: error.message }

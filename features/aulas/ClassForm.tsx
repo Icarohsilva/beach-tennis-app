@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClass } from './class-form-actions'
-import type { StudentLevel, ClassType } from '@/types'
+import type { ClassType } from '@/types'
 
-const LEVELS: StudentLevel[] = ['iniciante', 'D', 'C', 'B', 'A']
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
 
@@ -24,7 +23,6 @@ export function ClassForm() {
     const result = await createClass({
       name: fd.get('name') as string,
       description: fd.get('description') as string,
-      level: fd.get('level') as StudentLevel,
       type: fd.get('type') as ClassType,
       day_of_week: Number(fd.get('day_of_week')),
       start_time: fd.get('start_time') as string,
@@ -48,20 +46,12 @@ export function ClassForm() {
         <label className="text-sm text-slate-400 block mb-1">Descrição (opcional)</label>
         <Input name="description" placeholder="Detalhes ou observações" />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm text-slate-400 block mb-1">Nível</label>
-          <select name="level" required className={SELECT_CLS}>
-            {LEVELS.map((l) => <option key={l} value={l}>{l === 'iniciante' ? 'Iniciante' : `Nível ${l}`}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-sm text-slate-400 block mb-1">Tipo</label>
-          <select name="type" required className={SELECT_CLS}>
-            <option value="adult">Adulto</option>
-            <option value="kids">Kids</option>
-          </select>
-        </div>
+      <div>
+        <label className="text-sm text-slate-400 block mb-1">Tipo</label>
+        <select name="type" required className={SELECT_CLS}>
+          <option value="adult">Adulto</option>
+          <option value="kids">Kids</option>
+        </select>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
