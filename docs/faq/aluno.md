@@ -83,36 +83,35 @@ Digite **Nova senha**, confirme e clique em **Salvar e continuar**. Pronto — d
 
 ## 2. Home — sua tela inicial
 
-A **Home** é o seu resumo: saudação, créditos, aulas por semana, nível e próximas aulas.
+A **Home** é o seu resumo: saudação, créditos, aulas por semana e próximas aulas.
 
 ![Home do aluno](images/aluno-home.png)
 
 **O que aparece:**
 
-- **Cabeçalho colorido** (na cor da marca da academia) com **Créditos**, **Aulas/semana** e **Nível** (ex.: Iniciante).
+- **Cabeçalho colorido** (na cor da marca da academia) com **Créditos** e **Aulas/semana**.
 - **Assine um plano** — atalho para contratar mensalidade e ter aulas incluídas todo mês.
 - **Minhas próximas aulas** — se não houver, aparece **Agendar agora**.
 - **Barra inferior:** Home · Aulas · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
 
 > **🔧 Nos bastidores**
 > - **Créditos** vêm de `profiles.credits_balance`, que é um valor **em cache** — a fonte da verdade é a tabela `credit_transactions` (cada aula agendada, cancelamento ou reposição é um lançamento).
-> - O **nível** define quais turmas você consegue ver e agendar (hierarquia Iniciante < D < C < B < A).
 
 ---
 
 ## 3. Agendar aula
 
-Toque em **(+)** ou em **Agendar** para ver as turmas disponíveis para o **seu nível**.
+Toque em **(+)** ou em **Agendar** para ver as turmas disponíveis.
 
 ![Agendar — turmas disponíveis](images/aluno-agendar.png)
 
-- Se houver **Day Use disponível**, um cartão verde no topo leva para a reserva de quadra.
-- Abaixo aparecem as **turmas compatíveis** com seu nível. Se não houver nenhuma, o app avisa "Nenhuma turma disponível".
+- Se houver **Day Use disponível**, um cartão verde no topo leva para a reserva de espaço.
+- Abaixo aparecem as **turmas disponíveis** para você. Turmas **Kids** só aparecem se você tiver um dependente cadastrado. Se não houver nenhuma, o app avisa "Nenhuma turma disponível".
 
 Para agendar, escolha a turma/horário e confirme. O agendamento **consome um crédito** (ou está incluso no seu plano).
 
 > **🔧 Nos bastidores**
-> - Você só enxerga turmas cujo nível seja **compatível** com o seu (`canStudentAttendLevel`).
+> - Turmas do tipo **Kids** só aparecem para quem tem ao menos um dependente vinculado (`is_dependent`); as demais turmas ficam visíveis para todos os alunos.
 > - Agendar cria um `session_booking` para aquela `class_session` datada e lança o débito de crédito em `credit_transactions`.
 > - **Cancelamento:** se cancelar dentro da janela definida pela academia (padrão **5h** antes), você recebe um **crédito de reposição**; fora da janela, o crédito é perdido (`canCancelWithRefund`).
 
@@ -120,14 +119,14 @@ Para agendar, escolha a turma/horário e confirme. O agendamento **consome um cr
 
 ## 4. Day use
 
-O **Day Use** é a reserva de quadra **sem usar créditos** de aula.
+O **Day Use** é a reserva de espaço **sem usar créditos** de aula.
 
 ![Day use](images/aluno-agendar-dayuse.png)
 
 O professor **publica horários** de day use com antecedência. Quando houver horários abertos, eles aparecem aqui para você reservar. Se estiver vazio, é porque a academia ainda não divulgou horários.
 
 > **🔧 Nos bastidores**
-> - Day use é uma reserva de quadra independente da grade de turmas — não desconta crédito. Se a academia cobra day use pelo app, o pagamento passa pelo Mercado Pago da academia.
+> - Day use é uma reserva de espaço independente da grade de turmas — não desconta crédito. Se a academia cobra day use pelo app, o pagamento passa pelo Mercado Pago da academia.
 
 ---
 
@@ -192,7 +191,7 @@ A aba **Perfil** concentra seus dados pessoais, segurança, créditos, acesso de
 
 - **Dados pessoais** — nome, WhatsApp, data de nascimento.
 - **Conta e segurança** — trocar e-mail (exige confirmação por link) e definir nova senha.
-- **Créditos / Nível** — seu saldo atual e nível.
+- **Créditos** — seu saldo atual.
 - **Acesso por parceiro** — informe seu **ID Wellhub/TotalPass** para que seus check-ins sejam reconhecidos automaticamente.
 - **Histórico de pagamentos**.
 - **Dependentes (Kids)** — cadastre filhos/dependentes vinculados a você (você paga por eles).
@@ -210,8 +209,8 @@ A aba **Perfil** concentra seus dados pessoais, segurança, créditos, acesso de
 ## Resumo do fluxo do aluno
 
 1. **Entrar na academia** — pelo link de convite **ou** com a senha temporária (troca obrigatória no 1º acesso).
-2. **Home** — ver créditos, nível e próximas aulas.
-3. **Agendar** aulas compatíveis com seu nível (ou reservar **day use**).
+2. **Home** — ver créditos e próximas aulas.
+3. **Agendar** aulas disponíveis (ou reservar **day use**).
 4. **Financeiro** — contratar plano / ver pagamentos.
 5. **Perfil** — completar dados, ID de parceiro, gênero e ficha médica.
 6. Participar da **Comunidade** e dos **Torneios**.

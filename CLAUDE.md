@@ -12,14 +12,14 @@ npm run test         # vitest watch mode
 npm run test:run     # vitest single run (CI)
 
 # run a single test file
-npm run test:run -- lib/utils/levelAccess.test.ts
+npm run test:run -- lib/utils/creditRules.test.ts
 ```
 
 ## Architecture
 
 **Stack:** Next.js 14 App Router · TypeScript · Tailwind CSS · Supabase · Vitest · Vercel
 
-Beach tennis academy management app (in Portuguese). Core module: class scheduling and attendance. Secondary: payments/subscriptions, social community, tournaments.
+Academy/school management app for any activity with classes and students — beach tennis, padel, crossfit, pilates, football schools, etc. (in Portuguese). Core module: class scheduling and attendance. Secondary: payments/subscriptions, social community, tournaments.
 
 ### Route Groups
 
@@ -43,7 +43,6 @@ Never import `@supabase/supabase-js` directly — always use the wrappers above.
 
 | File | Purpose |
 |---|---|
-| [lib/utils/levelAccess.ts](lib/utils/levelAccess.ts) | `canStudentAttendLevel(studentLevel, classLevel)` — level hierarchy: iniciante < D < C < B < A |
 | [lib/utils/creditRules.ts](lib/utils/creditRules.ts) | `canCancelWithRefund()`, `getMakeupCreditExpiry()` — 5h cancellation window |
 | [lib/utils/dateHelpers.ts](lib/utils/dateHelpers.ts) | `getDatesForDayOfWeekInMonth()`, `formatDate()`, `formatTime()` (pt-BR locale via date-fns) |
 | [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |

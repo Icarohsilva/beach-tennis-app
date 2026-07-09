@@ -34,7 +34,7 @@
 
 ## 1. O que é o ArenaHub
 
-O ArenaHub é um sistema de **gestão para arenas e academias** de beach tennis (e outros esportes de quadra: padel, futevôlei, vôlei de praia, tênis). Ele resolve o "fim do caderninho e do grupo de WhatsApp lotado": agenda de aulas, controle de presença, cobrança de mensalidades/avulsas, comunidade, torneios e notificações — tudo em um só lugar.
+O ArenaHub é um sistema de **gestão para academias e escolas esportivas** — beach tennis, padel, futevôlei, crossfit, pilates, futebol, luta e qualquer outra modalidade que dá aulas e tem alunos. Ele resolve o "fim do caderninho e do grupo de WhatsApp lotado": agenda de aulas, controle de presença, cobrança de mensalidades/avulsas, comunidade, torneios e notificações — tudo em um só lugar.
 
 ![Landing page do ArenaHub](images/landing.png)
 
@@ -85,7 +85,7 @@ Logo após criar a conta, o dono cai na tela de onboarding (**`/onboarding`**). 
 
 1. **CEP** — ao digitar, o sistema busca o endereço automaticamente (via ViaCEP) e preenche Estado, Cidade, Bairro e Rua.
 2. **Número** (ou marque **Sem número**).
-3. **Esportes oferecidos** — clique nas modalidades (Beach Tennis, Padel, Futevôlei, Vôlei de Praia, Tênis). Isso filtra o que aparece para os alunos.
+3. **Esportes oferecidos** — clique nas modalidades da lista (Beach Tennis, Padel, CrossFit, Pilates, Futebol e várias outras) ou use **Outro** para digitar uma modalidade que não está na lista. Isso define o que aparece na vitrine pública da academia.
 4. **WhatsApp** — contato público.
 5. **Aparecer no diretório público de arenas** — se marcado, a academia entra na vitrine pública para captar novos alunos.
 6. **Personalização (opcional)** — descrição e **Cor da marca** (o app inteiro do aluno e o painel adotam essa cor).
@@ -138,11 +138,11 @@ Ao confirmar, o sistema gera uma **senha temporária** e a exibe **uma única ve
 
 ![Senha temporária gerada](images/admin-criar-aluno-senha.png)
 
-Depois disso o aluno aparece na lista, com nível e tipo de plano:
+Depois disso o aluno aparece na lista, com tipo de plano:
 
 ![Lista de alunos](images/admin-alunos-lista.png)
 
-Na lista você tem busca por nome e filtro por **nível** (Iniciante, D, C, B, A). Cada cartão mostra o **plano** (Mensalista, Avulso, Wellhub, TotalPass) e a quantidade de **turmas fixas**.
+Na lista você tem busca por nome e filtro por **nível** (Iniciante, D, C, B, A) — útil para academias que usam nível como uma categoria interna do aluno. Cada cartão mostra o **plano** (Mensalista, Avulso, Wellhub, TotalPass) e a quantidade de **turmas fixas**.
 
 > **🔧 Nos bastidores** (`createStudent`)
 > - Cria o usuário no Auth com senha aleatória e `must_change_password: true` nos metadados.
@@ -150,9 +150,9 @@ Na lista você tem busca por nome e filtro por **nível** (Iniciante, D, C, B, A
 > - A senha temporária é retornada **apenas na resposta da action** e mostrada no modal — não fica salva em texto puro.
 > - No primeiro login, o gate `must_change_password` força o aluno a passar por `/definir-senha` antes de acessar qualquer coisa.
 
-### 5.2 Níveis e acesso a turmas
+### 5.2 Nível do aluno
 
-O nível do aluno controla a quais turmas ele pode se inscrever, seguindo a hierarquia **Iniciante < D < C < B < A**. Uma turma de nível C, por exemplo, aceita alunos de nível C ou superior (regra em `lib/utils/levelAccess.ts`).
+O **nível** (Iniciante, D, C, B, A) é uma categoria informativa que a academia pode usar para buscar/filtrar alunos — ele **não bloqueia** o acesso a turmas. Todo aluno vê e pode se inscrever em qualquer turma da academia, com uma única exceção: turmas do tipo **Kids** só ficam visíveis para quem tem um **dependente** cadastrado.
 
 ---
 
@@ -174,24 +174,23 @@ A tela tem duas partes: **HOJE** (sessões do dia) e **GRADE SEMANAL** (turmas f
 |---|---|
 | **Nome da turma** | Ex.: "Terça 18h — Intermediário". |
 | **Descrição** | Observações (opcional). |
-| **Nível** | Iniciante/D/C/B/A — define quem pode se inscrever. |
 | **Tipo** | Adulto / Kids etc. |
 | **Dia da semana** | A turma se repete toda semana nesse dia. |
-| **Quadra** | Qual quadra da arena. |
+| **Espaço** | Qual espaço da academia. |
 | **Início / Fim** | Horário. |
 | **Vagas** | Capacidade (padrão 8). |
 
-Ao criar, a turma fica visível **apenas para alunos com nível compatível**.
+Ao criar, a turma fica visível para todos os alunos (exceto turmas **Kids**, visíveis só para quem tem dependente cadastrado).
 
 > **🔧 Nos bastidores**
-> - **`classes`** = o *template* recorrente da turma (dia da semana, horário, nível, vagas).
+> - **`classes`** = o *template* recorrente da turma (dia da semana, horário, vagas).
 > - **`class_sessions`** = a instância **datada** de cada aula (a "aula do dia 10/07"). É o que o aluno agenda e onde a presença é registrada.
 > - **`enrollments`** = matrícula fixa semanal do aluno numa turma. **`session_bookings`** = reservas avulsas/reposição para uma sessão específica.
 > - Essa separação permite ter uma grade fixa e, ao mesmo tempo, tratar exceções (falta, reposição, day use) sem bagunçar o template.
 
 ### 6.2 Day use
 
-O botão **Day Use** abre a reserva de quadra avulsa (sem consumir crédito de aula). O professor publica horários e o aluno reserva pelo app.
+O botão **Day Use** abre a reserva de espaço avulsa (sem consumir crédito de aula). O professor publica horários e o aluno reserva pelo app.
 
 ---
 
@@ -340,7 +339,7 @@ Em **Torneios** a academia cria e divulga torneios (com inscrição paga opciona
 
 ![Torneios](images/admin-torneios.png)
 
-**Campos do novo torneio:** Nome, Data, Esporte, Categoria, Participação (ex.: Dupla Revezando/Americano), Formato (ex.: Americano Super N), Nível, Games por set, **Valor da inscrição** (0 = gratuito), **Chave PIX** (para cobrança — CPF, e-mail, telefone ou chave aleatória), Limite de vagas e Imagem de capa.
+**Campos do novo torneio:** Nome, Data, Esporte, Categoria, Participação (ex.: Dupla Revezando/Americano), Formato (ex.: Americano Super N), Games por set, **Valor da inscrição** (0 = gratuito), **Chave PIX** (para cobrança — CPF, e-mail, telefone ou chave aleatória), Limite de vagas e Imagem de capa.
 
 > **Cobrança:** para inscrição paga, **valor e chave PIX precisam estar preenchidos**. O torneio gera um link compartilhável com a imagem de capa.
 
