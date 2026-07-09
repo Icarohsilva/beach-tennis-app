@@ -7,14 +7,12 @@ import { Button } from '@/components/ui/Button'
 import { createTournament } from '@/features/torneios/actions'
 import { SPORTS } from '@/lib/arenas/sports'
 import type {
-  StudentLevel,
   TournamentCategory,
   ParticipantType,
   TournamentFormat,
 } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 
-const LEVEL_OPTIONS: StudentLevel[] = ['iniciante', 'D', 'C', 'B', 'A']
 const CATEGORY_OPTIONS: { value: TournamentCategory; label: string }[] = [
   { value: 'livre', label: 'Livre' },
   { value: 'masculino', label: 'Masculino' },
@@ -42,7 +40,6 @@ export function CreateTournamentForm() {
   const [category, setCategory] = useState<TournamentCategory>('livre')
   const [participantType, setParticipantType] = useState<ParticipantType>('dupla_revezando')
   const [format, setFormat] = useState<TournamentFormat>('americano')
-  const [level, setLevel] = useState<StudentLevel>('C')
   const [gamesPerSet, setGamesPerSet] = useState(6)
   const [error, setError] = useState<string | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -103,7 +100,7 @@ export function CreateTournamentForm() {
         category,
         participant_type: participantType,
         format,
-        level,
+        level: 'iniciante',
         scoring: { sets_to_win: 1, games_per_set: gamesPerSet, tiebreak_games: true },
         cover_image_url: coverImageUrl,
         entry_price_cents: entryPriceCents,
@@ -133,7 +130,7 @@ export function CreateTournamentForm() {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
-      <Input label="Nome do torneio" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Americano Nível C Junho" required />
+      <Input label="Nome do torneio" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Americano de Sábado" required />
       <Input label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
 
       <div className="flex flex-col gap-1">
@@ -164,15 +161,6 @@ export function CreateTournamentForm() {
         <select value={format} onChange={(e) => setFormat(e.target.value as TournamentFormat)} className={selectClass}>
           {FORMAT_OPTIONS.map((f) => (
             <option key={f.value} value={f.value} disabled={!f.enabled}>{f.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-slate-300">Nível</label>
-        <select value={level} onChange={(e) => setLevel(e.target.value as StudentLevel)} className={selectClass}>
-          {LEVEL_OPTIONS.map((l) => (
-            <option key={l} value={l}>{l === 'iniciante' ? 'Iniciante' : `Nível ${l}`}</option>
           ))}
         </select>
       </div>
