@@ -49,6 +49,21 @@ describe('validateWellhubCheckin', () => {
     expect(res.error).toContain('401')
   })
 
+  it('usa a mensagem de erro de domínio da Wellhub quando disponível (mesmo com HTTP não-2xx)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          metadata: { total: 0, errors: 1 },
+          errors: [{ message: 'Check-In not found in database', key: 'checkin.validation.notfound' }],
+        },
+        false,
+        404,
+      ),
+    )
+    const res = await validateWellhubCheckin(base, fetchMock)
+    expect(res).toEqual({ valid: false, error: 'Check-In not found in database' })
+  })
+
   it('não valida em falha de rede', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNRESET'))
     const res = await validateWellhubCheckin(base, fetchMock)

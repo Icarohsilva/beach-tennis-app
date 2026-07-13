@@ -54,7 +54,21 @@ export async function validateWellhubCheckin(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    return { valid: false, error: `HTTP ${res.status} do validate: ${text.slice(0, 300)}` }
+    // A Wellhub responde com status não-2xx (ex.: 404) mesmo para erros de domínio
+    // (ex.: "Check-In not found in database" quando ainda não houve simulate/checkin
+    // do lado deles) — preferimos essa mensagem à genérica "HTTP {status}" quando disponível,
+    // pois é o texto que aparece pro admin na fila de pendentes.
+    let domainMessage: string | undefined
+    try {
+      const parsed = JSON.parse(text) as { errors?: { message?: string }[] }
+      domainMessage = parsed.errors?.[0]?.message
+    } catch {
+      // corpo não é JSON — segue para o fallback genérico abaixo.
+    }
+    return {
+      valid: false,
+      error: domainMessage ?? `HTTP ${res.status} do validate: ${text.slice(0, 300)}`,
+    }
   }
 
   let body: ValidateResponse
