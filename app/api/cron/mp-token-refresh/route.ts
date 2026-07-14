@@ -10,12 +10,12 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { decryptSecret } from '@/lib/billing/tokenCrypto'
 import { mpRefreshOAuthToken, MpApiError } from '@/lib/billing/mpClient'
 import { saveMpAccount, setMpAccountStatus } from '@/lib/billing/gatewayAccounts'
+import { verifyCronSecret } from '@/lib/auth/cronAuth'
 
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

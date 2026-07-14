@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { offerWaitlistSpot } from '@/features/aulas/waitlistActions'
+import { verifyCronSecret } from '@/lib/auth/cronAuth'
 
 export async function GET(req: NextRequest) {
-  // Verify Vercel cron secret
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
