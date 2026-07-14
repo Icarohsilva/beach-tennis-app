@@ -1,3 +1,4 @@
+// lib/auth/cronAuth.ts
 import { timingSafeEqual } from 'crypto'
 import type { NextRequest } from 'next/server'
 
