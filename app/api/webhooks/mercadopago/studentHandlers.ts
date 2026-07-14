@@ -2,6 +2,7 @@
 // Billing aluno→academia. Regra de ouro: NADA é creditado/ativado com base no
 // corpo do webhook — sempre re-consultamos a API do MP com o token da academia
 // dona. Erros lançados aqui viram 500 no route → o MP reentrega o evento.
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getMpAccount } from '@/lib/billing/gatewayAccounts'
 import { mpGetPreapproval, mpGetAuthorizedPayment } from '@/lib/billing/mpClient'
@@ -62,6 +63,10 @@ export async function handleStudentPreapprovalEvent(
   const account = await getMpAccount(sub.organization_id)
   if (!account) {
     console.error('[webhook/mp] academia sem conta MP para assinatura', { sub: sub.id })
+    Sentry.captureMessage('webhook/mp: academia sem conta MP para assinatura', {
+      level: 'error',
+      extra: { sub: sub.id },
+    })
     return 'handled'
   }
 
@@ -112,6 +117,10 @@ export async function handleStudentRecurringPayment(
   const account = await getMpAccount(orgId)
   if (!account) {
     console.error('[webhook/mp] cobrança recorrente sem conta MP', { orgId })
+    Sentry.captureMessage('webhook/mp: cobrança recorrente sem conta MP', {
+      level: 'error',
+      extra: { orgId },
+    })
     return
   }
 

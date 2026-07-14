@@ -1,5 +1,6 @@
 // app/api/webhooks/mercadopago/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { mapPreapprovalStatus } from '@/lib/billing/mpStatus'
 import { isValidSignature } from '@/lib/billing/webhookSignature'
@@ -128,6 +129,10 @@ async function handleWebhook(body: WebhookPayload, orgParam: string | null): Pro
   } catch (e) {
     // Falha transitória (API MP fora, DB): 500 → MP reentrega o evento.
     console.error('[webhook/mercadopago] handler falhou', e)
+    Sentry.captureException(e, {
+      tags: { webhook: 'mercadopago' },
+      extra: { action, resourceId, orgParam },
+    })
     return NextResponse.json({ error: 'Handler failed' }, { status: 500 })
   }
 

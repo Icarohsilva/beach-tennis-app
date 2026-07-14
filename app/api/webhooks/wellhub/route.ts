@@ -4,6 +4,7 @@
 // de ingestão. Sempre 200 para evento genuíno (mesmo órfão) para a Wellhub não
 // reenviar. Segue o padrão do webhook do Mercado Pago.
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { parseWellhubEvent, verifyWellhubSignature } from '@/lib/checkin/wellhub'
 import { ingestPartnerCheckin } from '@/lib/checkin/ingest'
@@ -21,7 +22,8 @@ export async function POST(req: NextRequest) {
   let event
   try {
     event = parseWellhubEvent(rawBody)
-  } catch {
+  } catch (e) {
+    Sentry.captureException(e, { tags: { webhook: 'wellhub' } })
     return NextResponse.json({ error: 'Malformed payload' }, { status: 400 })
   }
 
