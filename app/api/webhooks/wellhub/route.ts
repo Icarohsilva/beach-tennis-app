@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   try {
     event = parseWellhubEvent(rawBody)
   } catch (e) {
+    console.error('[webhook/wellhub] payload malformado', e)
     Sentry.captureException(e, { tags: { webhook: 'wellhub' } })
     return NextResponse.json({ error: 'Malformed payload' }, { status: 400 })
   }
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     // Retry da Wellhub não resolve um bug nosso de ingestão — reporta e ainda
     // assim confirma recebimento (200) pra não entrar em loop de reenvio.
+    console.error('[webhook/wellhub] falha ao ingerir check-in', e)
     Sentry.captureException(e, {
       tags: { webhook: 'wellhub' },
       extra: { gymId: event.gymId, orgId: integration.organization_id },
