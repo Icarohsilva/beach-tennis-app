@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
   for (const entry of expired ?? []) {
     try {
       // Expire the current offered entry
-      await adminClient
+      const { error: updateErr } = await adminClient
         .from('waitlists')
         .update({ status: 'expired' })
         .eq('id', entry.id)
+      if (updateErr) throw updateErr
 
       // Offer to next in queue
       await offerWaitlistSpot(entry.session_id)
