@@ -4,6 +4,7 @@
 // tratada como GATILHO NÃO CONFIÁVEL: nada acontece sem re-consultar o
 // pagamento na API do MP com o token da academia. O external_reference do
 // pagamento aponta para a NOSSA linha de payments (criada pending no checkout).
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getMpAccount } from '@/lib/billing/gatewayAccounts'
 import { mpGetPayment } from '@/lib/billing/mpClient'
@@ -26,6 +27,10 @@ export async function handleOrgCheckoutPayment(
   const account = await getMpAccount(orgId)
   if (!account) {
     console.error('[webhook/mp] checkout sem conta MP', { orgId })
+    Sentry.captureMessage('webhook/mp: checkout sem conta MP', {
+      level: 'error',
+      extra: { orgId },
+    })
     return
   }
 
@@ -54,6 +59,10 @@ export async function handleOrgCheckoutPayment(
   ) {
     console.error('[webhook/mp] valor menor que o esperado', {
       payment: pay.id, esperado: pay.amount, recebido: mpPay.transaction_amount,
+    })
+    Sentry.captureMessage('webhook/mp: valor menor que o esperado', {
+      level: 'error',
+      extra: { payment: pay.id, esperado: pay.amount, recebido: mpPay.transaction_amount },
     })
     return
   }

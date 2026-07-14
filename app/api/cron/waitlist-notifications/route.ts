@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { offerWaitlistSpot } from '@/features/aulas/waitlistActions'
+import { verifyCronSecret } from '@/lib/auth/cronAuth'
 
 export async function GET(req: NextRequest) {
-  // Verify Vercel cron secret
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -21,20 +21,29 @@ export async function GET(req: NextRequest) {
     .lt('notified_at', cutoff)
 
   if (error) {
+    Sentry.captureException(error, { tags: { cron: 'waitlist-notifications' } })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   let processed = 0
   for (const entry of expired ?? []) {
-    // Expire the current offered entry
-    await adminClient
-      .from('waitlists')
-      .update({ status: 'expired' })
-      .eq('id', entry.id)
+    try {
+      // Expire the current offered entry
+      const { error: updateErr } = await adminClient
+        .from('waitlists')
+        .update({ status: 'expired' })
+        .eq('id', entry.id)
+      if (updateErr) throw updateErr
 
-    // Offer to next in queue
-    await offerWaitlistSpot(entry.session_id)
-    processed++
+      // Offer to next in queue
+      await offerWaitlistSpot(entry.session_id)
+      processed++
+    } catch (e) {
+      Sentry.captureException(e, {
+        tags: { cron: 'waitlist-notifications' },
+        extra: { entryId: entry.id, sessionId: entry.session_id },
+      })
+    }
   }
 
   return NextResponse.json({ processed })

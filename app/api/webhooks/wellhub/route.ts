@@ -4,6 +4,7 @@
 // de ingestão. Sempre 200 para evento genuíno (mesmo órfão) para a Wellhub não
 // reenviar. Segue o padrão do webhook do Mercado Pago.
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { parseWellhubEvent, verifyWellhubSignature } from '@/lib/checkin/wellhub'
 import { ingestPartnerCheckin } from '@/lib/checkin/ingest'
@@ -21,7 +22,9 @@ export async function POST(req: NextRequest) {
   let event
   try {
     event = parseWellhubEvent(rawBody)
-  } catch {
+  } catch (e) {
+    console.error('[webhook/wellhub] payload malformado', e)
+    Sentry.captureException(e, { tags: { webhook: 'wellhub' } })
     return NextResponse.json({ error: 'Malformed payload' }, { status: 400 })
   }
 
@@ -53,24 +56,34 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Ingestão (casa aluno ou parqueia como pendente). Com api_key, valida em seguida.
-  await ingestPartnerCheckin(
-    {
-      orgId: integration.organization_id,
-      partner: 'wellhub',
-      partnerMemberId: event.partnerMemberId,
-      date: event.checkinDate,
-      externalRef: event.externalRef,
-      payload: JSON.parse(rawBody),
-      validate: integration.api_key
-        ? {
-            apiKey: integration.api_key,
-            gymId: event.gymId,
-            environment: (integration.environment as WellhubEnvironment) ?? 'production',
-          }
-        : undefined,
-    },
-    admin,
-  )
+  try {
+    await ingestPartnerCheckin(
+      {
+        orgId: integration.organization_id,
+        partner: 'wellhub',
+        partnerMemberId: event.partnerMemberId,
+        date: event.checkinDate,
+        externalRef: event.externalRef,
+        payload: JSON.parse(rawBody),
+        validate: integration.api_key
+          ? {
+              apiKey: integration.api_key,
+              gymId: event.gymId,
+              environment: (integration.environment as WellhubEnvironment) ?? 'production',
+            }
+          : undefined,
+      },
+      admin,
+    )
+  } catch (e) {
+    // Retry da Wellhub não resolve um bug nosso de ingestão — reporta e ainda
+    // assim confirma recebimento (200) pra não entrar em loop de reenvio.
+    console.error('[webhook/wellhub] falha ao ingerir check-in', e)
+    Sentry.captureException(e, {
+      tags: { webhook: 'wellhub' },
+      extra: { gymId: event.gymId, orgId: integration.organization_id },
+    })
+  }
 
   // 5. Sempre 200 para evento genuíno.
   return NextResponse.json({ received: true })

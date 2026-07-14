@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { reconcileAllActiveEnrollments } from '@/features/aulas/creditReconciliation'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { verifyCronSecret } from '@/lib/auth/cronAuth'
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Roda no dia 1 → janela = mês inteiro corrente.
-  const { from, to } = getMonthWindow(new Date())
-  const summary = await reconcileAllActiveEnrollments(from, to)
-
-  return NextResponse.json({ window: { from, to }, ...summary })
+  try {
+    // Roda no dia 1 → janela = mês inteiro corrente.
+    const { from, to } = getMonthWindow(new Date())
+    const summary = await reconcileAllActiveEnrollments(from, to)
+    return NextResponse.json({ window: { from, to }, ...summary })
+  } catch (e) {
+    Sentry.captureException(e, { tags: { cron: 'monthly-credit-renewal' } })
+    return NextResponse.json({ error: 'Cron failed' }, { status: 500 })
+  }
 }

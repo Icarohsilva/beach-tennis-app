@@ -6,16 +6,17 @@
 // novo na próxima semana; marcar 'expired' por um blip seria um falso sinal
 // de "precisa reconectar" para uma academia que na verdade está tudo bem.
 import { NextRequest, NextResponse } from 'next/server'
+import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { decryptSecret } from '@/lib/billing/tokenCrypto'
 import { mpRefreshOAuthToken, MpApiError } from '@/lib/billing/mpClient'
 import { saveMpAccount, setMpAccountStatus } from '@/lib/billing/gatewayAccounts'
+import { verifyCronSecret } from '@/lib/auth/cronAuth'
 
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -47,6 +48,10 @@ export async function GET(req: NextRequest) {
         org: row.organization_id,
         authRejection: isAuthRejection,
         error: e instanceof Error ? e.message : e,
+      })
+      Sentry.captureException(e, {
+        tags: { cron: 'mp-token-refresh', authRejection: String(isAuthRejection) },
+        extra: { org: row.organization_id },
       })
       if (isAuthRejection) {
         await setMpAccountStatus(row.organization_id, 'expired')
