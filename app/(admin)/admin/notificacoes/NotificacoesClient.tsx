@@ -41,7 +41,7 @@ export function NotificacoesClient() {
   const [notifType, setNotifType] = useState('announcement')
   const [filterMode, setFilterMode] = useState<FilterMode>('all')
   const [filterValue, setFilterValue] = useState('')
-  const [channels, setChannels] = useState<Channel[]>(['push'])
+  const [channels, setChannels] = useState<Channel[]>(['email', 'whatsapp'])
   const [error, setError] = useState<string | null>(null)
   const [successCount, setSuccessCount] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -90,7 +90,7 @@ export function NotificacoesClient() {
         setNotifType('announcement')
         setFilterMode('all')
         setFilterValue('')
-        setChannels(['push'])
+        setChannels(['email', 'whatsapp'])
       }
     })
   }
@@ -170,16 +170,19 @@ export function NotificacoesClient() {
             <div className="flex flex-wrap gap-2">
               {(
                 [
-                  { value: 'push' as Channel, label: 'Push (PWA)', description: 'Notificação no dispositivo' },
-                  { value: 'email' as Channel, label: 'E-mail', description: 'Via Resend' },
-                  { value: 'whatsapp' as Channel, label: 'WhatsApp', description: 'Via gateway' },
+                  { value: 'push' as Channel, label: 'Push (PWA)', description: 'Em breve', disabled: true },
+                  { value: 'email' as Channel, label: 'E-mail', description: 'Via Resend', disabled: false },
+                  { value: 'whatsapp' as Channel, label: 'WhatsApp', description: 'Via Z-API', disabled: false },
                 ] as const
               ).map((c) => (
                 <button
                   key={c.value}
-                  onClick={() => toggleChannel(c.value)}
+                  onClick={() => { if (!c.disabled) toggleChannel(c.value) }}
+                  disabled={c.disabled}
                   className={`flex flex-col items-start px-3 py-2 rounded-lg text-sm transition-colors border ${
-                    channels.includes(c.value)
+                    c.disabled
+                      ? 'bg-surface border-surface-border text-slate-600 opacity-50 cursor-not-allowed'
+                      : channels.includes(c.value)
                       ? 'bg-brand-600/20 border-brand-600 text-brand-400'
                       : 'bg-surface border-surface-border text-slate-400 hover:border-brand-600/50 hover:text-white'
                   }`}
@@ -197,22 +200,24 @@ export function NotificacoesClient() {
             <div className="flex flex-col gap-2">
               {(
                 [
-                  { value: 'all' as FilterMode, label: 'Todos os alunos ativos' },
-                  { value: 'by_level' as FilterMode, label: 'Por nível' },
-                  { value: 'by_plan' as FilterMode, label: 'Por tipo de plano' },
-                  { value: 'pwa_only' as FilterMode, label: 'Somente alunos com PWA instalado' },
+                  { value: 'all' as FilterMode, label: 'Todos os alunos ativos', disabled: false },
+                  { value: 'by_level' as FilterMode, label: 'Por nível', disabled: false },
+                  { value: 'by_plan' as FilterMode, label: 'Por tipo de plano', disabled: false },
+                  { value: 'pwa_only' as FilterMode, label: 'Somente alunos com PWA instalado — em breve', disabled: true },
                 ] as const
               ).map((f) => (
                 <label
                   key={f.value}
-                  className="flex items-center gap-3 cursor-pointer group"
+                  className={`flex items-center gap-3 group ${f.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                   <input
                     type="radio"
                     name="filterMode"
                     value={f.value}
                     checked={filterMode === f.value}
+                    disabled={f.disabled}
                     onChange={() => {
+                      if (f.disabled) return
                       setFilterMode(f.value)
                       setFilterValue('')
                     }}
