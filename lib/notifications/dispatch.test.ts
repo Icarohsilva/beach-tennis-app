@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const sendPushMock = vi.fn()
+vi.mock('./push', () => ({ sendPush: (...a: unknown[]) => sendPushMock(...a) }))
 vi.mock('./email', () => ({ sendEmail: vi.fn() }))
 vi.mock('./whatsapp', () => ({ sendWhatsApp: vi.fn() }))
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
@@ -23,6 +25,31 @@ function makeFakeClient(opts: { insertError?: { message: string } } = {}) {
   }
   return { client: client as never, inserted }
 }
+
+// Mock mínimo do admin client: registra deletes e devolve as subs no select().in().
+function makeClient(subs: Array<{ user_id: string; endpoint: string; p256dh: string; auth: string }>) {
+  const deleted: string[] = []
+  const client = {
+    from() {
+      return {
+        insert: () => ({ error: null }),
+        select: () => ({
+          in: async () => ({ data: subs, error: null }),
+        }),
+        delete: () => ({
+          eq: async (_col: string, val: string) => {
+            deleted.push(val)
+            return { error: null }
+          },
+        }),
+      }
+    },
+    deleted,
+  }
+  return client
+}
+
+const sub = { user_id: 'u1', endpoint: 'https://push/1', p256dh: 'p', auth: 'a' }
 
 describe('notifyUsers', () => {
   beforeEach(() => {
@@ -104,5 +131,67 @@ describe('notifyUsers', () => {
       expect.any(Error),
       expect.objectContaining({ tags: { channel: 'email', notificationType: 'payment_past_due' } }),
     )
+  })
+})
+
+describe('notifyUsers — canal push', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('envia push para as inscrições dos destinatários', async () => {
+    sendPushMock.mockResolvedValue('ok')
+    const client = makeClient([sub])
+    await notifyUsers(client as never, {
+      orgId: 'org1',
+      recipients: [{ userId: 'u1' }],
+      type: 'admin_message',
+      title: 't',
+      body: 'b',
+      channels: ['push'],
+    })
+    expect(sendPushMock).toHaveBeenCalledTimes(1)
+    expect(client.deleted).toHaveLength(0)
+  })
+
+  it('poda a inscrição quando sendPush retorna expired', async () => {
+    sendPushMock.mockResolvedValue('expired')
+    const client = makeClient([sub])
+    await notifyUsers(client as never, {
+      orgId: 'org1',
+      recipients: [{ userId: 'u1' }],
+      type: 'admin_message',
+      title: 't',
+      body: 'b',
+      channels: ['push'],
+    })
+    expect(client.deleted).toEqual(['https://push/1'])
+  })
+
+  it('isola falha de envio no Sentry sem propagar', async () => {
+    sendPushMock.mockRejectedValue(new Error('boom'))
+    const client = makeClient([sub])
+    await expect(
+      notifyUsers(client as never, {
+        orgId: 'org1',
+        recipients: [{ userId: 'u1' }],
+        type: 'admin_message',
+        title: 't',
+        body: 'b',
+        channels: ['push'],
+      }),
+    ).resolves.toBeUndefined()
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1)
+  })
+
+  it('não busca push quando o canal não está incluído', async () => {
+    const client = makeClient([sub])
+    await notifyUsers(client as never, {
+      orgId: 'org1',
+      recipients: [{ userId: 'u1' }],
+      type: 'admin_message',
+      title: 't',
+      body: 'b',
+      channels: ['inapp'],
+    })
+    expect(sendPushMock).not.toHaveBeenCalled()
   })
 })

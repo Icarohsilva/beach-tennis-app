@@ -7,6 +7,7 @@ import * as Sentry from '@sentry/nextjs'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { sendEmail } from './email'
 import { sendWhatsApp } from './whatsapp'
+import { sendPush } from './push'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -17,7 +18,7 @@ type AdminClient = ReturnType<typeof createAdminClient>
  */
 export type NotificationType = string
 
-export type NotificationChannel = 'inapp' | 'email' | 'whatsapp'
+export type NotificationChannel = 'inapp' | 'email' | 'whatsapp' | 'push'
 
 export interface NotifyRecipient {
   userId: string
@@ -100,6 +101,37 @@ export async function notifyUsers(
         Sentry.captureException(err, {
           tags: { channel: 'whatsapp', notificationType: type },
           extra: { orgId, userId: r.userId },
+        })
+      }
+    }
+  }
+
+  if (channels.includes('push')) {
+    const userIds = recipients.map((r) => r.userId)
+    const { data: subs } = await client
+      .from('push_subscriptions')
+      .select('user_id, endpoint, p256dh, auth')
+      .in('user_id', userIds)
+
+    for (const s of (subs ?? []) as {
+      user_id: string
+      endpoint: string
+      p256dh: string
+      auth: string
+    }[]) {
+      try {
+        const result = await sendPush({
+          subscription: { endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth },
+          title,
+          body,
+        })
+        if (result === 'expired') {
+          await client.from('push_subscriptions').delete().eq('endpoint', s.endpoint)
+        }
+      } catch (err) {
+        Sentry.captureException(err, {
+          tags: { channel: 'push', notificationType: type },
+          extra: { orgId, userId: s.user_id },
         })
       }
     }
