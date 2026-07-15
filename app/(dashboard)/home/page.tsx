@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
+import { PushOnboardingCard } from '@/components/pwa/PushOnboardingCard'
 import { CalendarPlus } from 'lucide-react'
 import { getStudentTournamentHome } from '@/features/torneios/studentHome'
 import { NextMatchCard } from '@/features/torneios/NextMatchCard'
@@ -320,6 +321,8 @@ export default async function HomePage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
+      <PushOnboardingCard />
+
       {recRaw && (
         <RecommendationBanner
           recommendationId={recRaw.id as string}
