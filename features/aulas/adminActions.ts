@@ -8,6 +8,8 @@ import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
 import { requiresCredit } from '@/lib/utils/reconciliationOps'
+import * as Sentry from '@sentry/nextjs'
+import { notifyUsers } from '@/lib/notifications/dispatch'
 
 async function requireAdmin(): Promise<{ userId: string; orgId: string; error?: string }> {
   const supabase = createClient()
@@ -323,14 +325,40 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
   const now = new Date().toISOString()
   const today = format(new Date(), 'yyyy-MM-dd')
 
-  // Garante que a turma pertence à academia ativa antes de mutar.
+  // Garante que a turma pertence à academia ativa antes de mutar. Pega o nome
+  // para a mensagem da notificação.
   const { data: ownClass } = await adminClient
     .from('classes')
-    .select('id')
+    .select('id, name')
     .eq('id', classId)
     .eq('organization_id', orgId)
     .single()
   if (!ownClass) return { error: 'Turma não encontrada.' }
+
+  // Coleta destinatários afetados ANTES de cancelar — as mutações abaixo mudam
+  // os filtros (status='confirmed', is_active=true) que identificam os afetados.
+  const { data: futureSessions } = await adminClient
+    .from('class_sessions')
+    .select('id')
+    .eq('class_id', classId)
+    .gte('session_date', today)
+  const sessionIds = (futureSessions ?? []).map((s: { id: string }) => s.id)
+
+  const affectedIds = new Set<string>()
+  if (sessionIds.length > 0) {
+    const { data: bookingsRaw } = await adminClient
+      .from('session_bookings')
+      .select('student_id')
+      .in('session_id', sessionIds)
+      .eq('status', 'confirmed')
+    for (const b of (bookingsRaw ?? []) as { student_id: string }[]) affectedIds.add(b.student_id)
+  }
+  const { data: enrollmentsRaw } = await adminClient
+    .from('enrollments')
+    .select('student_id')
+    .eq('class_id', classId)
+    .eq('is_active', true)
+  for (const e of (enrollmentsRaw ?? []) as { student_id: string }[]) affectedIds.add(e.student_id)
 
   // Cancel all future sessions
   await adminClient
@@ -340,14 +368,7 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
     .gte('session_date', today)
     .neq('status', 'cancelled')
 
-  // Get future session IDs to cancel bookings
-  const { data: futureSessions } = await adminClient
-    .from('class_sessions')
-    .select('id')
-    .eq('class_id', classId)
-    .gte('session_date', today)
-
-  const sessionIds = (futureSessions ?? []).map((s: { id: string }) => s.id)
+  // Cancel bookings on those future sessions
   if (sessionIds.length > 0) {
     await adminClient
       .from('session_bookings')
@@ -370,6 +391,44 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
     .eq('id', classId)
 
   if (error) return { error: 'Erro ao excluir turma.' }
+
+  // Best-effort: notificar afetados NUNCA reverte o cancelamento.
+  if (affectedIds.size > 0) {
+    try {
+      const ids = Array.from(affectedIds)
+      const { data: emailRows } = await adminClient
+        .from('user_emails')
+        .select('id, email')
+        .in('id', ids)
+      const { data: profileRows } = await adminClient
+        .from('profiles')
+        .select('id, phone')
+        .in('id', ids)
+      const emailById = new Map(((emailRows ?? []) as { id: string; email: string }[]).map((r) => [r.id, r.email]))
+      const phoneById = new Map(((profileRows ?? []) as { id: string; phone: string | null }[]).map((r) => [r.id, r.phone]))
+
+      await notifyUsers(adminClient, {
+        orgId,
+        recipients: ids.map((id) => ({
+          userId: id,
+          email: emailById.get(id) ?? null,
+          phone: phoneById.get(id) ?? null,
+        })),
+        type: 'class_cancelled',
+        title: 'Aula cancelada',
+        body: `A turma "${(ownClass as { name: string }).name}" foi cancelada.`,
+        channels: ['inapp', 'email', 'whatsapp'],
+      })
+    } catch (err) {
+      console.error('[deleteClass] notifyUsers falhou', {
+        classId, error: err instanceof Error ? err.message : String(err),
+      })
+      Sentry.captureException(err, {
+        tags: { channel: 'dispatch', notificationType: 'class_cancelled' },
+        extra: { classId, orgId },
+      })
+    }
+  }
 
   revalidatePath('/admin/grade')
   revalidatePath('/admin/alunos')

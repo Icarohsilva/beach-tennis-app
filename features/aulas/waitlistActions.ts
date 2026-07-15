@@ -4,6 +4,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
+import * as Sentry from '@sentry/nextjs'
+import { notifyUsers } from '@/lib/notifications/dispatch'
 
 // ---------------------------------------------------------------------------
 // offerWaitlistSpot — called when a spot opens (cancellation or cron)
@@ -45,15 +47,45 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
   const deadline = new Date(Date.now() + 60 * 60 * 1000)
   const deadlineStr = deadline.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-  // Insert in-app notification
-  await adminClient.from('notifications').insert({
-    organization_id: session?.organization_id,
-    user_id: next.student_id,
-    type: 'waitlist_offer',
-    title: 'Vaga disponível!',
-    body: `Uma vaga abriu em ${className} (${session?.session_date}). Confirme sua presença até ${deadlineStr}.`,
-    read: false,
-  })
+  const title = 'Vaga disponível!'
+  const body = `Uma vaga abriu em ${className} (${session?.session_date}). Confirme sua presença até ${deadlineStr}.`
+
+  // Best-effort: uma falha de notificacao nao pode derrubar o avanço da fila
+  // (offerWaitlistSpot é chamado fire-and-forget por leaveWaitlist/acceptWaitlistSpot).
+  try {
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('phone')
+      .eq('id', next.student_id)
+      .single()
+    const { data: emailRow } = await adminClient
+      .from('user_emails')
+      .select('email')
+      .eq('id', next.student_id)
+      .maybeSingle()
+
+    await notifyUsers(adminClient, {
+      orgId: session?.organization_id as string,
+      recipients: [{
+        userId: next.student_id,
+        email: (emailRow as { email: string } | null)?.email ?? null,
+        phone: (profile as { phone: string | null } | null)?.phone ?? null,
+      }],
+      type: 'waitlist_offer',
+      title,
+      body,
+      channels: ['inapp', 'email', 'whatsapp'],
+    })
+  } catch (err) {
+    console.error('[offerWaitlistSpot] notifyUsers falhou', {
+      sessionId, studentId: next.student_id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { channel: 'dispatch', notificationType: 'waitlist_offer' },
+      extra: { sessionId, studentId: next.student_id },
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------
