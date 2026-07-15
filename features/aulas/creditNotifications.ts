@@ -57,7 +57,7 @@ export async function checkLowCreditThreshold(
       type: 'low_credits',
       title: 'Seu credito esta acabando',
       body: 'Voce tem apenas 1 credito restante. Renove seu plano para continuar agendando aulas.',
-      channels: ['inapp', 'email', 'whatsapp'],
+      channels: ['inapp', 'email', 'whatsapp', 'push'],
     })
   } catch (err) {
     console.error('[checkLowCreditThreshold] falhou', {

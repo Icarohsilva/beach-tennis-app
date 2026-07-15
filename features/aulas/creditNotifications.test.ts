@@ -45,7 +45,7 @@ describe('checkLowCreditThreshold', () => {
       orgId: 'org-1',
       type: 'low_credits',
       recipients: [{ userId: 'student-1', email: 'a@x.com', phone: '11988887777' }],
-      channels: ['inapp', 'email', 'whatsapp'],
+      channels: ['inapp', 'email', 'whatsapp', 'push'],
     }))
   })
 

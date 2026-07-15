@@ -417,7 +417,7 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
         type: 'class_cancelled',
         title: 'Aula cancelada',
         body: `A turma "${(ownClass as { name: string }).name}" foi cancelada.`,
-        channels: ['inapp', 'email', 'whatsapp'],
+        channels: ['inapp', 'email', 'whatsapp', 'push'],
       })
     } catch (err) {
       console.error('[deleteClass] notifyUsers falhou', {

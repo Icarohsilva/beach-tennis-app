@@ -129,7 +129,7 @@ export async function handleStudentPreapprovalEvent(
           type: 'payment_past_due',
           title: 'Pagamento não aprovado',
           body: 'A cobrança da sua assinatura não foi aprovada. Regularize o pagamento para reativar seu acesso.',
-          channels: ['inapp', 'email', 'whatsapp'],
+          channels: ['inapp', 'email', 'whatsapp', 'push'],
         })
       } catch (err) {
         console.error('[webhook/mp] notifyUsers (payment_past_due) falhou', {

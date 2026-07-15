@@ -74,7 +74,7 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
       type: 'waitlist_offer',
       title,
       body,
-      channels: ['inapp', 'email', 'whatsapp'],
+      channels: ['inapp', 'email', 'whatsapp', 'push'],
     })
   } catch (err) {
     console.error('[offerWaitlistSpot] notifyUsers falhou', {
