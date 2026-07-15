@@ -11,6 +11,7 @@ import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
+import { NotificationToggle } from '@/features/perfil/NotificationToggle'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
@@ -188,6 +189,14 @@ export default async function PerfilPage() {
             confirmação por um link enviado ao novo endereço.
           </p>
           <AccountSecurityForm currentEmail={user.email ?? ''} />
+        </div>
+      </section>
+
+      {/* Notificações */}
+      <section>
+        <SectionHeader title="Notificações" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <NotificationToggle />
         </div>
       </section>
 
