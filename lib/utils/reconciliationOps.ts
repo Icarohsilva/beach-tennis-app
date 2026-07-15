@@ -13,22 +13,22 @@ export interface ReconciliationOp {
   debitReason: string
 }
 
-/** Wellhub/TotalPass agendam via check-in, sem crédito. */
-export function requiresCredit(paymentType: string): boolean {
-  return paymentType !== 'wellhub' && paymentType !== 'totalpass'
+/** Consome crédito quem NÃO tem parceiro. Parceiro (wellhub/totalpass) agenda via check-in. */
+export function requiresCredit(partner: string | null): boolean {
+  return !partner
 }
 
 /**
  * Para cada sessão ainda não reservada, monta a operação de reconciliação
- * (conceder + reservar + debitar). Puro: não toca no banco.
+ * (conceder + reservar + debitar). `needsCredit` é decidido pelo caller
+ * (sem parceiro E com plano ativo). Puro: não toca no banco.
  */
 export function buildReconciliationOps(
   sessions: SessionLite[],
   bookedSessionIds: Set<string>,
-  paymentType: string,
+  needsCredit: boolean,
   planName: string,
 ): ReconciliationOp[] {
-  const needsCredit = requiresCredit(paymentType)
   return sessions
     .filter((s) => !bookedSessionIds.has(s.id))
     .map((s) => {

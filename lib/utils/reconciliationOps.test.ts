@@ -2,11 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { requiresCredit, buildReconciliationOps } from './reconciliationOps'
 
 describe('requiresCredit', () => {
-  it('is true for subscriber and per_class', () => {
-    expect(requiresCredit('subscriber')).toBe(true)
-    expect(requiresCredit('per_class')).toBe(true)
+  it('é true quando não há parceiro (mensalista/avulso agendam por crédito)', () => {
+    expect(requiresCredit(null)).toBe(true)
   })
-  it('is false for wellhub and totalpass', () => {
+  it('é false quando há parceiro (wellhub/totalpass agendam por check-in)', () => {
     expect(requiresCredit('wellhub')).toBe(false)
     expect(requiresCredit('totalpass')).toBe(false)
   })
@@ -18,8 +17,8 @@ describe('buildReconciliationOps', () => {
     { id: 's2', session_date: '2026-06-25' },
   ]
 
-  it('creates one op per not-yet-booked session with credit flag and reasons', () => {
-    const ops = buildReconciliationOps(sessions, new Set<string>(), 'subscriber', 'Mensal 1x')
+  it('cria uma op por sessão não reservada, com needsCredit e razões', () => {
+    const ops = buildReconciliationOps(sessions, new Set<string>(), true, 'Mensal 1x')
     expect(ops).toEqual([
       {
         sessionId: 's1',
@@ -38,13 +37,13 @@ describe('buildReconciliationOps', () => {
     ])
   })
 
-  it('skips sessions already booked', () => {
-    const ops = buildReconciliationOps(sessions, new Set(['s1']), 'subscriber', 'Mensal 1x')
+  it('pula sessões já reservadas', () => {
+    const ops = buildReconciliationOps(sessions, new Set(['s1']), true, 'Mensal 1x')
     expect(ops.map((o) => o.sessionId)).toEqual(['s2'])
   })
 
-  it('marks needsCredit false for wellhub', () => {
-    const ops = buildReconciliationOps(sessions, new Set<string>(), 'wellhub', 'Mensal 1x')
+  it('marca needsCredit=false quando o caller passa false', () => {
+    const ops = buildReconciliationOps(sessions, new Set<string>(), false, 'Mensal 1x')
     expect(ops.every((o) => o.needsCredit === false)).toBe(true)
   })
 })
