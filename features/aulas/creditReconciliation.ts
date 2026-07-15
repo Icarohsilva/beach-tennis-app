@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { buildReconciliationOps, requiresCredit } from '@/lib/utils/reconciliationOps'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { checkLowCreditThreshold } from './creditNotifications'
 
 export interface ReconcileResult {
   booked: number
@@ -149,6 +150,9 @@ export async function reconcileEnrollmentCredits(
       continue
     }
     result.debited++
+
+    // Aviso de credito baixo (best-effort; a funcao nunca lança).
+    await checkLowCreditThreshold(adminClient, studentId, cls.organization_id, -1)
   }
 
   return result

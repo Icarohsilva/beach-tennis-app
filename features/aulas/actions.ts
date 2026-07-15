@@ -6,6 +6,7 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
+import { checkLowCreditThreshold } from './creditNotifications'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -229,6 +230,9 @@ export async function bookSession(
         ? { error: 'Créditos insuficientes.' }
         : { error: 'Erro ao criar agendamento. Tente novamente.' }
     }
+
+    // Aviso de credito baixo (best-effort; a funcao nunca lança).
+    await checkLowCreditThreshold(adminClient, user.id, orgId, -1)
   }
 
   revalidatePath('/home')
