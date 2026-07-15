@@ -8,6 +8,7 @@ import { getMpAccount } from '@/lib/billing/gatewayAccounts'
 import { mpGetPreapproval, mpGetAuthorizedPayment } from '@/lib/billing/mpClient'
 import { mapStudentPreapprovalStatus } from '@/lib/billing/studentSubscriptionStatus'
 import { addPeriod } from '@/lib/billing/periodicity'
+import { notifyUsers } from '@/lib/notifications/dispatch'
 import {
   reconcileEnrollmentCredits,
   getRemainingMonthWindow,
@@ -102,6 +103,44 @@ export async function handleStudentPreapprovalEvent(
     }
   } else if (mapped === 'past_due' || mapped === 'cancelled') {
     await admin.from('student_subscriptions').update({ status: mapped }).eq('id', sub.id)
+
+    // Só avisa em past_due (cobrança falhou / suspenso). Best-effort: uma falha
+    // de notificação NUNCA quebra o webhook (o MP reentregaria o evento).
+    if (mapped === 'past_due') {
+      try {
+        const { data: profile } = await admin
+          .from('profiles')
+          .select('phone')
+          .eq('id', sub.student_id)
+          .single()
+        const { data: emailRow } = await admin
+          .from('user_emails')
+          .select('email')
+          .eq('id', sub.student_id)
+          .maybeSingle()
+
+        await notifyUsers(admin, {
+          orgId: sub.organization_id,
+          recipients: [{
+            userId: sub.student_id,
+            email: (emailRow as { email: string } | null)?.email ?? null,
+            phone: (profile as { phone: string | null } | null)?.phone ?? null,
+          }],
+          type: 'payment_past_due',
+          title: 'Pagamento não aprovado',
+          body: 'A cobrança da sua assinatura não foi aprovada. Regularize o pagamento para reativar seu acesso.',
+          channels: ['inapp', 'email', 'whatsapp'],
+        })
+      } catch (err) {
+        console.error('[webhook/mp] notifyUsers (payment_past_due) falhou', {
+          sub: sub.id, error: err instanceof Error ? err.message : String(err),
+        })
+        Sentry.captureException(err, {
+          tags: { channel: 'dispatch', notificationType: 'payment_past_due' },
+          extra: { subscriptionId: sub.id, orgId: sub.organization_id },
+        })
+      }
+    }
   }
   // pending_payment: estado inicial, nada a fazer.
 
