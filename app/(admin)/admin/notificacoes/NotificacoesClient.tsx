@@ -170,7 +170,7 @@ export function NotificacoesClient() {
             <div className="flex flex-wrap gap-2">
               {(
                 [
-                  { value: 'push' as Channel, label: 'Push (PWA)', description: 'Em breve', disabled: true },
+                  { value: 'push' as Channel, label: 'Push (PWA)', description: 'App / navegador', disabled: false },
                   { value: 'email' as Channel, label: 'E-mail', description: 'Via Resend', disabled: false },
                   { value: 'whatsapp' as Channel, label: 'WhatsApp', description: 'Via Z-API', disabled: false },
                 ] as const

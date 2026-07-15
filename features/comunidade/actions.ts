@@ -273,11 +273,11 @@ export async function sendNotification(params: {
     ((emailRows ?? []) as { id: string; email: string }[]).map((r) => [r.id, r.email]),
   )
 
-  // In-app sempre; e-mail/WhatsApp conforme marcado na UI. (Push é ignorado —
-  // sem dispatcher real; a UI o mantém desabilitado.)
+  // In-app sempre; e-mail/WhatsApp/push conforme marcado na UI.
   const notifyChannels: NotificationChannel[] = ['inapp']
   if (channels.includes('email')) notifyChannels.push('email')
   if (channels.includes('whatsapp')) notifyChannels.push('whatsapp')
+  if (channels.includes('push')) notifyChannels.push('push')
 
   try {
     await notifyUsers(adminClient, {
