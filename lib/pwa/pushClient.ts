@@ -27,18 +27,25 @@ export async function subscribeToPush(): Promise<{ error?: string }> {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return { error: 'Permissão de notificação negada.' }
 
-  const reg = await registerServiceWorker()
-  const existing = await reg.pushManager.getSubscription()
-  const sub =
-    existing ??
-    (await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      // cast: urlBase64ToUint8Array retorna Uint8Array<ArrayBufferLike>; o lib.dom
-      // atual tipa applicationServerKey como BufferSource (ArrayBuffer específico).
-      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
-    }))
+  let json: PushSubscriptionJSON
+  try {
+    const reg = await registerServiceWorker()
+    const existing = await reg.pushManager.getSubscription()
+    const sub =
+      existing ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        // cast: urlBase64ToUint8Array retorna Uint8Array<ArrayBufferLike>; o lib.dom
+        // atual tipa applicationServerKey como BufferSource (ArrayBuffer específico).
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+      }))
+    json = sub.toJSON()
+  } catch {
+    // Chave VAPID malformada, registro do SW barrado, etc. — nunca deixa a UI
+    // travar no estado "carregando".
+    return { error: 'Não foi possível ativar as notificações.' }
+  }
 
-  const json = sub.toJSON()
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
     return { error: 'Inscrição de notificações inválida.' }
   }

@@ -31,6 +31,15 @@ create policy "push_subscriptions_insert_own" on push_subscriptions
   for insert to authenticated
   with check (user_id = auth.uid());
 
+-- Usuário atualiza a própria inscrição. Necessário para o upsert
+-- (onConflict = endpoint): sem policy de UPDATE, o ramo DO UPDATE do upsert
+-- é negado pela RLS e re-salvar a mesma inscrição falha.
+drop policy if exists "push_subscriptions_update_own" on push_subscriptions;
+create policy "push_subscriptions_update_own" on push_subscriptions
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 -- Usuário apaga as próprias inscrições.
 drop policy if exists "push_subscriptions_delete_own" on push_subscriptions;
 create policy "push_subscriptions_delete_own" on push_subscriptions
