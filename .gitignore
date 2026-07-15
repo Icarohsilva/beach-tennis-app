@@ -52,3 +52,6 @@ next-env.d.ts
 
 # dev server logs
 devserver.log
+
+# Sentry Config File
+.env.sentry-build-plugin
