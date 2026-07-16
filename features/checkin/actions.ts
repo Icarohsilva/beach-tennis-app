@@ -43,54 +43,57 @@ async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
 export type StudentType = 'subscriber' | CheckinPartner
 
 /**
- * Define o tipo do aluno numa única ação:
- * - 'subscriber' (Mensalista): payment_type='subscriber', meta zerada.
- * - 'wellhub' / 'totalpass': payment_type do parceiro, grava o ID no campo
- *   correspondente e a meta mensal de check-ins.
+ * Define os eixos do aluno de forma independente:
+ * - billing: 'subscriber' (mensalista) | 'per_class' (avulso) — eixo cobrança.
+ * - partner: null | 'wellhub' | 'totalpass' (+ id + meta) — eixo parceiro.
+ * Passar só um dos campos mexe só naquele eixo (não zera o outro).
  * (Vincular plano/créditos do mensalista continua em adminSubscribeStudentToPlan.)
  */
 export async function setStudentType(
   studentId: string,
-  input:
-    | { type: 'subscriber' }
-    | { type: CheckinPartner; partnerId: string; monthlyTarget: number },
+  input: {
+    billing?: 'subscriber' | 'per_class'
+    partner?:
+      | { type: null }
+      | { type: CheckinPartner; partnerId: string; monthlyTarget: number }
+  },
 ): Promise<{ error?: string }> {
   const { ok, orgId } = await requireAdmin()
   if (!ok) return { error: 'Sem permissão de administrador.' }
 
+  const patch: Record<string, unknown> = {}
+
+  if (input.billing) {
+    patch.payment_type = input.billing
+  }
+
+  if (input.partner) {
+    if (input.partner.type === null) {
+      // Desvincula o parceiro; zera a meta. Mantém os IDs (histórico) e a cobrança.
+      patch.partner = null
+      patch.monthly_checkin_target = 0
+      patch.pending_partner = null
+    } else {
+      if (!Number.isInteger(input.partner.monthlyTarget) || input.partner.monthlyTarget < 0) {
+        return { error: 'Meta mensal inválida.' }
+      }
+      const idColumn = input.partner.type === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
+      patch.partner = input.partner.type
+      patch[idColumn] = input.partner.partnerId.trim() || null
+      patch.monthly_checkin_target = input.partner.monthlyTarget
+      patch.pending_partner = null
+    }
+  }
+
+  if (Object.keys(patch).length === 0) return {}
+
   const adminClient = createAdminClient()
-
-  if (input.type === 'subscriber') {
-    const patch = { payment_type: 'subscriber', monthly_checkin_target: 0, pending_partner: null }
-    // Tipo do aluno é por-academia: fonte é a membership da academia ativa.
-    const { error } = await adminClient
-      .from('memberships')
-      .update(patch)
-      .eq('user_id', studentId)
-      .eq('organization_id', orgId)
-    if (error) return { error: 'Erro ao definir tipo do aluno.' }
-    revalidatePath(`/admin/alunos/${studentId}`)
-    return {}
-  }
-
-  if (!Number.isInteger(input.monthlyTarget) || input.monthlyTarget < 0) {
-    return { error: 'Meta mensal inválida.' }
-  }
-
-  const idColumn = input.type === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
-  const patch = {
-    payment_type: input.type,
-    [idColumn]: input.partnerId.trim() || null,
-    monthly_checkin_target: input.monthlyTarget,
-    pending_partner: null,
-  }
-  // Tipo do aluno é por-academia: fonte é a membership da academia ativa.
+  // Eixos são por-academia: fonte é a membership da academia ativa.
   const { error } = await adminClient
     .from('memberships')
     .update(patch)
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
-
   if (error) return { error: 'Erro ao definir tipo do aluno.' }
 
   revalidatePath(`/admin/alunos/${studentId}`)
@@ -116,13 +119,13 @@ export async function recordCheckin(
   // Vínculo ao parceiro é por-academia: vem da membership da academia ativa.
   const { data: profile } = await adminClient
     .from('memberships')
-    .select('payment_type, wellhub_id, totalpass_id, monthly_checkin_target')
+    .select('partner, wellhub_id, totalpass_id, monthly_checkin_target')
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
     .single()
 
   if (!profile) return { error: 'Aluno não encontrado.' }
-  if (profile.payment_type !== partner) {
+  if (profile.partner !== partner) {
     return { error: 'Aluno não está vinculado a este parceiro.' }
   }
 
@@ -219,7 +222,7 @@ export async function selfSetPartnerId(
   const { error } = await adminClient
     .from('memberships')
     .update({
-      payment_type: partner,
+      partner,
       [idColumn]: trimmedId,
       pending_partner: null,
     })
@@ -328,7 +331,7 @@ export async function resolvePendingCheckin(
   // do mesmo ID cairia em pendentes de novo. Meta zerada assume o padrão da academia.
   const idColumn = partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
   const memberId = (pending.partner_member_id as string | null)?.trim() || null
-  const patch: Record<string, unknown> = { payment_type: partner, pending_partner: null }
+  const patch: Record<string, unknown> = { partner, pending_partner: null }
   if (memberId) patch[idColumn] = memberId
   if (!membership.monthly_checkin_target) {
     patch.monthly_checkin_target = await getOrgDefaultCheckinTarget(adminClient, orgId)
