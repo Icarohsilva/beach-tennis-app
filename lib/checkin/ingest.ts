@@ -6,6 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
 import { validateWellhubCheckin, type WellhubEnvironment } from './wellhubValidate'
+import { normalizePartnerId } from './partnerId'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -140,11 +141,21 @@ export async function ingestPartnerCheckin(
 ): Promise<IngestResult> {
   const idColumn = input.partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
 
+  // Defesa em profundidade contra um token PADDED chegando do parceiro — e só isso.
+  // NÃO conserta ID gravado com espaço do nosso lado: quem compara é o Postgres,
+  // contra o valor da COLUNA. Espaço no que está gravado se resolve normalizando na
+  // escrita (features/checkin/actions.ts) + o backfill da 20260716000000.
+  // external_ref segue com o valor CRU: mudá-lo trocaria a chave de dedupe e
+  // reingeriria eventos já gravados.
+  // (?? input.partnerMemberId: token só-espaços normaliza p/ null, e .eq(col, null)
+  // seria um filtro inválido — cai no valor cru, que simplesmente não casa → pendente.)
+  const lookupId = normalizePartnerId(input.partnerMemberId) ?? input.partnerMemberId
+
   const { data: membership } = await client
     .from('memberships')
     .select('user_id, monthly_checkin_target')
     .eq('organization_id', input.orgId)
-    .eq(idColumn, input.partnerMemberId)
+    .eq(idColumn, lookupId)
     .maybeSingle()
 
   if (!membership) {

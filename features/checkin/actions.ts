@@ -9,6 +9,7 @@ import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { recordResolvedCheckin } from '@/lib/checkin/ingest'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
+import { normalizePartnerId } from '@/lib/checkin/partnerId'
 
 // "Hoje" (YYYY-MM-DD) no fuso de Brasília, independente do fuso do servidor
 // (Vercel roda em UTC — sem isso, o dia vira o seguinte depois das 21h BRT).
@@ -77,7 +78,9 @@ export async function setStudentType(
       }
       const idColumn = input.partner.type === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
       patch.partner = input.partner.type
-      patch[idColumn] = input.partner.partnerId.trim() || null
+      // normalizePartnerId (não .trim()): o ID copiado do portal vem com espaços
+      // INTERNOS, que o .trim() não remove — e aí o webhook nunca casa o aluno.
+      patch[idColumn] = normalizePartnerId(input.partner.partnerId)
       patch.monthly_checkin_target = input.partner.monthlyTarget
       patch.pending_partner = null
     }
@@ -197,8 +200,9 @@ export async function selfSetPartnerId(
   if (partner !== 'wellhub' && partner !== 'totalpass') {
     return { error: 'Parceiro inválido.' }
   }
-  const trimmedId = partnerId.trim()
-  if (!trimmedId) return { error: 'Informe o seu ID do parceiro.' }
+  // normalizePartnerId (não .trim()): ver setStudentType — espaços internos quebram o match.
+  const normalizedId = normalizePartnerId(partnerId)
+  if (!normalizedId) return { error: 'Informe o seu ID do parceiro.' }
 
   const adminClient = createAdminClient()
 
@@ -221,7 +225,7 @@ export async function selfSetPartnerId(
     .from('memberships')
     .update({
       partner,
-      [idColumn]: trimmedId,
+      [idColumn]: normalizedId,
       pending_partner: null,
     })
     .eq('user_id', user.id)
@@ -328,7 +332,7 @@ export async function resolvePendingCheckin(
   // check-in ficaria "solto" (não aparece na aba do parceiro) e o próximo evento
   // do mesmo ID cairia em pendentes de novo. Meta zerada assume o padrão da academia.
   const idColumn = partner === 'wellhub' ? 'wellhub_id' : 'totalpass_id'
-  const memberId = (pending.partner_member_id as string | null)?.trim() || null
+  const memberId = normalizePartnerId(pending.partner_member_id as string | null)
   const patch: Record<string, unknown> = { partner, pending_partner: null }
   if (memberId) patch[idColumn] = memberId
   if (!membership.monthly_checkin_target) {
