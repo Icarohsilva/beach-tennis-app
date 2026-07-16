@@ -3,7 +3,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
-import type { StudentLevel, PaymentType } from '@/types'
+import type { StudentLevel, PaymentType, CheckinPartner } from '@/types'
 import { notifyUsers, type NotificationChannel } from '@/lib/notifications/dispatch'
 
 // ---------------------------------------------------------------------------
@@ -247,7 +247,12 @@ export async function sendNotification(params: {
   if (filterMode === 'by_level' && filterValue) {
     memQuery = memQuery.eq('level', filterValue as StudentLevel)
   } else if (filterMode === 'by_plan' && filterValue) {
-    memQuery = memQuery.eq('payment_type', filterValue as PaymentType)
+    // 'subscriber'/'per_class' filtram cobrança; 'wellhub'/'totalpass' filtram parceiro.
+    if (filterValue === 'wellhub' || filterValue === 'totalpass') {
+      memQuery = memQuery.eq('partner', filterValue as CheckinPartner)
+    } else {
+      memQuery = memQuery.eq('payment_type', filterValue as PaymentType)
+    }
   }
 
   const { data: members, error: membersErr } = await memQuery
