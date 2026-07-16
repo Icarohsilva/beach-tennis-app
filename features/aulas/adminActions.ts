@@ -7,7 +7,6 @@ import { format, endOfMonth } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
-import { requiresCredit } from '@/lib/utils/reconciliationOps'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 
@@ -101,29 +100,6 @@ export async function enrollStudentInClass(
     .eq('is_active', true)
 
   if ((enrolled ?? 0) >= cls.max_students) return { error: 'Turma lotada.' }
-
-  // Validação: matrícula fixa exige plano ativo (exceto Wellhub/TotalPass).
-  // payment_type é por-academia: vem da membership da academia ativa.
-  const { data: validationMembership } = await adminClient
-    .from('memberships')
-    .select('payment_type')
-    .eq('user_id', studentId)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (requiresCredit((validationMembership?.payment_type as string) ?? 'subscriber')) {
-    const { count: activeSubs } = await adminClient
-      .from('student_subscriptions')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', studentId)
-      .eq('organization_id', orgId)
-      .eq('status', 'active')
-    if ((activeSubs ?? 0) === 0) {
-      return {
-        error: 'Aluno não possui plano ativo. Vincule um plano antes de criar a matrícula fixa.',
-      }
-    }
-  }
 
   // Upsert handles re-enrollment of previously cancelled students
   const { error } = await adminClient.from('enrollments').upsert(
