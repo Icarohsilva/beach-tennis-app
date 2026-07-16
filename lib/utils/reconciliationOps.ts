@@ -19,6 +19,18 @@ export function requiresCredit(partner: string | null): boolean {
 }
 
 /**
+ * Extrai o parceiro a partir do payment_type da membership. Só wellhub/totalpass
+ * são parceiros; 'subscriber'/'per_class' não têm parceiro (→ null).
+ *
+ * Ponte necessária porque payment_type é NOT NULL: passar payment_type direto a
+ * requiresCredit faria todo aluno cair em "tem parceiro" (string truthy) e parar
+ * de consumir crédito.
+ */
+export function partnerOf(paymentType: string | null): string | null {
+  return paymentType === 'wellhub' || paymentType === 'totalpass' ? paymentType : null
+}
+
+/**
  * Para cada sessão ainda não reservada, monta a operação de reconciliação
  * (conceder + reservar + debitar). `needsCredit` é decidido pelo caller
  * (sem parceiro E com plano ativo). Puro: não toca no banco.

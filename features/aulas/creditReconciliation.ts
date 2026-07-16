@@ -1,6 +1,6 @@
 // features/aulas/creditReconciliation.ts
 import { createAdminClient } from '@/lib/supabase/server'
-import { buildReconciliationOps, requiresCredit } from '@/lib/utils/reconciliationOps'
+import { buildReconciliationOps, requiresCredit, partnerOf } from '@/lib/utils/reconciliationOps'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { checkLowCreditThreshold } from './creditNotifications'
@@ -47,7 +47,7 @@ export async function reconcileEnrollmentCredits(
   if (!membership) return result
 
   const paymentType = membership.payment_type as string
-  const needsCredit = requiresCredit(paymentType)
+  const needsCredit = requiresCredit(partnerOf(paymentType))
 
   // Nome do plano para o log (só relevante quando há crédito)
   let planName = 'Mensal'
@@ -93,7 +93,7 @@ export async function reconcileEnrollmentCredits(
     (existingRaw ?? []).map((b: { session_id: string }) => b.session_id),
   )
 
-  const ops = buildReconciliationOps(sessions, bookedSessionIds, paymentType, planName)
+  const ops = buildReconciliationOps(sessions, bookedSessionIds, needsCredit, planName)
 
   for (const op of ops) {
     // 1. Reserva (atômica: respeita capacidade e reativa cancelado)
@@ -229,7 +229,7 @@ export async function reconcileAllActiveEnrollments(
   for (const e of enrollments) {
     const memberKey = `${e.student_id}:${e.organization_id}`
     const paymentType = paymentTypeByMember.get(memberKey) ?? 'subscriber'
-    const eligible = !requiresCredit(paymentType) || activeSubStudents.has(memberKey)
+    const eligible = !requiresCredit(partnerOf(paymentType)) || activeSubStudents.has(memberKey)
     if (!eligible) continue
 
     try {
