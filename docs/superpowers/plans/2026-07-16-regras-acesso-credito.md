@@ -571,8 +571,13 @@ where id in (select enrollment_id from _unlinked);
 -- ── 4. Notifica os desvinculados (in-app) ────────────────────────────────────
 -- Só in-app: notifyUsers é TypeScript e não roda dentro de migration. Um aluno
 -- em várias turmas recebe uma notificação por turma — é o que ele precisa saber.
-insert into notifications (user_id, type, title, body)
+-- organization_id EXPLÍCITO: o trigger trg_set_org que auto-preenchia essa
+-- coluna a partir de profiles foi removido em 20260624000000 (profiles perdeu
+-- organization_id na refatoração multi-vínculo). _unlinked já carrega
+-- e.organization_id, então basta propagar.
+insert into notifications (organization_id, user_id, type, title, body)
 select
+  u.organization_id,
   u.student_id,
   'enrollment_unlinked',
   'Sua vaga fixa foi encerrada',
