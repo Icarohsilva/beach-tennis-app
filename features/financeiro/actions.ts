@@ -35,7 +35,7 @@ export async function subscribeToPlan(
   // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
     .from('subscription_plans')
-    .select('id, is_active, credits_per_month, name')
+    .select('id, is_active, name')
     .eq('id', planId)
     .eq('organization_id', orgId)
     .single()
@@ -77,7 +77,8 @@ export async function subscribeToPlan(
 
   if (insertErr || !newSub) return { error: 'Erro ao criar assinatura. Tente novamente.' }
 
-  // Concede créditos proporcionais reconciliando as matrículas ativas do aluno
+  // Reserva as sessões das matrículas ativas do aluno (não concede crédito —
+  // plano é acesso ilimitado desde 2026-07).
   const { data: activeEnrolls } = await adminClient
     .from('enrollments')
     .select('class_id')
@@ -100,8 +101,8 @@ export async function subscribeToPlan(
 /**
  * Assigns a subscription plan to any student. Admin only.
  * - Deactivates any existing active subscription
- * - Grants prorated credits by reconciling the student's active enrollments
- *   over the remaining month (reconcileEnrollmentCredits)
+ * - Reserves the student's active enrollment sessions by reconciling (does
+ *   not grant credit — plan is unlimited access)
  * - For is_dependent students: payer_id = parent_id
  * - Calls revalidatePath for the admin student page
  */
@@ -140,7 +141,7 @@ export async function adminSubscribeStudentToPlan(
   // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
     .from('subscription_plans')
-    .select('id, is_active, credits_per_month')
+    .select('id, is_active')
     .eq('id', planId)
     .eq('organization_id', orgId)
     .single()
@@ -181,7 +182,8 @@ export async function adminSubscribeStudentToPlan(
 
   if (insertErr) return { error: 'Erro ao criar assinatura. Tente novamente.' }
 
-  // Concede créditos proporcionais reconciliando as matrículas ativas do aluno
+  // Reserva as sessões das matrículas ativas do aluno (não concede crédito —
+  // plano é acesso ilimitado desde 2026-07).
   if (newSub) {
     const { data: activeEnrolls } = await adminClient
       .from('enrollments')

@@ -18,10 +18,9 @@ import { handleOrgCheckoutPayment } from './checkoutHandlers'
  * On payment.updated / payment.created with status = 'approved':
  *   1. Find the matching payment row by gateway_payment_id
  *   2. Update payments.status = 'paid' and paid_at = now
- *   3. Find the student_subscription linked to that payment
- *   4. Fetch subscription_plans.credits_per_month for the plan
- *   5. Insert credit_transactions.type = 'renewed' with amount = credits_per_month
- *   6. Update profiles.credits_balance = credits_per_month (renewal, not accumulation)
+ *
+ * Assinaturas não concedem mais crédito na renovação — plano é acesso
+ * ilimitado (spec: docs/superpowers/specs/2026-07-16-regras-acesso-credito-design.md).
  */
 export async function POST(req: NextRequest) {
   // ─── Signature validation ───────────────────────────────────────────────
@@ -193,51 +192,8 @@ async function handleWebhook(body: WebhookPayload, orgParam: string | null): Pro
     return NextResponse.json({ error: 'Failed to update payment' }, { status: 500 })
   }
 
-  // If this payment is linked to a subscription, release monthly credits
-  if (payment.subscription_id) {
-    const { data: sub } = await adminClient
-      .from('student_subscriptions')
-      .select('id, plan_id, student_id, organization_id')
-      .eq('id', payment.subscription_id)
-      .maybeSingle()
-
-    if (sub) {
-      const { data: plan } = await adminClient
-        .from('subscription_plans')
-        .select('credits_per_month')
-        .eq('id', sub.plan_id)
-        .maybeSingle()
-
-      const creditsPerMonth = plan?.credits_per_month ?? 0
-
-      if (creditsPerMonth > 0) {
-        // Insert renewed transaction
-        const { error: txErr } = await adminClient.from('credit_transactions').insert({
-          student_id: sub.student_id,
-          organization_id: sub.organization_id,
-          type: 'renewed',
-          amount: creditsPerMonth,
-          reason: `Renovação mensal — pagamento ${gatewayPaymentId}`,
-          session_id: null,
-          subscription_id: sub.id,
-          expires_at: null,
-        })
-
-        if (txErr) {
-          console.error('[webhook/mercadopago] Error inserting credit_transaction:', txErr)
-          // Payment was already marked paid — don't fail the whole webhook
-        } else {
-          // Update cached balance: renewal replaces, not accumulates.
-          // Saldo é por-academia → grava na membership da (aluno, org da assinatura).
-          await adminClient
-            .from('memberships')
-            .update({ credits_balance: creditsPerMonth })
-            .eq('user_id', sub.student_id)
-            .eq('organization_id', sub.organization_id)
-        }
-      }
-    }
-  }
+  // Assinatura renovada não concede mais crédito: plano é acesso ilimitado.
+  // O pagamento já foi marcado 'paid' acima — é tudo que este evento faz.
 
   return NextResponse.json({ received: true })
 }

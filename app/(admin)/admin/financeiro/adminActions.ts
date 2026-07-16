@@ -50,7 +50,6 @@ export interface CreatePlanData {
   name: string
   description?: string
   classes_per_week: number
-  credits_per_month: number
 }
 
 export async function createPlan(data: CreatePlanData): Promise<{ error?: string; planId?: string }> {
@@ -58,7 +57,6 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
     const { adminClient, orgId } = await assertAdmin()
 
     if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
-    if (data.credits_per_month < 1) return { error: 'Créditos por mês deve ser ≥ 1.' }
 
     const { data: plan, error } = await adminClient
       .from('subscription_plans')
@@ -66,7 +64,6 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
         name: data.name.trim(),
         description: data.description?.trim() || null,
         classes_per_week: data.classes_per_week,
-        credits_per_month: data.credits_per_month,
         is_active: true,
         organization_id: orgId,
       })

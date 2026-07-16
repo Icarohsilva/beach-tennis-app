@@ -22,7 +22,6 @@ const emptyCreateForm: CreatePlanData = {
   name: '',
   description: '',
   classes_per_week: 2,
-  credits_per_month: 8,
 }
 
 function formatCurrency(amount: number) {
@@ -130,23 +129,13 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Aulas/semana</label>
-                <Input
-                  type="number" min="1" step="1"
-                  value={createForm.classes_per_week}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Créditos/mês</label>
-                <Input
-                  type="number" min="1" step="1"
-                  value={createForm.credits_per_month}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, credits_per_month: parseInt(e.target.value) || 0 }))}
-                />
-              </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Aulas/semana</label>
+              <Input
+                type="number" min="1" step="1"
+                value={createForm.classes_per_week}
+                onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
+              />
             </div>
             <div className="flex gap-2">
               <Button size="sm" variant="primary" loading={pending} onClick={handleCreatePlan}>
@@ -179,7 +168,7 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
               </div>
               {plan.description && <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>}
               <p className="text-xs text-slate-400 mt-1">
-                {plan.classes_per_week}x/semana · {plan.credits_per_month} créditos/mês
+                {plan.classes_per_week}x/semana
               </p>
             </div>
             <Button

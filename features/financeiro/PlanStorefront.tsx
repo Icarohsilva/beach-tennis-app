@@ -63,7 +63,7 @@ export function PlanStorefront({ plans, options, mpConnected, hasActivePlan }: P
             <h3 className="text-white font-semibold text-sm">{plan.name}</h3>
             {plan.description && <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>}
             <p className="text-xs text-slate-400 mt-1">
-              {plan.classes_per_week}x/semana · {plan.credits_per_month} créditos/mês
+              {plan.classes_per_week}x/semana
             </p>
 
             <div className="flex flex-wrap gap-2 mt-3">
