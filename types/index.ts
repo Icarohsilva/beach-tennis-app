@@ -140,7 +140,8 @@ export interface Membership {
   organization_id: string
   role: UserRole
   level: StudentLevel
-  payment_type: PaymentType
+  payment_type: PaymentType // eixo cobrança: 'subscriber' | 'per_class' (não recebe mais wellhub/totalpass)
+  partner: CheckinPartner | null // eixo parceiro, independente da cobrança
   is_dependent: boolean
   parent_id: string | null
   contract_active: boolean
