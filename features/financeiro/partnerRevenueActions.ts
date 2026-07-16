@@ -93,16 +93,16 @@ export async function getPartnerRevenueThisMonth(): Promise<PartnerRevenue> {
   // dependentes de parceiro contam no financeiro igual a alunos normais.
   const { data: memberships } = await adminClient
     .from('memberships')
-    .select('user_id, payment_type, monthly_checkin_target')
+    .select('user_id, partner, monthly_checkin_target')
     .eq('organization_id', orgId)
-    .in('payment_type', ['wellhub', 'totalpass'])
+    .not('partner', 'is', null)
 
   const { from, to } = getMonthWindow(new Date())
   const students: PartnerStudentMonth[] = []
 
   for (const m of (memberships ?? []) as {
     user_id: string
-    payment_type: CheckinPartner
+    partner: CheckinPartner
     monthly_checkin_target: number
   }[]) {
     const { count } = await adminClient
@@ -114,7 +114,7 @@ export async function getPartnerRevenueThisMonth(): Promise<PartnerRevenue> {
       .lte('checkin_date', to)
 
     students.push({
-      partner: m.payment_type,
+      partner: m.partner,
       checkinsThisMonth: count ?? 0,
       monthlyTarget: m.monthly_checkin_target ?? 0,
     })

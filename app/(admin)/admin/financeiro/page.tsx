@@ -145,7 +145,7 @@ export default async function FinanceiroPage() {
     .from('memberships')
     .select('monthly_checkin_target')
     .eq('organization_id', orgId)
-    .in('payment_type', ['wellhub', 'totalpass'])
+    .not('partner', 'is', null)
   const hasZeroTargetStudents = (
     (partnerMembershipsRaw ?? []) as { monthly_checkin_target: number }[]
   ).some((m) => (m.monthly_checkin_target ?? 0) === 0)
