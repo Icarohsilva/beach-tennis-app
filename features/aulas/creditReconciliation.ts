@@ -1,6 +1,6 @@
 // features/aulas/creditReconciliation.ts
 import { createAdminClient } from '@/lib/supabase/server'
-import { buildReconciliationOps, requiresCredit, partnerOf } from '@/lib/utils/reconciliationOps'
+import { buildReconciliationOps, requiresCredit } from '@/lib/utils/reconciliationOps'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { checkLowCreditThreshold } from './creditNotifications'
@@ -37,21 +37,22 @@ export async function reconcileEnrollmentCredits(
     .single()
   if (!cls) return result
 
-  // payment_type é por-academia: vem da membership do aluno nesta academia.
+  // Eixo parceiro é por-academia: vem da membership do aluno nesta academia.
   const { data: membership } = await adminClient
     .from('memberships')
-    .select('payment_type')
+    .select('partner')
     .eq('user_id', studentId)
     .eq('organization_id', cls.organization_id)
     .single()
   if (!membership) return result
 
-  const paymentType = membership.payment_type as string
-  const needsCredit = requiresCredit(partnerOf(paymentType))
+  const partner = (membership.partner as string | null) ?? null
 
-  // Nome do plano para o log (só relevante quando há crédito)
+  // Plano ativo (nome p/ log + gate de crédito). Sem parceiro E com plano →
+  // consome crédito; sem plano (ou com parceiro) → só reserva, sem crédito.
   let planName = 'Mensal'
-  if (needsCredit) {
+  let hasActivePlan = false
+  {
     const { data: sub } = await adminClient
       .from('student_subscriptions')
       .select('subscription_plans(name)')
@@ -59,11 +60,16 @@ export async function reconcileEnrollmentCredits(
       .eq('organization_id', cls.organization_id)
       .eq('status', 'active')
       .maybeSingle()
-    const planRel = (sub as { subscription_plans: { name: string } | { name: string }[] } | null)
-      ?.subscription_plans
-    const planObj = Array.isArray(planRel) ? planRel[0] : planRel
-    if (planObj?.name) planName = planObj.name
+    if (sub) {
+      hasActivePlan = true
+      const planRel = (sub as { subscription_plans: { name: string } | { name: string }[] } | null)
+        ?.subscription_plans
+      const planObj = Array.isArray(planRel) ? planRel[0] : planRel
+      if (planObj?.name) planName = planObj.name
+    }
   }
+
+  const needsCredit = requiresCredit(partner) && hasActivePlan
 
   // Sessões agendadas no intervalo
   const { data: sessionsRaw } = await adminClient
@@ -190,16 +196,16 @@ export async function reconcileAllActiveEnrollments(
   }
   const enrollments = (enrollmentsRaw ?? []) as unknown as Row[]
 
-  // payment_type é por-academia: indexado por user_id+organization_id.
+  // Eixo parceiro é por-academia: indexado por user_id+organization_id.
   let membershipsQuery = adminClient
     .from('memberships')
-    .select('user_id, organization_id, payment_type')
+    .select('user_id, organization_id, partner')
   if (orgId) membershipsQuery = membershipsQuery.eq('organization_id', orgId)
   const { data: membershipsRaw } = await membershipsQuery
-  const paymentTypeByMember = new Map<string, string>(
+  const partnerByMember = new Map<string, string | null>(
     (membershipsRaw ?? []).map(
-      (m: { user_id: string; organization_id: string; payment_type: string }) =>
-        [`${m.user_id}:${m.organization_id}`, m.payment_type],
+      (m: { user_id: string; organization_id: string; partner: string | null }) =>
+        [`${m.user_id}:${m.organization_id}`, m.partner],
     ),
   )
 
@@ -228,8 +234,9 @@ export async function reconcileAllActiveEnrollments(
 
   for (const e of enrollments) {
     const memberKey = `${e.student_id}:${e.organization_id}`
-    const paymentType = paymentTypeByMember.get(memberKey) ?? 'subscriber'
-    const eligible = !requiresCredit(partnerOf(paymentType)) || activeSubStudents.has(memberKey)
+    const partner = partnerByMember.get(memberKey) ?? null
+    // Elegível: tem parceiro (agenda sem crédito) OU tem assinatura em dia.
+    const eligible = !requiresCredit(partner) || activeSubStudents.has(memberKey)
     if (!eligible) continue
 
     try {
