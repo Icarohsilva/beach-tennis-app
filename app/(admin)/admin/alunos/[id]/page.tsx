@@ -32,7 +32,7 @@ export default async function StudentProfilePage({ params }: Props) {
   const { data: membership } = await adminClient
     .from('memberships')
     .select(
-      'level, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id',
+      'level, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner',
     )
     .eq('user_id', params.id)
     .eq('organization_id', orgId)
@@ -55,7 +55,7 @@ export default async function StudentProfilePage({ params }: Props) {
     ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
     ...(membership as Pick<
       Membership,
-      'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id'
+      'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner'
     >),
     organization_id: orgId,
   }
@@ -267,6 +267,11 @@ export default async function StudentProfilePage({ params }: Props) {
                 {student.credits_balance} crédito{student.credits_balance !== 1 ? 's' : ''}
               </span>
             )}
+            {student.partner && (
+              <Badge variant="default">
+                {student.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
+              </Badge>
+            )}
           </div>
         </div>
       </div>
@@ -285,6 +290,7 @@ export default async function StudentProfilePage({ params }: Props) {
           availablePlans={availablePlans}
           currentSubscription={currentSubscription}
           paymentType={student.payment_type}
+          partner={student.partner}
           wellhubId={student.wellhub_id}
           totalpassId={student.totalpass_id}
           monthlyTarget={student.monthly_checkin_target}

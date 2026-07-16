@@ -66,6 +66,7 @@ interface StudentProfileClientProps {
   availablePlans?: PlanSummary[]
   currentSubscription?: CurrentSubscription | null
   paymentType: string
+  partner: 'wellhub' | 'totalpass' | null
   wellhubId: string | null
   totalpassId: string | null
   monthlyTarget: number
@@ -99,6 +100,7 @@ export function StudentProfileClient({
   availablePlans = [],
   currentSubscription = null,
   paymentType,
+  partner,
   wellhubId,
   totalpassId,
   monthlyTarget,
@@ -120,17 +122,20 @@ export function StudentProfileClient({
   const [creditAmount, setCreditAmount] = useState('')
   const [creditReason, setCreditReason] = useState('')
   const [showCancelPlanDialog, setShowCancelPlanDialog] = useState(false)
-  const [studentType, setStudentTypeState] = useState<'subscriber' | 'wellhub' | 'totalpass'>(
-    paymentType === 'wellhub' || paymentType === 'totalpass' ? paymentType : 'subscriber',
+  const [billing, setBilling] = useState<'subscriber' | 'per_class'>(
+    paymentType === 'subscriber' ? 'subscriber' : 'per_class',
+  )
+  const [partnerType, setPartnerType] = useState<'none' | 'wellhub' | 'totalpass'>(
+    partner ?? 'none',
   )
   const [partnerId, setPartnerId] = useState(
-    (paymentType === 'totalpass' ? totalpassId : wellhubId) ?? '',
+    (partner === 'totalpass' ? totalpassId : wellhubId) ?? '',
   )
   // Aluno sem meta própria (0) herda a meta padrão da academia como sugestão.
   const [targetInput, setTargetInput] = useState(
     String(monthlyTarget > 0 ? monthlyTarget : orgDefaultTarget),
   )
-  const [linkedPartner, setLinkedPartner] = useState<string>(paymentType)
+  const [linkedPartner, setLinkedPartner] = useState<'wellhub' | 'totalpass' | null>(partner)
   const [checkinList, setCheckinList] = useState(checkins)
   const [checkinsDone, setCheckinsDone] = useState(checkins.length)
   const [pending, setPending] = useState<'wellhub' | 'totalpass' | null>(pendingPartner)
@@ -280,17 +285,29 @@ export function StudentProfileClient({
     })
   }
 
-  function handleSaveType() {
+  function handleSaveBilling() {
     setError(null)
-    if (studentType === 'subscriber') {
+    startTransition(async () => {
+      const result = await setStudentType(studentId, { billing })
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      notify('Cobrança atualizada.')
+    })
+  }
+
+  function handleSavePartner() {
+    setError(null)
+    if (partnerType === 'none') {
       startTransition(async () => {
-        const result = await setStudentType(studentId, { type: 'subscriber' })
+        const result = await setStudentType(studentId, { partner: { type: null } })
         if (result.error) {
           setError(result.error)
           return
         }
-        setLinkedPartner('subscriber')
-        notify('Tipo do aluno atualizado.')
+        setLinkedPartner(null)
+        notify('Parceiro desvinculado.')
       })
       return
     }
@@ -301,24 +318,22 @@ export function StudentProfileClient({
     }
     startTransition(async () => {
       const result = await setStudentType(studentId, {
-        type: studentType,
-        partnerId,
-        monthlyTarget: target,
+        partner: { type: partnerType, partnerId, monthlyTarget: target },
       })
       if (result.error) {
         setError(result.error)
         return
       }
-      setLinkedPartner(studentType)
-      notify('Tipo do aluno atualizado.')
+      setLinkedPartner(partnerType)
+      notify('Parceiro atualizado.')
     })
   }
 
   function handleRecordCheckin() {
-    if (linkedPartner !== 'wellhub' && linkedPartner !== 'totalpass') return
+    if (!linkedPartner) return
     setError(null)
     startTransition(async () => {
-      const result = await recordCheckin(studentId, linkedPartner as 'wellhub' | 'totalpass')
+      const result = await recordCheckin(studentId, linkedPartner)
       if (result.error) {
         setError(result.error)
         return
@@ -326,7 +341,7 @@ export function StudentProfileClient({
       setCheckinList((prev) => [
         {
           id: crypto.randomUUID(),
-          partner: linkedPartner as 'wellhub' | 'totalpass',
+          partner: linkedPartner,
           checkin_date: new Date().toISOString().slice(0, 10),
           session_id: result.linkedSessionId ?? null,
           validation: 'manual',
@@ -350,16 +365,14 @@ export function StudentProfileClient({
     setError(null)
     startTransition(async () => {
       const result = await setStudentType(studentId, {
-        type: pending,
-        partnerId: declaredId,
-        monthlyTarget: target,
+        partner: { type: pending, partnerId: declaredId, monthlyTarget: target },
       })
       if (result.error) {
         setError(result.error)
         return
       }
       setLinkedPartner(pending)
-      setStudentTypeState(pending)
+      setPartnerType(pending)
       setPartnerId(declaredId)
       setTargetInput(String(target))
       setPending(null)
@@ -722,22 +735,41 @@ export function StudentProfileClient({
           </div>
         )}
 
+        {/* Eixo cobrança */}
         <div className="flex flex-wrap gap-2 items-end">
           <label className="text-xs text-slate-400">
-            Tipo
+            Cobrança
             <select
-              value={studentType}
-              onChange={(e) =>
-                setStudentTypeState(e.target.value as 'subscriber' | 'wellhub' | 'totalpass')
-              }
+              value={billing}
+              onChange={(e) => setBilling(e.target.value as 'subscriber' | 'per_class')}
               className="mt-1 block bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm text-white"
             >
               <option value="subscriber">Mensalista (plano)</option>
+              <option value="per_class">Avulso</option>
+            </select>
+          </label>
+          <Button onClick={handleSaveBilling} loading={isPending} size="sm" variant="secondary">
+            Salvar cobrança
+          </Button>
+        </div>
+
+        {/* Eixo parceiro */}
+        <div className="flex flex-wrap gap-2 items-end mt-4">
+          <label className="text-xs text-slate-400">
+            Parceiro
+            <select
+              value={partnerType}
+              onChange={(e) =>
+                setPartnerType(e.target.value as 'none' | 'wellhub' | 'totalpass')
+              }
+              className="mt-1 block bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-sm text-white"
+            >
+              <option value="none">Nenhum</option>
               <option value="wellhub">Wellhub</option>
               <option value="totalpass">TotalPass</option>
             </select>
           </label>
-          {(studentType === 'wellhub' || studentType === 'totalpass') && (
+          {partnerType !== 'none' && (
             <>
               <label className="text-xs text-slate-400">
                 ID do parceiro
@@ -755,8 +787,8 @@ export function StudentProfileClient({
               </label>
             </>
           )}
-          <Button onClick={handleSaveType} disabled={isPending} variant="secondary">
-            Salvar tipo
+          <Button onClick={handleSavePartner} loading={isPending} size="sm" variant="secondary">
+            Salvar parceiro
           </Button>
         </div>
 
