@@ -711,6 +711,13 @@ export function StudentProfileClient({
       <section className="pt-4 border-t border-surface-border">
         <h3 className="text-sm font-semibold text-white mb-2">Tipo de aluno</h3>
 
+        <div className="flex flex-wrap gap-2 mb-3">
+          <Badge variant="default">{billing === 'subscriber' ? 'Mensalista' : 'Avulso'}</Badge>
+          {linkedPartner && (
+            <Badge variant="default">{linkedPartner === 'wellhub' ? 'Wellhub' : 'TotalPass'}</Badge>
+          )}
+        </div>
+
         {pending && (
           <div className="mb-3 p-3 rounded-lg border border-yellow-700/50 bg-yellow-950/30">
             <p className="text-sm text-yellow-200">
