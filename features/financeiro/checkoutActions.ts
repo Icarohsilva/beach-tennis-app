@@ -8,7 +8,7 @@ import { mpCancelPreapproval, mpCreatePreapproval, mpCreatePreference } from '@/
 import { computeMarketplaceFee } from '@/lib/billing/fees'
 import { addPeriod, PERIODICITY_MONTHS, PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
-import type { PaymentType, Periodicity } from '@/types'
+import type { Periodicity } from '@/types'
 
 interface CheckoutResult {
   initPoint?: string
@@ -41,19 +41,6 @@ export async function subscribeToPlanCheckout(
       .eq('organization_id', orgId)
       .single()
     if (!dep?.is_dependent || dep.parent_id !== user.id) return { error: 'Sem permissão.' }
-  }
-
-  // Wellhub/TotalPass não assinam plano no app.
-  const { data: studentMembership } = await admin
-    .from('memberships')
-    .select('payment_type')
-    .eq('user_id', studentId)
-    .eq('organization_id', orgId)
-    .single()
-  if (!studentMembership) return { error: 'Aluno não encontrado.' }
-  const paymentType = studentMembership.payment_type as PaymentType
-  if (paymentType === 'wellhub' || paymentType === 'totalpass') {
-    return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
   }
 
   const token = await getConnectedMpToken(orgId)

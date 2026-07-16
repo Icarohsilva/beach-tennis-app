@@ -2,7 +2,6 @@
 // features/financeiro/actions.ts
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
-import type { PaymentType } from '@/types'
 import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { normalizeSports } from '@/lib/arenas/sports'
@@ -15,7 +14,6 @@ import { mpCancelPreapproval } from '@/lib/billing/mpClient'
 
 /**
  * Creates a student_subscription for the authenticated student.
- * - Blocks Wellhub/TotalPass users (they don't use subscriptions)
  * - payer_id = parent_id if is_dependent, else student's own id
  * - Deactivates any existing active subscription first
  */
@@ -33,11 +31,6 @@ export async function subscribeToPlan(
   // Dados por-academia (payment_type/dependente) vêm da membership da academia ativa.
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
-
-  const paymentType = membership.payment_type as PaymentType
-  if (paymentType === 'wellhub' || paymentType === 'totalpass') {
-    return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
-  }
 
   // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
@@ -137,17 +130,12 @@ export async function adminSubscribeStudentToPlan(
   // Dados por-academia do aluno vêm da membership desta academia.
   const { data: student, error: studentErr } = await adminClient
     .from('memberships')
-    .select('payment_type, is_dependent, parent_id, contract_active')
+    .select('is_dependent, parent_id, contract_active')
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
     .single()
 
   if (studentErr || !student) return { error: 'Aluno não encontrado.' }
-
-  const paymentType = student.payment_type as PaymentType
-  if (paymentType === 'wellhub' || paymentType === 'totalpass') {
-    return { error: 'Alunos Wellhub/TotalPass não precisam de assinatura no app.' }
-  }
 
   // Fetch plan (escopado pela academia ativa)
   const { data: plan, error: planErr } = await adminClient
