@@ -38,6 +38,7 @@ export default async function PerfilPage() {
         full_name: identity?.full_name ?? null,
         credits_balance: membership.credits_balance,
         payment_type: membership.payment_type,
+        partner: membership.partner,
         level: membership.level,
         is_dependent: membership.is_dependent,
       }
@@ -140,13 +141,9 @@ export default async function PerfilPage() {
     expires_at: string | null
   }[]
 
-  const isWellhubOrTotalpass =
-    profile?.payment_type === 'wellhub' || profile?.payment_type === 'totalpass'
+  const isWellhubOrTotalpass = !!profile?.partner
 
-  const currentPartner =
-    profile?.payment_type === 'wellhub' || profile?.payment_type === 'totalpass'
-      ? profile.payment_type
-      : null
+  const currentPartner = profile?.partner ?? null
   const currentPartnerId =
     currentPartner === 'wellhub'
       ? (membership?.wellhub_id ?? null)
@@ -214,7 +211,7 @@ export default async function PerfilPage() {
           <div className="bg-surface-card border border-surface-border rounded-xl p-4">
             <p className="text-sm text-slate-300">
               Você acessa via{' '}
-              <span className="text-brand-500 font-medium capitalize">{profile.payment_type}</span>.
+              <span className="text-brand-500 font-medium capitalize">{profile.partner}</span>.
               O check-in é registrado automaticamente.
             </p>
           </div>

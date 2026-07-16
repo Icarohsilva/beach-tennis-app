@@ -77,10 +77,9 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
     sessionId = (newSession as { id: string }).id
   }
 
-  // Tipo de pagamento (por-academia) vem da membership da academia ativa.
+  // Vínculo de parceiro (por-academia) vem da membership da academia ativa.
   const membership = await getActiveMembership()
-  const paymentType = membership?.payment_type
-  const useCredit = paymentType !== 'wellhub' && paymentType !== 'totalpass'
+  const useCredit = !membership?.partner
 
   return bookSession(sessionId, useCredit)
 }

@@ -117,8 +117,8 @@ export default async function HomePage() {
     orgId,
     userId: user.id,
   })
-  const showCredits = membership?.payment_type !== 'wellhub' && membership?.payment_type !== 'totalpass'
-  const isPartner = membership?.payment_type === 'wellhub' || membership?.payment_type === 'totalpass'
+  const showCredits = !membership?.partner
+  const isPartner = !!membership?.partner
   // Não mostra o CTA genérico se já existe uma recomendação de plano do admin
   // (mais específica) ou se o aluno já tem plano/pendência em andamento.
   const showPlanCTA = !isPartner && !existingSub && !recRaw
@@ -338,7 +338,7 @@ export default async function HomePage() {
           stats={[
             ...(showCredits
               ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
-              : [{ label: 'Plano', value: membership?.payment_type === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
+              : [{ label: 'Plano', value: membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
             { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
           ]}
         />
@@ -346,7 +346,7 @@ export default async function HomePage() {
 
       {isPartner && checkinProgress && (
         <CheckinProgressCard
-          partner={membership!.payment_type as 'wellhub' | 'totalpass'}
+          partner={membership!.partner as 'wellhub' | 'totalpass'}
           progress={checkinProgress}
         />
       )}

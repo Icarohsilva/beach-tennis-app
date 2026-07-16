@@ -90,14 +90,14 @@ export default async function GradePage() {
     enrolledStudentIds.length > 0
       ? await adminClient
           .from('memberships')
-          .select('user_id, credits_balance, payment_type')
+          .select('user_id, credits_balance, partner')
           .in('user_id', enrolledStudentIds)
           .eq('organization_id', orgId)
       : { data: [] }
 
-  const memByStudent = new Map<string, { credits_balance: number; payment_type: string }>()
-  for (const m of (enrollMemsRaw ?? []) as { user_id: string; credits_balance: number; payment_type: string }[]) {
-    memByStudent.set(m.user_id, { credits_balance: m.credits_balance, payment_type: m.payment_type })
+  const memByStudent = new Map<string, { credits_balance: number; partner: string | null }>()
+  for (const m of (enrollMemsRaw ?? []) as { user_id: string; credits_balance: number; partner: string | null }[]) {
+    memByStudent.set(m.user_id, { credits_balance: m.credits_balance, partner: m.partner })
   }
 
   const enrollCountMap = new Map<string, number>()
@@ -105,7 +105,7 @@ export default async function GradePage() {
   for (const e of enrollRows) {
     enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
     const p = memByStudent.get(e.student_id)
-    if (p && p.payment_type !== 'wellhub' && p.payment_type !== 'totalpass' && p.credits_balance < 1) {
+    if (p && !p.partner && p.credits_balance < 1) {
       noCreditMap.set(e.class_id, (noCreditMap.get(e.class_id) ?? 0) + 1)
     }
   }
