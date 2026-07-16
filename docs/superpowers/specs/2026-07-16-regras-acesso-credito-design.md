@@ -24,6 +24,7 @@ Este é o **spec 1 de 3**. Cobre:
 - Adição de aluno avulso pelo admin/professor, com motivo.
 - Nascimento da pendência financeira (o registro; não o fluxo de cobrança).
 - Check-in dentro da janela de ±1h marcando presença.
+- **Expiração de crédito** — hoje configurável na UI mas nunca implementada (§3.1).
 
 **Fora de escopo, em specs próprios:**
 
@@ -110,7 +111,8 @@ Cascata:
 - `subscription_plans.classes_per_week` **permanece**, como texto comercial. Deixa de ser
   regra de negócio.
 - O cron `monthly-credit-renewal` deixa de renovar (plano não emite mais crédito) e passa a
-  fazer **só a expiração** de créditos vencidos, via `credit_expiry_days`.
+  fazer **só a expiração** de créditos vencidos, via `credit_expiry_days` — que precisa ser
+  **construída**; ver §3.1.
 - Crédito nasce de exatamente duas fontes:
   - **compra avulsa** (`purchased`) — fluxo existente, inalterado;
   - **estorno de cancelamento antecipado** (`refunded`) — só quando o `credit_used` da
@@ -118,6 +120,39 @@ Cascata:
 - `credit_expiry_days` e `cancellation_window_hours` já existem em `system_settings` e já
   estão no formulário de configurações (`app/(admin)/admin/configuracoes/SystemSettingsForm.tsx:11-12`).
   Nada a construir.
+
+### 3.1. Expiração de crédito (não existe hoje)
+
+`credit_expiry_days` é configurável na tela de configurações mas **não faz nada**.
+`isCreditExpired` (`lib/utils/creditRules.ts:31`) nunca é chamado em produção; o `expires_at`
+de `credit_transactions` é gravado, exibido na ficha do aluno, e ignorado. Nenhum cron expira
+crédito.
+
+Até aqui isso quase não importava: o crédito de plano era concedido e debitado no mesmo
+instante (saldo líquido zero), então pouca coisa ficava parada. **As novas regras invertem
+isso** — crédito passa a nascer só de compra e estorno, ou seja, acumula. A expiração vira
+load-bearing pela primeira vez.
+
+**Obstáculo:** `credits_balance` é um `int` único e `credit_transactions` não liga um débito
+ao crédito específico que ele consumiu (`001_initial_schema.sql:105-115`). Não há como saber
+quais créditos estão parados e vencidos.
+
+**Solução — replay FIFO, sem mudança de schema.** `lib/utils/creditLots.ts` (novo):
+
+```ts
+export function replayCredits(
+  transactions: { amount: number; expires_at: string | null; created_at: string }[],
+  now: Date,
+): { validBalance: number; expiredAmount: number }
+```
+
+Transações positivas são lotes com `expires_at`; negativas consomem do lote mais antigo
+primeiro. Lotes vencidos e não consumidos viram `expiredAmount`. Função pura — mesmo padrão
+de `creditRules` e `reconciliationOps`.
+
+O cron aplica a diferença via `adjust_credits` com `p_type = 'expired'`, o que mantém
+`credit_transactions` como fonte da verdade e o saldo cacheado em sincronia. `expires_at`
+nulo = crédito que não expira (estorno de matrícula fixa, comportamento atual preservado).
 
 ### 4. Pendência — reuso de `payments`
 
@@ -297,6 +332,9 @@ Vitest, co-locado, seguindo o padrão do repo:
 - **`features/aulas/creditReconciliation`** — asserção de que nenhuma chamada a
   `adjust_credits` é emitida.
 - **`enrollStudentInClass`** — rejeita quem não tem plano nem parceiro.
+- **`lib/utils/creditLots.test.ts`** — FIFO consome o lote mais antigo primeiro; lote vencido
+  e não consumido expira; lote vencido **já consumido** não expira duas vezes; `expires_at`
+  nulo nunca expira; extrato vazio → saldo 0.
 
 ## Riscos
 
@@ -306,3 +344,4 @@ Vitest, co-locado, seguindo o padrão do repo:
 | Dívida não nasce porque presença não é marcada | Aceito e documentado; o aviso na reserva dá visibilidade antecipada à academia |
 | Desvinculação em massa surpreende alunos | Notificação in-app na migração; reservas futuras preservadas |
 | Compra de crédito pendente bloqueando aluno | `hasOpenDebt` filtra `session_id is not null`; coberto por teste |
+| Replay FIFO expirar crédito indevidamente | Função pura com testes de lote consumido, lote sem `expires_at` e dupla expiração; o cron grava via `adjust_credits`, deixando rastro auditável em `credit_transactions` |
