@@ -633,8 +633,9 @@ Numeração fora de sequência de propósito (4.5, não 5): é uma correção de
 - Modify: `app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx:41-47,691-693`
 - Modify: `features/financeiro/PlanStorefront.tsx:63-67`
 - Modify: `app/api/webhooks/mercadopago/route.ts:13-25,195-241`
+- Delete: `features/financeiro/PlanSelector.tsx`
 
-`features/financeiro/PlanSelector.tsx` também referencia o campo mas não é importado por nenhum outro arquivo (confirmado: `grep -rln "PlanSelector\b"` só acha o próprio arquivo) — código morto, fora de escopo, não tocar.
+**Correção feita durante a execução:** a versão original deste plano dizia para NÃO tocar em `features/financeiro/PlanSelector.tsx` (confirmado código morto: `grep -rln "PlanSelector\b"` só acha o próprio arquivo, sem teste, nunca modificado desde o commit original do módulo financeiro — substituído por `PlanStorefront.tsx`, que é o que de fato é renderizado). Isso se provou incompatível com "build sem erro": `next build` faz typecheck de todo `.tsx` do repo via `tsconfig.json` (`include: ["**/*.tsx"]`), independente de import — então zerar `credits_per_month` de `SubscriptionPlan` quebra a build através deste arquivo órfão mesmo sem nada importá-lo. O implementer escalou corretamente em vez de adivinhar. Decisão: apagar o arquivo (confirmado morto — manter vivo só para não quebrar o build seria um hack de compatibilidade regressiva para código que nada usa).
 
 - [ ] **Step 1: `types/index.ts` — remover o campo do tipo**
 
