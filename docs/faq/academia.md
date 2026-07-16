@@ -287,9 +287,18 @@ Clique em **Conectar**. O status muda de **"Desconectado"** para conectado.
 
 Quando um check-in chega mas o sistema **não consegue casar** o ID Wellhub com um aluno cadastrado, ele aparece na seção **Check-ins pendentes**, e o dono pode **vincular manualmente** o check-in ao aluno correto.
 
+Cada pendência mostra o **nome de quem fez o check-in** (a Wellhub envia nome e sobrenome junto do evento), além do ID, da data e do selo **Validado**. Use o nome para escolher o aluno na lista e clicar em **Vincular**. Se a Wellhub não mandar o nome no evento, aparece *"Nome não informado pelo parceiro"* — nesse caso, o ID é a única pista.
+
+Ao vincular, o ID do parceiro é gravado no aluno — os próximos check-ins dele passam a casar sozinhos.
+
+> **⚠️ IDs com espaço**
+> O portal da Wellhub exibe o ID agrupado (`3603 3181 0803 2`), mas o check-in chega sem espaços (`3603318108032`). O sistema **remove os espaços automaticamente** ao salvar, então pode colar o ID direto do portal.
+
 > **🔧 Nos bastidores** (`app/api/webhooks/wellhub/route.ts`, `lib/checkin/*`, `features/checkin/actions.ts`)
 > - O webhook roda em runtime Node.js e recebe o header `x-gympass-signature`.
 > - `parseWellhubEvent` lê eventos cujo tipo começa com `checkin`, extrai `gym.id`, o `unique_token` (gympass_id de 13 dígitos) e o timestamp (epoch → data local BRT).
+> - `wellhubMemberName` lê `event_data.user.first_name`/`last_name` do **payload cru** guardado em `pending_checkins.payload` — por isso o nome aparece até nas pendências antigas, sem coluna nova.
+> - `normalizePartnerId` (`lib/checkin/partnerId.ts`) remove **todo** espaço em branco do ID — inclusive os **internos** do copy/paste do portal, que o `.trim()` não pegava e que faziam todo check-in do aluno cair em pendentes.
 > - `verifyWellhubSignature` recalcula um **HMAC-SHA1** (hex maiúsculo) com o `webhook_secret` e compara com `timingSafeEqual` (à prova de timing attack).
 > - `connectIntegration('wellhub', …)` faz *upsert* em **`org_integrations`** (chave `organization_id, partner`) com `gym_id`, `webhook_secret`, `api_key`, `environment`, `status`.
 > - `wellhubValidate` chama `POST {base}/access/v1/validate` com header `X-Gym-Id` + `Bearer api_key`. Base **sandbox** = `apitesting.partners.gympass.com`; **produção** = `api.partners.gympass.com`. Sucesso = `metadata.errors == 0`.

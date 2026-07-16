@@ -36,10 +36,26 @@ export interface IgnoredEvent {
 interface RawWellhubEvent {
   event_type?: string
   event_data?: {
-    user?: { unique_token?: string }
+    user?: { unique_token?: string; first_name?: string; last_name?: string }
     gym?: { id?: number | string }
     timestamp?: number
   }
+}
+
+// Nome de quem fez o check-in, extraído do payload CRU já guardado em
+// pending_checkins.payload. A Wellhub manda first_name/last_name junto do
+// unique_token; sem isso a fila de pendentes mostra só o ID, e o admin não tem
+// como saber quem vincular. Lê do payload (em vez de uma coluna nova) porque o
+// webhook sempre guardou o corpo inteiro — então vale também para os pendentes
+// que já estão na fila. Retorna null quando o evento não traz nome.
+export function wellhubMemberName(payload: unknown): string | null {
+  const user = (payload as RawWellhubEvent | null)?.event_data?.user
+  if (!user) return null
+  const name = [user.first_name, user.last_name]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(' ')
+  return name || null
 }
 
 function epochToLocalDate(timestamp: number): string {

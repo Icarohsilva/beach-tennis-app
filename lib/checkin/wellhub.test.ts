@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import crypto from 'crypto'
-import { parseWellhubEvent, verifyWellhubSignature } from './wellhub'
+import { parseWellhubEvent, verifyWellhubSignature, wellhubMemberName } from './wellhub'
 
 // Payload real do evento de check-in (doc de sandbox do Access Control API).
 const CHECKIN = JSON.stringify({
@@ -79,6 +79,41 @@ describe('parseWellhubEvent', () => {
     expect(() =>
       parseWellhubEvent(JSON.stringify({ event_type: 'checkin', event_data: {} })),
     ).toThrow()
+  })
+})
+
+describe('wellhubMemberName', () => {
+  it('extrai o nome de quem fez o check-in do payload guardado', () => {
+    expect(wellhubMemberName(JSON.parse(CHECKIN))).toBe('Mike Hightower')
+  })
+
+  it('funciona com o payload já gravado em pending_checkins (corpo cru inteiro)', () => {
+    // O webhook guarda JSON.parse(rawBody) — mesmo formato do evento.
+    const stored = {
+      event_type: 'checkin',
+      event_data: {
+        user: { unique_token: '3603318108032', first_name: 'Ana', last_name: 'Souza' },
+        gym: { id: 129 },
+        timestamp: 1666629613,
+      },
+    }
+    expect(wellhubMemberName(stored)).toBe('Ana Souza')
+  })
+
+  it('aceita evento só com first_name', () => {
+    expect(
+      wellhubMemberName({ event_data: { user: { unique_token: '1', first_name: 'Ana' } } }),
+    ).toBe('Ana')
+  })
+
+  it('retorna null quando o evento não traz nome', () => {
+    expect(wellhubMemberName({ event_data: { user: { unique_token: '1' } } })).toBeNull()
+  })
+
+  it('retorna null para payload ausente ou inesperado', () => {
+    expect(wellhubMemberName(null)).toBeNull()
+    expect(wellhubMemberName(undefined)).toBeNull()
+    expect(wellhubMemberName({})).toBeNull()
   })
 })
 

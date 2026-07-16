@@ -12,6 +12,7 @@ import {
   disconnectIntegration,
   resolvePendingCheckin,
 } from '@/features/checkin/actions'
+import { wellhubMemberName } from '@/lib/checkin/wellhub'
 import type { OrgIntegrationView, PendingCheckin } from '@/types'
 
 interface Props {
@@ -147,6 +148,9 @@ function PendingRow({
   const [studentId, setStudentId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // A Wellhub manda o nome junto do check-in; sem ele, o admin só vê o ID e não
+  // tem como saber quem vincular.
+  const memberName = wellhubMemberName(pending.payload)
 
   async function handleLink() {
     if (!studentId) return
@@ -163,10 +167,19 @@ function PendingRow({
 
   return (
     <div className="border border-surface-border rounded-lg p-3 space-y-2">
-      <div className="text-sm text-white flex flex-wrap items-center gap-2">
-        ID <span className="text-brand-400">{pending.partner_member_id}</span> ·{' '}
-        <span className="text-slate-400">{pending.checkin_date}</span>
-        {pending.partner_validated && <Badge variant="success">Validado</Badge>}
+      <div className="space-y-1">
+        <div className="text-sm flex flex-wrap items-center gap-2">
+          {memberName ? (
+            <span className="text-white font-medium">{memberName}</span>
+          ) : (
+            <span className="text-slate-400 italic">Nome não informado pelo parceiro</span>
+          )}
+          <span className="text-slate-400">{pending.checkin_date}</span>
+          {pending.partner_validated && <Badge variant="success">Validado</Badge>}
+        </div>
+        <div className="text-xs text-slate-500">
+          ID <span className="text-brand-400 font-mono">{pending.partner_member_id}</span>
+        </div>
       </div>
       <div className="flex flex-wrap gap-2 items-center">
         <select
