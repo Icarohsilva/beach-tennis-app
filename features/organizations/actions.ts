@@ -244,9 +244,11 @@ export async function createStudent(
   // Opcional: vincular tipo parceiro (grava wellhub_id/totalpass_id + meta na membership).
   if (input.partner) {
     await setStudentType(created.user.id, {
-      type: input.partner.type,
-      partnerId: input.partner.partnerId,
-      monthlyTarget: input.partner.monthlyTarget,
+      partner: {
+        type: input.partner.type,
+        partnerId: input.partner.partnerId,
+        monthlyTarget: input.partner.monthlyTarget,
+      },
     })
   }
 
