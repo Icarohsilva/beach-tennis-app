@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export interface MedicalProfileData {
@@ -11,15 +11,30 @@ export interface MedicalProfileData {
   health_notes?: string
 }
 
+// medical_profiles.organization_id PRECISA ir explícito no insert. O trigger que o
+// preenchia (trg_set_org, derivado de profiles.organization_id) foi removido no cutover
+// de identidade (20260624000000) — profiles virou só identidade e a academia passou a
+// vir das memberships. A RLS de insert continua exigindo
+// `organization_id in (select auth_org_ids())`, então sem esse campo o insert entra com
+// NULL e o Postgres rejeita com "new row violates row-level security policy".
+async function activeOrgIdOrError(): Promise<{ orgId?: string; error?: string }> {
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada. Recarregue a página e tente de novo.' }
+  return { orgId }
+}
+
 export async function saveMedicalProfile(data: MedicalProfileData): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
+  const { orgId, error: orgError } = await activeOrgIdOrError()
+  if (orgError) return { error: orgError }
+
   const { error } = await supabase
     .from('medical_profiles')
     .upsert(
-      { profile_id: user.id, ...data, updated_at: new Date().toISOString() },
+      { profile_id: user.id, organization_id: orgId, ...data, updated_at: new Date().toISOString() },
       { onConflict: 'profile_id' },
     )
 
@@ -52,13 +67,23 @@ export async function updatePersonalData(data: PersonalData): Promise<{ error?: 
 
   // birth_date vive em medical_profiles; só grava se o campo veio no formulário.
   if (data.birth_date !== undefined) {
+    const { orgId, error: orgError } = await activeOrgIdOrError()
+    if (orgError) return { error: orgError }
+
     const { error: medicalErr } = await supabase
       .from('medical_profiles')
       .upsert(
-        { profile_id: user.id, birth_date: data.birth_date || null, updated_at: new Date().toISOString() },
+        {
+          profile_id: user.id,
+          organization_id: orgId,
+          birth_date: data.birth_date || null,
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: 'profile_id' },
       )
-    if (medicalErr) return { error: 'Erro ao salvar a data de nascimento.' }
+    // Mensagem genérica escondia a causa real (RLS por organization_id ausente) e
+    // custou uma investigação — repassa o detalhe do Postgres.
+    if (medicalErr) return { error: `Erro ao salvar a data de nascimento: ${medicalErr.message}` }
   }
 
   revalidatePath('/perfil')
