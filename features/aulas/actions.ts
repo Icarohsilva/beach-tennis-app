@@ -242,8 +242,9 @@ export async function bookSession(
 
 // ---------------------------------------------------------------------------
 // skipEnrollmentSession — fixed student skips one specific session.
-// Always refunds 1 non-expiring credit regardless of timing.
-// Does NOT cancel the enrollment (student stays fixed for future weeks).
+// Refunds 1 non-expiring credit if one was originally consumed for this
+// booking, regardless of timing. Does NOT cancel the enrollment (student
+// stays fixed for future weeks).
 // ---------------------------------------------------------------------------
 
 export async function skipEnrollmentSession(bookingId: string): Promise<{ error?: string }> {
@@ -273,22 +274,23 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 
   if (cancelErr) return { error: 'Erro ao cancelar. Tente novamente.' }
 
-  // Aluno fixo sempre recebe crédito de reposição sem vencimento ao sair de uma aula
-  const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-    p_student_id: user.id,
-    p_org: booking.organization_id,
-    p_delta: 1,
-    p_type: 'refunded',
-    p_reason: 'Falta em aula fixa — crédito reposição sem vencimento',
-    p_session_id: booking.session_id,
-  })
-
   let creditWarning: string | undefined
-  if (creditErr) {
-    console.error('[skipEnrollmentSession] adjust_credits falhou', {
-      bookingId, sessionId: booking.session_id, error: creditErr.message,
+  if (booking.credit_used) {
+    // Aluno fixo que consumiu crédito recebe crédito de reposição sem vencimento ao sair de uma aula
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: user.id,
+      p_org: booking.organization_id,
+      p_delta: 1,
+      p_type: 'refunded',
+      p_reason: 'Falta em aula fixa — crédito reposição sem vencimento',
+      p_session_id: booking.session_id,
     })
-    creditWarning = 'Saída registrada, mas houve um erro ao gerar o crédito. Contate o suporte.'
+    if (creditErr) {
+      console.error('[skipEnrollmentSession] adjust_credits falhou', {
+        bookingId, sessionId: booking.session_id, error: creditErr.message,
+      })
+      creditWarning = 'Saída registrada, mas houve um erro ao gerar o crédito. Contate o suporte.'
+    }
   }
 
   // Open spot for next person on waitlist
@@ -466,7 +468,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
       .single()
 
     if (profile) {
-      if (booking.from_enrollment && profile.payment_type === 'subscriber') {
+      if (booking.from_enrollment && booking.credit_used && profile.payment_type === 'subscriber') {
         // Crédito extra: não expira enquanto o contrato estiver ativo
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {
           p_student_id: user.id,

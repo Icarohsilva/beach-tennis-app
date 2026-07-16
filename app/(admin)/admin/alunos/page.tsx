@@ -34,7 +34,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, payment_type, contract_active, is_dependent, parent_id, credits_balance, pending_partner, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
@@ -55,6 +55,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     full_name: string
     level: Membership['level']
     payment_type: Membership['payment_type']
+    partner: Membership['partner']
     contract_active: Membership['contract_active']
     is_dependent: Membership['is_dependent']
     parent_id: Membership['parent_id']
@@ -67,6 +68,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       user_id: string
       level: StudentLevel
       payment_type: Membership['payment_type']
+      partner: Membership['partner']
       contract_active: boolean
       is_dependent: boolean
       parent_id: string | null
@@ -82,6 +84,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         full_name: prof?.full_name ?? '',
         level: m.level,
         payment_type: m.payment_type,
+        partner: m.partner,
         contract_active: m.contract_active,
         is_dependent: m.is_dependent,
         parent_id: m.parent_id,
@@ -123,13 +126,6 @@ export default async function AlunosPage({ searchParams }: Props) {
   for (const s of (subsRaw ?? []) as { student_id: string; plan: { name: string } | { name: string }[] | null }[]) {
     const planObj = Array.isArray(s.plan) ? s.plan[0] : s.plan
     if (planObj?.name) planNameMap.set(s.student_id, planObj.name)
-  }
-
-  const paymentLabel: Record<string, string> = {
-    subscriber: 'Mensalista',
-    per_class: 'Avulso',
-    wellhub: 'Wellhub',
-    totalpass: 'Totalpass',
   }
 
   return (
@@ -221,10 +217,18 @@ export default async function AlunosPage({ searchParams }: Props) {
                       >
                         {student.payment_type === 'subscriber'
                           ? (planNameMap.get(student.id) ?? 'Mensalista (sem plano)')
-                          : (paymentLabel[student.payment_type] ?? student.payment_type)}
+                          : 'Avulso'}
                         {student.payment_type === 'subscriber' && !student.contract_active && ' (inativo)'}
                       </span>
                     </div>
+                    {student.partner && (
+                      <div className="flex items-center justify-between">
+                        <span>Parceiro</span>
+                        <span className="text-brand-500">
+                          {student.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span>Turmas fixas</span>
                       <span className="text-white">{enrollCount}</span>

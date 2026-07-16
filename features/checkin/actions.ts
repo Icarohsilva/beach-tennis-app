@@ -40,8 +40,6 @@ async function requireAdmin(): Promise<{ ok: boolean; orgId: string }> {
   return { ok: membership?.role === 'admin', orgId }
 }
 
-export type StudentType = 'subscriber' | CheckinPartner
-
 /**
  * Define os eixos do aluno de forma independente:
  * - billing: 'subscriber' (mensalista) | 'per_class' (avulso) — eixo cobrança.
