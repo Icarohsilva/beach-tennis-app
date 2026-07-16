@@ -613,6 +613,347 @@ A migration **não** é aplicada por você — o CLI do Supabase não está aute
 
 > A migration `20260716000100_access_rules_credit.sql` precisa ser aplicada com `supabase db push`. Ela desvincula matrículas fixas de alunos sem plano/parceiro e notifica os afetados — vale conferir antes quantos são:
 > `select count(*) from enrollments e join memberships m on m.user_id = e.student_id and m.organization_id = e.organization_id where e.is_active and m.partner is null and not exists (select 1 from student_subscriptions s where s.student_id = e.student_id and s.organization_id = e.organization_id and s.status = 'active' and (s.current_period_end is null or s.current_period_end >= now()));`
+>
+> **Importante:** só aplique esta migration DEPOIS que a Task 4.5 (abaixo) estiver mergeada e em produção. A Task 4.5 remove todo código do app que ainda referencia `subscription_plans.credits_per_month` — aplicar o drop da coluna antes disso quebra criação de plano, assinatura (self-service e admin) e o webhook de renovação do Mercado Pago.
+
+---
+
+### Task 4.5: Remover `credits_per_month` do código do app
+
+Descoberta durante o code-quality review da Task 4: `credits_per_month` é referenciado por **6 arquivos vivos** que nenhuma das 15 tasks originais tocava. Dropar a coluna (Task 4) sem esta correção quebra criação de plano, as duas rotas de assinatura, e — mais grave — o webhook do Mercado Pago tem um **terceiro mecanismo de "plano concede crédito"** que o resto do plano não cobria (os outros dois eram `reconcileEnrollmentCredits`, tratado na Task 7, e o cron mensal, tratado na Task 11).
+
+Numeração fora de sequência de propósito (4.5, não 5): é uma correção de lacuna do plano, não um passo do desenho original. Não depende de nenhuma outra task; pode rodar a qualquer momento após a Task 4, e deve ir para produção antes que a migration da Task 4 seja aplicada (ver aviso acima).
+
+**Files:**
+- Modify: `types/index.ts:260`
+- Modify: `app/(admin)/admin/financeiro/adminActions.ts:49-82`
+- Modify: `app/(admin)/admin/financeiro/PlansManager.tsx:21-26,133-150,181-183`
+- Modify: `features/financeiro/actions.ts:36-44,80-91,141-149,184-197`
+- Modify: `app/(admin)/admin/alunos/[id]/page.tsx:151-164`
+- Modify: `app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx:41-47,691-693`
+- Modify: `features/financeiro/PlanStorefront.tsx:63-67`
+- Modify: `app/api/webhooks/mercadopago/route.ts:13-25,195-241`
+
+`features/financeiro/PlanSelector.tsx` também referencia o campo mas não é importado por nenhum outro arquivo (confirmado: `grep -rln "PlanSelector\b"` só acha o próprio arquivo) — código morto, fora de escopo, não tocar.
+
+- [ ] **Step 1: `types/index.ts` — remover o campo do tipo**
+
+```ts
+export interface SubscriptionPlan {
+  id: string
+  organization_id: string
+  name: string
+  description: string | null
+  classes_per_week: number
+  is_active: boolean
+}
+```
+
+(remove a linha `credits_per_month: number`)
+
+- [ ] **Step 2: `app/(admin)/admin/financeiro/adminActions.ts` — criação de plano**
+
+Remova `credits_per_month` da interface, da validação e do insert:
+
+```ts
+export interface CreatePlanData {
+  name: string
+  description?: string
+  classes_per_week: number
+}
+
+export async function createPlan(data: CreatePlanData): Promise<{ error?: string; planId?: string }> {
+  try {
+    const { adminClient, orgId } = await assertAdmin()
+
+    if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
+
+    const { data: plan, error } = await adminClient
+      .from('subscription_plans')
+      .insert({
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        classes_per_week: data.classes_per_week,
+        is_active: true,
+        organization_id: orgId,
+      })
+      .select('id')
+      .single()
+
+    if (error || !plan) return { error: error?.message ?? 'Erro ao criar plano.' }
+    revalidatePath('/admin/financeiro/planos')
+    return { planId: plan.id as string }
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
+  }
+}
+```
+
+- [ ] **Step 3: `app/(admin)/admin/financeiro/PlansManager.tsx` — formulário e exibição**
+
+`emptyCreateForm` perde o campo:
+
+```ts
+const emptyCreateForm: CreatePlanData = {
+  name: '',
+  description: '',
+  classes_per_week: 2,
+}
+```
+
+O grid de dois campos ("Aulas/semana" + "Créditos/mês") vira um campo único — troque:
+
+```tsx
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Aulas/semana</label>
+                <Input
+                  type="number" min="1" step="1"
+                  value={createForm.classes_per_week}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Créditos/mês</label>
+                <Input
+                  type="number" min="1" step="1"
+                  value={createForm.credits_per_month}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, credits_per_month: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+            </div>
+```
+
+por:
+
+```tsx
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Aulas/semana</label>
+              <Input
+                type="number" min="1" step="1"
+                value={createForm.classes_per_week}
+                onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
+              />
+            </div>
+```
+
+E a linha de exibição do card do plano perde o texto de crédito:
+
+```tsx
+              <p className="text-xs text-slate-400 mt-1">
+                {plan.classes_per_week}x/semana
+              </p>
+```
+
+- [ ] **Step 4: `features/financeiro/actions.ts` — assinatura self-service e admin**
+
+Em `subscribeToPlan`, o select do plano não usa `credits_per_month` para nada além do proprio select — remova:
+
+```ts
+  const { data: plan, error: planErr } = await adminClient
+    .from('subscription_plans')
+    .select('id, is_active, name')
+    .eq('id', planId)
+    .eq('organization_id', orgId)
+    .single()
+```
+
+E o comentário logo antes do laço de reconciliação (por volta da linha 80) fica desatualizado após a Task 7 (que remove o grant de crédito de `reconcileEnrollmentCredits`) — nenhuma outra task toca este arquivo, então corrija aqui:
+
+```ts
+  // Reserva as sessões das matrículas ativas do aluno (não concede crédito —
+  // plano é acesso ilimitado desde 2026-07).
+  const { data: activeEnrolls } = await adminClient
+```
+
+Em `adminSubscribeStudentToPlan`, mesmo padrão — o select:
+
+```ts
+  const { data: plan, error: planErr } = await adminClient
+    .from('subscription_plans')
+    .select('id, is_active')
+    .eq('id', planId)
+    .eq('organization_id', orgId)
+    .single()
+```
+
+E o comentário equivalente antes do laço de reconciliação dessa função, mesma correção do parágrafo acima. Também ajuste o JSDoc da função (por volta da linha 100-107), que hoje diz "Grants prorated credits by reconciling..." — troque por algo como "Reserves the student's active enrollment sessions by reconciling (does not grant credit — plan is unlimited access)."
+
+- [ ] **Step 5: `app/(admin)/admin/alunos/[id]/page.tsx` — picker de plano na ficha do aluno**
+
+Select explícito de colunas — remova o campo da lista e do tipo local:
+
+```ts
+  const { data: plansRaw } = await adminClient
+    .from('subscription_plans')
+    .select('id, name, classes_per_week, is_active')
+    .eq('is_active', true)
+    .eq('organization_id', orgId)
+    .order('classes_per_week', { ascending: true })
+
+  const availablePlans = (plansRaw ?? []) as {
+    id: string
+    name: string
+    classes_per_week: number
+    is_active: boolean
+  }[]
+```
+
+- [ ] **Step 6: `app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx` — tipo e exibição**
+
+```ts
+interface PlanSummary {
+  id: string
+  name: string
+  classes_per_week: number
+  is_active: boolean
+}
+```
+
+E a linha do `<option>`:
+
+```tsx
+                {availablePlans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — {p.classes_per_week}x/sem
+                  </option>
+                ))}
+```
+
+- [ ] **Step 7: `features/financeiro/PlanStorefront.tsx` — vitrine do aluno**
+
+```tsx
+            <p className="text-xs text-slate-400 mt-1">
+              {plan.classes_per_week}x/semana
+            </p>
+```
+
+(Esta tela usa `select('*')` no Server Component pai, então não quebra com erro — só passaria a exibir "undefined créditos/mês". Corrigido mesmo assim, já que o texto ficaria errado.)
+
+- [ ] **Step 8: `app/api/webhooks/mercadopago/route.ts` — remover a renovação mensal de crédito**
+
+Este é o mais importante: o webhook tem um bloco inteiro que concede crédito mensal na confirmação de pagamento de assinatura — um terceiro mecanismo de "plano dá crédito" que nenhuma outra task cobria. Ele precisa sumir, não só parar de referenciar a coluna dropada.
+
+Primeiro, corrija o docstring da função no topo do arquivo (linhas 13-25), que descreve o comportamento antigo:
+
+```ts
+/**
+ * Mercado Pago webhook handler.
+ *
+ * Security: validates x-signature header using HMAC-SHA256 with MERCADOPAGO_WEBHOOK_SECRET.
+ *
+ * On payment.updated / payment.created with status = 'approved':
+ *   1. Find the matching payment row by gateway_payment_id
+ *   2. Update payments.status = 'paid' and paid_at = now
+ *
+ * Assinaturas não concedem mais crédito na renovação — plano é acesso
+ * ilimitado (spec: docs/superpowers/specs/2026-07-16-regras-acesso-credito-design.md).
+ */
+```
+
+Depois, dentro de `handleWebhook`, remova o bloco inteiro que começa em `// If this payment is linked to a subscription, release monthly credits` e vai até o fechamento do `if (payment.subscription_id) { ... }` (a `payment.subscription_id` não aciona mais nada neste handler — o pagamento já foi marcado `paid` acima, que é tudo que este evento precisa fazer):
+
+```ts
+  if (updatePaymentErr) {
+    console.error('[webhook/mercadopago] Error updating payment:', updatePaymentErr)
+    return NextResponse.json({ error: 'Failed to update payment' }, { status: 500 })
+  }
+
+  // If this payment is linked to a subscription, release monthly credits
+  if (payment.subscription_id) {
+    const { data: sub } = await adminClient
+      .from('student_subscriptions')
+      .select('id, plan_id, student_id, organization_id')
+      .eq('id', payment.subscription_id)
+      .maybeSingle()
+
+    if (sub) {
+      const { data: plan } = await adminClient
+        .from('subscription_plans')
+        .select('credits_per_month')
+        .eq('id', sub.plan_id)
+        .maybeSingle()
+
+      const creditsPerMonth = plan?.credits_per_month ?? 0
+
+      if (creditsPerMonth > 0) {
+        // Insert renewed transaction
+        const { error: txErr } = await adminClient.from('credit_transactions').insert({
+          student_id: sub.student_id,
+          organization_id: sub.organization_id,
+          type: 'renewed',
+          amount: creditsPerMonth,
+          reason: `Renovação mensal — pagamento ${gatewayPaymentId}`,
+          session_id: null,
+          subscription_id: sub.id,
+          expires_at: null,
+        })
+
+        if (txErr) {
+          console.error('[webhook/mercadopago] Error inserting credit_transaction:', txErr)
+          // Payment was already marked paid — don't fail the whole webhook
+        } else {
+          // Update cached balance: renewal replaces, not accumulates.
+          // Saldo é por-academia → grava na membership da (aluno, org da assinatura).
+          await adminClient
+            .from('memberships')
+            .update({ credits_balance: creditsPerMonth })
+            .eq('user_id', sub.student_id)
+            .eq('organization_id', sub.organization_id)
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({ received: true })
+}
+```
+
+por:
+
+```ts
+  if (updatePaymentErr) {
+    console.error('[webhook/mercadopago] Error updating payment:', updatePaymentErr)
+    return NextResponse.json({ error: 'Failed to update payment' }, { status: 500 })
+  }
+
+  // Assinatura renovada não concede mais crédito: plano é acesso ilimitado.
+  // O pagamento já foi marcado 'paid' acima — é tudo que este evento faz.
+
+  return NextResponse.json({ received: true })
+}
+```
+
+`payment.subscription_id` e a variável `gatewayPaymentId` continuam usadas mais acima na função (fetch do payment, log); confirme que remover este bloco não deixa nenhum import ou variável órfã ao rodar o typecheck no Step 10.
+
+- [ ] **Step 9: Buscar referências residuais**
+
+Run: `grep -rln "credits_per_month" --include=*.ts --include=*.tsx . | grep -v node_modules | grep -v worktrees`
+Expected: só `features/financeiro/PlanSelector.tsx` (código morto, fora de escopo — ver nota acima) e, se ainda não tiver sido tratado por outra task, `docs/` (specs/planos são documentação histórica, não precisam mudar).
+
+- [ ] **Step 10: Verify**
+
+Run: `npm run build`
+Expected: compila sem erro. Preste atenção especial em `app/api/webhooks/mercadopago/route.ts` — confirme que não sobrou nenhuma variável (`sub`, `plan`, `creditsPerMonth`) referenciada fora do bloco removido.
+
+Run: `npm run lint`
+Expected: sem erro
+
+Run: `npm run test:run`
+Expected: toda a suíte passa (nenhum teste existente cobre estes arquivos diretamente, mas confirme que nada quebrou por efeito colateral)
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add types/index.ts "app/(admin)/admin/financeiro/adminActions.ts" "app/(admin)/admin/financeiro/PlansManager.tsx" features/financeiro/actions.ts "app/(admin)/admin/alunos/[id]/page.tsx" "app/(admin)/admin/alunos/[id]/StudentProfileClient.tsx" features/financeiro/PlanStorefront.tsx app/api/webhooks/mercadopago/route.ts
+git commit -m "fix(financeiro): remove credits_per_month do codigo do app (coluna dropada na Task 4)
+
+Fecha uma lacuna do plano original: 6 arquivos vivos referenciavam a coluna
+sem nenhuma task cobri-los. O mais importante e o webhook do Mercado Pago,
+que tinha um terceiro mecanismo de renovacao mensal de credito por plano
+(os outros dois eram reconcileEnrollmentCredits e o cron mensal) que
+nenhuma outra task tratava."
+```
 
 ---
 
@@ -2412,7 +2753,8 @@ Diga ao usuário o que foi verificado de verdade e o que não foi. O check-in de
 Task 1 (accessRules)  ─┐
 Task 2 (sessionWindow) ├─ puras, independentes, podem ir em paralelo
 Task 3 (creditLots)   ─┘
-Task 4 (migration)     ─── independente; precisa ser aplicada pelo usuário antes das Tasks 5+ em runtime
+Task 4 (migration)     ─── independente; precisa ser aplicada pelo usuário DEPOIS da Task 4.5 em produção
+Task 4.5 (rm credits_per_month no app) ─── independente; correção de lacuna achada no review da Task 4
 Task 5 (classDebt)     ─── precisa de 4 (índice único)
 Task 6 (presença)      ─── precisa de 5
 Task 7 (reconciliação) ─── precisa de 4 (drop credits_per_month)
@@ -2432,7 +2774,7 @@ Task 15 (verificação)  ─── precisa de todas
 |---|---|
 | §1 Elegibilidade (`resolveClassAccess`) | 1 |
 | §2 Matrícula fixa exige plano/parceiro | 8 |
-| §3 Plano não emite crédito | 4 (drop), 7 (reconciliação), 11 (cron) |
+| §3 Plano não emite crédito | 4 (drop), 4.5 (código do app + webhook MP), 7 (reconciliação), 11 (cron) |
 | §3.1 Expiração de crédito | 3 (`replayCredits`), 11 (cron) |
 | §4 Pendência em `payments` / `hasOpenDebt` | 5, 9 |
 | §5 Dívida nasce na presença | 5, 6, 10 |
