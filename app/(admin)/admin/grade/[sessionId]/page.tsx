@@ -55,29 +55,32 @@ export default async function SessionDetailPage({ params }: Props) {
           .in('id', studentIds)
       : { data: [] }
 
-  const { data: memsRaw } =
-    studentIds.length > 0
-      ? await adminClient
-          .from('memberships')
-          .select('user_id, level, payment_type, partner, credits_balance')
-          .in('user_id', studentIds)
-          .eq('organization_id', orgId)
-      : { data: [] }
+  // Membership (nível/tipo/parceiro/crédito) de TODOS os alunos da academia,
+  // buscada uma vez só: serve tanto os já matriculados nesta sessão (aviso de
+  // dívida potencial, spec §UI/Riscos) quanto os candidatos a adicionar (spec
+  // §6) — mesma regra de acesso do resolveClassAccess, sem o eixo dívida (aqui
+  // só decide se avisa/pede motivo, nunca bloqueia). `level`/`payment_type` só
+  // importam para quem já está matriculado.
+  const { data: allMemsRaw } = await adminClient
+    .from('memberships')
+    .select('user_id, level, payment_type, partner, credits_balance')
+    .eq('organization_id', orgId)
+    .eq('role', 'student')
 
-  const memByStudent = new Map<string, {
+  const memById = new Map<string, {
     level: Membership['level']
     payment_type: Membership['payment_type']
     partner: string | null
     credits_balance: number
   }>()
-  for (const m of (memsRaw ?? []) as {
+  for (const m of (allMemsRaw ?? []) as {
     user_id: string
     level: Membership['level']
     payment_type: Membership['payment_type']
     partner: string | null
     credits_balance: number
   }[]) {
-    memByStudent.set(m.user_id, {
+    memById.set(m.user_id, {
       level: m.level,
       payment_type: m.payment_type,
       partner: m.partner,
@@ -85,25 +88,24 @@ export default async function SessionDetailPage({ params }: Props) {
     })
   }
 
-  // Dívida potencial: aviso ao professor ANTES de marcar presença — mitigação
-  // documentada no spec (§UI, tabela de Riscos) para "dívida só nasce na
-  // presença". Mesma regra de acesso do resolveClassAccess, sem o eixo dívida
-  // (aqui só decide se avisa, nunca bloqueia).
-  const { data: bookedSubsRaw } =
-    studentIds.length > 0
-      ? await adminClient
-          .from('student_subscriptions')
-          .select('student_id, gateway, current_period_end')
-          .in('student_id', studentIds)
-          .eq('organization_id', orgId)
-          .eq('status', 'active')
-      : { data: [] }
+  // Assinaturas ativas de TODA a academia, buscadas uma vez só (mesmo motivo).
+  const { data: allSubsRaw } = await adminClient
+    .from('student_subscriptions')
+    .select('student_id, gateway, current_period_end')
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
 
-  const bookedPlanStudents = new Set(
-    ((bookedSubsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
-      .filter((s) => isSubscriptionCurrent(s, new Date()))
+  const now = new Date()
+  const planStudents = new Set(
+    ((allSubsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
+      .filter((s) => isSubscriptionCurrent(s, now))
       .map((s) => s.student_id),
   )
+
+  function hasAccess(studentId: string): boolean {
+    const mem = memById.get(studentId)
+    return !!mem?.partner || planStudents.has(studentId) || (mem?.credits_balance ?? 0) >= 1
+  }
 
   // Fetch attendances for this session
   const { data: attendances } =
@@ -122,9 +124,7 @@ export default async function SessionDetailPage({ params }: Props) {
 
   const students = (profiles ?? [])
     .map((p: Pick<Profile, 'id' | 'full_name'>) => {
-      const mem = memByStudent.get(p.id)
-      const hasAccess =
-        !!mem?.partner || bookedPlanStudents.has(p.id) || (mem?.credits_balance ?? 0) >= 1
+      const mem = memById.get(p.id)
       return {
         student: {
           id: p.id,
@@ -133,61 +133,25 @@ export default async function SessionDetailPage({ params }: Props) {
           payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
         },
         attendance: attendanceByStudent.get(p.id) ?? null,
-        wouldOweDebt: !hasAccess,
+        wouldOweDebt: !hasAccess(p.id),
       }
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
 
-  // Alunos da academia que ainda NÃO estão nesta sessão. `wouldOweDebt` decide
-  // se o seletor de motivo aparece — mesma regra do resolveClassAccess, mas sem
-  // o eixo dívida: o admin ignora o bloqueio (spec §1).
-  const { data: allMemsRaw } = await adminClient
-    .from('memberships')
-    .select('user_id, partner, credits_balance')
-    .eq('organization_id', orgId)
-    .eq('role', 'student')
-
-  const allMems = (allMemsRaw ?? []) as {
-    user_id: string
-    partner: string | null
-    credits_balance: number
-  }[]
-  const candidateIds = allMems.map((m) => m.user_id).filter((id) => !studentIds.includes(id))
+  // Alunos da academia que ainda NÃO estão nesta sessão (candidatos a adicionar).
+  const candidateIds = Array.from(memById.keys()).filter((id) => !studentIds.includes(id))
 
   const { data: candidateProfiles } =
     candidateIds.length > 0
       ? await adminClient.from('profiles').select('id, full_name').in('id', candidateIds)
       : { data: [] }
 
-  const { data: candidateSubsRaw } =
-    candidateIds.length > 0
-      ? await adminClient
-          .from('student_subscriptions')
-          .select('student_id, gateway, current_period_end')
-          .in('student_id', candidateIds)
-          .eq('organization_id', orgId)
-          .eq('status', 'active')
-      : { data: [] }
-
-  const now = new Date()
-  const planStudents = new Set(
-    ((candidateSubsRaw ?? []) as {
-      student_id: string
-      gateway: string
-      current_period_end: string | null
-    }[])
-      .filter((s) => isSubscriptionCurrent(s, now))
-      .map((s) => s.student_id),
-  )
-  const memById = new Map(allMems.map((m) => [m.user_id, m]))
-
   const addableStudents: AddableStudent[] = (candidateProfiles ?? [])
-    .map((p: Pick<Profile, 'id' | 'full_name'>) => {
-      const mem = memById.get(p.id)
-      const hasAccess =
-        !!mem?.partner || planStudents.has(p.id) || (mem?.credits_balance ?? 0) >= 1
-      return { id: p.id, full_name: p.full_name, wouldOweDebt: !hasAccess }
-    })
+    .map((p: Pick<Profile, 'id' | 'full_name'>) => ({
+      id: p.id,
+      full_name: p.full_name,
+      wouldOweDebt: !hasAccess(p.id),
+    }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
   return (

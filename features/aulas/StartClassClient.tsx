@@ -92,7 +92,12 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
                   : 'bg-red-900/40 border-red-700 text-red-300',
               )}
             >
-              <span>{student.full_name}{wouldOweDebt ? ' ⚠️' : ''}</span>
+              <span>
+                {student.full_name}
+                {wouldOweDebt && (
+                  <span title="Sem plano/crédito — marcar presença vai gerar dívida"> ⚠️</span>
+                )}
+              </span>
               <span>{present ? 'Presente' : 'Ausente'}</span>
             </button>
           )
