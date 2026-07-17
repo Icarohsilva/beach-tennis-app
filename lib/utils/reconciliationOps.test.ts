@@ -1,49 +1,31 @@
+// lib/utils/reconciliationOps.test.ts
 import { describe, it, expect } from 'vitest'
-import { requiresCredit, buildReconciliationOps } from './reconciliationOps'
-
-describe('requiresCredit', () => {
-  it('é true quando não há parceiro (mensalista/avulso agendam por crédito)', () => {
-    expect(requiresCredit(null)).toBe(true)
-  })
-  it('é false quando há parceiro (wellhub/totalpass agendam por check-in)', () => {
-    expect(requiresCredit('wellhub')).toBe(false)
-    expect(requiresCredit('totalpass')).toBe(false)
-  })
-})
+import { buildReconciliationOps } from './reconciliationOps'
 
 describe('buildReconciliationOps', () => {
   const sessions = [
-    { id: 's1', session_date: '2026-06-18' },
-    { id: 's2', session_date: '2026-06-25' },
+    { id: 's1', session_date: '2026-07-20' },
+    { id: 's2', session_date: '2026-07-27' },
   ]
 
-  it('cria uma op por sessão não reservada, com needsCredit e razões', () => {
-    const ops = buildReconciliationOps(sessions, new Set<string>(), true, 'Mensal 1x')
-    expect(ops).toEqual([
-      {
-        sessionId: 's1',
-        sessionDate: '2026-06-18',
-        needsCredit: true,
-        grantReason: 'Plano Mensal 1x — aula 18/06',
-        debitReason: 'Matrícula fixa — aula 18/06',
-      },
-      {
-        sessionId: 's2',
-        sessionDate: '2026-06-25',
-        needsCredit: true,
-        grantReason: 'Plano Mensal 1x — aula 25/06',
-        debitReason: 'Matrícula fixa — aula 25/06',
-      },
+  it('monta uma operação por sessão ainda não reservada', () => {
+    expect(buildReconciliationOps(sessions, new Set())).toEqual([
+      { sessionId: 's1', sessionDate: '2026-07-20' },
+      { sessionId: 's2', sessionDate: '2026-07-27' },
     ])
   })
 
-  it('pula sessões já reservadas', () => {
-    const ops = buildReconciliationOps(sessions, new Set(['s1']), true, 'Mensal 1x')
-    expect(ops.map((o) => o.sessionId)).toEqual(['s2'])
+  it('pula sessões que já têm reserva', () => {
+    expect(buildReconciliationOps(sessions, new Set(['s1']))).toEqual([
+      { sessionId: 's2', sessionDate: '2026-07-27' },
+    ])
   })
 
-  it('marca needsCredit=false quando o caller passa false', () => {
-    const ops = buildReconciliationOps(sessions, new Set<string>(), false, 'Mensal 1x')
-    expect(ops.every((o) => o.needsCredit === false)).toBe(true)
+  it('todas reservadas devolve lista vazia', () => {
+    expect(buildReconciliationOps(sessions, new Set(['s1', 's2']))).toEqual([])
+  })
+
+  it('lista vazia devolve lista vazia', () => {
+    expect(buildReconciliationOps([], new Set())).toEqual([])
   })
 })

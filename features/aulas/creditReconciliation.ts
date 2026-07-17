@@ -1,23 +1,23 @@
 // features/aulas/creditReconciliation.ts
 import { createAdminClient } from '@/lib/supabase/server'
-import { buildReconciliationOps, requiresCredit } from '@/lib/utils/reconciliationOps'
+import { buildReconciliationOps } from '@/lib/utils/reconciliationOps'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
-import { checkLowCreditThreshold } from './creditNotifications'
 
 export interface ReconcileResult {
   booked: number
-  granted: number
-  debited: number
   skipped: number
 }
 
-const EMPTY: ReconcileResult = { booked: 0, granted: 0, debited: 0, skipped: 0 }
+const EMPTY: ReconcileResult = { booked: 0, skipped: 0 }
 
 /**
- * Reconcilia os créditos de UMA matrícula (aluno+turma) no intervalo [from, to]:
- * para cada sessão scheduled ainda não reservada, reserva a sessão, concede 1
- * crédito e debita 1 crédito (Wellhub/TotalPass: só reserva). Idempotente.
+ * Reserva as sessões da matrícula fixa (aluno+turma) no intervalo [from, to].
+ * Idempotente.
+ *
+ * NÃO mexe em crédito: desde 2026-07 matrícula fixa exige plano ou parceiro, e
+ * os dois entram de graça (spec §3). Antes daqui saía um par concede/debita por
+ * sessão — era a mecânica de "plano dá crédito", que deixou de existir.
  */
 export async function reconcileEnrollmentCredits(
   studentId: string,
@@ -29,7 +29,6 @@ export async function reconcileEnrollmentCredits(
   const adminClient = injectedClient ?? createAdminClient()
   const result: ReconcileResult = { ...EMPTY }
 
-  // Turma (capacidade + academia)
   const { data: cls } = await adminClient
     .from('classes')
     .select('max_students, organization_id')
@@ -37,41 +36,6 @@ export async function reconcileEnrollmentCredits(
     .single()
   if (!cls) return result
 
-  // Eixo parceiro é por-academia: vem da membership do aluno nesta academia.
-  const { data: membership } = await adminClient
-    .from('memberships')
-    .select('partner')
-    .eq('user_id', studentId)
-    .eq('organization_id', cls.organization_id)
-    .single()
-  if (!membership) return result
-
-  const partner = (membership.partner as string | null) ?? null
-
-  // Plano ativo (nome p/ log + gate de crédito). Sem parceiro E com plano →
-  // consome crédito; sem plano (ou com parceiro) → só reserva, sem crédito.
-  let planName = 'Mensal'
-  let hasActivePlan = false
-  {
-    const { data: sub } = await adminClient
-      .from('student_subscriptions')
-      .select('subscription_plans(name)')
-      .eq('student_id', studentId)
-      .eq('organization_id', cls.organization_id)
-      .eq('status', 'active')
-      .maybeSingle()
-    if (sub) {
-      hasActivePlan = true
-      const planRel = (sub as { subscription_plans: { name: string } | { name: string }[] } | null)
-        ?.subscription_plans
-      const planObj = Array.isArray(planRel) ? planRel[0] : planRel
-      if (planObj?.name) planName = planObj.name
-    }
-  }
-
-  const needsCredit = requiresCredit(partner) && hasActivePlan
-
-  // Sessões agendadas no intervalo
   const { data: sessionsRaw } = await adminClient
     .from('class_sessions')
     .select('id, session_date')
@@ -84,11 +48,10 @@ export async function reconcileEnrollmentCredits(
   const sessions = (sessionsRaw ?? []) as { id: string; session_date: string }[]
   if (sessions.length === 0) return result
 
-  // Sessões em que o aluno já tem reserva (QUALQUER status). Inclui canceladas
-  // de propósito: opt-out de aula fixa (skipEnrollmentNoBooking) e saída com
-  // refund (skipEnrollmentSession) deixam uma reserva 'cancelled'. Reconciliar
-  // não pode reativá-las nem reconceder crédito — pulamos qualquer linha
-  // existente (o unique student_id+session_id garante no máximo uma).
+  // Reservas existentes em QUALQUER status. As canceladas entram de propósito:
+  // opt-out de aula fixa (skipEnrollmentNoBooking) e saída com refund
+  // (skipEnrollmentSession) deixam uma reserva 'cancelled', e reconciliar não
+  // pode reativá-las. O unique student_id+session_id garante no máximo uma.
   const sessionIds = sessions.map((s) => s.id)
   const { data: existingRaw } = await adminClient
     .from('session_bookings')
@@ -99,66 +62,23 @@ export async function reconcileEnrollmentCredits(
     (existingRaw ?? []).map((b: { session_id: string }) => b.session_id),
   )
 
-  const ops = buildReconciliationOps(sessions, bookedSessionIds, needsCredit, planName)
+  const ops = buildReconciliationOps(sessions, bookedSessionIds)
 
   for (const op of ops) {
-    // 1. Reserva (atômica: respeita capacidade e reativa cancelado)
     const { error: bookErr } = await adminClient.rpc('book_session_atomic', {
       p_student_id: studentId,
       p_session_id: op.sessionId,
       p_max_students: cls.max_students,
       p_type: 'extra',
       p_from_enrollment: true,
-      p_credit_used: op.needsCredit,
+      p_credit_used: false,
     })
     if (bookErr) {
-      // SESSION_FULL ou ALREADY_BOOKED (corrida): pula sem mexer em crédito
+      // SESSION_FULL ou ALREADY_BOOKED (corrida): pula.
       result.skipped++
       continue
     }
     result.booked++
-
-    if (!op.needsCredit) continue
-
-    // 2. Concede 1 crédito (log). Só debita se a concessão funcionou — assim um
-    //    erro na concessão não faz o débito consumir saldo pré-existente.
-    //    Obs.: as 3 RPCs não são atômicas entre si; uma falha após a reserva
-    //    pode deixar a sessão reservada sem o par concede/debita. É raro
-    //    (cada RPC é atômica) e fica registrado no log para auditoria.
-    const { error: grantErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: studentId,
-      p_org: cls.organization_id,
-      p_delta: 1,
-      p_type: 'renewed',
-      p_reason: op.grantReason,
-    })
-    if (grantErr) {
-      console.error('[reconcileEnrollmentCredits] concessao falhou', {
-        studentId, sessionId: op.sessionId, error: grantErr.message,
-      })
-      continue
-    }
-    result.granted++
-
-    // 3. Debita 1 crédito (log, vinculado à sessão)
-    const { error: debitErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: studentId,
-      p_org: cls.organization_id,
-      p_delta: -1,
-      p_type: 'used',
-      p_reason: op.debitReason,
-      p_session_id: op.sessionId,
-    })
-    if (debitErr) {
-      console.error('[reconcileEnrollmentCredits] debito falhou', {
-        studentId, sessionId: op.sessionId, error: debitErr.message,
-      })
-      continue
-    }
-    result.debited++
-
-    // Aviso de credito baixo (best-effort; a funcao nunca lança).
-    await checkLowCreditThreshold(adminClient, studentId, cls.organization_id, -1)
   }
 
   return result
@@ -235,15 +155,15 @@ export async function reconcileAllActiveEnrollments(
   for (const e of enrollments) {
     const memberKey = `${e.student_id}:${e.organization_id}`
     const partner = partnerByMember.get(memberKey) ?? null
-    // Elegível: tem parceiro (agenda sem crédito) OU tem assinatura em dia.
-    const eligible = !requiresCredit(partner) || activeSubStudents.has(memberKey)
+    // Elegível para renovar a fixa = tem parceiro OU plano vigente. É a mesma
+    // regra que enrollStudentInClass aplica na entrada (spec §2). Plano vencido
+    // simplesmente para de ser reservado; a grade sinaliza.
+    const eligible = partner !== null || activeSubStudents.has(memberKey)
     if (!eligible) continue
 
     try {
       const r = await reconcileEnrollmentCredits(e.student_id, e.class_id, from, to, adminClient)
       totals.booked += r.booked
-      totals.granted += r.granted
-      totals.debited += r.debited
       totals.skipped += r.skipped
       totals.processedEnrollments++
     } catch (err) {
