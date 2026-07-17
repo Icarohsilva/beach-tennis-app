@@ -9,7 +9,7 @@ import { validateWellhubCheckin } from './wellhubValidate'
 
 // Client falso: suporta o subconjunto de chamadas que o núcleo faz.
 // - maybeSingle(): memberships (lookup do aluno), checkins (idempotência)
-// - await builder: enrollments (findLinkedSession curto-circuita com [])
+// - await builder: class_sessions (findLinkedSession curto-circuita com [])
 // - insert(): checkins, pending_checkins (este último com .select('id').single())
 // - update(): checkins, pending_checkins (fire-and-forget, encadeia .eq())
 function makeFakeClient(opts: {
@@ -32,8 +32,9 @@ function makeFakeClient(opts: {
         if (table === 'checkins') return Promise.resolve({ data: opts.existingCheckin ?? null })
         return Promise.resolve({ data: null })
       }
-      // findLinkedSession faz `await client.from('enrollments').select().eq().eq()`:
-      // o builder precisa ser "thenable" e resolver com lista vazia.
+      // findLinkedSession faz `await client.from('class_sessions').select()...`:
+      // o builder precisa ser "thenable" e resolver com lista vazia (curto-circuita
+      // antes de precisar de session_bookings).
       builder.then = (resolve: (v: { data: unknown[] }) => void) => resolve({ data: [] })
       builder.insert = (row: unknown) => {
         inserts[table] = [...(inserts[table] ?? []), row]
@@ -63,6 +64,7 @@ describe('ingestPartnerCheckin', () => {
     partner: 'wellhub' as const,
     partnerMemberId: 'GP123456',
     date: '2026-06-25',
+    checkinAt: '2026-06-25T22:00:00Z',
     externalRef: 'evt_abc123',
     payload: { raw: true },
   }

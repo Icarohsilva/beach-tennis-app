@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
         partner: 'wellhub',
         partnerMemberId: event.partnerMemberId,
         date: event.checkinDate,
+        // parseWellhubEvent não expõe o epoch cru do evento (só a data local
+        // derivada dele), e não é escopo aqui reexpor esse campo — o instante
+        // de recebimento do webhook é uma aproximação segura: a Wellhub entrega
+        // quase em tempo real, e a janela de casamento é de ±1h.
+        checkinAt: new Date().toISOString(),
         externalRef: event.externalRef,
         payload: JSON.parse(rawBody),
         validate: integration.api_key

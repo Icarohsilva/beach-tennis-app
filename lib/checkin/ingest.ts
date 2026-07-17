@@ -7,52 +7,81 @@ import { createAdminClient } from '@/lib/supabase/server'
 import type { CheckinPartner } from '@/types'
 import { validateWellhubCheckin, type WellhubEnvironment } from './wellhubValidate'
 import { normalizePartnerId } from './partnerId'
+import { findSessionInWindow } from './sessionWindow'
+import { sessionStartIso } from '@/lib/utils/sessionTime'
+import { ensureClassDebt } from '@/features/financeiro/classDebt'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-/** Sessão agendada na data, de turma com matrícula ativa e reserva confirmada. */
+/**
+ * Sessão com reserva confirmada do aluno cujo horário de início está a até 1h
+ * do check-in (antes ou depois).
+ *
+ * Casa por RESERVA, não por matrícula fixa: antes só olhava turmas com
+ * enrollment ativa, então uma reserva avulsa nunca marcava presença — a regra
+ * é "a aula onde o aluno está vinculado" (spec §7).
+ */
 export async function findLinkedSession(
   client: AdminClient,
   studentId: string,
   orgId: string,
-  date: string,
+  checkinAt: string,
 ): Promise<string | null> {
-  const { data: enrolls } = await client
-    .from('enrollments')
-    .select('class_id')
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-  const classIds = (enrolls ?? []).map((e: { class_id: string }) => e.class_id)
-  if (classIds.length === 0) return null
+  // Janela de ±1h pode atravessar a meia-noite: busca o dia do check-in e os
+  // vizinhos, e deixa a comparação de instante para findSessionInWindow.
+  const day = checkinAt.slice(0, 10)
+  const dayBefore = new Date(new Date(day).getTime() - 86400000).toISOString().slice(0, 10)
+  const dayAfter = new Date(new Date(day).getTime() + 86400000).toISOString().slice(0, 10)
 
-  const { data: sessions } = await client
+  const { data: sessionsRaw } = await client
     .from('class_sessions')
-    .select('id')
+    .select('id, session_date, class:classes(start_time)')
     .eq('organization_id', orgId)
-    .eq('session_date', date)
     .eq('status', 'scheduled')
-    .in('class_id', classIds)
-  const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id)
-  if (sessionIds.length === 0) return null
+    .in('session_date', [dayBefore, day, dayAfter])
 
-  const { data: booking } = await client
+  type Row = {
+    id: string
+    session_date: string
+    class: { start_time: string } | { start_time: string }[] | null
+  }
+  const rows = (sessionsRaw ?? []) as unknown as Row[]
+  if (rows.length === 0) return null
+
+  // Só sessões em que o aluno tem reserva confirmada.
+  const { data: bookingsRaw } = await client
     .from('session_bookings')
     .select('session_id')
     .eq('student_id', studentId)
     .eq('status', 'confirmed')
-    .in('session_id', sessionIds)
-    .limit(1)
-    .maybeSingle()
+    .in('session_id', rows.map((r) => r.id))
 
-  return (booking?.session_id as string | undefined) ?? null
+  const booked = new Set(
+    (bookingsRaw ?? []).map((b: { session_id: string }) => b.session_id),
+  )
+  if (booked.size === 0) return null
+
+  const candidates = rows
+    .filter((r) => booked.has(r.id))
+    .map((r) => {
+      const cls = Array.isArray(r.class) ? r.class[0] : r.class
+      if (!cls?.start_time) return null
+      // sessionStartIso ancora em -03:00. Sem isso a janela erra por 3h.
+      return { id: r.id, startsAt: sessionStartIso(r.session_date, cls.start_time) }
+    })
+    .filter((c): c is { id: string; startsAt: string } => c !== null)
+
+  return findSessionInWindow(candidates, checkinAt)
 }
 
 export interface RecordResolvedInput {
   orgId: string
   studentId: string
   partner: CheckinPartner
+  /** YYYY-MM-DD — grava em checkins.checkin_date. */
   date: string
+  /** Instante ISO do check-in. Usado para casar a sessão na janela de ±1h. */
+  checkinAt: string
   externalRef: string | null
   validation: 'manual' | CheckinPartner
   createdBy?: string | null
@@ -76,7 +105,12 @@ export async function recordResolvedCheckin(
     if (existing) return { recorded: true, linkedSessionId: null, isNew: false }
   }
 
-  const linkedSessionId = await findLinkedSession(client, input.studentId, input.orgId, input.date)
+  const linkedSessionId = await findLinkedSession(
+    client,
+    input.studentId,
+    input.orgId,
+    input.checkinAt,
+  )
 
   const { error: insertError } = await client.from('checkins').insert({
     organization_id: input.orgId,
@@ -96,6 +130,9 @@ export async function recordResolvedCheckin(
   }
 
   if (linkedSessionId) {
+    // ignoreDuplicates: "exceto quando o processo já realizou" (spec §7). Um
+    // check-in reenviado NÃO pode reescrever uma presença que o professor já
+    // ajustou na mão — antes o upsert sobrescrevia.
     const { error: attendanceError } = await client.from('attendance').upsert(
       {
         organization_id: input.orgId,
@@ -105,10 +142,27 @@ export async function recordResolvedCheckin(
         source: input.partner,
         checked_in_at: new Date().toISOString(),
       },
-      { onConflict: 'student_id,session_id' },
+      { onConflict: 'student_id,session_id', ignoreDuplicates: true },
     )
     if (attendanceError) {
       throw new Error(`Falha ao marcar presença: ${attendanceError.message}`)
+    }
+
+    // Presença gera pendência (spec §5). Aluno de parceiro nunca gera — o
+    // ensureClassDebt confere isso —, mas a chamada fica aqui porque um
+    // check-in manual do admin pode ser de aluno sem parceiro.
+    try {
+      await ensureClassDebt(client, {
+        orgId: input.orgId,
+        studentId: input.studentId,
+        sessionId: linkedSessionId,
+      })
+    } catch (err) {
+      console.error('[recordResolvedCheckin] ensureClassDebt falhou', {
+        sessionId: linkedSessionId,
+        studentId: input.studentId,
+        error: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 
@@ -120,6 +174,8 @@ export interface IngestPartnerCheckinInput {
   partner: CheckinPartner
   partnerMemberId: string
   date: string
+  /** Instante ISO do check-in. Usado para casar a sessão na janela de ±1h. */
+  checkinAt: string
   externalRef: string | null
   payload: unknown
   createdBy?: string | null
@@ -210,6 +266,7 @@ export async function ingestPartnerCheckin(
     studentId: membership.user_id as string,
     partner: input.partner,
     date: input.date,
+    checkinAt: input.checkinAt,
     externalRef: input.externalRef,
     validation: input.partner,
     createdBy: input.createdBy ?? null,

@@ -149,6 +149,7 @@ export async function recordCheckin(
     studentId,
     partner,
     date,
+    checkinAt: new Date().toISOString(),
     externalRef: result.externalRef ?? null,
     validation: result.validation,
     createdBy: opts?.createdBy ?? null,
@@ -310,7 +311,7 @@ export async function resolvePendingCheckin(
   const { data: pending } = await adminClient
     .from('pending_checkins')
     .select(
-      'id, partner, partner_member_id, checkin_date, external_ref, resolved, partner_validated',
+      'id, partner, partner_member_id, checkin_date, external_ref, resolved, partner_validated, created_at',
     )
     .eq('id', pendingId)
     .eq('organization_id', orgId)
@@ -349,6 +350,10 @@ export async function resolvePendingCheckin(
     studentId,
     partner,
     date: pending.checkin_date as string,
+    // Não temos o instante exato do evento original (só a data) — created_at é
+    // quando o check-in entrou na fila de pendentes, a melhor aproximação do
+    // instante real disponível para casar a sessão na janela de ±1h.
+    checkinAt: pending.created_at as string,
     externalRef: (pending.external_ref as string | null) ?? null,
     validation: partner,
   })
