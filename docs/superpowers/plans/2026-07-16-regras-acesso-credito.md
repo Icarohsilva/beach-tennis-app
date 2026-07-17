@@ -1805,6 +1805,224 @@ git commit -m "feat(aulas): bookSession decide custo por resolveClassAccess e bl
 
 ---
 
+### Task 9.5: Extrair `hasActiveSubscriptionPlan` — o mesmo bloco parou de ser coincidência
+
+Descoberta durante o code-quality review da Task 9: o bloco de 6 linhas "busca `student_subscriptions` ativa + roda por `isSubscriptionCurrent`" apareceu **três vezes** verbatim (`classDebt.ts` na Task 5, `enrollStudentInClass` na Task 8, `bookSession` na Task 9) — e o texto ainda não implementado da Task 12 (`addStudentToSession`, linhas 2263-2272 antes desta correção) tinha exatamente a **quarta** cópia. Passou do "três iguais é aceitável" para "toda mudança futura na regra de plano ativo precisa lembrar de 4 lugares". Extraído agora, antes que a Task 12 escreva a quarta cópia.
+
+Numeração fora de sequência de propósito (9.5, não 10): correção de lacuna achada no review, não passo do desenho original. Não depende de nenhuma outra task; deve rodar antes da Task 12 (que já foi ajustada abaixo para usar o helper).
+
+**Files:**
+- Create: `lib/billing/planEligibility.ts`
+- Test: `lib/billing/planEligibility.test.ts`
+- Modify: `features/financeiro/classDebt.ts`
+- Modify: `features/aulas/adminActions.ts` (`enrollStudentInClass`)
+- Modify: `features/aulas/actions.ts` (`bookSession`)
+
+**Fora de escopo de propósito:** `reconcileAllActiveEnrollments` (`features/aulas/creditReconciliation.ts`) e a página da grade (Tasks 13/14) usam uma variante em lote (`activeSubStudents.filter(s => isSubscriptionCurrent(s, now))` sobre um array pré-carregado) — é uma forma diferente, otimizada para não fazer N queries, e um candidato mais fraco pra extração. Não tocar.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// lib/billing/planEligibility.test.ts
+import { describe, it, expect } from 'vitest'
+import { hasActiveSubscriptionPlan } from './planEligibility'
+
+function makeClient(sub: { gateway?: string; current_period_end: string | null } | null) {
+  const builder: Record<string, unknown> = {
+    select: () => builder,
+    eq: () => builder,
+    maybeSingle: () => Promise.resolve({ data: sub }),
+  }
+  return { from: () => builder } as never
+}
+
+describe('hasActiveSubscriptionPlan', () => {
+  it('sem assinatura ativa devolve false', async () => {
+    expect(await hasActiveSubscriptionPlan(makeClient(null), 'stu-1', 'org-1')).toBe(false)
+  })
+
+  it('mercadopago com período vigente devolve true', async () => {
+    const client = makeClient({ gateway: 'mercadopago', current_period_end: '2099-01-01T00:00:00Z' })
+    expect(await hasActiveSubscriptionPlan(client, 'stu-1', 'org-1')).toBe(true)
+  })
+
+  it('mercadopago com período vencido devolve false', async () => {
+    const client = makeClient({ gateway: 'mercadopago', current_period_end: '2020-01-01T00:00:00Z' })
+    expect(await hasActiveSubscriptionPlan(client, 'stu-1', 'org-1')).toBe(false)
+  })
+
+  it('gateway manual é sempre vigente (gerido por fora)', async () => {
+    const client = makeClient({ gateway: 'manual', current_period_end: null })
+    expect(await hasActiveSubscriptionPlan(client, 'stu-1', 'org-1')).toBe(true)
+  })
+
+  it('gateway ausente (undefined) também é sempre vigente — mesma regra de isSubscriptionCurrent', async () => {
+    const client = makeClient({ current_period_end: null })
+    expect(await hasActiveSubscriptionPlan(client, 'stu-1', 'org-1')).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npm run test:run -- lib/billing/planEligibility.test.ts`
+Expected: FAIL — `Failed to resolve import "./planEligibility"`
+
+- [ ] **Step 3: Write the implementation**
+
+```ts
+// lib/billing/planEligibility.ts
+// "Tem plano ativo?" isolado num único ponto — extraído depois que o mesmo
+// bloco de 6 linhas apareceu em 3 call sites (classDebt, enrollStudentInClass,
+// bookSession) e uma 4ª cópia (addStudentToSession, Task 12) estava prestes a
+// repetir. Aceita um client injetável para reusar a mesma instância do caller
+// e para ser testável com o padrão de stub já usado em classDebt.test.ts.
+import { isSubscriptionCurrent } from './periodicity'
+import type { createAdminClient } from '@/lib/supabase/server'
+
+type AdminClient = ReturnType<typeof createAdminClient>
+
+/**
+ * 'active' com período vencido NÃO conta — mesmo critério em toda a spec
+ * (docs/superpowers/specs/2026-07-16-regras-acesso-credito-design.md §1).
+ */
+export async function hasActiveSubscriptionPlan(
+  client: AdminClient,
+  studentId: string,
+  orgId: string,
+): Promise<boolean> {
+  const { data: sub } = await client
+    .from('student_subscriptions')
+    .select('gateway, current_period_end')
+    .eq('student_id', studentId)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  return !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npm run test:run -- lib/billing/planEligibility.test.ts`
+Expected: PASS — 5 passed
+
+- [ ] **Step 5: Retrofit `features/financeiro/classDebt.ts`**
+
+Troque o import `isSubscriptionCurrent` por `hasActiveSubscriptionPlan`:
+
+```ts
+import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+```
+
+E substitua o bloco 3:
+
+```ts
+  // 3. Plano vigente entra de graça. 'active' com período vencido NÃO conta —
+  //    mesmo critério da reconciliação (spec §1).
+  const { data: sub } = await client
+    .from('student_subscriptions')
+    .select('gateway, current_period_end')
+    .eq('student_id', studentId)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())) {
+    return
+  }
+```
+
+por:
+
+```ts
+  // 3. Plano vigente entra de graça. 'active' com período vencido NÃO conta —
+  //    mesmo critério da reconciliação (spec §1).
+  if (await hasActiveSubscriptionPlan(client, studentId, orgId)) return
+```
+
+- [ ] **Step 6: Retrofit `enrollStudentInClass` em `features/aulas/adminActions.ts`**
+
+Troque o import `isSubscriptionCurrent` por `hasActiveSubscriptionPlan`. Substitua:
+
+```ts
+  if (!(membership as { partner: string | null }).partner) {
+    const { data: sub } = await adminClient
+      .from('student_subscriptions')
+      .select('gateway, current_period_end')
+      .eq('student_id', studentId)
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    const hasActivePlan =
+      !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+
+    if (!hasActivePlan) {
+```
+
+por:
+
+```ts
+  if (!(membership as { partner: string | null }).partner) {
+    const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
+
+    if (!hasActivePlan) {
+```
+
+- [ ] **Step 7: Retrofit `bookSession` em `features/aulas/actions.ts`**
+
+Troque o import `isSubscriptionCurrent` por `hasActiveSubscriptionPlan`. Substitua:
+
+```ts
+  // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
+  // da reconciliação (spec §1).
+  const { data: sub } = await adminClient
+    .from('student_subscriptions')
+    .select('gateway, current_period_end')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  const hasActivePlan =
+    !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+```
+
+por:
+
+```ts
+  // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
+  // da reconciliação (spec §1).
+  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, user.id, orgId)
+```
+
+- [ ] **Step 8: Confirmar que `isSubscriptionCurrent` não ficou órfão nesses 3 arquivos**
+
+Run: `grep -n "isSubscriptionCurrent" features/financeiro/classDebt.ts features/aulas/adminActions.ts features/aulas/actions.ts`
+Expected: nenhum resultado — o import foi trocado por `hasActiveSubscriptionPlan` em todos os três.
+
+- [ ] **Step 9: Verify**
+
+Run: `npm run build`
+Expected: compila sem erro
+
+Run: `npm run lint`
+Expected: sem erro
+
+Run: `npm run test:run`
+Expected: toda a suíte passa, incluindo os testes já existentes de `classDebt.test.ts` (o comportamento não muda, só a forma)
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add lib/billing/planEligibility.ts lib/billing/planEligibility.test.ts features/financeiro/classDebt.ts features/aulas/adminActions.ts features/aulas/actions.ts
+git commit -m "refactor(billing): extrai hasActiveSubscriptionPlan, usado por classDebt/enroll/bookSession"
+```
+
+---
+
 ### Task 10: Check-in casa a sessão pela janela de ±1h
 
 **Files:**
@@ -2260,16 +2478,7 @@ export async function addStudentToSession(
   if (!membership) return { error: 'Aluno não participa desta academia.' }
   const mem = membership as { partner: string | null; credits_balance: number }
 
-  const { data: sub } = await adminClient
-    .from('student_subscriptions')
-    .select('gateway, current_period_end')
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .maybeSingle()
-
-  const hasActivePlan =
-    !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
 
   // Note o hasOpenDebt: false — o admin ignora o bloqueio (ver doc acima).
   const decision = resolveClassAccess({
@@ -2363,10 +2572,11 @@ Adicione aos imports do topo de `features/aulas/adminActions.ts`:
 
 ```ts
 import { resolveClassAccess } from '@/lib/utils/accessRules'
+import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import type { AddStudentReason, CheckinPartner } from '@/types'
 ```
 
-(`isSubscriptionCurrent` já foi importado na Task 8.)
+(`hasActiveSubscriptionPlan` substitui o antigo import de `isSubscriptionCurrent` — a Task 9.5 extraiu esse bloco pra um helper compartilhado, usado aqui pela primeira vez sem duplicar.)
 
 - [ ] **Step 3: Verify**
 
@@ -2761,6 +2971,7 @@ Task 6 (presença)      ─── precisa de 5
 Task 7 (reconciliação) ─── precisa de 4 (drop credits_per_month)
 Task 8 (fixa)          ─── precisa de 7
 Task 9 (bookSession)   ─── precisa de 1
+Task 9.5 (planEligibility) ─── independente; correção de lacuna achada no review da Task 9; precisa rodar antes da 12
 Task 10 (check-in)     ─── precisa de 2 e 5
 Task 11 (cron)         ─── precisa de 3 e 7
 Task 12 (admin add)    ─── precisa de 1 e 4
