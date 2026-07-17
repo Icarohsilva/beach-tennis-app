@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTime } from '@/lib/utils/dateHelpers'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { GenerateSessionsButton } from './GenerateSessionsButton'
 import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
@@ -90,23 +91,40 @@ export default async function GradePage() {
     enrolledStudentIds.length > 0
       ? await adminClient
           .from('memberships')
-          .select('user_id, credits_balance, partner')
+          .select('user_id, partner')
           .in('user_id', enrolledStudentIds)
           .eq('organization_id', orgId)
       : { data: [] }
 
-  const memByStudent = new Map<string, { credits_balance: number; partner: string | null }>()
-  for (const m of (enrollMemsRaw ?? []) as { user_id: string; credits_balance: number; partner: string | null }[]) {
-    memByStudent.set(m.user_id, { credits_balance: m.credits_balance, partner: m.partner })
+  const partnerByStudent = new Map<string, string | null>()
+  for (const m of (enrollMemsRaw ?? []) as { user_id: string; partner: string | null }[]) {
+    partnerByStudent.set(m.user_id, m.partner)
   }
 
+  const { data: subsRaw } =
+    enrolledStudentIds.length > 0
+      ? await adminClient
+          .from('student_subscriptions')
+          .select('student_id, gateway, current_period_end')
+          .in('student_id', enrolledStudentIds)
+          .eq('organization_id', orgId)
+          .eq('status', 'active')
+      : { data: [] }
+
+  const now = new Date()
+  const planStudents = new Set(
+    ((subsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
+      .filter((s) => isSubscriptionCurrent(s, now))
+      .map((s) => s.student_id),
+  )
+
   const enrollCountMap = new Map<string, number>()
-  const noCreditMap = new Map<string, number>()
+  const noPlanMap = new Map<string, number>()
   for (const e of enrollRows) {
     enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
-    const p = memByStudent.get(e.student_id)
-    if (p && !p.partner && p.credits_balance < 1) {
-      noCreditMap.set(e.class_id, (noCreditMap.get(e.class_id) ?? 0) + 1)
+    const hasPartner = !!partnerByStudent.get(e.student_id)
+    if (!hasPartner && !planStudents.has(e.student_id)) {
+      noPlanMap.set(e.class_id, (noPlanMap.get(e.class_id) ?? 0) + 1)
     }
   }
 
@@ -205,9 +223,9 @@ export default async function GradePage() {
                           <span className="text-sm font-extrabold text-brand-500">{enrolled}/{c.max_students}</span>{' '}
                           <span className={spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}>vagas</span>
                         </p>
-                        {(noCreditMap.get(c.id) ?? 0) > 0 && (
+                        {(noPlanMap.get(c.id) ?? 0) > 0 && (
                           <span className="text-xs text-yellow-400 font-medium">
-                            ⚠️ {noCreditMap.get(c.id)} sem crédito
+                            ⚠️ {noPlanMap.get(c.id)} sem plano ativo
                           </span>
                         )}
                       </div>
