@@ -8,6 +8,7 @@ import { markAttendanceBulk } from './actions'
 
 interface Student {
   student: { id: string; full_name: string }
+  wouldOweDebt: boolean
 }
 
 interface Props {
@@ -78,7 +79,7 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
       <h2 className="text-lg font-semibold text-white">Chamada</h2>
 
       <div className="space-y-2">
-        {students.map(({ student }) => {
+        {students.map(({ student, wouldOweDebt }) => {
           const present = presentIds.has(student.id)
           return (
             <button
@@ -91,7 +92,7 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
                   : 'bg-red-900/40 border-red-700 text-red-300',
               )}
             >
-              <span>{student.full_name}</span>
+              <span>{student.full_name}{wouldOweDebt ? ' ⚠️' : ''}</span>
               <span>{present ? 'Presente' : 'Ausente'}</span>
             </button>
           )

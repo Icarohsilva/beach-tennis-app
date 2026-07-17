@@ -10,6 +10,7 @@ interface StudentAttendance {
   // id/full_name = identidade (profiles); level/payment_type = por-academia (membership).
   student: Pick<Profile, 'id' | 'full_name'> & Pick<Membership, 'level' | 'payment_type'>
   attendance: Attendance | null
+  wouldOweDebt: boolean
 }
 
 interface AttendanceSheetProps {
@@ -85,7 +86,7 @@ export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheet
         <p className="text-slate-500 text-sm text-center py-6">Nenhum aluno inscrito nesta sessão.</p>
       ) : (
         <ul className="space-y-2">
-          {students.map(({ student }) => {
+          {students.map(({ student, wouldOweDebt }) => {
             const att = attendanceMap.get(student.id)
             const isPresent = att?.status === 'present'
             const source = att?.source ?? null
@@ -106,6 +107,9 @@ export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheet
                   <div className="flex items-center gap-2 mt-0.5">
                     {source && (
                       <Badge variant={SOURCE_VARIANT[source]}>{SOURCE_LABEL[source]}</Badge>
+                    )}
+                    {wouldOweDebt && (
+                      <span className="text-xs text-yellow-400 font-medium">⚠️ sem plano/crédito</span>
                     )}
                   </div>
                   {err && <p className="text-xs text-red-400 mt-1">{err}</p>}

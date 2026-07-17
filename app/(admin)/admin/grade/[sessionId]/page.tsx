@@ -59,15 +59,51 @@ export default async function SessionDetailPage({ params }: Props) {
     studentIds.length > 0
       ? await adminClient
           .from('memberships')
-          .select('user_id, level, payment_type')
+          .select('user_id, level, payment_type, partner, credits_balance')
           .in('user_id', studentIds)
           .eq('organization_id', orgId)
       : { data: [] }
 
-  const memByStudent = new Map<string, { level: Membership['level']; payment_type: Membership['payment_type'] }>()
-  for (const m of (memsRaw ?? []) as { user_id: string; level: Membership['level']; payment_type: Membership['payment_type'] }[]) {
-    memByStudent.set(m.user_id, { level: m.level, payment_type: m.payment_type })
+  const memByStudent = new Map<string, {
+    level: Membership['level']
+    payment_type: Membership['payment_type']
+    partner: string | null
+    credits_balance: number
+  }>()
+  for (const m of (memsRaw ?? []) as {
+    user_id: string
+    level: Membership['level']
+    payment_type: Membership['payment_type']
+    partner: string | null
+    credits_balance: number
+  }[]) {
+    memByStudent.set(m.user_id, {
+      level: m.level,
+      payment_type: m.payment_type,
+      partner: m.partner,
+      credits_balance: m.credits_balance,
+    })
   }
+
+  // Dívida potencial: aviso ao professor ANTES de marcar presença — mitigação
+  // documentada no spec (§UI, tabela de Riscos) para "dívida só nasce na
+  // presença". Mesma regra de acesso do resolveClassAccess, sem o eixo dívida
+  // (aqui só decide se avisa, nunca bloqueia).
+  const { data: bookedSubsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('student_subscriptions')
+          .select('student_id, gateway, current_period_end')
+          .in('student_id', studentIds)
+          .eq('organization_id', orgId)
+          .eq('status', 'active')
+      : { data: [] }
+
+  const bookedPlanStudents = new Set(
+    ((bookedSubsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
+      .filter((s) => isSubscriptionCurrent(s, new Date()))
+      .map((s) => s.student_id),
+  )
 
   // Fetch attendances for this session
   const { data: attendances } =
@@ -87,6 +123,8 @@ export default async function SessionDetailPage({ params }: Props) {
   const students = (profiles ?? [])
     .map((p: Pick<Profile, 'id' | 'full_name'>) => {
       const mem = memByStudent.get(p.id)
+      const hasAccess =
+        !!mem?.partner || bookedPlanStudents.has(p.id) || (mem?.credits_balance ?? 0) >= 1
       return {
         student: {
           id: p.id,
@@ -95,6 +133,7 @@ export default async function SessionDetailPage({ params }: Props) {
           payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
         },
         attendance: attendanceByStudent.get(p.id) ?? null,
+        wouldOweDebt: !hasAccess,
       }
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
