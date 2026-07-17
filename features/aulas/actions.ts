@@ -7,7 +7,9 @@ import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRu
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
+import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
+import * as Sentry from '@sentry/nextjs'
 
 // ---------------------------------------------------------------------------
 // getNextOccurrence — returns the next date (>= from) matching dayOfWeek
@@ -569,6 +571,21 @@ export async function markAttendance(
   )
 
   if (upsertErr) return { error: 'Erro ao registrar presença.' }
+
+  // A dívida nasce na presença (spec §5). Só para 'present' — faltar não gera
+  // cobrança. Best-effort: a pendência NUNCA derruba a marcação de presença,
+  // que é a operação que o professor está fazendo.
+  if (present) {
+    try {
+      await ensureClassDebt(adminClient, { orgId, studentId, sessionId })
+    } catch (err) {
+      console.error('[markAttendance] ensureClassDebt falhou', {
+        sessionId, studentId, error: err instanceof Error ? err.message : String(err),
+      })
+      Sentry.captureException(err, { extra: { sessionId, studentId, orgId } })
+    }
+  }
+
   return {}
 }
 
@@ -616,6 +633,20 @@ export async function markAttendanceBulk(
     .upsert(rows, { onConflict: 'session_id,student_id' })
 
   if (error) return { error: error.message }
+
+  // Mesma regra do markAttendance: só quem esteve presente gera pendência.
+  // Sequencial de propósito — o volume é uma turma (~15 alunos) e o índice
+  // único já protege contra duplicata.
+  for (const studentId of presentIds) {
+    try {
+      await ensureClassDebt(adminClient, { orgId, studentId, sessionId })
+    } catch (err) {
+      console.error('[markAttendanceBulk] ensureClassDebt falhou', {
+        sessionId, studentId, error: err instanceof Error ? err.message : String(err),
+      })
+      Sentry.captureException(err, { extra: { sessionId, studentId, orgId } })
+    }
+  }
 
   await adminClient.from('class_sessions').update({ status: 'completed' }).eq('id', sessionId)
 
