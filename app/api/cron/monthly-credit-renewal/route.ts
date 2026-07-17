@@ -1,3 +1,7 @@
+// app/api/cron/monthly-credit-renewal/route.ts
+// Plano não emite mais crédito (spec §3), então não há renovação a fazer. O que
+// resta é reservar as sessões do mês para as matrículas fixas ativas — mesma
+// janela, sem tocar em crédito.
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { reconcileAllActiveEnrollments } from '@/features/aulas/creditReconciliation'
