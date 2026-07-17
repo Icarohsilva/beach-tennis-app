@@ -33,7 +33,13 @@ where e.is_active
     where s.student_id = e.student_id
       and s.organization_id = e.organization_id
       and s.status = 'active'
-      and (s.current_period_end is null or s.current_period_end >= now())
+      -- Espelha isSubscriptionCurrent (lib/billing/periodicity.ts): manual (ou
+      -- qualquer gateway != mercadopago) é sempre vigente, gerido por fora;
+      -- mercadopago exige current_period_end futuro. Divergir daqui criaria
+      -- duas noções de "plano ativo" no mesmo sistema (spec §1) — a versão
+      -- anterior desta migration ignorava gateway e podia desvincular um
+      -- manual com period_end passado, ou manter um mercadopago sem period_end.
+      and (s.gateway <> 'mercadopago' or (s.current_period_end is not null and s.current_period_end >= now()))
   );
 
 update enrollments

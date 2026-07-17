@@ -561,7 +561,14 @@ where e.is_active
     where s.student_id = e.student_id
       and s.organization_id = e.organization_id
       and s.status = 'active'
-      and (s.current_period_end is null or s.current_period_end >= now())
+      -- Espelha isSubscriptionCurrent (lib/billing/periodicity.ts): manual (ou
+      -- qualquer gateway != mercadopago) é sempre vigente, gerido por fora;
+      -- mercadopago exige current_period_end futuro. Divergir daqui criaria
+      -- duas noções de "plano ativo" no mesmo sistema (spec §1) — achado no
+      -- review final: a versão anterior ignorava gateway e podia desvincular
+      -- um manual com period_end passado, ou manter um mercadopago sem
+      -- period_end.
+      and (s.gateway <> 'mercadopago' or (s.current_period_end is not null and s.current_period_end >= now()))
   );
 
 update enrollments
@@ -612,7 +619,7 @@ git commit -m "feat(db): dropa credits_per_month, unique de pendencia e desvincu
 A migration **não** é aplicada por você — o CLI do Supabase não está autenticado neste ambiente. Diga ao usuário, com estas palavras:
 
 > A migration `20260716000100_access_rules_credit.sql` precisa ser aplicada com `supabase db push`. Ela desvincula matrículas fixas de alunos sem plano/parceiro e notifica os afetados — vale conferir antes quantos são:
-> `select count(*) from enrollments e join memberships m on m.user_id = e.student_id and m.organization_id = e.organization_id where e.is_active and m.partner is null and not exists (select 1 from student_subscriptions s where s.student_id = e.student_id and s.organization_id = e.organization_id and s.status = 'active' and (s.current_period_end is null or s.current_period_end >= now()));`
+> `select count(*) from enrollments e join memberships m on m.user_id = e.student_id and m.organization_id = e.organization_id where e.is_active and m.partner is null and not exists (select 1 from student_subscriptions s where s.student_id = e.student_id and s.organization_id = e.organization_id and s.status = 'active' and (s.gateway <> 'mercadopago' or (s.current_period_end is not null and s.current_period_end >= now())));`
 >
 > **Importante:** só aplique esta migration DEPOIS que a Task 4.5 (abaixo) estiver mergeada e em produção. A Task 4.5 remove todo código do app que ainda referencia `subscription_plans.credits_per_month` — aplicar o drop da coluna antes disso quebra criação de plano, assinatura (self-service e admin) e o webhook de renovação do Mercado Pago.
 
