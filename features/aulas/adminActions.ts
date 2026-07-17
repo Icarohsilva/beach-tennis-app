@@ -7,7 +7,7 @@ import { format, endOfMonth } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
-import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 
@@ -94,16 +94,7 @@ export async function enrollStudentInClass(
   if (!membership) return { error: 'Aluno não participa desta academia.' }
 
   if (!(membership as { partner: string | null }).partner) {
-    const { data: sub } = await adminClient
-      .from('student_subscriptions')
-      .select('gateway, current_period_end')
-      .eq('student_id', studentId)
-      .eq('organization_id', orgId)
-      .eq('status', 'active')
-      .maybeSingle()
-
-    const hasActivePlan =
-      !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+    const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
 
     if (!hasActivePlan) {
       return {

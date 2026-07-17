@@ -4,7 +4,7 @@
 // na reserva (spec §5): cancelamento e no-show nunca geram dívida, sem precisar
 // de regra para apagar.
 import { createAdminClient } from '@/lib/supabase/server'
-import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -55,17 +55,7 @@ export async function ensureClassDebt(
 
   // 3. Plano vigente entra de graça. 'active' com período vencido NÃO conta —
   //    mesmo critério da reconciliação (spec §1).
-  const { data: sub } = await client
-    .from('student_subscriptions')
-    .select('gateway, current_period_end')
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .maybeSingle()
-
-  if (sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())) {
-    return
-  }
+  if (await hasActiveSubscriptionPlan(client, studentId, orgId)) return
 
   // 4. Preço da avulsa. Ausente → pendência com amount 0: a academia PRECISA ver
   //    que o aluno entrou sem pagar, mesmo sem preço definido (spec §4).

@@ -9,7 +9,7 @@ import { offerWaitlistSpot } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
-import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
@@ -179,16 +179,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
 
   // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
   // da reconciliação (spec §1).
-  const { data: sub } = await adminClient
-    .from('student_subscriptions')
-    .select('gateway, current_period_end')
-    .eq('student_id', user.id)
-    .eq('organization_id', orgId)
-    .eq('status', 'active')
-    .maybeSingle()
-
-  const hasActivePlan =
-    !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, user.id, orgId)
 
   // Dívida aberta = payments pendente COM session_id. O filtro de session_id é
   // essencial: compra de crédito abandonada no checkout também fica 'pending',
