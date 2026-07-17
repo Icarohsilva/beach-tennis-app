@@ -2965,6 +2965,195 @@ Diga ao usuário o que foi verificado de verdade e o que não foi. O check-in de
 
 ---
 
+### Task 16: Aviso de dívida na lista de presença — lacuna achada no review final
+
+Descoberta no review holístico feito após a Task 15: a Task 13 implementou o aviso "⚠️ sem plano/crédito" só no seletor de **adicionar** aluno (`AddStudentToSession`). Mas o spec §UI e a própria tabela de Riscos do design ("o aviso na reserva dá visibilidade antecipada à academia") descrevem esse aviso como a mitigação documentada para a decisão de que **a dívida só nasce na presença, não na reserva** — ou seja, ele precisa aparecer também na lista de alunos **já matriculados** na sessão, antes do professor marcar presença. Isso nunca foi implementado: nem `AttendanceSheet.tsx` nem `StartClassClient.tsx` (os dois pontos de marcação de presença na UI) recebem qualquer sinal de dívida potencial.
+
+Numeração fora de sequência de propósito (16, não 15.5): é lacuna achada no review holístico final (que roda depois da Task 15), não no review de uma task individual. Não depende de nenhuma outra task além das já concluídas (13, 14).
+
+**Files:**
+- Modify: `app/(admin)/admin/grade/[sessionId]/page.tsx`
+- Modify: `features/aulas/AttendanceSheet.tsx`
+- Modify: `features/aulas/StartClassClient.tsx`
+
+- [ ] **Step 1: Calcular `wouldOweDebt` para os alunos já matriculados**
+
+Em `app/(admin)/admin/grade/[sessionId]/page.tsx`, a query que já busca `memberships` dos alunos matriculados (`memsRaw`/`memByStudent`) só seleciona `level, payment_type`. Estenda para também trazer `partner, credits_balance` (é a MESMA query, não uma nova — esses alunos já estão sendo buscados) e adicione uma query de assinaturas ativas para eles, espelhando o que a Task 13 já faz para `addableStudents`:
+
+Substitua:
+
+```ts
+  const { data: memsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('memberships')
+          .select('user_id, level, payment_type')
+          .in('user_id', studentIds)
+          .eq('organization_id', orgId)
+      : { data: [] }
+
+  const memByStudent = new Map<string, { level: Membership['level']; payment_type: Membership['payment_type'] }>()
+  for (const m of (memsRaw ?? []) as { user_id: string; level: Membership['level']; payment_type: Membership['payment_type'] }[]) {
+    memByStudent.set(m.user_id, { level: m.level, payment_type: m.payment_type })
+  }
+```
+
+por:
+
+```ts
+  const { data: memsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('memberships')
+          .select('user_id, level, payment_type, partner, credits_balance')
+          .in('user_id', studentIds)
+          .eq('organization_id', orgId)
+      : { data: [] }
+
+  const memByStudent = new Map<string, {
+    level: Membership['level']
+    payment_type: Membership['payment_type']
+    partner: string | null
+    credits_balance: number
+  }>()
+  for (const m of (memsRaw ?? []) as {
+    user_id: string
+    level: Membership['level']
+    payment_type: Membership['payment_type']
+    partner: string | null
+    credits_balance: number
+  }[]) {
+    memByStudent.set(m.user_id, {
+      level: m.level,
+      payment_type: m.payment_type,
+      partner: m.partner,
+      credits_balance: m.credits_balance,
+    })
+  }
+
+  // Dívida potencial: aviso ao professor ANTES de marcar presença — mitigação
+  // documentada no spec (§UI, tabela de Riscos) para "dívida só nasce na
+  // presença". Mesma regra de acesso do resolveClassAccess, sem o eixo dívida
+  // (aqui só decide se avisa, nunca bloqueia).
+  const { data: bookedSubsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('student_subscriptions')
+          .select('student_id, gateway, current_period_end')
+          .in('student_id', studentIds)
+          .eq('organization_id', orgId)
+          .eq('status', 'active')
+      : { data: [] }
+
+  const bookedPlanStudents = new Set(
+    ((bookedSubsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
+      .filter((s) => isSubscriptionCurrent(s, new Date()))
+      .map((s) => s.student_id),
+  )
+```
+
+(`isSubscriptionCurrent` já está importado neste arquivo desde a Task 13 — não duplique o import.)
+
+- [ ] **Step 2: Propagar `wouldOweDebt` para `students`**
+
+Substitua o `students` (mesmo bloco que a Task 13 já tocou, terminando no `.sort(...)`):
+
+```ts
+  const students = (profiles ?? [])
+    .map((p: Pick<Profile, 'id' | 'full_name'>) => {
+      const mem = memByStudent.get(p.id)
+      return {
+        student: {
+          id: p.id,
+          full_name: p.full_name,
+          level: mem?.level ?? ('iniciante' as Membership['level']),
+          payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
+        },
+        attendance: attendanceByStudent.get(p.id) ?? null,
+      }
+    })
+    .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
+```
+
+por:
+
+```ts
+  const students = (profiles ?? [])
+    .map((p: Pick<Profile, 'id' | 'full_name'>) => {
+      const mem = memByStudent.get(p.id)
+      const hasAccess =
+        !!mem?.partner || bookedPlanStudents.has(p.id) || (mem?.credits_balance ?? 0) >= 1
+      return {
+        student: {
+          id: p.id,
+          full_name: p.full_name,
+          level: mem?.level ?? ('iniciante' as Membership['level']),
+          payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
+        },
+        attendance: attendanceByStudent.get(p.id) ?? null,
+        wouldOweDebt: !hasAccess,
+      }
+    })
+    .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
+```
+
+- [ ] **Step 3: Exibir o aviso em `AttendanceSheet.tsx`**
+
+Adicione `wouldOweDebt` à interface e desestruture no `.map`:
+
+```ts
+interface StudentAttendance {
+  student: Pick<Profile, 'id' | 'full_name'> & Pick<Membership, 'level' | 'payment_type'>
+  attendance: Attendance | null
+  wouldOweDebt: boolean
+}
+```
+
+No `.map`, troque `{ student }` por `{ student, wouldOweDebt }`, e no JSX (dentro do bloco `<div className="flex items-center gap-2 mt-0.5">` que já mostra o `Badge` de origem) adicione, ao lado do badge existente:
+
+```tsx
+                    {wouldOweDebt && (
+                      <span className="text-xs text-yellow-400 font-medium">⚠️ sem plano/crédito</span>
+                    )}
+```
+
+- [ ] **Step 4: Exibir o aviso em `StartClassClient.tsx`**
+
+Estenda a interface `Student` e o JSX da chamada:
+
+```ts
+interface Student {
+  student: { id: string; full_name: string }
+  wouldOweDebt: boolean
+}
+```
+
+No `.map`, troque `students.map(({ student }) => {` por `students.map(({ student, wouldOweDebt }) => {`, e no `<span>` do nome:
+
+```tsx
+              <span>{student.full_name}{wouldOweDebt ? ' ⚠️' : ''}</span>
+```
+
+- [ ] **Step 5: Verify**
+
+Run: `npm run build`
+Expected: compila
+
+Run: `npm run lint`
+Expected: sem erro
+
+Run: `npm run test:run`
+Expected: toda a suíte passa
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add "app/(admin)/admin/grade/[sessionId]/page.tsx" features/aulas/AttendanceSheet.tsx features/aulas/StartClassClient.tsx
+git commit -m "feat(aulas): avisa professor de divida potencial na lista de presenca"
+```
+
+---
+
 ## Ordem de execução e dependências
 
 ```
