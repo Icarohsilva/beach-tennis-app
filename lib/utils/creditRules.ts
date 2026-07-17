@@ -27,8 +27,3 @@ export function getMakeupCreditExpiry(from: Date, expiryDays: number): Date {
   return expiry
 }
 
-/** Returns true if a makeup credit has expired */
-export function isCreditExpired(expiresAt: string | null, now = new Date()): boolean {
-  if (!expiresAt) return false // monthly credits: handled by month-end cron
-  return new Date(expiresAt) < now
-}
