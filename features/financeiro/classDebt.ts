@@ -15,6 +15,30 @@ export interface EnsureClassDebtInput {
 }
 
 /**
+ * Preço configurado da aula avulsa. 0 se a academia não configurou.
+ *
+ * Extraído porque o mesmo lookup (system_settings → single_class_price →
+ * parseFloat) estava duplicado byte-a-byte aqui e em addStudentToSession
+ * (features/aulas/adminActions.ts) — mesmo padrão que motivou a extração de
+ * hasActiveSubscriptionPlan. Não serve para checkoutActions.ts, que busca
+ * single_class_price junto com single_class_sale_enabled numa única query
+ * (otimização deliberada para uma regra de negócio diferente — gatear a venda
+ * online, não calcular o valor da dívida).
+ */
+export async function getSingleClassPrice(client: AdminClient, orgId: string): Promise<number> {
+  const { data: settingsRaw } = await client
+    .from('system_settings')
+    .select('key, value')
+    .eq('organization_id', orgId)
+    .in('key', ['single_class_price'])
+
+  const priceRow = ((settingsRaw ?? []) as { key: string; value: string }[]).find(
+    (s) => s.key === 'single_class_price',
+  )
+  return parseFloat(priceRow?.value ?? '0') || 0
+}
+
+/**
  * Cria a pendência da aula se o aluno não pagou por ela de nenhuma forma.
  *
  * Não cria quando:
@@ -60,16 +84,7 @@ export async function ensureClassDebt(
   // 4. Preço da avulsa. Ausente → pendência com amount 0: a academia PRECISA ver
   //    que o aluno entrou sem pagar, mesmo sem preço definido (spec §4).
   //    single_class_sale_enabled gateia a venda online, não o preço da dívida.
-  const { data: settingsRaw } = await client
-    .from('system_settings')
-    .select('key, value')
-    .eq('organization_id', orgId)
-    .in('key', ['single_class_price'])
-
-  const priceRow = ((settingsRaw ?? []) as { key: string; value: string }[]).find(
-    (s) => s.key === 'single_class_price',
-  )
-  const amount = parseFloat(priceRow?.value ?? '0') || 0
+  const amount = await getSingleClassPrice(client, orgId)
 
   const { error } = await client.from('payments').insert({
     organization_id: orgId,

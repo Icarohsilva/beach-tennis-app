@@ -9,6 +9,7 @@ import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
 import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
+import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
@@ -675,11 +676,21 @@ export async function addStudentToSession(
       p_session_id: sessionId,
     })
     if (creditErr) {
-      await adminClient
+      const { error: rollbackErr } = await adminClient
         .from('session_bookings')
         .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
         .eq('student_id', studentId)
         .eq('session_id', sessionId)
+
+      if (rollbackErr) {
+        console.error('[addStudentToSession] rollback do booking falhou após erro no débito', {
+          studentId,
+          sessionId,
+          creditErr: creditErr.message,
+          rollbackErr: rollbackErr.message,
+        })
+      }
+
       return { error: 'Erro ao debitar o crédito. Tente novamente.' }
     }
   }
@@ -687,16 +698,7 @@ export async function addStudentToSession(
   // Pré-declaração. Só para quem não tem plano/parceiro/crédito — para os outros
   // a aula já está paga e gravar payments aqui seria cobrança dupla.
   if (decision.grant === 'debt' && reason !== 'open') {
-    const { data: settingsRaw } = await adminClient
-      .from('system_settings')
-      .select('key, value')
-      .eq('organization_id', orgId)
-      .in('key', ['single_class_price'])
-
-    const priceRow = ((settingsRaw ?? []) as { key: string; value: string }[]).find(
-      (s) => s.key === 'single_class_price',
-    )
-    const price = parseFloat(priceRow?.value ?? '0') || 0
+    const price = await getSingleClassPrice(adminClient, orgId)
 
     const { error: payErr } = await adminClient.from('payments').insert({
       organization_id: orgId,
