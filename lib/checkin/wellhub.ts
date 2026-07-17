@@ -25,6 +25,7 @@ export interface CanonicalCheckinEvent {
   gymId: string
   partnerMemberId: string
   checkinDate: string // yyyy-MM-dd (data local da academia)
+  checkinAt: string // instante ISO do evento (epoch do payload, normalizado)
   externalRef: string // chave de dedupe sintetizada (gym:user:timestamp)
 }
 
@@ -58,13 +59,18 @@ export function wellhubMemberName(payload: unknown): string | null {
   return name || null
 }
 
+// A doc da Wellhub é ambígua na unidade: o POST de exemplo usa SEGUNDOS (10 díg.,
+// ex. 1666629613) e o "response example" usa MILISSEGUNDOS (13 díg.). Detecta pela
+// magnitude p/ não errar a data/instante (>= 1e12 ⇒ já está em ms).
+function normalizeEpochMs(timestamp: number): number {
+  return timestamp >= 1e12 ? timestamp : timestamp * 1000
+}
+
 function epochToLocalDate(timestamp: number): string {
-  // A doc da Wellhub é ambígua na unidade: o POST de exemplo usa SEGUNDOS (10 díg.,
-  // ex. 1666629613) e o "response example" usa MILISSEGUNDOS (13 díg.). Detecta pela
-  // magnitude p/ não errar a data (>= 1e12 ⇒ já está em ms).
-  const ms = timestamp >= 1e12 ? timestamp : timestamp * 1000
   // en-CA formata como yyyy-MM-dd; timeZone converte para a data local da academia.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: GYM_TIMEZONE }).format(new Date(ms))
+  return new Intl.DateTimeFormat('en-CA', { timeZone: GYM_TIMEZONE }).format(
+    new Date(normalizeEpochMs(timestamp)),
+  )
 }
 
 // Normaliza o payload cru da Wellhub. Eventos não-checkin → { kind: 'ignored' }.
@@ -91,6 +97,7 @@ export function parseWellhubEvent(rawBody: string): CanonicalCheckinEvent | Igno
     gymId: gymIdStr,
     partnerMemberId,
     checkinDate: epochToLocalDate(timestamp),
+    checkinAt: new Date(normalizeEpochMs(timestamp)).toISOString(),
     externalRef: `${gymIdStr}:${partnerMemberId}:${timestamp}`,
   }
 }

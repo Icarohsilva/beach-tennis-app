@@ -19,6 +19,7 @@ describe('parseWellhubEvent', () => {
       gymId: '123456',
       partnerMemberId: '1000000000001',
       checkinDate: '2022-10-24',
+      checkinAt: '2022-10-24T16:40:13.000Z',
       externalRef: '123456:1000000000001:1666629613',
     })
   })
