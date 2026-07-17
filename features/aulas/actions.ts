@@ -582,7 +582,7 @@ export async function markAttendance(
       console.error('[markAttendance] ensureClassDebt falhou', {
         sessionId, studentId, error: err instanceof Error ? err.message : String(err),
       })
-      Sentry.captureException(err, { extra: { sessionId, studentId, orgId } })
+      Sentry.captureException(err, { tags: { feature: 'classDebt' }, extra: { sessionId, studentId, orgId } })
     }
   }
 
@@ -644,7 +644,7 @@ export async function markAttendanceBulk(
       console.error('[markAttendanceBulk] ensureClassDebt falhou', {
         sessionId, studentId, error: err instanceof Error ? err.message : String(err),
       })
-      Sentry.captureException(err, { extra: { sessionId, studentId, orgId } })
+      Sentry.captureException(err, { tags: { feature: 'classDebt' }, extra: { sessionId, studentId, orgId } })
     }
   }
 
