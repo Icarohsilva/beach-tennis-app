@@ -71,9 +71,9 @@ export default async function GradePage() {
     classesByDay.set(c.day_of_week, arr)
   }
 
-  // Enrolled count per class + credit-issue count. Saldo/tipo são por-academia:
-  // vêm da membership do aluno NESTA org (não de profiles, que só reflete a
-  // academia padrão do aluno multi-vínculo).
+  // Enrolled count per class + contagem de irregulares (sem plano/parceiro).
+  // Partner/plano são por-academia: vêm da membership do aluno NESTA org (não
+  // de profiles, que só reflete a academia padrão do aluno multi-vínculo).
   const classIds = allClasses.map((c) => c.id)
   const { data: enrollRowsRaw } =
     classIds.length > 0
@@ -217,7 +217,7 @@ export default async function GradePage() {
                       <p className="text-xs text-slate-400 mb-1">
                         {formatTime(c.start_time)} – {formatTime(c.end_time)}
                       </p>
-                      {/* Row 3: vagas + alerta de crédito */}
+                      {/* Row 3: vagas + alerta de plano */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-slate-400">
                           <span className="text-sm font-extrabold text-brand-500">{enrolled}/{c.max_students}</span>{' '}
