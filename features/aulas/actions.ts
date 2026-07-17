@@ -8,6 +8,8 @@ import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
+import { resolveClassAccess } from '@/lib/utils/accessRules'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
@@ -79,11 +81,8 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
     sessionId = (newSession as { id: string }).id
   }
 
-  // Vínculo de parceiro (por-academia) vem da membership da academia ativa.
-  const membership = await getActiveMembership()
-  const useCredit = !membership?.partner
-
-  return bookSession(sessionId, useCredit)
+  // Quem decide o custo é resolveClassAccess, dentro de bookSession.
+  return bookSession(sessionId)
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +100,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
  *   5. No duplicate confirmed booking on the same session
  *   6. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
  */
-export async function bookSession(
-  sessionId: string,
-  useCreditArg?: boolean,
-): Promise<{ error?: string }> {
+export async function bookSession(sessionId: string): Promise<{ error?: string }> {
   const supabase = createClient()
   const {
     data: { user },
@@ -181,11 +177,48 @@ export async function bookSession(
     return { error: 'Você já possui um agendamento confirmado nesta sessão.' }
   }
 
-  // Decide credit usage
-  const useCredit = useCreditArg ?? false
-  if (useCredit && profile.credits_balance < 1) {
-    return { error: 'Créditos insuficientes.' }
+  // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
+  // da reconciliação (spec §1).
+  const { data: sub } = await adminClient
+    .from('student_subscriptions')
+    .select('gateway, current_period_end')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  const hasActivePlan =
+    !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+
+  // Dívida aberta = payments pendente COM session_id. O filtro de session_id é
+  // essencial: compra de crédito abandonada no checkout também fica 'pending',
+  // mas com session_id null — sem o filtro ela bloquearia o aluno para sempre
+  // (spec §4).
+  const { count: debtCount } = await adminClient
+    .from('payments')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'pending')
+    .not('session_id', 'is', null)
+
+  const decision = resolveClassAccess({
+    partner: profile.partner,
+    hasActivePlan,
+    creditsBalance: profile.credits_balance,
+    hasOpenDebt: (debtCount ?? 0) > 0,
+  })
+
+  if ('denied' in decision) {
+    return {
+      error:
+        'Você tem uma aula em aberto. Regularize o pagamento com a academia para agendar novamente.',
+    }
   }
+
+  // Só 'credit' debita. 'partner' e 'plan' entram de graça; 'debt' entra e a
+  // pendência nasce se houver presença (spec §5).
+  const useCredit = decision.grant === 'credit'
 
   // Capacity check + insert na mesma transação (sem overbooking)
   const { data: bookingId, error: bookErr } = await adminClient.rpc('book_session_atomic', {
