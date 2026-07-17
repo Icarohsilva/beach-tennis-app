@@ -8,6 +8,8 @@ import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
 import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+import { resolveClassAccess } from '@/lib/utils/accessRules'
+import type { AddStudentReason, CheckinPartner } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 
@@ -581,4 +583,143 @@ export async function generateSessionsForExistingClass(
 
   revalidatePath('/admin/grade')
   return { count: rows.length }
+}
+
+// ---------------------------------------------------------------------------
+// addStudentToSession — admin/professor adiciona aluno avulso a uma sessão
+// ---------------------------------------------------------------------------
+
+/**
+ * Adiciona um aluno a uma sessão, com ou sem crédito, plano ou parceiro.
+ *
+ * IGNORA o bloqueio por dívida de propósito (spec §1): o admin pode estar
+ * adicionando justamente o aluno que está quitando no balcão. Esta é a única
+ * porta com essa permissão.
+ *
+ * `reason` só é considerado quando o aluno não tem plano, parceiro nem crédito;
+ * caso contrário o caminho normal decide (parceiro/plano entram de graça,
+ * crédito debita).
+ */
+export async function addStudentToSession(
+  sessionId: string,
+  studentId: string,
+  reason: AddStudentReason,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, status, class:classes(max_students)')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .single()
+
+  if (!session) return { error: 'Sessão não encontrada.' }
+  if ((session as { status: string }).status !== 'scheduled') {
+    return { error: 'Esta sessão não está disponível.' }
+  }
+
+  const clsRaw = (session as { class: { max_students: number } | { max_students: number }[] }).class
+  const cls = Array.isArray(clsRaw) ? clsRaw[0] : clsRaw
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('partner, credits_balance')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  if (!membership) return { error: 'Aluno não participa desta academia.' }
+  const mem = membership as { partner: string | null; credits_balance: number }
+
+  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
+
+  // Note o hasOpenDebt: false — o admin ignora o bloqueio (ver doc acima).
+  const decision = resolveClassAccess({
+    partner: mem.partner as CheckinPartner | null,
+    hasActivePlan,
+    creditsBalance: mem.credits_balance,
+    hasOpenDebt: false,
+  })
+
+  // 'denied' é inalcançável com hasOpenDebt: false, mas o TypeScript não sabe.
+  if ('denied' in decision) return { error: 'Não foi possível adicionar o aluno.' }
+
+  const useCredit = decision.grant === 'credit'
+
+  const { error: bookErr } = await adminClient.rpc('book_session_atomic', {
+    p_student_id: studentId,
+    p_session_id: sessionId,
+    p_max_students: cls.max_students,
+    p_type: 'extra',
+    p_from_enrollment: false,
+    p_credit_used: useCredit,
+  })
+
+  if (bookErr) {
+    if (bookErr.message.includes('SESSION_FULL')) return { error: 'Esta turma está lotada.' }
+    if (bookErr.message.includes('ALREADY_BOOKED')) return { error: 'Aluno já está nesta aula.' }
+    return { error: 'Erro ao adicionar o aluno.' }
+  }
+
+  if (useCredit) {
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_org: orgId,
+      p_delta: -1,
+      p_type: 'used',
+      p_reason: 'Adicionado à aula pelo admin',
+      p_session_id: sessionId,
+    })
+    if (creditErr) {
+      await adminClient
+        .from('session_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('student_id', studentId)
+        .eq('session_id', sessionId)
+      return { error: 'Erro ao debitar o crédito. Tente novamente.' }
+    }
+  }
+
+  // Pré-declaração. Só para quem não tem plano/parceiro/crédito — para os outros
+  // a aula já está paga e gravar payments aqui seria cobrança dupla.
+  if (decision.grant === 'debt' && reason !== 'open') {
+    const { data: settingsRaw } = await adminClient
+      .from('system_settings')
+      .select('key, value')
+      .eq('organization_id', orgId)
+      .in('key', ['single_class_price'])
+
+    const priceRow = ((settingsRaw ?? []) as { key: string; value: string }[]).find(
+      (s) => s.key === 'single_class_price',
+    )
+    const price = parseFloat(priceRow?.value ?? '0') || 0
+
+    const { error: payErr } = await adminClient.from('payments').insert({
+      organization_id: orgId,
+      student_id: studentId,
+      session_id: sessionId,
+      amount: reason === 'experimental' ? 0 : price,
+      currency: 'BRL',
+      status: 'paid',
+      type: reason === 'experimental' ? 'trial' : 'per_class',
+      gateway: 'manual',
+      paid_at: new Date().toISOString(),
+      credits_qty: null,
+    })
+
+    // 23505 = já havia pendência para este par: a aula já estava registrada.
+    // Não é erro — e não derruba a reserva, que é o que o admin pediu.
+    if (payErr && payErr.code !== '23505') {
+      console.error('[addStudentToSession] pre-declaracao falhou', {
+        sessionId, studentId, reason, error: payErr.message,
+      })
+    }
+  }
+
+  revalidatePath(`/admin/grade/${sessionId}`)
+  return {}
 }

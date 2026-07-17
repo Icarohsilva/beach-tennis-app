@@ -11,6 +11,14 @@ export type AttendanceStatus = 'present' | 'absent' | 'late'
 export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass'
 export type CheckinPartner = 'wellhub' | 'totalpass'
 
+/**
+ * Motivo da adição de um aluno sem plano, parceiro nem crédito a uma sessão.
+ * Pré-declaração: 'experimental' e 'on_spot' gravam payments na hora, o que
+ * SUPRIME a dívida automática da presença (via payments_session_student_unique).
+ * 'open' não grava nada — a presença cria a pendência normalmente.
+ */
+export type AddStudentReason = 'experimental' | 'on_spot' | 'open'
+
 export interface OrgIntegration {
   id: string
   organization_id: string
