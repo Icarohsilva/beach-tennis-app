@@ -10,6 +10,7 @@ import { normalizePartnerId } from './partnerId'
 import { findSessionInWindow } from './sessionWindow'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
+import * as Sentry from '@sentry/nextjs'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -148,21 +149,38 @@ export async function recordResolvedCheckin(
       throw new Error(`Falha ao marcar presença: ${attendanceError.message}`)
     }
 
-    // Presença gera pendência (spec §5). Aluno de parceiro nunca gera — o
-    // ensureClassDebt confere isso —, mas a chamada fica aqui porque um
-    // check-in manual do admin pode ser de aluno sem parceiro.
-    try {
-      await ensureClassDebt(client, {
-        orgId: input.orgId,
-        studentId: input.studentId,
-        sessionId: linkedSessionId,
-      })
-    } catch (err) {
-      console.error('[recordResolvedCheckin] ensureClassDebt falhou', {
-        sessionId: linkedSessionId,
-        studentId: input.studentId,
-        error: err instanceof Error ? err.message : String(err),
-      })
+    // ignoreDuplicates não devolve a linha final em caso de conflito — relê pra
+    // saber o status real. Pode ter ficado 'absent' se o professor já tinha
+    // marcado assim; só presença 'present' de fato gera pendência (spec §5,
+    // classDebt.ts: "Chame SOMENTE para presença 'present'").
+    const { data: finalAttendance } = await client
+      .from('attendance')
+      .select('status')
+      .eq('student_id', input.studentId)
+      .eq('session_id', linkedSessionId)
+      .maybeSingle()
+
+    if ((finalAttendance as { status: string } | null)?.status === 'present') {
+      // Aluno de parceiro nunca gera pendência — o ensureClassDebt confere
+      // isso —, mas a chamada fica aqui porque um check-in manual do admin
+      // pode ser de aluno sem parceiro.
+      try {
+        await ensureClassDebt(client, {
+          orgId: input.orgId,
+          studentId: input.studentId,
+          sessionId: linkedSessionId,
+        })
+      } catch (err) {
+        console.error('[recordResolvedCheckin] ensureClassDebt falhou', {
+          sessionId: linkedSessionId,
+          studentId: input.studentId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        Sentry.captureException(err, {
+          tags: { feature: 'classDebt' },
+          extra: { sessionId: linkedSessionId, studentId: input.studentId, orgId: input.orgId },
+        })
+      }
     }
   }
 

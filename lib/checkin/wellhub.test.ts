@@ -8,7 +8,7 @@ const CHECKIN = JSON.stringify({
   event_data: {
     user: { unique_token: '1000000000001', first_name: 'Mike', last_name: 'Hightower' },
     gym: { id: 123456, title: 'Arena' },
-    timestamp: 1666629613, // 2022-10-24T17:20:13Z → 14:20 BRT (mesmo dia)
+    timestamp: 1666629613, // 2022-10-24T16:40:13Z → 13:40 BRT (mesmo dia)
   },
 })
 
