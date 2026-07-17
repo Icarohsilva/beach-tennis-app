@@ -1818,7 +1818,7 @@ Numeração fora de sequência de propósito (9.5, não 10): correção de lacun
 - Modify: `features/aulas/adminActions.ts` (`enrollStudentInClass`)
 - Modify: `features/aulas/actions.ts` (`bookSession`)
 
-**Fora de escopo de propósito:** `reconcileAllActiveEnrollments` (`features/aulas/creditReconciliation.ts`) e a página da grade (Tasks 13/14) usam uma variante em lote (`activeSubStudents.filter(s => isSubscriptionCurrent(s, now))` sobre um array pré-carregado) — é uma forma diferente, otimizada para não fazer N queries, e um candidato mais fraco pra extração. Não tocar.
+**Fora de escopo de propósito:** `reconcileAllActiveEnrollments` (`features/aulas/creditReconciliation.ts`), `app/(admin)/admin/financeiro/page.tsx` (lista de inadimplentes) e a página da grade (Tasks 13/14) usam uma variante em lote (`activeSubStudents.filter(s => isSubscriptionCurrent(s, now))` sobre um array pré-carregado) — é uma forma diferente, otimizada para não fazer N queries, e um candidato mais fraco pra extração. Não tocar.
 
 - [ ] **Step 1: Write the failing test**
 
