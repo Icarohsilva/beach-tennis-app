@@ -7,6 +7,7 @@ import { format, endOfMonth } from 'date-fns'
 import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 
@@ -82,6 +83,36 @@ export async function enrollStudentInClass(
 
   if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
 
+  // Fixa exige plano ou parceiro (spec §2). Crédito não compra vaga fixa.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('partner')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  if (!membership) return { error: 'Aluno não participa desta academia.' }
+
+  if (!(membership as { partner: string | null }).partner) {
+    const { data: sub } = await adminClient
+      .from('student_subscriptions')
+      .select('gateway, current_period_end')
+      .eq('student_id', studentId)
+      .eq('organization_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle()
+
+    const hasActivePlan =
+      !!sub && isSubscriptionCurrent(sub as { gateway: string; current_period_end: string | null }, new Date())
+
+    if (!hasActivePlan) {
+      return {
+        error:
+          'Aula fixa exige plano ativo ou Wellhub/TotalPass. Para uma aula pontual, adicione o aluno direto na sessão.',
+      }
+    }
+  }
+
   // Check for existing active enrollment
   const { count: existing } = await adminClient
     .from('enrollments')
@@ -116,7 +147,8 @@ export async function enrollStudentInClass(
 
   if (error) return { error: `Erro ao criar matrícula: ${error.message}` }
 
-  // Concede + reserva + debita todas as sessões restantes do mês para esta turma
+  // Reserva as sessões restantes do mês para esta turma. Não consome crédito:
+  // quem chega aqui tem plano ou parceiro (spec §3).
   const today = format(new Date(), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
   await reconcileEnrollmentCredits(studentId, classId, today, monthEnd)
