@@ -151,7 +151,7 @@ async function handleWebhook(body: WebhookPayload, orgParam: string | null): Pro
   // Find payment row
   const { data: payment, error: paymentErr } = await adminClient
     .from('payments')
-    .select('id, student_id, subscription_id, status, amount, currency')
+    .select('id, student_id, status, amount, currency')
     .eq('gateway_payment_id', gatewayPaymentId)
     .maybeSingle()
 
