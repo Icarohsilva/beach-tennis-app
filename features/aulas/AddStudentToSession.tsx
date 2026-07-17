@@ -40,13 +40,21 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   // ou crédito já tem a aula paga — perguntar seria ruído (spec §6).
   const needsReason = selected?.wouldOweDebt ?? false
 
+  function handleSelectStudent(id: string) {
+    setStudentId(id)
+    setReason('experimental')
+  }
+
   function handleAdd() {
     if (!studentId) return
     setError(null)
     startTransition(async () => {
       const result = await onAdd(sessionId, studentId, needsReason ? reason : 'open')
       if (result.error) setError(result.error)
-      else setStudentId('')
+      else {
+        setStudentId('')
+        setReason('experimental')
+      }
     })
   }
 
@@ -58,7 +66,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
 
       <select
         value={studentId}
-        onChange={(e) => setStudentId(e.target.value)}
+        onChange={(e) => handleSelectStudent(e.target.value)}
         className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-sm text-white mb-3"
       >
         <option value="">Selecione um aluno…</option>
