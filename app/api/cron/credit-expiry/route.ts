@@ -18,10 +18,12 @@ export async function GET(req: NextRequest) {
     const now = new Date()
 
     // Só quem tem saldo pode ter crédito a expirar.
-    const { data: membersRaw } = await admin
+    const { data: membersRaw, error: membersErr } = await admin
       .from('memberships')
       .select('user_id, organization_id, credits_balance')
       .gt('credits_balance', 0)
+
+    if (membersErr) throw new Error(membersErr.message)
 
     const members = (membersRaw ?? []) as {
       user_id: string
@@ -35,11 +37,13 @@ export async function GET(req: NextRequest) {
 
     for (const m of members) {
       try {
-        const { data: txsRaw } = await admin
+        const { data: txsRaw, error: txErr } = await admin
           .from('credit_transactions')
           .select('amount, created_at, expires_at')
           .eq('student_id', m.user_id)
           .eq('organization_id', m.organization_id)
+
+        if (txErr) throw new Error(txErr.message)
 
         const txs = (txsRaw ?? []) as {
           amount: number
