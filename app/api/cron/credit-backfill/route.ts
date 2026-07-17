@@ -1,6 +1,7 @@
 // app/api/cron/credit-backfill/route.ts
-// Execução pontual: desconta os créditos das aulas do mês corrente para
-// alunos ativos que já têm matrícula fixa. Idempotente (pula sessões já
+// Execução pontual: reserva as sessões do mês corrente para alunos ativos que
+// já têm matrícula fixa. Não mexe em crédito (spec 2026-07: matrícula fixa
+// exige plano ou parceiro, não crédito). Idempotente (pula sessões já
 // reservadas). Disparar manualmente via curl com o CRON_SECRET.
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'

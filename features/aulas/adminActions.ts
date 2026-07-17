@@ -452,7 +452,8 @@ export async function addCreditsManually(
 
 // ---------------------------------------------------------------------------
 // generateWeeklyBookings — for a class, reconciles each enrolled student over
-// the next 14 days via reconcileEnrollmentCredits (book + grant + debit).
+// the next 14 days via reconcileEnrollmentCredits (books sessions only — does
+// not touch credit; fixed enrollment requires a plan or partner, not credit).
 // Returns lists of booked and skipped (e.g. full sessions) students for display.
 // ---------------------------------------------------------------------------
 
