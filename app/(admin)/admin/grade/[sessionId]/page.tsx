@@ -5,6 +5,9 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { AttendanceSheet } from '@/features/aulas/AttendanceSheet'
 import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
+import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
+import { addStudentToSession } from '@/features/aulas/adminActions'
+import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import type { ClassSession, Profile, Membership, Attendance } from '@/types'
@@ -96,6 +99,58 @@ export default async function SessionDetailPage({ params }: Props) {
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
 
+  // Alunos da academia que ainda NÃO estão nesta sessão. `wouldOweDebt` decide
+  // se o seletor de motivo aparece — mesma regra do resolveClassAccess, mas sem
+  // o eixo dívida: o admin ignora o bloqueio (spec §1).
+  const { data: allMemsRaw } = await adminClient
+    .from('memberships')
+    .select('user_id, partner, credits_balance')
+    .eq('organization_id', orgId)
+    .eq('role', 'student')
+
+  const allMems = (allMemsRaw ?? []) as {
+    user_id: string
+    partner: string | null
+    credits_balance: number
+  }[]
+  const candidateIds = allMems.map((m) => m.user_id).filter((id) => !studentIds.includes(id))
+
+  const { data: candidateProfiles } =
+    candidateIds.length > 0
+      ? await adminClient.from('profiles').select('id, full_name').in('id', candidateIds)
+      : { data: [] }
+
+  const { data: candidateSubsRaw } =
+    candidateIds.length > 0
+      ? await adminClient
+          .from('student_subscriptions')
+          .select('student_id, gateway, current_period_end')
+          .in('student_id', candidateIds)
+          .eq('organization_id', orgId)
+          .eq('status', 'active')
+      : { data: [] }
+
+  const now = new Date()
+  const planStudents = new Set(
+    ((candidateSubsRaw ?? []) as {
+      student_id: string
+      gateway: string
+      current_period_end: string | null
+    }[])
+      .filter((s) => isSubscriptionCurrent(s, now))
+      .map((s) => s.student_id),
+  )
+  const memById = new Map(allMems.map((m) => [m.user_id, m]))
+
+  const addableStudents: AddableStudent[] = (candidateProfiles ?? [])
+    .map((p: Pick<Profile, 'id' | 'full_name'>) => {
+      const mem = memById.get(p.id)
+      const hasAccess =
+        !!mem?.partner || planStudents.has(p.id) || (mem?.credits_balance ?? 0) >= 1
+      return { id: p.id, full_name: p.full_name, wouldOweDebt: !hasAccess }
+    })
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center gap-3">
@@ -113,6 +168,12 @@ export default async function SessionDetailPage({ params }: Props) {
           {formatDate(typedSession.session_date)} · {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
         </p>
       </div>
+
+      <AddStudentToSession
+        sessionId={params.sessionId}
+        students={addableStudents}
+        onAdd={addStudentToSession}
+      />
 
       <AttendanceSheet
         sessionId={params.sessionId}
