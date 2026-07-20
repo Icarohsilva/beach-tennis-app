@@ -42,9 +42,16 @@ export async function generateGrid(
   const rows = classes.flatMap((c) => buildSessionRows(c.id, c.day_of_week, from, to))
   if (rows.length > 0) {
     // organization_id é preenchido pelo trigger trg_set_org (deriva de class_id).
-    await client
+    const { error: upsertErr } = await client
       .from('class_sessions')
       .upsert(rows, { onConflict: 'class_id,session_date', ignoreDuplicates: true })
+
+    if (upsertErr) {
+      console.error('[generateGrid] upsert de class_sessions falhou', {
+        orgId, from, to, error: upsertErr.message,
+      })
+      return { sessionsCreated: 0, studentsBooked: 0 }
+    }
   }
 
   const rec = await reconcileAllActiveEnrollments(from, to, orgId)

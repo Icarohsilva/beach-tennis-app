@@ -12,6 +12,10 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
 /**
  * Fake client: `classes` devolve o que o teste configurar; `class_sessions.upsert`
  * captura as linhas. Só o subconjunto que generateGrid usa.
+ *
+ * `.eq()` grava os filtros aplicados e o `.then()` de fato filtra `classes` por
+ * eles — assim um teste que exige filtro por `classId`/`dayOfWeek` falha de
+ * verdade se o `.eq(...)` correspondente for removido do código-fonte.
  */
 function makeClient(classes: { id: string; day_of_week: number }[]) {
   const upserted: unknown[][] = []
@@ -19,11 +23,25 @@ function makeClient(classes: { id: string; day_of_week: number }[]) {
     if (table === 'class_sessions') {
       return { upsert: (rows: unknown[]) => { upserted.push(rows); return Promise.resolve({ error: null }) } }
     }
-    // classes: encadeia select/eq/eq... e resolve com a lista (thenable)
+    // classes: encadeia select/eq/eq... e resolve com a lista filtrada (thenable)
+    const filters: [string, unknown][] = []
     const builder: Record<string, unknown> = {}
     builder.select = () => builder
-    builder.eq = () => builder
-    builder.then = (resolve: (v: { data: unknown[] }) => void) => resolve({ data: classes })
+    builder.eq = (field: string, value: unknown) => {
+      filters.push([field, value])
+      return builder
+    }
+    builder.then = (resolve: (v: { data: unknown[] }) => void) => {
+      // Só filtra por campos que os fixtures modelam (id, day_of_week). Filtros
+      // como organization_id/is_active são sempre aplicados por generateGrid mas
+      // não fazem parte do fixture — tratados como pass-through aqui.
+      const filtered = classes.filter((c) =>
+        filters.every(([field, value]) =>
+          !(field in c) || (c as Record<string, unknown>)[field] === value,
+        ),
+      )
+      resolve({ data: filtered })
+    }
     return builder
   })
   return { client: { from } as never, upserted }
@@ -50,5 +68,17 @@ describe('generateGrid', () => {
     expect(upserted).toHaveLength(0)
     expect(r.sessionsCreated).toBe(0)
     expect(reconcileAllActiveEnrollments).not.toHaveBeenCalled()
+  })
+
+  it('filtra por classId quando informado', async () => {
+    const { client, upserted } = makeClient([
+      { id: 'c1', day_of_week: 2 },
+      { id: 'c2', day_of_week: 2 },
+    ])
+    const r = await generateGrid('org-1', '2026-07-20', '2026-07-26', { classId: 'c1' }, client)
+    expect(upserted).toHaveLength(1)
+    expect(upserted[0]).toHaveLength(1)
+    expect(upserted[0][0]).toMatchObject({ class_id: 'c1' })
+    expect(r.sessionsCreated).toBe(1)
   })
 })
