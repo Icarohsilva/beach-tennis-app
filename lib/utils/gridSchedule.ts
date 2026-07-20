@@ -50,8 +50,8 @@ function mostRecentTargetUtc(targetDay: number, targetHour: number, now: Date): 
   // Instante BRT-de-parede de hoje na hora-alvo, expresso em UTC.
   let target = new Date(Date.UTC(p.year, p.month, p.day, targetHour, 0, 0) + BRT_OFFSET_MS)
   // Recua até bater o dia-da-semana e não passar de `now`.
-  const targetDow = new Date(target.getTime() - BRT_OFFSET_MS).getUTCDay()
-  let back = (targetDow - targetDay + 7) % 7
+  const targetDow = p.dow
+  const back = (targetDow - targetDay + 7) % 7
   target = new Date(target.getTime() - back * 24 * 60 * 60 * 1000)
   if (target.getTime() > now.getTime()) {
     target = new Date(target.getTime() - 7 * 24 * 60 * 60 * 1000)
