@@ -33,9 +33,17 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   if (error) return { error: error.message }
 
   // Gera só a próxima semana da turma (7 datas). O regime de 90 dias foi
-  // substituído pela geração semanal (spec 2026-07-17).
+  // substituído pela geração semanal (spec 2026-07-17). Nota: generateGrid
+  // também reconcilia os fixos da ORG INTEIRA nesse intervalo (não só desta
+  // turma) — idempotente e seguro, mas não é grátis; aceito porque criar
+  // turma é uma operação rara para o admin.
   const from = brtToday(new Date())
-  await generateGrid(orgId, from, addDaysStr(from, 6), { classId: newClass.id })
+  const result = await generateGrid(orgId, from, addDaysStr(from, 6), { classId: newClass.id })
+  if (result.sessionsCreated === 0) {
+    console.error('[createClass] generateGrid nao criou a sessao esperada', {
+      classId: newClass.id, orgId, from,
+    })
+  }
 
   revalidatePath('/admin/grade')
   return {}
