@@ -8,7 +8,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
-import { GenerateSessionsButton } from './GenerateSessionsButton'
+import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
 import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
@@ -135,6 +135,7 @@ export default async function GradePage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Grade de Aulas</h1>
         <div className="flex gap-2">
+          <GenerateWeekButton />
           <Link href="/admin/grade/dayuse">
             <Button variant="secondary" size="sm">Day Use</Button>
           </Link>
@@ -191,8 +192,9 @@ export default async function GradePage() {
           if (dayClasses.length === 0) return null
           return (
             <div key={day} className="mb-4">
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                {DAY_ABBR[day]}
+              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center justify-between">
+                <span>{DAY_ABBR[day]}</span>
+                <GenerateDayButton dayOfWeek={day} />
               </h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dayClasses.map((c) => {
@@ -229,7 +231,6 @@ export default async function GradePage() {
                           </span>
                         )}
                       </div>
-                      <GenerateSessionsButton classId={c.id} />
                       <DeleteClassButton classId={c.id} className={c.name} />
                     </Card>
                   )
