@@ -13,31 +13,7 @@ import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
-
-async function requireAdmin(): Promise<{ userId: string; orgId: string; error?: string }> {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { userId: '', orgId: '', error: 'Não autenticado.' }
-
-  const orgId = await getActiveOrgId()
-  if (!orgId) return { userId: user.id, orgId: '', error: 'Academia ativa não encontrada.' }
-
-  // Papel é por-academia: vem da membership da academia ativa.
-  const adminClient = createAdminClient()
-  const { data: membership } = await adminClient
-    .from('memberships')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (membership?.role !== 'admin') {
-    return { userId: user.id, orgId, error: 'Sem permissão de administrador.' }
-  }
-  return { userId: user.id, orgId }
-}
+import { requireAdmin } from './authGuards'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
