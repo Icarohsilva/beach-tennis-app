@@ -2,8 +2,8 @@
 
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { format } from 'date-fns'
-import { buildSessionRows } from './sessionUtils'
+import { generateGrid } from './gridGeneration'
+import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
 import type { ClassType } from '@/types'
 
 export interface ClassFormData {
@@ -32,19 +32,10 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
     .single()
   if (error) return { error: error.message }
 
-  // Auto-generate sessions for the next 90 days
-  const today = new Date()
-  const end = new Date()
-  end.setDate(today.getDate() + 90)
-  const rows = buildSessionRows(
-    newClass.id,
-    data.day_of_week,
-    format(today, 'yyyy-MM-dd'),
-    format(end, 'yyyy-MM-dd'),
-  )
-  if (rows.length > 0) {
-    await adminClient.from('class_sessions').insert(rows)
-  }
+  // Gera só a próxima semana da turma (7 datas). O regime de 90 dias foi
+  // substituído pela geração semanal (spec 2026-07-17).
+  const from = brtToday(new Date())
+  await generateGrid(orgId, from, addDaysStr(from, 6), { classId: newClass.id })
 
   revalidatePath('/admin/grade')
   return {}
