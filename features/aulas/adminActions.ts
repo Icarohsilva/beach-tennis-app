@@ -623,10 +623,38 @@ export async function adminSkipEnrollmentDate(
   if (authErr) return { error: authErr }
   const adminClient = createAdminClient()
 
-  // Escopo: a sessão é desta academia.
+  // Escopo: a sessão é desta academia. Guarda class_id para revalidar também
+  // a página de edição da turma (Task 10), como updateClass já faz.
   const { data: session } = await adminClient
-    .from('class_sessions').select('id').eq('id', sessionId).eq('organization_id', orgId).maybeSingle()
+    .from('class_sessions')
+    .select('id, class_id')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
   if (!session) return { error: 'Sessão não encontrada.' }
+
+  // Mesma checagem de addStudentToSession: aluno precisa participar desta academia.
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('user_id')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!membership) return { error: 'Aluno não participa desta academia.' }
+
+  // Lê a reserva ANTES do upsert: se já havia uma reserva 'confirmed' com
+  // crédito debitado (ex.: addStudentToSession usou 1 crédito para esta data),
+  // o upsert abaixo vai sobrescrevê-la para 'cancelled'/credit_used:false —
+  // sem isto o crédito se perderia sem estorno. Mesma lógica de
+  // skipEnrollmentSession (features/aulas/actions.ts).
+  const { data: existingBooking } = await adminClient
+    .from('session_bookings')
+    .select('status, credit_used')
+    .eq('student_id', studentId)
+    .eq('session_id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  const needsRefund = existingBooking?.status === 'confirmed' && existingBooking?.credit_used === true
 
   // Reserva 'cancelled' (unique student_id,session_id): a reconciliação não
   // re-reserva quem tem QUALQUER reserva na sessão (creditReconciliation).
@@ -638,12 +666,34 @@ export async function adminSkipEnrollmentDate(
       status: 'cancelled',
       from_enrollment: true,
       credit_used: false,
+      cancelled_at: new Date().toISOString(),
     },
     { onConflict: 'student_id,session_id' },
   )
   if (error) return { error: `Erro ao registrar falta: ${error.message}` }
+
+  let creditWarning: string | undefined
+  if (needsRefund) {
+    // Crédito de reposição sem vencimento — mesmo tratamento de skipEnrollmentSession.
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_org: orgId,
+      p_delta: 1,
+      p_type: 'refunded',
+      p_reason: 'Falta pontual registrada pelo admin — crédito reposição sem vencimento',
+      p_session_id: sessionId,
+    })
+    if (creditErr) {
+      console.error('[adminSkipEnrollmentDate] adjust_credits falhou', {
+        studentId, sessionId, error: creditErr.message,
+      })
+      creditWarning = 'Falta registrada, mas houve um erro ao devolver o crédito. Contate o suporte.'
+    }
+  }
+
   revalidatePath('/admin/grade')
-  return {}
+  revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
+  return creditWarning ? { error: creditWarning } : {}
 }
 
 /** Desfaz a falta: remove a reserva 'cancelled' daquela data (volta a poder reservar). */
@@ -654,6 +704,16 @@ export async function adminUnskipEnrollmentDate(
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
   const adminClient = createAdminClient()
+
+  // Só para revalidar a página de edição da turma (Task 10) além da listagem;
+  // não precisa bloquear o desfazer se a turma não for encontrada.
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('class_id')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
   const { error } = await adminClient
     .from('session_bookings')
     .delete()
@@ -662,6 +722,8 @@ export async function adminUnskipEnrollmentDate(
     .eq('organization_id', orgId)
     .eq('status', 'cancelled')
   if (error) return { error: `Erro ao desfazer: ${error.message}` }
+
   revalidatePath('/admin/grade')
+  if (session) revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
   return {}
 }
