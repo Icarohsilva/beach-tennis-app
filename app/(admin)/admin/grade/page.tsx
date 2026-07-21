@@ -95,6 +95,7 @@ export default async function GradePage() {
         .in('class_id', classIds)
         .eq('organization_id', orgId)
         .eq('status', 'scheduled')
+        .gte('session_date', today)
     : { data: [] }
   const genByClass = new Map<string, { lastDate: string; lastCreated: string }>()
   for (const s of (genRaw ?? []) as { class_id: string; session_date: string; created_at: string }[]) {
