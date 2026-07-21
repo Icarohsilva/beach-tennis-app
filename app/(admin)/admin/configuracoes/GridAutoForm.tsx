@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { updateSystemSettings } from '@/features/financeiro/actions'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-brand-500'
 
 interface Props {
   settings: { grid_auto_enabled: boolean; grid_auto_day: number; grid_auto_hour: number }
@@ -40,7 +41,7 @@ export function GridAutoForm({ settings }: Props) {
         {success && <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">{success}</p>}
 
         <label className="flex items-center gap-2 text-sm text-slate-300 font-medium">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-4 h-4 accent-brand-500" />
           Gerar a grade da próxima semana automaticamente
         </label>
         <p className="text-xs text-slate-400">
@@ -54,7 +55,7 @@ export function GridAutoForm({ settings }: Props) {
               value={day}
               onChange={(e) => setDay(Number(e.target.value))}
               disabled={!enabled}
-              className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50"
+              className={SELECT_CLS}
             >
               {DAYS.map((d, i) => (
                 <option key={i} value={i}>{d}</option>
@@ -67,7 +68,7 @@ export function GridAutoForm({ settings }: Props) {
               value={hour}
               onChange={(e) => setHour(Number(e.target.value))}
               disabled={!enabled}
-              className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50"
+              className={SELECT_CLS}
             >
               {Array.from({ length: 24 }, (_, h) => (
                 <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>
