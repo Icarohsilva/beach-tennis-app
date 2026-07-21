@@ -115,6 +115,13 @@ gated). `grid_auto_last_run` é interno, não aparece no formulário.
 
 Registrado no `vercel.json` com schedule `0 * * * *` (de hora em hora).
 
+**Atualização pós-deploy:** o plano Hobby da Vercel rejeita cron mais frequente
+que 1x/dia (deploy falha com `deploy_failed`). Schedule real em produção é
+`0 5 * * *` (1x/dia). A lógica de catch-up (abaixo) já tolera esse intervalo
+maior — só alarga a janela de atraso de ~1h para ~24h, sem quebrar a garantia
+de que a semana acaba sendo gerada. Trocar de volta para `0 * * * *` se/quando
+o plano virar Pro.
+
 Fluxo:
 
 1. `verifyCronSecret` (padrão dos outros crons).

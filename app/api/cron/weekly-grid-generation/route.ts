@@ -1,8 +1,12 @@
 // app/api/cron/weekly-grid-generation/route.ts
-// Auto-geração semanal da grade. Roda de hora em hora; para cada academia com
-// grid_auto_enabled, decide via shouldRunGridNow (catch-up com marca d'água) se
-// gera agora. Resiliente a atraso/falha do Vercel: se perder a hora exata, a
-// próxima execução pega o alvo pendente.
+// Auto-geração semanal da grade. Rodava de hora em hora, mas o plano Hobby da
+// Vercel só permite crons diários (deploy falha com schedule mais frequente
+// que 1x/dia) — vercel.json roda isto 1x/dia (schedule "0 5 * * *"). Para
+// cada academia com grid_auto_enabled, decide via shouldRunGridNow (catch-up
+// com marca d'água) se gera agora; a lógica de catch-up já tolera qualquer
+// atraso entre checagens, então rodar 1x/dia só alarga a janela de atraso
+// (até ~24h) sem quebrar a garantia de que a semana acaba sendo gerada.
+// Se o plano virar Pro, trocar o schedule de volta para "0 * * * *".
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
