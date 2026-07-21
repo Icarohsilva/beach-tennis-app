@@ -25,9 +25,8 @@ export async function ClassRosterSection({ classId, orgId }: { classId: string; 
   }
 
   // Próximas sessões geradas (scheduled, hoje em diante) desta turma. Consulta
-  // direta (mesmo shape de getClassUpcomingSessions em adminActions.ts) para
-  // reusar o adminClient/orgId já resolvidos aqui, em vez de disparar mais um
-  // requireAdmin() (auth.getUser() + role query) redundante.
+  // direta reusando o adminClient/orgId já resolvidos aqui, em vez de disparar
+  // um requireAdmin() (auth.getUser() + role query) redundante.
   const today = new Date().toISOString().slice(0, 10)
   const { data: upSessionsRaw } = await adminClient
     .from('class_sessions')

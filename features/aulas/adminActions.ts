@@ -592,27 +592,8 @@ export async function addStudentToSession(
 }
 
 // ---------------------------------------------------------------------------
-// getClassUpcomingSessions / adminSkipEnrollmentDate / adminUnskipEnrollmentDate
+// adminSkipEnrollmentDate / adminUnskipEnrollmentDate
 // ---------------------------------------------------------------------------
-
-/** Próximas sessões geradas (scheduled, hoje em diante) de uma turma. */
-export async function getClassUpcomingSessions(
-  classId: string,
-): Promise<{ error?: string; sessions?: { id: string; session_date: string }[] }> {
-  const { orgId, error: authErr } = await requireAdmin()
-  if (authErr) return { error: authErr }
-  const adminClient = createAdminClient()
-  const today = new Date().toISOString().slice(0, 10)
-  const { data } = await adminClient
-    .from('class_sessions')
-    .select('id, session_date')
-    .eq('class_id', classId)
-    .eq('organization_id', orgId)
-    .eq('status', 'scheduled')
-    .gte('session_date', today)
-    .order('session_date', { ascending: true })
-  return { sessions: (data ?? []) as { id: string; session_date: string }[] }
-}
 
 /** Admin tira o aluno de UMA data (falta pontual): reserva 'cancelled' na sessão. */
 export async function adminSkipEnrollmentDate(
