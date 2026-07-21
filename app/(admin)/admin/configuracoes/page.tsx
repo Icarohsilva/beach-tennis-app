@@ -1,5 +1,6 @@
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { SystemSettingsForm } from './SystemSettingsForm'
+import { GridAutoForm } from './GridAutoForm'
 import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
@@ -28,6 +29,12 @@ export default async function ConfiguracoesPage() {
     credit_expiry_days: Number(map.get('credit_expiry_days') ?? 30),
     cancellation_window_hours: Number(map.get('cancellation_window_hours') ?? 5),
     default_checkin_target: Number(map.get('default_checkin_target') ?? DEFAULT_CHECKIN_TARGET),
+  }
+
+  const gridAuto = {
+    grid_auto_enabled: (map.get('grid_auto_enabled') ?? 'false') === 'true',
+    grid_auto_day: Number(map.get('grid_auto_day') ?? 1),
+    grid_auto_hour: Number(map.get('grid_auto_hour') ?? 6),
   }
 
   const { data: orgRow } = await adminClient
@@ -74,6 +81,14 @@ export default async function ConfiguracoesPage() {
         <p className="text-slate-400 text-sm mt-1">Parâmetros globais do sistema</p>
       </div>
       <SystemSettingsForm settings={defaults} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Geração automática da grade</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Gere a grade da próxima semana automaticamente, no dia e hora que escolher.
+        </p>
+      </div>
+      <GridAutoForm settings={gridAuto} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Personalização</h2>

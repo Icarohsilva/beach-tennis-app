@@ -427,6 +427,9 @@ export async function updateSystemSettings(settings: {
   credit_expiry_days?: number
   cancellation_window_hours?: number
   default_checkin_target?: number
+  grid_auto_enabled?: boolean
+  grid_auto_day?: number
+  grid_auto_hour?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -451,6 +454,19 @@ export async function updateSystemSettings(settings: {
     (!Number.isInteger(settings.default_checkin_target) || settings.default_checkin_target < 0)
   ) {
     return { error: 'Meta mensal de check-ins inválida.' }
+  }
+
+  if (
+    settings.grid_auto_day !== undefined &&
+    (!Number.isInteger(settings.grid_auto_day) || settings.grid_auto_day < 0 || settings.grid_auto_day > 6)
+  ) {
+    return { error: 'Dia da geração automática inválido.' }
+  }
+  if (
+    settings.grid_auto_hour !== undefined &&
+    (!Number.isInteger(settings.grid_auto_hour) || settings.grid_auto_hour < 0 || settings.grid_auto_hour > 23)
+  ) {
+    return { error: 'Hora da geração automática inválida.' }
   }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
