@@ -4,16 +4,56 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
 import { generateGrid } from './gridGeneration'
-import { getClassRoster } from './enrollmentRoster'
+import { getClassRoster, type Roster } from './enrollmentRoster'
 import { notifyGridGenerated } from './gridNotify'
 import { brtToday, addDaysStr, nextDateForDayOfWeek } from '@/lib/utils/gridSchedule'
 
 interface GridActionResult {
   error?: string
   sessionsCreated?: number
+  // reservados/aConfirmar/semPlano ficam em pt-BR de propósito: são o shape direto
+  // do texto exibido ao admin (Task 7), diferente do inglês interno de enrollmentRoster.ts.
   reservados?: number
   aConfirmar?: number
   semPlano?: number
+}
+
+/**
+ * Busca o roster com blindagem: se falhar (qualquer uma das queries internas,
+ * ou até createAdminClient()), degrada para contagens zeradas em vez de
+ * derrubar a Server Action. Importante: generateGrid já inseriu as sessões de
+ * forma durável ANTES deste ponto, e o gate de notificação (sessionsCreated >
+ * 0) depende de um upsert idempotente — se a action rejeitar aqui, um retry
+ * encontra as sessões já existentes, sessionsCreated volta 0, e a notificação
+ * daquelas sessões específicas NUNCA mais dispara. Perder o roster não deveria
+ * também bloquear o push.
+ */
+async function getRosterSafe(orgId: string, opts: { dayOfWeek?: number } = {}): Promise<Roster> {
+  try {
+    return await getClassRoster(createAdminClient(), orgId, opts)
+  } catch (err) {
+    console.error('[gridActions] getClassRoster falhou', { orgId, error: err instanceof Error ? err.message : String(err) })
+    return { byClass: new Map(), totals: { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0 } }
+  }
+}
+
+/** Roster (blindado) + notify (best-effort, gated) + revalidate + shape do retorno — cauda compartilhada pelas duas actions. */
+async function finishGeneration(
+  orgId: string,
+  sessionsCreated: number,
+  rosterOpts: { dayOfWeek?: number },
+  notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
+): Promise<GridActionResult> {
+  const roster = await getRosterSafe(orgId, rosterOpts)
+  if (sessionsCreated > 0) await notifyGridGenerated(orgId, notifyScope)
+
+  revalidatePath('/admin/grade')
+  return {
+    sessionsCreated,
+    reservados: roster.totals.eligible,
+    aConfirmar: roster.totals.pendingConfirmation,
+    semPlano: roster.totals.noPlan,
+  }
 }
 
 /** Gera a próxima ocorrência de um dia-da-semana (todas as turmas do dia). */
@@ -30,16 +70,7 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
   if (r.error) return { error: r.error }
 
-  const roster = await getClassRoster(createAdminClient(), orgId, { dayOfWeek })
-  if (r.sessionsCreated > 0) await notifyGridGenerated(orgId, { kind: 'day', dayOfWeek })
-
-  revalidatePath('/admin/grade')
-  return {
-    sessionsCreated: r.sessionsCreated,
-    reservados: roster.totals.eligible,
-    aConfirmar: roster.totals.pendingConfirmation,
-    semPlano: roster.totals.noPlan,
-  }
+  return finishGeneration(orgId, r.sessionsCreated, { dayOfWeek }, { kind: 'day', dayOfWeek })
 }
 
 /** Gera a semana toda (7 datas a partir de hoje, todas as turmas). */
@@ -52,14 +83,5 @@ export async function generateGridWeek(): Promise<GridActionResult> {
   const r = await generateGrid(orgId, from, to)
   if (r.error) return { error: r.error }
 
-  const roster = await getClassRoster(createAdminClient(), orgId)
-  if (r.sessionsCreated > 0) await notifyGridGenerated(orgId, { kind: 'week' })
-
-  revalidatePath('/admin/grade')
-  return {
-    sessionsCreated: r.sessionsCreated,
-    reservados: roster.totals.eligible,
-    aConfirmar: roster.totals.pendingConfirmation,
-    semPlano: roster.totals.noPlan,
-  }
+  return finishGeneration(orgId, r.sessionsCreated, {}, { kind: 'week' })
 }
