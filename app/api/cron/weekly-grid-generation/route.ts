@@ -15,6 +15,8 @@ import { generateGrid } from '@/features/aulas/gridGeneration'
 import { notifyGridGenerated } from '@/features/aulas/gridNotify'
 import { brtToday, addDaysStr, shouldRunGridNow } from '@/lib/utils/gridSchedule'
 
+export const maxDuration = 300
+
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
