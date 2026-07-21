@@ -3,9 +3,18 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { generateGridWeek, generateGridDay } from '@/features/aulas/gridActions'
 
-function feedback(r: { error?: string; sessionsCreated?: number; studentsBooked?: number }): string {
+function feedback(r: {
+  error?: string
+  sessionsCreated?: number
+  reservados?: number
+  aConfirmar?: number
+  semPlano?: number
+}): string {
   if (r.error) return `Erro: ${r.error}`
-  return `${r.sessionsCreated ?? 0} sessões geradas · ${r.studentsBooked ?? 0} alunos reservados.`
+  const parts = [`${r.sessionsCreated ?? 0} sessões`, `${r.reservados ?? 0} reservados`]
+  if ((r.aConfirmar ?? 0) > 0) parts.push(`${r.aConfirmar} a confirmar`)
+  if ((r.semPlano ?? 0) > 0) parts.push(`${r.semPlano} sem plano`)
+  return parts.join(' · ')
 }
 
 /** Botão "Gerar semana toda" — vai no topo da grade. */
