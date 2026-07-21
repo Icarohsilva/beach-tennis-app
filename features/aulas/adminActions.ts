@@ -590,3 +590,78 @@ export async function addStudentToSession(
   revalidatePath(`/admin/grade/${sessionId}`)
   return {}
 }
+
+// ---------------------------------------------------------------------------
+// getClassUpcomingSessions / adminSkipEnrollmentDate / adminUnskipEnrollmentDate
+// ---------------------------------------------------------------------------
+
+/** Próximas sessões geradas (scheduled, hoje em diante) de uma turma. */
+export async function getClassUpcomingSessions(
+  classId: string,
+): Promise<{ error?: string; sessions?: { id: string; session_date: string }[] }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  const adminClient = createAdminClient()
+  const today = new Date().toISOString().slice(0, 10)
+  const { data } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date')
+    .eq('class_id', classId)
+    .eq('organization_id', orgId)
+    .eq('status', 'scheduled')
+    .gte('session_date', today)
+    .order('session_date', { ascending: true })
+  return { sessions: (data ?? []) as { id: string; session_date: string }[] }
+}
+
+/** Admin tira o aluno de UMA data (falta pontual): reserva 'cancelled' na sessão. */
+export async function adminSkipEnrollmentDate(
+  studentId: string,
+  sessionId: string,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  const adminClient = createAdminClient()
+
+  // Escopo: a sessão é desta academia.
+  const { data: session } = await adminClient
+    .from('class_sessions').select('id').eq('id', sessionId).eq('organization_id', orgId).maybeSingle()
+  if (!session) return { error: 'Sessão não encontrada.' }
+
+  // Reserva 'cancelled' (unique student_id,session_id): a reconciliação não
+  // re-reserva quem tem QUALQUER reserva na sessão (creditReconciliation).
+  const { error } = await adminClient.from('session_bookings').upsert(
+    {
+      organization_id: orgId,
+      student_id: studentId,
+      session_id: sessionId,
+      status: 'cancelled',
+      from_enrollment: true,
+      credit_used: false,
+    },
+    { onConflict: 'student_id,session_id' },
+  )
+  if (error) return { error: `Erro ao registrar falta: ${error.message}` }
+  revalidatePath('/admin/grade')
+  return {}
+}
+
+/** Desfaz a falta: remove a reserva 'cancelled' daquela data (volta a poder reservar). */
+export async function adminUnskipEnrollmentDate(
+  studentId: string,
+  sessionId: string,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('session_bookings')
+    .delete()
+    .eq('student_id', studentId)
+    .eq('session_id', sessionId)
+    .eq('organization_id', orgId)
+    .eq('status', 'cancelled')
+  if (error) return { error: `Erro ao desfazer: ${error.message}` }
+  revalidatePath('/admin/grade')
+  return {}
+}
