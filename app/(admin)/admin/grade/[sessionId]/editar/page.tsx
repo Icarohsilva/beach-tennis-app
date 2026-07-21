@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { EditClassForm } from '@/features/aulas/EditClassForm'
+import { ClassRosterSection } from '@/features/aulas/ClassRosterSection'
 import type { Class } from '@/types'
 
 export default async function EditClassPage({ params }: { params: { sessionId: string } }) {
@@ -15,6 +16,9 @@ export default async function EditClassPage({ params }: { params: { sessionId: s
       <Link href="/admin/grade" className="text-slate-400 hover:text-white text-sm">← Grade</Link>
       <h1 className="text-2xl font-bold text-white">Editar Turma</h1>
       <EditClassForm class_={data as Class} />
+      <div className="border-t border-surface-border pt-6">
+        <ClassRosterSection classId={classId} />
+      </div>
     </div>
   )
 }
