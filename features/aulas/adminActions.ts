@@ -4,7 +4,6 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { format, endOfMonth } from 'date-fns'
-import { buildSessionRows } from './sessionUtils'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
 import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
@@ -450,116 +449,6 @@ export async function addCreditsManually(
 
   revalidatePath(`/admin/alunos/${studentId}`)
   return {}
-}
-
-// ---------------------------------------------------------------------------
-// generateWeeklyBookings — for a class, reconciles each enrolled student over
-// the next 14 days via reconcileEnrollmentCredits (books sessions only — does
-// not touch credit; fixed enrollment requires a plan or partner, not credit).
-// Returns lists of booked and skipped (e.g. full sessions) students for display.
-// ---------------------------------------------------------------------------
-
-export async function generateWeeklyBookings(
-  classId: string,
-): Promise<{ error?: string; booked?: string[]; skipped?: string[] }> {
-  const { orgId, error: authErr } = await requireAdmin()
-  if (authErr) return { error: authErr }
-
-  const adminClient = createAdminClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const in14 = new Date()
-  in14.setDate(in14.getDate() + 14)
-  const in14Str = format(in14, 'yyyy-MM-dd')
-
-  // Matrículas ativas da turma com nome do aluno (escopado pela academia ativa)
-  const { data: enrollmentsRaw } = await adminClient
-    .from('enrollments')
-    .select('student_id, profiles(full_name)')
-    .eq('class_id', classId)
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-
-  type EnrollRow = {
-    student_id: string
-    profiles: { full_name: string } | { full_name: string }[] | null
-  }
-  const enrollments = (enrollmentsRaw ?? []) as unknown as EnrollRow[]
-  if (enrollments.length === 0) return { booked: [], skipped: [] }
-
-  const bookedNames: string[] = []
-  const skippedNames: string[] = []
-
-  for (const enroll of enrollments) {
-    const prof = Array.isArray(enroll.profiles) ? enroll.profiles[0] : enroll.profiles
-    const name = prof?.full_name ?? 'Aluno'
-
-    const r = await reconcileEnrollmentCredits(
-      enroll.student_id,
-      classId,
-      today,
-      in14Str,
-      adminClient,
-    )
-
-    if (r.booked > 0) {
-      if (!bookedNames.includes(name)) bookedNames.push(name)
-    } else if (r.skipped > 0) {
-      if (!skippedNames.includes(name)) skippedNames.push(name)
-    }
-  }
-
-  revalidatePath('/admin/grade')
-  return { booked: bookedNames, skipped: skippedNames }
-}
-
-// ---------------------------------------------------------------------------
-// generateSessionsForExistingClass — backfill sessions for next 90 days
-// ---------------------------------------------------------------------------
-
-/**
- * Gera sessões para uma turma existente nos próximos 90 dias.
- * Ignora datas que já têm sessão (upsert por class_id+session_date).
- */
-export async function generateSessionsForExistingClass(
-  classId: string,
-): Promise<{ error?: string; count?: number }> {
-  const { orgId, error: authErr } = await requireAdmin()
-  if (authErr) return { error: authErr }
-
-  const adminClient = createAdminClient()
-
-  const { data: cls } = await adminClient
-    .from('classes')
-    .select('day_of_week, is_active')
-    .eq('id', classId)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (!cls) return { error: 'Turma não encontrada.' }
-  if (!cls.is_active) return { error: 'Turma inativa.' }
-
-  const today = new Date()
-  const end = new Date()
-  end.setDate(today.getDate() + 90)
-
-  const rows = buildSessionRows(
-    classId,
-    cls.day_of_week,
-    format(today, 'yyyy-MM-dd'),
-    format(end, 'yyyy-MM-dd'),
-  )
-
-  if (rows.length === 0) return { count: 0 }
-
-  // upsert — ignores conflicts on (class_id, session_date)
-  const { error } = await adminClient
-    .from('class_sessions')
-    .upsert(rows, { onConflict: 'class_id,session_date', ignoreDuplicates: true })
-
-  if (error) return { error: error.message }
-
-  revalidatePath('/admin/grade')
-  return { count: rows.length }
 }
 
 // ---------------------------------------------------------------------------

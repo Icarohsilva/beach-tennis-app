@@ -331,7 +331,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 // ---------------------------------------------------------------------------
 // skipEnrollmentNoBooking — enrolled student skips the next session when no
 // booking has been generated yet (pre-emptive skip, no credit deducted).
-// Creates a cancelled booking record so generateWeeklyBookings skips them.
+// Creates a cancelled booking record so future reconciliation (reconcileEnrollmentCredits) skips them.
 // ---------------------------------------------------------------------------
 
 export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?: string }> {
