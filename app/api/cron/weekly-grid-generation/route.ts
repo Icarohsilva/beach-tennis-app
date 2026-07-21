@@ -50,6 +50,17 @@ export async function GET(req: NextRequest) {
       try {
         const from = brtToday(now)
         const r = await generateGrid(orgId, from, addDaysStr(from, 6))
+        if (r.error) {
+          // generateGrid não lançou (erro de upsert é engolido lá), mas não
+          // podemos tratar como sucesso: nem soma contador de sucesso nem
+          // avança a marca d'água, senão o catch-up nunca tenta de novo.
+          failed++
+          console.error('[cron/weekly-grid-generation] falhou para uma academia', {
+            organizationId: orgId,
+            error: r.error,
+          })
+          continue
+        }
         sessionsCreated += r.sessionsCreated
         orgsProcessed++
 

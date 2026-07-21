@@ -17,11 +17,11 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
  * eles — assim um teste que exige filtro por `classId`/`dayOfWeek` falha de
  * verdade se o `.eq(...)` correspondente for removido do código-fonte.
  */
-function makeClient(classes: { id: string; day_of_week: number }[]) {
+function makeClient(classes: { id: string; day_of_week: number }[], upsertError: { message: string } | null = null) {
   const upserted: unknown[][] = []
   const from = vi.fn((table: string) => {
     if (table === 'class_sessions') {
-      return { upsert: (rows: unknown[]) => { upserted.push(rows); return Promise.resolve({ error: null }) } }
+      return { upsert: (rows: unknown[]) => { upserted.push(rows); return Promise.resolve({ error: upsertError }) } }
     }
     // classes: encadeia select/eq/eq... e resolve com a lista filtrada (thenable)
     const filters: [string, unknown][] = []
@@ -80,5 +80,23 @@ describe('generateGrid', () => {
     expect(upserted[0]).toHaveLength(1)
     expect(upserted[0][0]).toMatchObject({ class_id: 'c1' })
     expect(r.sessionsCreated).toBe(1)
+  })
+
+  it('quando o upsert de class_sessions falha, devolve error e não reconcilia', async () => {
+    vi.mocked(reconcileAllActiveEnrollments).mockClear()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { client } = makeClient([{ id: 'c1', day_of_week: 2 }], { message: 'upsert boom' })
+
+    const r = await generateGrid('org-1', '2026-07-20', '2026-07-26', {}, client)
+
+    // O chamador (cron) precisa de um jeito de distinguir isto de sucesso —
+    // sessionsCreated/studentsBooked zerados sozinhos são indistinguíveis de
+    // "sem turmas esta semana".
+    expect(r).toEqual({ sessionsCreated: 0, studentsBooked: 0, error: 'upsert boom' })
+    expect(reconcileAllActiveEnrollments).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[generateGrid] upsert de class_sessions falhou',
+      expect.objectContaining({ orgId: 'org-1', error: 'upsert boom' }),
+    )
   })
 })

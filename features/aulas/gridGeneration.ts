@@ -11,6 +11,8 @@ type AdminClient = ReturnType<typeof createAdminClient>
 export interface GenerateGridResult {
   sessionsCreated: number
   studentsBooked: number
+  /** Presente quando o upsert de class_sessions falhou — chamador não deve tratar como sucesso. */
+  error?: string
 }
 
 /**
@@ -50,7 +52,7 @@ export async function generateGrid(
       console.error('[generateGrid] upsert de class_sessions falhou', {
         orgId, from, to, error: upsertErr.message,
       })
-      return { sessionsCreated: 0, studentsBooked: 0 }
+      return { sessionsCreated: 0, studentsBooked: 0, error: upsertErr.message }
     }
   }
 
