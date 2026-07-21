@@ -4,8 +4,12 @@
 -- assumir. Preserva o que já foi realizado.
 
 -- Apaga class_sessions de HOJE (BRT) em diante, EXCETO:
---   - status = 'completed' (aula já finalizada), e
---   - sessões com presença marcada (attendance),
+--   - status = 'completed' (aula já finalizada),
+--   - sessões com presença marcada (attendance), e
+--   - sessões com reserva avulsa confirmada paga em crédito (session_bookings
+--     credit_used=true, status='confirmed') — o DELETE é bruto e não passa
+--     pelo cancelBooking, que sempre estorna o crédito ao remover uma reserva;
+--     sem esta exceção o aluno perderia crédito e reserva sem estorno nem aviso.
 -- porque desde o spec de acesso/crédito (2026-07-16) a dívida e o financeiro
 -- nascem da presença — apagar isso destruiria registro financeiro.
 --
@@ -19,4 +23,8 @@ where cs.session_date >= (now() at time zone 'America/Sao_Paulo')::date
   and cs.status <> 'completed'
   and not exists (
     select 1 from attendance a where a.session_id = cs.id
+  )
+  and not exists (
+    select 1 from session_bookings sb
+    where sb.session_id = cs.id and sb.credit_used = true and sb.status = 'confirmed'
   );
