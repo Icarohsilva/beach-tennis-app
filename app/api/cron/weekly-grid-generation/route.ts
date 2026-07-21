@@ -12,6 +12,7 @@ import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { generateGrid } from '@/features/aulas/gridGeneration'
+import { notifyGridGenerated } from '@/features/aulas/gridNotify'
 import { brtToday, addDaysStr, shouldRunGridNow } from '@/lib/utils/gridSchedule'
 
 export async function GET(req: NextRequest) {
@@ -75,6 +76,13 @@ export async function GET(req: NextRequest) {
             { organization_id: orgId, key: 'grid_auto_last_run', value: now.toISOString() },
             { onConflict: 'organization_id,key' },
           )
+
+        // Push/in-app só quando gerou sessões NOVAS de verdade (r.sessionsCreated
+        // conta inserções reais, Task 2) — regeração idempotente numa checagem
+        // seguinte cria 0 e não re-notifica. Passa o admin client já criado.
+        if (r.sessionsCreated > 0) {
+          await notifyGridGenerated(orgId, { kind: 'week' }, admin)
+        }
       } catch (err) {
         failed++
         console.error('[cron/weekly-grid-generation] falhou para uma academia', {
