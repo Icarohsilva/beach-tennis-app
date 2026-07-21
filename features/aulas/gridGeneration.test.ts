@@ -23,7 +23,7 @@ function makeClient(
   // Quantas das linhas passadas ao upsert devem ser tratadas como "realmente
   // inseridas" (o resto simula conflito, como ON CONFLICT DO NOTHING faria).
   // Default: todas — reflete os fixtures existentes, que geram do zero.
-  partialInsertCount?: number,
+  insertedCount?: number,
 ) {
   const upserted: unknown[][] = []
   const from = vi.fn((table: string) => {
@@ -38,7 +38,7 @@ function makeClient(
                   ? { data: null, error: upsertError }
                   : {
                       data: rows
-                        .slice(0, partialInsertCount ?? rows.length)
+                        .slice(0, insertedCount ?? rows.length)
                         .map((r) => ({ id: `${r.class_id}:${r.session_date}` })),
                       error: null,
                     },
@@ -137,7 +137,6 @@ describe('generateGrid', () => {
   })
 
   it('conta apenas as sessões realmente inseridas quando há conflito parcial (idempotência)', async () => {
-    vi.mocked(reconcileAllActiveEnrollments).mockClear()
     // 2 turmas de terça → 2 linhas tentadas no upsert, mas só 1 é nova (a outra
     // já existia de uma geração anterior e foi pulada pelo ON CONFLICT DO NOTHING).
     const { client, upserted } = makeClient(
@@ -152,5 +151,6 @@ describe('generateGrid', () => {
 
     expect(upserted[0]).toHaveLength(2) // tentou inserir 2
     expect(r.sessionsCreated).toBe(1) // mas só 1 foi de fato inserida — não rows.length
+    expect(r.studentsBooked).toBe(3) // reconciliação roda normalmente após conflito parcial
   })
 })

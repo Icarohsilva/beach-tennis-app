@@ -9,6 +9,7 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
 type AdminClient = ReturnType<typeof createAdminClient>
 
 export interface GenerateGridResult {
+  /** Sessões efetivamente inseridas nesta chamada — não conta as que já existiam e foram puladas pelo upsert idempotente. */
   sessionsCreated: number
   studentsBooked: number
   /** Presente quando o upsert de class_sessions falhou — chamador não deve tratar como sucesso. */
