@@ -14,7 +14,10 @@ describe('classifyEnrollment', () => {
   it('nada → sem_plano', () => {
     expect(classifyEnrollment({ partner: null, pendingPartner: null, hasActivePlan: false })).toBe('sem_plano')
   })
-  it('partner vazio ("") NÃO conta como parceiro', () => {
-    expect(classifyEnrollment({ partner: '', pendingPartner: 'totalpass', hasActivePlan: false })).toBe('a_confirmar')
+  it('parceiro confirmado vence pending_partner diferente → elegivel', () => {
+    expect(classifyEnrollment({ partner: 'wellhub', pendingPartner: 'totalpass', hasActivePlan: false })).toBe('elegivel')
+  })
+  it('plano ativo vence pending_partner → elegivel', () => {
+    expect(classifyEnrollment({ partner: null, pendingPartner: 'totalpass', hasActivePlan: true })).toBe('elegivel')
   })
 })
