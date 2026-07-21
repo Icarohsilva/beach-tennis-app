@@ -22,17 +22,35 @@
 -- pré-declaração de admin (paid) numa sessão futura sem presença vira um
 -- pagamento órfão com session_id null; é inofensivo (hasOpenDebt filtra
 -- session_id not null).
-delete from class_sessions cs
-where cs.session_date >= (now() at time zone 'America/Sao_Paulo')::date
-  and cs.status <> 'completed'
-  and not exists (
-    select 1 from attendance a where a.session_id = cs.id
-  )
-  and not exists (
-    select 1 from session_bookings sb
-    where sb.session_id = cs.id and sb.credit_used = true and sb.status = 'confirmed'
-  )
-  and not exists (
-    select 1 from waitlists w
-    where w.session_id = cs.id and w.status in ('waiting', 'offered')
-  );
+--
+-- waitlists é referenciada pelo app mas está AUSENTE em produção (migration
+-- 20260602000000_waitlists.sql nunca foi aplicada lá — mesmo schema drift já
+-- guardado com to_regclass em 20260616000500_rls_org_scoped.sql e
+-- 20260621000200_rls_memberships_scoped.sql). Monta o DELETE dinamicamente:
+-- só inclui a exclusão de waitlists se a tabela existir neste ambiente.
+do $$
+declare
+  waitlist_clause text := '';
+begin
+  if to_regclass('public.waitlists') is not null then
+    waitlist_clause := '
+      and not exists (
+        select 1 from waitlists w
+        where w.session_id = cs.id and w.status in (''waiting'', ''offered'')
+      )';
+  end if;
+
+  execute format($q$
+    delete from class_sessions cs
+    where cs.session_date >= (now() at time zone 'America/Sao_Paulo')::date
+      and cs.status <> 'completed'
+      and not exists (
+        select 1 from attendance a where a.session_id = cs.id
+      )
+      and not exists (
+        select 1 from session_bookings sb
+        where sb.session_id = cs.id and sb.credit_used = true and sb.status = 'confirmed'
+      )
+      %s
+  $q$, waitlist_clause);
+end $$;
