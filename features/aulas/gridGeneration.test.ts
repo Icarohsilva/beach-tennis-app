@@ -82,6 +82,18 @@ describe('generateGrid', () => {
     expect(r.sessionsCreated).toBe(1)
   })
 
+  it('filtra por dayOfWeek quando informado', async () => {
+    const { client, upserted } = makeClient([
+      { id: 'c1', day_of_week: 2 }, // terça
+      { id: 'c2', day_of_week: 4 }, // quinta
+    ])
+    const r = await generateGrid('org-1', '2026-07-20', '2026-07-26', { dayOfWeek: 2 }, client)
+    expect(upserted).toHaveLength(1)
+    expect(upserted[0]).toHaveLength(1)
+    expect(upserted[0][0]).toMatchObject({ class_id: 'c1' })
+    expect(r.sessionsCreated).toBe(1)
+  })
+
   it('quando o upsert de class_sessions falha, devolve error e não reconcilia', async () => {
     vi.mocked(reconcileAllActiveEnrollments).mockClear()
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
