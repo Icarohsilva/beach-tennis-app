@@ -23,6 +23,7 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const today = brtToday(new Date())
   const target = nextDateForDayOfWeek(today, dayOfWeek)
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
+  if (r.error) return { error: r.error }
 
   revalidatePath('/admin/grade')
   return { sessionsCreated: r.sessionsCreated, studentsBooked: r.studentsBooked }
@@ -36,6 +37,7 @@ export async function generateGridWeek(): Promise<GridActionResult> {
   const from = brtToday(new Date())
   const to = addDaysStr(from, 6)
   const r = await generateGrid(orgId, from, to)
+  if (r.error) return { error: r.error }
 
   revalidatePath('/admin/grade')
   return { sessionsCreated: r.sessionsCreated, studentsBooked: r.studentsBooked }
