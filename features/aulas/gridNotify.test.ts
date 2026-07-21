@@ -86,7 +86,7 @@ describe('notifyGridGenerated', () => {
       orgId: 'org-1',
       recipients: [{ userId: 'aluno-1' }, { userId: 'aluno-2' }],
       type: 'grade_disponivel',
-      title: 'Novas aulas na Arena Beach Tennis 🎾',
+      title: 'Novas aulas na Arena Beach Tennis',
       body: 'A grade da semana já está disponível. Agende sua aula!',
       channels: ['push', 'inapp'],
     })
@@ -101,7 +101,7 @@ describe('notifyGridGenerated', () => {
     await notifyGridGenerated('org-1', { kind: 'day', dayOfWeek: 2 }, client) // terça
 
     expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
-      title: 'Aulas de terça na Arena Beach Tennis 🎾',
+      title: 'Aulas de terça na Arena Beach Tennis',
       body: 'Já dá pra agendar. Bora treinar!',
     }))
   })
@@ -115,7 +115,7 @@ describe('notifyGridGenerated', () => {
     await notifyGridGenerated('org-1', { kind: 'day', dayOfWeek: 99 }, client)
 
     expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
-      title: 'Aulas de sua turma na Arena Beach Tennis 🎾',
+      title: 'Aulas de sua turma na Arena Beach Tennis',
     }))
   })
 
@@ -128,7 +128,7 @@ describe('notifyGridGenerated', () => {
     await notifyGridGenerated('org-1', { kind: 'week' }, client)
 
     expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
-      title: 'Novas aulas na sua academia 🎾',
+      title: 'Novas aulas na sua academia',
     }))
   })
 

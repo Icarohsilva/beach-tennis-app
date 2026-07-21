@@ -12,22 +12,27 @@ const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sáb
 export async function notifyGridGenerated(
   orgId: string,
   scope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
-  client: AdminClient = createAdminClient(),
+  client?: AdminClient,
 ): Promise<void> {
   try {
-    const { data: org } = await client.from('organizations').select('name').eq('id', orgId).single()
+    // Resolvido AQUI DENTRO (não como default de parâmetro) — se createAdminClient()
+    // lançar (ex.: env var ausente), o catch abaixo precisa ver, senão o "nunca
+    // lança" vira mentira justamente no caso comum: chamador sem client próprio.
+    const c = client ?? createAdminClient()
+
+    const { data: org } = await c.from('organizations').select('name').eq('id', orgId).single()
     const academia = (org as { name: string } | null)?.name ?? 'sua academia'
 
     const title =
       scope.kind === 'week'
-        ? `Novas aulas na ${academia} 🎾`
-        : `Aulas de ${DIAS[scope.dayOfWeek] ?? 'sua turma'} na ${academia} 🎾`
+        ? `Novas aulas na ${academia}`
+        : `Aulas de ${DIAS[scope.dayOfWeek] ?? 'sua turma'} na ${academia}`
     const body =
       scope.kind === 'week'
         ? 'A grade da semana já está disponível. Agende sua aula!'
         : 'Já dá pra agendar. Bora treinar!'
 
-    const { data: mems } = await client
+    const { data: mems } = await c
       .from('memberships')
       .select('user_id')
       .eq('organization_id', orgId)
@@ -36,7 +41,7 @@ export async function notifyGridGenerated(
     const recipients = ((mems ?? []) as { user_id: string }[]).map((m) => ({ userId: m.user_id }))
     if (recipients.length === 0) return
 
-    await notifyUsers(client, {
+    await notifyUsers(c, {
       orgId,
       recipients,
       type: 'grade_disponivel',
