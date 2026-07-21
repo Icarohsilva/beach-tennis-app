@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatTime } from '@/lib/utils/dateHelpers'
-import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
+import { getClassRoster } from '@/features/aulas/enrollmentRoster'
 import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
 import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
@@ -15,6 +15,15 @@ import type { Class, ClassSession } from '@/types'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+function ago(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const h = Math.floor(diff / 3600000)
+  if (h < 1) return 'há minutos'
+  if (h < 24) return `há ${h}h`
+  const d = Math.floor(h / 24)
+  return `há ${d}d`
+}
 
 export default async function GradePage() {
   const adminClient = createAdminClient()
@@ -71,60 +80,27 @@ export default async function GradePage() {
     classesByDay.set(c.day_of_week, arr)
   }
 
-  // Enrolled count per class + contagem de irregulares (sem plano/parceiro).
-  // Partner/plano são por-academia: vêm da membership do aluno NESTA org (não
-  // de profiles, que só reflete a academia padrão do aluno multi-vínculo).
+  // Roster (matriculados/elegíveis/a-confirmar/sem-plano) via getClassRoster —
+  // org-wide, sem filtro de dia/turma (esta página mostra a semana toda).
   const classIds = allClasses.map((c) => c.id)
-  const { data: enrollRowsRaw } =
-    classIds.length > 0
-      ? await adminClient
-          .from('enrollments')
-          .select('class_id, student_id')
-          .in('class_id', classIds)
-          .eq('organization_id', orgId)
-          .eq('is_active', true)
-      : { data: [] }
+  const roster = await getClassRoster(adminClient, orgId!)
 
-  const enrollRows = (enrollRowsRaw ?? []) as { class_id: string; student_id: string }[]
-  const enrolledStudentIds = Array.from(new Set(enrollRows.map((e) => e.student_id)))
-  const { data: enrollMemsRaw } =
-    enrolledStudentIds.length > 0
-      ? await adminClient
-          .from('memberships')
-          .select('user_id, partner')
-          .in('user_id', enrolledStudentIds)
-          .eq('organization_id', orgId)
-      : { data: [] }
-
-  const partnerByStudent = new Map<string, string | null>()
-  for (const m of (enrollMemsRaw ?? []) as { user_id: string; partner: string | null }[]) {
-    partnerByStudent.set(m.user_id, m.partner)
-  }
-
-  const { data: subsRaw } =
-    enrolledStudentIds.length > 0
-      ? await adminClient
-          .from('student_subscriptions')
-          .select('student_id, gateway, current_period_end')
-          .in('student_id', enrolledStudentIds)
-          .eq('organization_id', orgId)
-          .eq('status', 'active')
-      : { data: [] }
-
-  const now = new Date()
-  const planStudents = new Set(
-    ((subsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
-      .filter((s) => isSubscriptionCurrent(s, now))
-      .map((s) => s.student_id),
-  )
-
-  const enrollCountMap = new Map<string, number>()
-  const noPlanMap = new Map<string, number>()
-  for (const e of enrollRows) {
-    enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
-    const hasPartner = !!partnerByStudent.get(e.student_id)
-    if (!hasPartner && !planStudents.has(e.student_id)) {
-      noPlanMap.set(e.class_id, (noPlanMap.get(e.class_id) ?? 0) + 1)
+  // Info de geração por turma: maior session_date e created_at correspondente
+  // (status scheduled). organization_id explícito por defesa em profundidade,
+  // mesmo padrão do resto deste arquivo (linha 41 já faz isso pra sessionsToday).
+  const { data: genRaw } = classIds.length > 0
+    ? await adminClient
+        .from('class_sessions')
+        .select('class_id, session_date, created_at')
+        .in('class_id', classIds)
+        .eq('organization_id', orgId)
+        .eq('status', 'scheduled')
+    : { data: [] }
+  const genByClass = new Map<string, { lastDate: string; lastCreated: string }>()
+  for (const s of (genRaw ?? []) as { class_id: string; session_date: string; created_at: string }[]) {
+    const cur = genByClass.get(s.class_id)
+    if (!cur || s.session_date > cur.lastDate) {
+      genByClass.set(s.class_id, { lastDate: s.session_date, lastCreated: s.created_at })
     }
   }
 
@@ -198,40 +174,39 @@ export default async function GradePage() {
               </h3>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dayClasses.map((c) => {
-                  const enrolled = enrollCountMap.get(c.id) ?? 0
-                  const spotsLeft = c.max_students - enrolled
+                  const rc = roster.byClass.get(c.id) ?? { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0, students: [] }
+                  const gen = genByClass.get(c.id)
                   return (
                     <Card key={c.id}>
-                      {/* Row 1: name + badges + edit link */}
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-white text-sm font-medium truncate">{c.name}</span>
                         <div className="flex items-center gap-1 shrink-0">
                           {c.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
-                          <Link
-                            href={`/admin/grade/${c.id}/editar`}
-                            className="text-xs text-slate-400 hover:text-brand-500 ml-1"
-                          >
-                            Editar
-                          </Link>
+                          <Link href={`/admin/grade/${c.id}/editar`} className="text-xs text-slate-400 hover:text-brand-500 ml-1">Editar</Link>
                         </div>
                       </div>
-                      {/* Row 2: time */}
-                      <p className="text-xs text-slate-400 mb-1">
-                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                      <p className="text-xs text-slate-400 mb-1">{formatTime(c.start_time)} – {formatTime(c.end_time)}</p>
+
+                      <p className="text-xs text-slate-400 mb-2">
+                        <span className="text-sm font-extrabold text-white">{rc.enrolled}</span> matriculados ·{' '}
+                        <span className="text-sm font-extrabold text-green-400">{rc.eligible}</span> reservados{' '}
+                        <span className="text-slate-500">/ {c.max_students}</span>
                       </p>
-                      {/* Row 3: vagas + alerta de plano */}
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-slate-400">
-                          <span className="text-sm font-extrabold text-brand-500">{enrolled}/{c.max_students}</span>{' '}
-                          <span className={spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}>vagas</span>
-                        </p>
-                        {(noPlanMap.get(c.id) ?? 0) > 0 && (
-                          <span className="text-xs text-yellow-400 font-medium">
-                            ⚠️ {noPlanMap.get(c.id)} sem plano ativo
-                          </span>
-                        )}
+
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-green-400 bg-green-500/10 border border-green-500/30">✅ {rc.eligible} elegíveis</span>
+                        {rc.pendingConfirmation > 0 && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-blue-400 bg-blue-500/10 border border-blue-500/30">🔵 {rc.pendingConfirmation} a confirmar</span>}
+                        {rc.noPlan > 0 && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-yellow-400 bg-yellow-500/10 border border-yellow-500/30">⚠️ {rc.noPlan} sem plano</span>}
                       </div>
-                      <DeleteClassButton classId={c.id} className={c.name} />
+
+                      <p className="text-xs text-slate-500 mb-2">
+                        {gen ? <>Próxima gerada: <span className="text-slate-400">{formatDate(gen.lastDate)}</span> · gerada {ago(gen.lastCreated)}</> : 'Ainda não gerada'}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-surface-border">
+                        <Link href={`/admin/grade/${c.id}/editar`} className="text-xs font-semibold text-brand-500 hover:underline">Ver alunos →</Link>
+                        <DeleteClassButton classId={c.id} className={c.name} />
+                      </div>
                     </Card>
                   )
                 })}
