@@ -1,6 +1,5 @@
-import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { getClassRoster } from './enrollmentRoster'
-import { getClassUpcomingSessions } from './adminActions'
 import { SkipDateButton } from './SkipDateButton'
 import type { EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
 
@@ -10,10 +9,9 @@ const STATUS_META: Record<EnrollmentStatus, { label: string; cls: string }> = {
   sem_plano: { label: '⚠️ Sem plano', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
 }
 
-export async function ClassRosterSection({ classId }: { classId: string }) {
+export async function ClassRosterSection({ classId, orgId }: { classId: string; orgId: string }) {
   const adminClient = createAdminClient()
-  const orgId = await getCurrentOrgId()
-  const roster = await getClassRoster(adminClient, orgId!, { classId })
+  const roster = await getClassRoster(adminClient, orgId, { classId })
   const students = roster.byClass.get(classId)?.students ?? []
 
   const ids = students.map((s) => s.studentId)
@@ -22,12 +20,28 @@ export async function ClassRosterSection({ classId }: { classId: string }) {
     : { data: [] }
   const nameById = new Map(((profs ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]))
 
-  const upcoming = await getClassUpcomingSessions(classId)
-  const upSessions = upcoming.sessions ?? []
+  if (students.length === 0) {
+    return <p className="text-sm text-slate-500">Nenhum aluno matriculado nesta turma.</p>
+  }
+
+  // Próximas sessões geradas (scheduled, hoje em diante) desta turma. Consulta
+  // direta (mesmo shape de getClassUpcomingSessions em adminActions.ts) para
+  // reusar o adminClient/orgId já resolvidos aqui, em vez de disparar mais um
+  // requireAdmin() (auth.getUser() + role query) redundante.
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: upSessionsRaw } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date')
+    .eq('class_id', classId)
+    .eq('organization_id', orgId)
+    .eq('status', 'scheduled')
+    .gte('session_date', today)
+    .order('session_date', { ascending: true })
+  const upSessions = (upSessionsRaw ?? []) as { id: string; session_date: string }[]
 
   // Datas que cada aluno já está pulando (reserva 'cancelled') → pra oferecer "desfazer".
   const upIds = upSessions.map((s) => s.id)
-  const { data: skipsRaw } = ids.length > 0 && upIds.length > 0
+  const { data: skipsRaw } = upIds.length > 0
     ? await adminClient.from('session_bookings').select('student_id, session_id')
         .in('session_id', upIds).in('student_id', ids).eq('status', 'cancelled')
     : { data: [] }
@@ -35,10 +49,6 @@ export async function ClassRosterSection({ classId }: { classId: string }) {
   for (const b of (skipsRaw ?? []) as { student_id: string; session_id: string }[]) {
     const set = skippedByStudent.get(b.student_id) ?? new Set<string>()
     set.add(b.session_id); skippedByStudent.set(b.student_id, set)
-  }
-
-  if (students.length === 0) {
-    return <p className="text-sm text-slate-500">Nenhum aluno matriculado nesta turma.</p>
   }
 
   return (

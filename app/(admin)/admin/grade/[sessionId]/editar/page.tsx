@@ -17,7 +17,7 @@ export default async function EditClassPage({ params }: { params: { sessionId: s
       <h1 className="text-2xl font-bold text-white">Editar Turma</h1>
       <EditClassForm class_={data as Class} />
       <div className="border-t border-surface-border pt-6">
-        <ClassRosterSection classId={classId} />
+        <ClassRosterSection classId={classId} orgId={orgId!} />
       </div>
     </div>
   )

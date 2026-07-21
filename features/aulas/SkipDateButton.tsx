@@ -11,12 +11,12 @@ export function SkipDateButton({ studentId, sessions }: { studentId: string; ses
   const [pending, start] = useTransition()
 
   function toggle(s: SessionOpt) {
+    setOpen(false) // fecha JÁ: some com os botões de data → sem segundo clique na corrida
     start(async () => {
       const r = s.skipped
         ? await adminUnskipEnrollmentDate(studentId, s.id)
         : await adminSkipEnrollmentDate(studentId, s.id)
       setMsg(r.error ? `Erro: ${r.error}` : s.skipped ? 'Falta desfeita.' : 'Falta registrada.')
-      setOpen(false)
     })
   }
 
@@ -34,8 +34,8 @@ export function SkipDateButton({ studentId, sessions }: { studentId: string; ses
           {sessions.length === 0 && <p className="text-xs text-slate-500 px-2 py-1">Sem datas geradas.</p>}
           {sessions.map((s) => (
             <button
-              key={s.id} type="button" onClick={() => toggle(s)}
-              className="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded-md hover:bg-surface-card"
+              key={s.id} type="button" onClick={() => toggle(s)} disabled={pending}
+              className="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded-md hover:bg-surface-card disabled:opacity-50"
             >
               <span className={s.skipped ? 'text-slate-500 line-through' : 'text-slate-200'}>{formatDate(s.session_date)}</span>
               {s.skipped && <span className="text-[11px] text-brand-500">desfazer</span>}
