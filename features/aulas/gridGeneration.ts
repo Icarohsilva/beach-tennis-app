@@ -42,11 +42,15 @@ export async function generateGrid(
   if (classes.length === 0) return { sessionsCreated: 0, studentsBooked: 0 }
 
   const rows = classes.flatMap((c) => buildSessionRows(c.id, c.day_of_week, from, to))
+  let sessionsCreated = 0
   if (rows.length > 0) {
     // organization_id é preenchido pelo trigger trg_set_org (deriva de class_id).
-    const { error: upsertErr } = await client
+    // .select() com ignoreDuplicates devolve SÓ as linhas inseridas (conflitos
+    // são pulados e não voltam) → contagem real de sessões novas, não tentadas.
+    const { data: inserted, error: upsertErr } = await client
       .from('class_sessions')
       .upsert(rows, { onConflict: 'class_id,session_date', ignoreDuplicates: true })
+      .select('id')
 
     if (upsertErr) {
       console.error('[generateGrid] upsert de class_sessions falhou', {
@@ -54,9 +58,10 @@ export async function generateGrid(
       })
       return { sessionsCreated: 0, studentsBooked: 0, error: upsertErr.message }
     }
+    sessionsCreated = inserted?.length ?? 0
   }
 
   const rec = await reconcileAllActiveEnrollments(from, to, orgId)
 
-  return { sessionsCreated: rows.length, studentsBooked: rec.booked }
+  return { sessionsCreated, studentsBooked: rec.booked }
 }

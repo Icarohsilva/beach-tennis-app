@@ -17,11 +17,35 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
  * eles — assim um teste que exige filtro por `classId`/`dayOfWeek` falha de
  * verdade se o `.eq(...)` correspondente for removido do código-fonte.
  */
-function makeClient(classes: { id: string; day_of_week: number }[], upsertError: { message: string } | null = null) {
+function makeClient(
+  classes: { id: string; day_of_week: number }[],
+  upsertError: { message: string } | null = null,
+  // Quantas das linhas passadas ao upsert devem ser tratadas como "realmente
+  // inseridas" (o resto simula conflito, como ON CONFLICT DO NOTHING faria).
+  // Default: todas — reflete os fixtures existentes, que geram do zero.
+  partialInsertCount?: number,
+) {
   const upserted: unknown[][] = []
   const from = vi.fn((table: string) => {
     if (table === 'class_sessions') {
-      return { upsert: (rows: unknown[]) => { upserted.push(rows); return Promise.resolve({ error: upsertError }) } }
+      return {
+        upsert: (rows: { class_id: string; session_date: string }[]) => {
+          upserted.push(rows)
+          return {
+            select: () =>
+              Promise.resolve(
+                upsertError
+                  ? { data: null, error: upsertError }
+                  : {
+                      data: rows
+                        .slice(0, partialInsertCount ?? rows.length)
+                        .map((r) => ({ id: `${r.class_id}:${r.session_date}` })),
+                      error: null,
+                    },
+              ),
+          }
+        },
+      }
     }
     // classes: encadeia select/eq/eq... e resolve com a lista filtrada (thenable)
     const filters: [string, unknown][] = []
@@ -110,5 +134,23 @@ describe('generateGrid', () => {
       '[generateGrid] upsert de class_sessions falhou',
       expect.objectContaining({ orgId: 'org-1', error: 'upsert boom' }),
     )
+  })
+
+  it('conta apenas as sessões realmente inseridas quando há conflito parcial (idempotência)', async () => {
+    vi.mocked(reconcileAllActiveEnrollments).mockClear()
+    // 2 turmas de terça → 2 linhas tentadas no upsert, mas só 1 é nova (a outra
+    // já existia de uma geração anterior e foi pulada pelo ON CONFLICT DO NOTHING).
+    const { client, upserted } = makeClient(
+      [
+        { id: 'c1', day_of_week: 2 },
+        { id: 'c2', day_of_week: 2 },
+      ],
+      null,
+      1,
+    )
+    const r = await generateGrid('org-1', '2026-07-20', '2026-07-26', {}, client)
+
+    expect(upserted[0]).toHaveLength(2) // tentou inserir 2
+    expect(r.sessionsCreated).toBe(1) // mas só 1 foi de fato inserida — não rows.length
   })
 })
