@@ -5,16 +5,16 @@
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/cron/monthly-credit-renewal",
-      "schedule": "0 1 1 * *"
-    },
-    {
       "path": "/api/cron/mp-token-refresh",
       "schedule": "0 4 * * 1"
     },
     {
       "path": "/api/cron/credit-expiry",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-grid-generation",
+      "schedule": "0 * * * *"
     }
   ]
 }
