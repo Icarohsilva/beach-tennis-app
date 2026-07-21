@@ -11,6 +11,7 @@ import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import type { ClassSession, Profile, Membership, Attendance } from '@/types'
+import { RegenerateTodayButton } from '../RegenerateTodayButton'
 
 interface Props {
   params: { sessionId: string }
@@ -177,6 +178,16 @@ export default async function SessionDetailPage({ params }: Props) {
         students={addableStudents}
         onAdd={addStudentToSession}
       />
+
+      {students.length === 0 && (
+        <div className="border border-dashed border-surface-border rounded-xl p-5 text-center space-y-3">
+          <p className="text-sm text-slate-400">Ninguém reservado ainda para esta aula.</p>
+          <p className="text-xs text-slate-500">Adicione um aluno avulso acima, ou regere o dia para reservar quem já tem plano/parceiro ativo.</p>
+          <div className="flex justify-center">
+            <RegenerateTodayButton dayOfWeek={new Date(typedSession.session_date + 'T12:00:00').getDay()} />
+          </div>
+        </div>
+      )}
 
       <AttendanceSheet
         sessionId={params.sessionId}
