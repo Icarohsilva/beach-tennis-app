@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { getClassRoster } from './enrollmentRoster'
 
-// Fake client mínimo: responde por tabela com filtros irrelevantes ignorados.
+/**
+ * Fake client: `classes` grava os filtros de `.eq()` e o `.then()` de fato
+ * filtra por eles — mesma técnica de gridGeneration.test.ts, para que um teste
+ * que exige filtro por dayOfWeek/classId falhe de verdade se o `.eq(...)`
+ * correspondente for removido do código-fonte. `enrollments`/`memberships`/
+ * `student_subscriptions` continuam pass-through simples: getClassRoster não
+ * aplica opts a elas (só a `classes`).
+ */
 function makeClient(data: {
   classes: { id: string; day_of_week: number }[]
   enrollments: { class_id: string; student_id: string }[]
@@ -10,8 +17,26 @@ function makeClient(data: {
 }) {
   return {
     from(table: string) {
+      if (table === 'classes') {
+        const filters: [string, unknown][] = []
+        const builder: any = {
+          select() { return builder },
+          eq(field: string, value: unknown) {
+            filters.push([field, value])
+            return builder
+          },
+          then(resolve: (v: { data: unknown[] }) => void) {
+            const filtered = data.classes.filter((c) =>
+              filters.every(([field, value]) =>
+                !(field in c) || (c as Record<string, unknown>)[field] === value,
+              ),
+            )
+            resolve({ data: filtered })
+          },
+        }
+        return builder
+      }
       const rowsByTable: Record<string, unknown[]> = {
-        classes: data.classes,
         enrollments: data.enrollments,
         memberships: data.memberships,
         student_subscriptions: data.subs,
@@ -46,20 +71,55 @@ describe('getClassRoster', () => {
     })
     const roster = await getClassRoster(client, 'org1')
     const c1 = roster.byClass.get('c1')!
-    expect(c1.elegivel).toBe(1)
-    expect(c1.aConfirmar).toBe(1)
-    expect(c1.semPlano).toBe(1)
-    expect(c1.matriculados).toBe(3)
+    expect(c1.eligible).toBe(1)
+    expect(c1.pendingConfirmation).toBe(1)
+    expect(c1.noPlan).toBe(1)
+    expect(c1.enrolled).toBe(3)
   })
 
   it('filtra por dayOfWeek', async () => {
     const client = makeClient({
-      classes: [{ id: 'c1', day_of_week: 2 }],
-      enrollments: [{ class_id: 'c1', student_id: 'a' }],
-      memberships: [{ user_id: 'a', partner: 'wellhub', pending_partner: null }],
+      classes: [
+        { id: 'c1', day_of_week: 2 },
+        { id: 'c2', day_of_week: 4 }, // fora do escopo do filtro abaixo
+      ],
+      enrollments: [
+        { class_id: 'c1', student_id: 'a' },
+        { class_id: 'c2', student_id: 'z' }, // apareceria em totals se o filtro não funcionasse
+      ],
+      memberships: [
+        { user_id: 'a', partner: 'wellhub', pending_partner: null },
+        { user_id: 'z', partner: 'wellhub', pending_partner: null },
+      ],
       subs: [],
     })
     const roster = await getClassRoster(client, 'org1', { dayOfWeek: 2 })
-    expect(roster.totals.elegivel).toBe(1)
+    expect(roster.byClass.has('c2')).toBe(false)
+    expect(roster.byClass.has('c1')).toBe(true)
+    expect(roster.totals.enrolled).toBe(1)
+    expect(roster.totals.eligible).toBe(1)
+  })
+
+  it('filtra por classId', async () => {
+    const client = makeClient({
+      classes: [
+        { id: 'c1', day_of_week: 2 },
+        { id: 'c2', day_of_week: 2 }, // mesmo dia, só o id difere
+      ],
+      enrollments: [
+        { class_id: 'c1', student_id: 'a' },
+        { class_id: 'c2', student_id: 'z' }, // apareceria em totals se o filtro não funcionasse
+      ],
+      memberships: [
+        { user_id: 'a', partner: 'wellhub', pending_partner: null },
+        { user_id: 'z', partner: 'wellhub', pending_partner: null },
+      ],
+      subs: [],
+    })
+    const roster = await getClassRoster(client, 'org1', { classId: 'c1' })
+    expect(roster.byClass.has('c2')).toBe(false)
+    expect(roster.byClass.has('c1')).toBe(true)
+    expect(roster.totals.enrolled).toBe(1)
+    expect(roster.totals.eligible).toBe(1)
   })
 })
