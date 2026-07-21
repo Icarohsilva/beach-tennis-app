@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import type { ClassSession, Profile, Membership, Attendance } from '@/types'
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 interface Props {
   params: { sessionId: string }
@@ -155,6 +156,8 @@ export default async function SessionDetailPage({ params }: Props) {
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
+  const isToday = typedSession.session_date === brtToday(new Date())
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center gap-3">
@@ -179,27 +182,35 @@ export default async function SessionDetailPage({ params }: Props) {
         onAdd={addStudentToSession}
       />
 
-      {students.length === 0 && (
+      {students.length === 0 && typedSession.status !== 'completed' ? (
         <div className="border border-dashed border-surface-border rounded-xl p-5 text-center space-y-3">
           <p className="text-sm text-slate-400">Ninguém reservado ainda para esta aula.</p>
-          <p className="text-xs text-slate-500">Adicione um aluno avulso acima, ou regere o dia para reservar quem já tem plano/parceiro ativo.</p>
-          <div className="flex justify-center">
-            <RegenerateTodayButton dayOfWeek={new Date(typedSession.session_date + 'T12:00:00').getDay()} />
-          </div>
+          {isToday ? (
+            <>
+              <p className="text-xs text-slate-500">Adicione um aluno avulso acima, ou regere o dia para reservar quem já tem plano/parceiro ativo.</p>
+              <div className="flex justify-center">
+                <RegenerateTodayButton dayOfWeek={new Date(typedSession.session_date + 'T12:00:00').getDay()} />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-slate-500">Adicione um aluno avulso acima.</p>
+          )}
         </div>
+      ) : (
+        <>
+          <AttendanceSheet
+            sessionId={params.sessionId}
+            students={students}
+            onMark={markAttendance}
+          />
+
+          <StartClassClient
+            sessionId={params.sessionId}
+            students={students}
+            isCompleted={typedSession.status === 'completed'}
+          />
+        </>
       )}
-
-      <AttendanceSheet
-        sessionId={params.sessionId}
-        students={students}
-        onMark={markAttendance}
-      />
-
-      <StartClassClient
-        sessionId={params.sessionId}
-        students={students}
-        isCompleted={typedSession.status === 'completed'}
-      />
     </div>
   )
 }
