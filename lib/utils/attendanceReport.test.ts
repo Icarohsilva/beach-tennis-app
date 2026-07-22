@@ -58,6 +58,12 @@ describe('buildAttendanceReport', () => {
     expect(buildAttendanceReport(input)).toEqual([])
   })
 
+  it('inclui a sessão exatamente na data do corte', () => {
+    const input = base()
+    input.trackingStart = '2026-07-20'
+    expect(buildAttendanceReport(input)[0]).toMatchObject({ present: 1 })
+  })
+
   it('reserva confirmada torna esperado quem não é fixo', () => {
     const input = base()
     input.enrollments = []
@@ -77,10 +83,16 @@ describe('buildAttendanceReport', () => {
     expect(buildAttendanceReport(input)).toEqual([])
   })
 
-  it('mantém o aluno na conta no próprio dia em que saiu', () => {
+  it('conta a sessão anterior ao cancelamento da matrícula', () => {
     const input = base()
     input.enrollments = [{ studentId: 'ana', classId: 'c1', enrolledAt: '2026-01-01', cancelledAt: '2026-07-21' }]
     expect(buildAttendanceReport(input)[0]).toMatchObject({ present: 1 })
+  })
+
+  it('não conta a aula do próprio dia em que a matrícula foi cancelada', () => {
+    const input = base()
+    input.enrollments = [{ studentId: 'ana', classId: 'c1', enrolledAt: '2026-01-01', cancelledAt: '2026-07-20' }]
+    expect(buildAttendanceReport(input)).toEqual([])
   })
 
   it('deixa de fora quem não tinha nenhuma aula prevista', () => {

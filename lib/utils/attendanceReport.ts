@@ -66,7 +66,7 @@ export interface StudentTotals {
  */
 function enrollmentCovers(enrollment: ReportEnrollment, date: string): boolean {
   if (enrollment.enrolledAt > date) return false
-  if (enrollment.cancelledAt !== null && enrollment.cancelledAt < date) return false
+  if (enrollment.cancelledAt !== null && enrollment.cancelledAt <= date) return false
   return true
 }
 
@@ -126,7 +126,9 @@ export function buildAttendanceReport(input: ReportInput): StudentTotals[] {
         bump(studentId, mark === 'absent' ? 'absent' : 'present')
         continue
       }
-      if (cancelled.has(studentId)) {
+      // Reserva confirmada vence o aviso: se as duas linhas coexistissem, o banco
+      // diz que o aluno está dentro. Ver mergeSessionAttendees em attendees.ts.
+      if (cancelled.has(studentId) && !confirmed.has(studentId)) {
         bump(studentId, 'notified')
         continue
       }
