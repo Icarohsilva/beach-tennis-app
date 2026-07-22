@@ -14,7 +14,10 @@ alter table payments
   add column if not exists settled_by uuid references profiles(id),
   add column if not exists settled_method text;
 
--- Devedores por academia: pendências de aula (session_id não nulo) com valor.
+-- Devedores por academia: pendências de aula (session_id não nulo), já na ordem
+-- em que a tela de cobrança lê (created_at asc). status/session_id não entram na
+-- chave — o WHERE parcial já os fixa, então como coluna seriam bytes sem
+-- seletividade; created_at entra para o ORDER BY sair do índice.
 create index if not exists idx_payments_org_pending_session
-  on payments (organization_id, status, session_id)
+  on payments (organization_id, created_at)
   where status = 'pending' and session_id is not null;
