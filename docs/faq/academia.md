@@ -196,6 +196,27 @@ O botão **Day Use** abre a reserva de espaço avulsa (sem consumir crédito de 
 
 ---
 
+## 6.3 Relatório de frequência
+
+Em **Relatórios** você vê quem está vindo às aulas, por **semana** (padrão) ou por **mês**, com navegação para períodos anteriores.
+
+![Relatório de frequência](images/admin-relatorios.png)
+
+**O que a tela mostra:**
+
+- **Números do período:** aulas realizadas, presenças, faltas e o comparecimento geral da academia.
+- **Por aluno:** presenças, faltas, avisos e o **aproveitamento** (presenças ÷ aulas previstas). Dá para ordenar por qualquer coluna; a ordem padrão é por aproveitamento, porque ordenar por presenças absolutas favoreceria quem simplesmente tem mais aulas na semana.
+- **Aulas sem chamada:** nessas, todo mundo entrou como presente. É o ponto onde você corrige — e também o que revela uma aula que não aconteceu.
+
+> **🔧 Nos bastidores**
+> - A presença é **presumida**: quem estava previsto numa aula que já passou conta como presente até você marcar a falta na chamada. Sem isso o relatório nasceria vazio, porque a chamada quase nunca era feita.
+> - Quem **avisou** que não vem (saiu da aula pelo app antes de ela começar) conta numa categoria própria, separada de quem simplesmente não apareceu. O aviso entra no total de aulas previstas, então também pesa no aproveitamento.
+> - Marcar a chamada **vence** a presunção: a linha gravada é a verdade.
+> - A contagem começa na data em que a frequência passou a ser rastreada. Aulas anteriores ficam de fora — nada é afirmado sobre aula que ninguém conferiu.
+> - A lista da chamada passou a incluir também o **aluno fixo sem reserva gerada**. Antes ele não aparecia, e por isso a falta dele nunca era registrada.
+
+---
+
 ## 7. Financeiro — planos, avulsa e day use
 
 A área **Financeiro** tem três abas: **Visão geral**, **Planos e preços** e **Integrações**.

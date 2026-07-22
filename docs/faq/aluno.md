@@ -93,6 +93,7 @@ A **Home** é o seu resumo: quanto falta para a próxima aula, sua agenda da sem
 - **Próxima aula** — cartão de destaque com **contagem regressiva ao vivo** ("Faltam 2h 24min"), horário, quantos lugares já estão ocupados e o atalho para entrar na aula. Se você ainda não tem aula marcada, ele mostra a próxima com vaga aberta.
 - **Sua semana** — faixa com os próximos 7 dias. Toque em um dia para ver as aulas dele: horário, quantos alunos já confirmaram e se a turma é sua. **Toque numa aula** (botão **Ver / Entrar**) para abrir a **ficha da aula**: ali você vê quem já está confirmado e **entra ou sai** da aula sem sair da Home.
 - **Assine um plano** — atalho para contratar mensalidade e ter aulas incluídas todo mês.
+- **Sua frequência** — presenças, faltas e aproveitamento do mês. O detalhe por mês e por ano fica no **Perfil**.
 - **Minhas próximas aulas** — se não houver, aparece **Agendar agora**.
 - **Barra inferior:** Home · Arena · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
 
@@ -192,6 +193,7 @@ A aba **Perfil** concentra seus dados pessoais, segurança, créditos, acesso de
 
 - **Dados pessoais** — nome, WhatsApp, data de nascimento.
 - **Conta e segurança** — trocar e-mail (exige confirmação por link) e definir nova senha.
+- **Minha frequência** — suas presenças, faltas e aproveitamento no **mês** e no **ano**. Aula em que você avisou que não ia aparece separada da falta.
 - **Créditos** — seu saldo atual.
 - **Acesso por parceiro** — informe seu **ID Wellhub/TotalPass** para que seus check-ins sejam reconhecidos automaticamente.
 - **Histórico de pagamentos**.

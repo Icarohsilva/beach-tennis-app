@@ -5,8 +5,15 @@
 // presente até alguém dizer o contrário. Uma linha de `attendance` (professor ou
 // webhook de parceiro) sempre vence a presunção.
 
-/** Data em que a academia passou a ter frequência rastreada. */
-export const ATTENDANCE_TRACKING_START = '2026-07-23'
+/**
+ * Data em que a frequência passou a ser rastreada (deploy da feature).
+ *
+ * Aula anterior a isto não entra em nenhuma conta: a presunção de presença só
+ * vale daqui pra frente, para não afirmar nada sobre as dezenas de aulas antigas
+ * que ninguém conferiu. Como o relatório só olha aulas com data ANTERIOR a hoje,
+ * o primeiro dado aparece no dia seguinte ao deploy.
+ */
+export const ATTENDANCE_TRACKING_START = '2026-07-22'
 
 export interface ReportSession {
   id: string
