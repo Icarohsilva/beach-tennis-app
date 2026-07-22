@@ -146,3 +146,19 @@ export async function getFrequencyReport(
     },
   }
 }
+
+/**
+ * Totais de um aluno só, no período. Reusa a mesma regra do painel: o relatório
+ * inteiro da academia é calculado e filtrado. Para o porte destas academias
+ * (dezenas de alunos) isso é barato e evita uma segunda regra divergindo da
+ * primeira.
+ */
+export async function getStudentFrequency(
+  orgId: string,
+  studentId: string,
+  window: DateWindow,
+  today: string,
+): Promise<StudentTotals | null> {
+  const report = await getFrequencyReport(orgId, window, today)
+  return report.rows.find((r) => r.studentId === studentId) ?? null
+}

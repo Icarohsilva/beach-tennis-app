@@ -14,6 +14,10 @@ import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { NotificationToggle } from '@/features/perfil/NotificationToggle'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
+import { getStudentFrequency } from '@/features/relatorios/query'
+import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard'
+import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
 
 export default async function PerfilPage() {
@@ -153,6 +157,15 @@ export default async function PerfilPage() {
   // Mensalista ativo ⇒ trava o autoatendimento (subscription já carregada acima).
   const isActiveSubscriber = subscription?.status === 'active'
 
+  const hoje = new Date().toISOString().slice(0, 10)
+  const anoWindow = { from: `${hoje.slice(0, 4)}-01-01`, to: `${hoje.slice(0, 4)}-12-31` }
+  const [freqMes, freqAno] = orgId
+    ? await Promise.all([
+        getStudentFrequency(orgId, user.id, getMonthWindow(new Date()), hoje),
+        getStudentFrequency(orgId, user.id, anoWindow, hoje),
+      ])
+    : [null, null]
+
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -203,6 +216,13 @@ export default async function PerfilPage() {
           <StatCard label="Créditos" value={profile?.credits_balance ?? 0} />
         </div>
       )}
+
+      {/* Minha frequência */}
+      <section className="space-y-3">
+        <SectionHeader title="Minha frequência" />
+        <StudentFrequencyCard totals={freqMes} periodLabel={formatDate(hoje, 'MMMM')} />
+        <StudentFrequencyCard totals={freqAno} periodLabel={hoje.slice(0, 4)} />
+      </section>
 
       {/* Plano Ativo */}
       <section>
