@@ -300,10 +300,11 @@ await safe('aluno-home', async () => {
 })
 await capture(stu, '/agendar', 'aluno-agendar')
 await capture(stu, '/agendar/dayuse', 'aluno-agendar-dayuse')
-await capture(stu, '/aulas', 'aluno-aulas')
 await capture(stu, '/financeiro', 'aluno-financeiro')
 await capture(stu, '/comunidade', 'aluno-comunidade')
-await capture(stu, '/torneios', 'aluno-torneios')
+// Aba "Arena": reúne torneios e day use (a antiga aba "Aulas" deixou de existir;
+// a agenda de aulas passou para a Home).
+await capture(stu, '/torneios', 'aluno-arena')
 await capture(stu, '/perfil', 'aluno-perfil')
 
 await stuCtx.close()

@@ -30,16 +30,22 @@ export function SessionModal({
   useEffect(() => setMounted(true), [])
 
   // Fecha no Esc e trava a rolagem do fundo enquanto a ficha está aberta.
+  // Em mobile o scroller costuma ser o <html>, não o <body> — travar só o body
+  // deixava o dash rolar por trás. Travamos os dois.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
-    const previous = document.body.style.overflow
+    const root = document.documentElement
+    const prevRoot = root.style.overflow
+    const prevBody = document.body.style.overflow
+    root.style.overflow = 'hidden'
     document.body.style.overflow = 'hidden'
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = previous
+      root.style.overflow = prevRoot
+      document.body.style.overflow = prevBody
     }
   }, [onClose])
 
@@ -78,7 +84,7 @@ export function SessionModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
+      className="fixed inset-0 z-[60] flex items-center justify-center overscroll-contain p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-modal-title"
@@ -90,7 +96,7 @@ export function SessionModal({
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
       />
 
-      <div className="glass reveal relative w-full max-w-md rounded-t-3xl border border-white/10 p-5 shadow-2xl sm:rounded-3xl">
+      <div className="glass reveal relative max-h-[85vh] w-full max-w-md overflow-y-auto overscroll-contain rounded-3xl border border-white/10 p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">

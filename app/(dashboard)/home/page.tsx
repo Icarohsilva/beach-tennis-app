@@ -4,8 +4,6 @@ import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { ClassCard } from '@/features/aulas/ClassCard'
-import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { addDaysISO } from '@/lib/utils/agenda'
 import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
@@ -19,12 +17,10 @@ import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { PushOnboardingCard } from '@/components/pwa/PushOnboardingCard'
-import { CalendarPlus, Trophy, Sun } from 'lucide-react'
-import { getStudentTournamentHome } from '@/features/torneios/studentHome'
-import { NextMatchCard } from '@/features/torneios/NextMatchCard'
+import { CalendarPlus, Sun } from 'lucide-react'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
-import type { Tournament, Profile, Class, ClassSession, DayUseSlot, Periodicity } from '@/types'
+import type { Profile, DayUseSlot, Periodicity } from '@/types'
 
 export default async function HomePage() {
   const supabase = createClient()
@@ -32,7 +28,6 @@ export default async function HomePage() {
   if (!user) redirect('/login')
 
   const today = new Date().toISOString().slice(0, 10)
-  const todayDayOfWeek = new Date().getDay()
   const adminClient = createAdminClient()
 
   // Campos por-academia vêm da membership da academia ativa; identidade (full_name) de profiles.
@@ -67,9 +62,7 @@ export default async function HomePage() {
 
   const [
     { data: profileData },
-    { data: tournamentsData },
     { data: nextSessionsData },
-    { data: todayClassesData },
     { data: todayDayUseData },
     { count: weeklyClassesCount },
   ] = await Promise.all([
@@ -79,13 +72,6 @@ export default async function HomePage() {
       .eq('id', user.id)
       .single(),
     supabase
-      .from('tournaments')
-      .select('*')
-      .eq('status', 'open')
-      .eq('organization_id', orgId)
-      .order('date', { ascending: true })
-      .limit(6),
-    supabase
       .from('session_bookings')
       .select('id, session:class_sessions(id, session_date, class:classes(name, start_time, end_time, level, type))')
       .eq('student_id', user.id)
@@ -94,13 +80,6 @@ export default async function HomePage() {
       .gte('session_date', today)
       .order('session_date', { referencedTable: 'class_sessions', ascending: true })
       .limit(5),
-    supabase
-      .from('classes')
-      .select('*')
-      .eq('day_of_week', todayDayOfWeek)
-      .eq('is_active', true)
-      .eq('organization_id', orgId)
-      .order('start_time', { ascending: true }),
     supabase
       .from('dayuse_slots')
       .select('id, court, start_time, end_time, capacity, notes')
@@ -117,11 +96,6 @@ export default async function HomePage() {
   ])
 
   const profile = profileData as Pick<Profile, 'full_name'> | null
-  const tournaments = (tournamentsData ?? []) as Tournament[]
-  const { myTournaments, myTournamentIds, nextMatch } = await getStudentTournamentHome({
-    orgId,
-    userId: user.id,
-  })
   const showCredits = !membership?.partner
   const isPartner = !!membership?.partner
   // Não mostra o CTA genérico se já existe uma recomendação de plano do admin
@@ -155,13 +129,7 @@ export default async function HomePage() {
   }
   const nextSessions = (nextSessionsData ?? []) as unknown as SessionRow[]
 
-  // Filtra as turmas de hoje apenas por kids (nível não bloqueia mais).
-  const allTodayClasses = (todayClassesData ?? []) as Class[]
-  const todayClasses = membership
-    ? allTodayClasses.filter((c) => c.type !== 'kids' || membership.is_dependent)
-    : []
-
-  // ── Matrículas fixas do aluno (usadas na agenda e no bloco de hoje) ───────
+  // ── Matrículas fixas do aluno (usadas na agenda) ──────────────────────────
   const { data: studentEnrollmentsRaw } = await supabase
     .from('enrollments')
     .select('class_id')
@@ -238,10 +206,8 @@ export default async function HomePage() {
     }
   }
 
-  // Alunos fixos das turmas envolvidas (agenda da semana + turmas de hoje).
-  const weekClassIds = weekSessionRows.map((s) => s.class_id)
-  const todayClassIdsForRoster = todayClasses.map((c) => c.id)
-  const rosterClassIds = Array.from(new Set([...weekClassIds, ...todayClassIdsForRoster]))
+  // Alunos fixos das turmas que aparecem na agenda da semana.
+  const rosterClassIds = Array.from(new Set(weekSessionRows.map((s) => s.class_id)))
 
   const { data: rosterRaw } = rosterClassIds.length > 0
     ? await adminClient
@@ -263,9 +229,6 @@ export default async function HomePage() {
       { id: e.student_id, name: p?.full_name ?? 'Aluno' },
     ])
   }
-
-  const countByClass = new Map<string, number>()
-  enrolledByClass.forEach((people, classId) => countByClass.set(classId, people.length))
 
   /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram. */
   function attendeesOf(sessionId: string, classId: string): string[] {
@@ -323,123 +286,6 @@ export default async function HomePage() {
       capacity,
       state,
     }))
-
-  // ── Dados de ação das turmas de hoje ──────────────────────────────────────
-  const todayClassIds = todayClasses.map((c) => c.id)
-
-  // Today's sessions for today's classes
-  const { data: todaySessionsRaw } = todayClassIds.length > 0
-    ? await adminClient
-        .from('class_sessions')
-        .select('id, class_id, session_date, status')
-        .in('class_id', todayClassIds)
-        .eq('session_date', today)
-        .eq('status', 'scheduled')
-    : { data: [] }
-
-  const todaySessions = (todaySessionsRaw ?? []) as Pick<ClassSession, 'id' | 'class_id' | 'session_date' | 'status'>[]
-  const nextSessionByClass = new Map<string, Pick<ClassSession, 'id' | 'session_date'>>()
-  for (const s of todaySessions) {
-    nextSessionByClass.set(s.class_id, { id: s.id, session_date: s.session_date })
-  }
-  const todaySessionIds = todaySessions.map((s) => s.id)
-
-  // Contagens e reservas de hoje saem dos mapas da semana: as sessões de hoje
-  // já estão na janela, então não há por que consultá-las de novo.
-  const bookingBySession = new Map<string, string>()
-  for (const id of todaySessionIds) {
-    const mine = myBookingBySession.get(id)
-    if (mine) bookingBySession.set(id, mine.id)
-  }
-
-  const bookedCountBySession = weekBookedCount
-
-  // Student's waitlist entries for today's sessions
-  const { data: waitlistRaw } = todaySessionIds.length > 0
-    ? await supabase
-        .from('waitlists')
-        .select('id, session_id, position, status, notified_at')
-        .eq('student_id', user.id)
-        .eq('organization_id', orgId)
-        .in('session_id', todaySessionIds)
-        .in('status', ['waiting', 'offered'])
-    : { data: [] }
-
-  const waitlistBySession: Record<string, { id: string; position: number; status: 'waiting' | 'offered'; notified_at: string | null }> = {}
-  for (const w of (waitlistRaw ?? []) as { id: string; session_id: string; position: number; status: 'waiting' | 'offered'; notified_at: string | null }[]) {
-    waitlistBySession[w.session_id] = w
-  }
-
-  // Waitlist counts for today's sessions
-  const { data: waitlistCountsRaw } = todaySessionIds.length > 0
-    ? await adminClient
-        .from('waitlists')
-        .select('session_id')
-        .in('session_id', todaySessionIds)
-        .in('status', ['waiting', 'offered'])
-    : { data: [] }
-
-  const waitlistCountBySession = new Map<string, number>()
-  for (const w of (waitlistCountsRaw ?? []) as { session_id: string }[]) {
-    waitlistCountBySession.set(w.session_id, (waitlistCountBySession.get(w.session_id) ?? 0) + 1)
-  }
-
-  // Student's confirmed bookings today (for daily limit)
-  const { data: allTodaySessionIds } = await adminClient
-    .from('class_sessions')
-    .select('id')
-    .eq('session_date', today)
-    .eq('organization_id', orgId)
-
-  const allTodayIds = (allTodaySessionIds ?? []).map((s: { id: string }) => s.id)
-  let dailyBookingCount = 0
-  if (allTodayIds.length > 0) {
-    const { count } = await supabase
-      .from('session_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', user.id)
-      .eq('organization_id', orgId)
-      .in('session_id', allTodayIds)
-      .eq('status', 'confirmed')
-    dailyBookingCount = count ?? 0
-  }
-
-  // Bloco de hoje com as ações reais (agendar, fila, sair), injetado na agenda.
-  const todayContent = todayClasses.length > 0 ? (
-    <div className="space-y-3">
-      {todayClasses.map((c) => {
-        const nextSession = nextSessionByClass.get(c.id) ?? null
-        const nextId = nextSession?.id
-        const isEnrolled = enrolledClassIds.has(c.id)
-        const bookingId = nextId ? bookingBySession.get(nextId) : undefined
-        const hasBooking = !!bookingId
-        const sessionBookedCount = nextId ? (bookedCountBySession.get(nextId) ?? 0) : 0
-        const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
-        const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
-        const attendees = nextId
-          ? attendeesOf(nextId, c.id)
-          : (enrolledByClass.get(c.id) ?? []).map((a) => a.name)
-
-        return (
-          <div key={c.id} className="space-y-1">
-            <ClassCard class_={c} enrolledCount={countByClass.get(c.id) ?? 0} />
-            <AgendarClient
-              class_={c}
-              nextSession={nextSession}
-              isEnrolled={isEnrolled}
-              hasBooking={hasBooking}
-              bookingId={bookingId}
-              sessionBookedCount={sessionBookedCount}
-              sessionWaitlistCount={sessionWaitlistCount}
-              waitlistEntry={waitlistEntry}
-              attendees={attendees}
-              dailyBookingCount={dailyBookingCount}
-            />
-          </div>
-        )
-      })}
-    </div>
-  ) : null
 
   return (
     <div className="space-y-5 p-4 pb-24">
@@ -504,17 +350,11 @@ export default async function HomePage() {
         </Reveal>
       )}
 
-      {nextMatch && (
-        <Reveal step={3}>
-          <NextMatchCard match={nextMatch} />
-        </Reveal>
-      )}
-
-      {/* Agenda da semana — hoje traz as ações completas de agendamento. */}
-      {(agendaSessions.length > 0 || todayContent) && (
+      {/* Agenda da semana — cada aula abre a ficha em modal (ver/entrar/sair). */}
+      {agendaSessions.length > 0 && (
         <Reveal step={3} as="section">
           <SectionHeader title="Sua semana" href="/agendar" linkLabel="agendar" />
-          <WeekAgenda todayISO={today} sessions={agendaSessions} todayContent={todayContent} />
+          <WeekAgenda todayISO={today} sessions={agendaSessions} />
         </Reveal>
       )}
 
@@ -556,7 +396,7 @@ export default async function HomePage() {
 
       {/* Próximas aulas agendadas */}
       <Reveal step={5} as="section">
-        <SectionHeader title="Minhas próximas aulas" href="/aulas" linkLabel="ver todas" />
+        <SectionHeader title="Minhas próximas aulas" />
         {nextSessions.length === 0 ? (
           <EmptyState
             icon={CalendarPlus}
@@ -588,64 +428,6 @@ export default async function HomePage() {
           </div>
         )}
       </Reveal>
-
-      {myTournaments.length > 0 && (
-        <Reveal step={6} as="section">
-          <SectionHeader title="Meus torneios" href="/torneios" />
-          <div className="space-y-2">
-            {myTournaments.map((t) => (
-              <Link key={t.id} href={`/torneios/${t.id}`} className="group block">
-                <Card glass accent interactive>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
-                        <Trophy className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{t.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {formatDate(t.date, "dd 'de' MMMM")}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant={t.status === 'in_progress' ? 'warning' : 'success'}>
-                      {t.status === 'in_progress' ? 'Em andamento' : 'Inscrito'}
-                    </Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </Reveal>
-      )}
-
-      {tournaments.filter((t) => !myTournamentIds.has(t.id)).length > 0 && (
-        <Reveal step={7} as="section">
-          <SectionHeader title="Próximos torneios" href="/torneios" />
-          <div className="space-y-2">
-            {tournaments
-              .filter((t) => !myTournamentIds.has(t.id))
-              .slice(0, 3)
-              .map((tournament) => (
-                <Link key={tournament.id} href={`/torneios/${tournament.id}`} className="group block">
-                  <Card glass interactive>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{tournament.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {formatDate(tournament.date, "dd 'de' MMMM")}
-                        </p>
-                      </div>
-                      <span className="text-xs text-slate-400 transition-colors group-hover:text-brand-400">
-                        ver →
-                      </span>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
-          </div>
-        </Reveal>
-      )}
     </div>
   )
 }

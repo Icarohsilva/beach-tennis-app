@@ -1,7 +1,7 @@
 // features/home/WeekAgenda.tsx
 'use client'
 import { useState } from 'react'
-import { CalendarDays, Check, Users } from 'lucide-react'
+import { CalendarDays, Check, Users, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { buildWeekDays } from '@/lib/utils/agenda'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
@@ -48,22 +48,14 @@ function localDate(iso: string): Date {
 export function WeekAgenda({
   todayISO,
   sessions,
-  todayContent,
 }: {
   todayISO: string
   sessions: AgendaSession[]
-  /**
-   * Bloco de hoje renderizado no servidor, com os botões de agendar/cancelar.
-   * Substitui a lista genérica quando o dia de hoje está selecionado, para que
-   * a agenda não vire uma segunda cópia — sem ações — do que já existe.
-   */
-  todayContent?: React.ReactNode
 }) {
   const days = buildWeekDays(todayISO, 7, sessions)
   const [selected, setSelected] = useState(todayISO)
   const [openSessionId, setOpenSessionId] = useState<string | null>(null)
   const selectedDay = days.find((d) => d.date === selected) ?? days[0]
-  const showTodayContent = selected === todayISO && !!todayContent
   const openSession = sessions.find((s) => s.id === openSessionId) ?? null
 
   return (
@@ -129,9 +121,7 @@ export function WeekAgenda({
       </div>
 
       <div className="mt-3 space-y-2">
-        {showTodayContent ? (
-          todayContent
-        ) : selectedDay.items.length === 0 ? (
+        {selectedDay.items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-7 text-center">
             <CalendarDays className="mx-auto h-6 w-6 text-slate-600" />
             <p className="mt-2 text-sm font-semibold text-slate-300">Nenhuma aula neste dia</p>
@@ -193,17 +183,19 @@ export function WeekAgenda({
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+                    <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
                       {isMine ? (
-                        <span className="flex items-center gap-1 rounded-full bg-brand-500/15 px-2 py-1 text-[10px] font-bold text-brand-300">
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
                           <Check className="h-3 w-3" />
                           {session.fixed && !session.mine ? 'Fixa' : 'Sua'}
                         </span>
                       ) : (
                         isFull && <Badge variant="danger">Lotada</Badge>
                       )}
-                      <span className="text-[10px] font-semibold text-slate-400 transition-colors group-hover:text-brand-400">
-                        Ver / Entrar →
+                      {/* Chamada à ação colorida — o card inteiro é clicável e abre a ficha. */}
+                      <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 to-brand-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm shadow-brand-600/30 transition-transform group-hover:scale-105">
+                        {isMine ? 'Ver' : 'Ver / Entrar'}
+                        <ArrowRight className="h-3 w-3" />
                       </span>
                     </div>
                   </div>
