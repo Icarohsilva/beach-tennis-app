@@ -6,7 +6,7 @@
 > Cada seção traz o passo a passo, a tela real do app e um bloco **🔧 Nos bastidores** explicando o que o sistema faz por baixo dos panos.
 
 **Produção:** <https://www.arenahub.website>
-**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Aulas · (+) · Comunidade · Perfil.
+**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Arena · (+) · Comunidade · Perfil.
 
 > 💡 Este manual também fica disponível **dentro do app**: toque no botão de ajuda **(?)** → **Documentação**.
 
@@ -20,10 +20,10 @@
 2. [Home — sua tela inicial](#2-home--sua-tela-inicial)
 3. [Agendar aula](#3-agendar-aula)
 4. [Day use](#4-day-use)
-5. [Minhas aulas](#5-minhas-aulas)
+5. [Arena — torneios e Day Use](#5-arena--torneios-e-day-use)
 6. [Financeiro — plano e pagamentos](#6-financeiro--plano-e-pagamentos)
 7. [Comunidade](#7-comunidade)
-8. [Torneios](#8-torneios)
+8. [Torneios — inscrição](#8-torneios--inscrição)
 9. [Perfil — dados, créditos e ficha](#9-perfil--dados-créditos-e-ficha)
 
 ---
@@ -91,10 +91,10 @@ A **Home** é o seu resumo: quanto falta para a próxima aula, sua agenda da sem
 
 - **Cabeçalho colorido** (na cor da marca da academia) com a saudação do momento do dia, a data e três números: **Créditos** (ou seu plano parceiro), **Aulas/semana** e quantas aulas você tem **nesta semana**.
 - **Próxima aula** — cartão de destaque com **contagem regressiva ao vivo** ("Faltam 2h 24min"), horário, quantos lugares já estão ocupados e o atalho para entrar na aula. Se você ainda não tem aula marcada, ele mostra a próxima com vaga aberta.
-- **Sua semana** — faixa com os próximos 7 dias. Toque em um dia para ver as aulas dele: horário, quantos alunos já confirmaram e se a turma é sua. O dia de hoje traz os botões de **Entrar na aula**, fila de espera e cancelamento.
+- **Sua semana** — faixa com os próximos 7 dias. Toque em um dia para ver as aulas dele: horário, quantos alunos já confirmaram e se a turma é sua. **Toque numa aula** (botão **Ver / Entrar**) para abrir a **ficha da aula**: ali você vê quem já está confirmado e **entra ou sai** da aula sem sair da Home.
 - **Assine um plano** — atalho para contratar mensalidade e ter aulas incluídas todo mês.
 - **Minhas próximas aulas** — se não houver, aparece **Agendar agora**.
-- **Barra inferior:** Home · Aulas · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
+- **Barra inferior:** Home · Arena · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
 
 > **🔧 Nos bastidores**
 > - **Créditos** vêm de `profiles.credits_balance`, que é um valor **em cache** — a fonte da verdade é a tabela `credit_transactions` (cada aula agendada, cancelamento ou reposição é um lançamento).
@@ -133,13 +133,15 @@ O professor **publica horários** de day use com antecedência. Quando houver ho
 
 ---
 
-## 5. Minhas aulas
+## 5. Arena — torneios e Day Use
 
-Na aba **Aulas** você acompanha suas aulas agendadas e o histórico.
+A aba **Arena** (barra inferior) reúne os **Torneios** da academia e o **Day Use** (aluguel de quadra avulsa). Suas **aulas** ficam na **Home** (agenda da semana — veja a seção [Home](#2-home--sua-tela-inicial)).
 
-![Minhas aulas](images/aluno-aulas.png)
+![Aba Arena](images/aluno-arena.png)
 
-Se você ainda não agendou nada, aparece **Você ainda não tem aulas** com o botão **Agendar aula**.
+- **Day Use** — próximos horários de quadra avulsa; toque para reservar (detalhe na seção [Day use](#4-day-use)).
+- **Meus torneios** — os torneios em que você já está inscrito, com o próximo confronto quando houver.
+- **Torneios** — todos os torneios abertos da academia, com filtro por **nível** (detalhe na seção [Torneios](#8-torneios--inscrição)).
 
 ---
 
@@ -171,13 +173,9 @@ Poste novidades, fotos e recados para a turma. Se ninguém postou ainda, você p
 
 ---
 
-## 8. Torneios
+## 8. Torneios — inscrição
 
-Na aba **Torneios** você vê os torneios da academia e pode se inscrever.
-
-![Torneios do aluno](images/aluno-torneios.png)
-
-Use os filtros de **nível** (Todos os níveis, Iniciante, D, C, B, A) para achar torneios da sua categoria. Quando houver torneios abertos, eles aparecem aqui com data e valor de inscrição.
+Os torneios ficam na aba **Arena** (seção Torneios). Use os filtros de **nível** (Todos os níveis, Iniciante, D, C, B, A) para achar torneios da sua categoria. Quando houver torneios abertos, eles aparecem com data e valor de inscrição; toque para se inscrever.
 
 > **🔧 Nos bastidores**
 > - Torneios pagos são cobrados por **PIX** (chave configurada pela academia). A academia pode oferecer **descontos progressivos** para quem se inscreve em vários torneios na mesma semana.

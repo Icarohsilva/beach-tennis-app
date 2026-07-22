@@ -13,11 +13,11 @@ const ALUNO_STEPS: TourStep[] = [
     },
   },
   {
-    element: '[data-tour="tour-aluno-aulas"]',
+    element: '[data-tour="tour-aluno-arena"]',
     popover: {
-      title: 'Suas aulas',
+      title: 'Arena',
       description:
-        'Aqui você vê as aulas disponíveis. Para reservar, use o botão laranja "+" (Agendar) no centro.',
+        'Aqui ficam os torneios da sua academia e o Day Use (aluguel de quadra avulsa). Para agendar sua aula, use o botão laranja "+" no centro.',
     },
   },
   {
