@@ -2,6 +2,7 @@
 import { redirect } from 'next/navigation'
 import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
+import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 import { Logo } from '@/components/ui/Logo'
@@ -56,8 +57,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div style={accentVars(org?.brand_color)} className="min-h-screen bg-surface text-white">
+      <AuroraBackground />
       {/* Top bar */}
-      <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-between px-3 bg-surface border-b border-surface-border/40">
+      <header className="fixed top-0 left-0 right-0 z-40 h-11 flex items-center justify-between px-3 bg-surface/80 backdrop-blur-md border-b border-surface-border/40">
         {memberships.length > 1 && activeOrgId ? (
           <OrgSwitcher
             items={memberships.map((m) => ({ organization_id: m.organization_id, org_name: m.org_name }))}

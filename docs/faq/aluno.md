@@ -83,19 +83,22 @@ Digite **Nova senha**, confirme e clique em **Salvar e continuar**. Pronto — d
 
 ## 2. Home — sua tela inicial
 
-A **Home** é o seu resumo: saudação, créditos, aulas por semana e próximas aulas.
+A **Home** é o seu resumo: quanto falta para a próxima aula, sua agenda da semana e seus números.
 
 ![Home do aluno](images/aluno-home.png)
 
 **O que aparece:**
 
-- **Cabeçalho colorido** (na cor da marca da academia) com **Créditos** e **Aulas/semana**.
+- **Cabeçalho colorido** (na cor da marca da academia) com a saudação do momento do dia, a data e três números: **Créditos** (ou seu plano parceiro), **Aulas/semana** e quantas aulas você tem **nesta semana**.
+- **Próxima aula** — cartão de destaque com **contagem regressiva ao vivo** ("Faltam 2h 24min"), horário, quantos lugares já estão ocupados e o atalho para entrar na aula. Se você ainda não tem aula marcada, ele mostra a próxima com vaga aberta.
+- **Sua semana** — faixa com os próximos 7 dias. Toque em um dia para ver as aulas dele: horário, quantos alunos já confirmaram e se a turma é sua. O dia de hoje traz os botões de **Entrar na aula**, fila de espera e cancelamento.
 - **Assine um plano** — atalho para contratar mensalidade e ter aulas incluídas todo mês.
 - **Minhas próximas aulas** — se não houver, aparece **Agendar agora**.
 - **Barra inferior:** Home · Aulas · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
 
 > **🔧 Nos bastidores**
 > - **Créditos** vêm de `profiles.credits_balance`, que é um valor **em cache** — a fonte da verdade é a tabela `credit_transactions` (cada aula agendada, cancelamento ou reposição é um lançamento).
+> - A contagem regressiva e a escolha de qual aula vai no destaque acontecem **no seu aparelho**, pelo relógio dele — o servidor roda em UTC e mostraria a aula errada perto da virada do dia.
 
 ---
 
