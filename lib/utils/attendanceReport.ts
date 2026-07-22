@@ -104,20 +104,30 @@ export function buildAttendanceReport(input: ReportInput): StudentTotals[] {
     const sessionBookings = bookingsBySession.get(session.id) ?? []
     const marks = attendanceBySession.get(session.id) ?? new Map()
 
-    const confirmed = new Set(
-      sessionBookings.filter((b) => b.status === 'confirmed').map((b) => b.studentId),
-    )
-    const cancelled = new Set(
-      sessionBookings.filter((b) => b.status === 'cancelled').map((b) => b.studentId),
-    )
-    const fixed = new Set(
-      enrollments
-        .filter((e) => e.classId === session.classId && enrollmentCovers(e, session.date))
-        .map((e) => e.studentId),
-    )
+    const confirmedIds = sessionBookings
+      .filter((b) => b.status === 'confirmed')
+      .map((b) => b.studentId)
+    const cancelledIds = sessionBookings
+      .filter((b) => b.status === 'cancelled')
+      .map((b) => b.studentId)
+    const fixedIds = enrollments
+      .filter((e) => e.classId === session.classId && enrollmentCovers(e, session.date))
+      .map((e) => e.studentId)
+
+    const confirmed = new Set(confirmedIds)
+    const cancelled = new Set(cancelledIds)
 
     // Todo mundo que a aula tocava: fixo na janela, reserva confirmada ou aviso.
-    const involved = new Set<string>([...fixed, ...confirmed, ...cancelled])
+    // Deduplicamos por array + Set de controle em vez de espalhar Sets: o
+    // tsconfig deste projeto não liga downlevelIteration, então espalhar ou
+    // iterar um Set quebra o typecheck (TS2802).
+    const seen = new Set<string>()
+    const involved: string[] = []
+    for (const studentId of [...fixedIds, ...confirmedIds, ...cancelledIds]) {
+      if (seen.has(studentId)) continue
+      seen.add(studentId)
+      involved.push(studentId)
+    }
 
     for (const studentId of involved) {
       const mark = marks.get(studentId)
