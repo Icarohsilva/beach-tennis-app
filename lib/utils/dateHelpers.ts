@@ -13,8 +13,26 @@ export function getDatesForDayOfWeekInMonth(
   return eachDayOfInterval({ start, end }).filter((d) => getDay(d) === dayOfWeek)
 }
 
+/**
+ * Converte para Date PRESERVANDO o dia do calendário.
+ *
+ * `new Date('2026-07-28')` (data pura) é parseado como meia-noite UTC; formatado
+ * num fuso negativo (BRT = UTC-3) isso volta 3h e cai em 27/07. Server components
+ * mascaravam o bug (Vercel roda em UTC), mas no navegador do aluno toda data pura
+ * aparecia um dia antes. Datas puras (YYYY-MM-DD) passam a virar meia-noite LOCAL,
+ * então o dia exibido é o mesmo no servidor e no navegador, em qualquer fuso.
+ * Strings com hora e objetos Date seguem o parse normal.
+ */
+function toCalendarDate(date: string | Date): Date {
+  if (typeof date === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  }
+  return new Date(date)
+}
+
 export function formatDate(date: string | Date, fmt = 'dd/MM/yyyy'): string {
-  return format(new Date(date), fmt, { locale: ptBR })
+  return format(toCalendarDate(date), fmt, { locale: ptBR })
 }
 
 export function formatTime(time: string): string {
