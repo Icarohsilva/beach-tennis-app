@@ -15,7 +15,7 @@ const navItems = [
 export function BottomNav() {
   const pathname = usePathname()
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-surface-card border-t border-surface-border">
+    <nav className="glass fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.07]">
       <div className="flex items-center justify-around px-2 pb-safe">
         {navItems.slice(0, 2).map((item) => (
           <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />

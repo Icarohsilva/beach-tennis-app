@@ -108,9 +108,11 @@ Concluído o onboarding, o dono chega ao **painel admin** (`/admin/dashboard`). 
 
 **O que a tela mostra:**
 
+- **Faixa de abertura:** saudação, data e o pulso do dia ("5 aulas hoje · 22 alunos esperados"), com atalhos para a grade e para criar turma.
 - **Cartões de resumo:** Alunos ativos, Aulas hoje, Matrículas ativas, Day use hoje.
-- **Aulas de Hoje:** próximas sessões do dia.
-- **Ações rápidas:** Nova Turma, Day Use, Gerenciar Alunos, Financeiro, Enviar Notificação, Torneios.
+- **Agenda de hoje:** as aulas do dia em linha do tempo, com um marcador de **agora** que corre com o relógio. Cada aula mostra a barra de ocupação (quantos dos lugares já estão preenchidos) e leva direto para a **chamada**. Aula que já passou fica apagada; a que está rolando ganha destaque.
+- **Resumo:** anel com a **ocupação do dia** (lugares preenchidos sobre o total) e as turmas mais cheia e mais vazia — útil para saber onde ainda dá para encaixar aluno.
+- **Ações rápidas:** Nova turma, Day Use, Alunos, Financeiro, Notificação, Torneios.
 - **Banner do mês grátis** (topo): mostra quantos dias faltam do período de teste e leva para a assinatura.
 
 O menu lateral segue esta ordem: **Dashboard · Alunos · Grade de Aulas · Financeiro · Notificações · Torneios · Integrações · Configurações · Equipe**.

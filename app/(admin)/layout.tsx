@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { Logo } from '@/components/ui/Logo'
 import { AdminMobileNav } from '@/components/ui/AdminMobileNav'
+import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { getPlatformAccess } from '@/lib/billing/access'
 import { accentVars } from '@/lib/branding/theme'
@@ -102,7 +103,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       style={accentVars(org?.brand_color)}
       className="min-h-screen bg-surface text-white flex flex-col md:flex-row"
     >
-      <aside className="w-64 bg-surface-card border-r border-surface-border min-h-screen hidden md:flex flex-col">
+      <AuroraBackground />
+      <aside className="glass w-64 border-r border-white/[0.07] min-h-screen hidden md:flex flex-col">
         <div className="bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-5 mb-2">
           <div className="flex items-start justify-between">
             <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />

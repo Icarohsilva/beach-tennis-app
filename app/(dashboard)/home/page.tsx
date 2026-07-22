@@ -7,14 +7,18 @@ import { Badge } from '@/components/ui/Badge'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import { StatHeader } from '@/components/ui/StatHeader'
+import { addDaysISO } from '@/lib/utils/agenda'
+import { HeroHeader } from '@/features/home/HeroHeader'
+import { NextClassSpotlight, type SpotlightCandidate } from '@/features/home/NextClassSpotlight'
+import { WeekAgenda, type AgendaSession } from '@/features/home/WeekAgenda'
+import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { PushOnboardingCard } from '@/components/pwa/PushOnboardingCard'
-import { CalendarPlus } from 'lucide-react'
+import { CalendarPlus, Trophy, Sun } from 'lucide-react'
 import { getStudentTournamentHome } from '@/features/torneios/studentHome'
 import { NextMatchCard } from '@/features/torneios/NextMatchCard'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
@@ -156,7 +160,111 @@ export default async function HomePage() {
     ? allTodayClasses.filter((c) => c.type !== 'kids' || membership.is_dependent)
     : []
 
-  // ── Fetch action data for today's classes ─────────────────────────────────
+  // ── Matrículas fixas do aluno (usadas na agenda e no bloco de hoje) ───────
+  const { data: studentEnrollmentsRaw } = await supabase
+    .from('enrollments')
+    .select('class_id')
+    .eq('student_id', user.id)
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+
+  const enrolledClassIds = new Set(
+    (studentEnrollmentsRaw ?? []).map((e: { class_id: string }) => e.class_id),
+  )
+
+  // ── Agenda dos próximos 7 dias ────────────────────────────────────────────
+  const weekEnd = addDaysISO(today, 6)
+  const { data: weekSessionsRaw } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date, class_id, classes(name, start_time, end_time, type, max_students)')
+    .eq('organization_id', orgId)
+    .gte('session_date', today)
+    .lte('session_date', weekEnd)
+    .eq('status', 'scheduled')
+    .order('session_date', { ascending: true })
+
+  type WeekSessionRow = {
+    id: string
+    session_date: string
+    class_id: string
+    classes:
+      | { name: string; start_time: string; end_time: string; type: string; max_students: number }
+      | { name: string; start_time: string; end_time: string; type: string; max_students: number }[]
+      | null
+  }
+  const weekSessionRows = (weekSessionsRaw ?? []) as unknown as WeekSessionRow[]
+  const weekSessionIds = weekSessionRows.map((s) => s.id)
+
+  const [{ data: weekBookedRaw }, { data: myWeekBookingsRaw }] = weekSessionIds.length > 0
+    ? await Promise.all([
+        adminClient
+          .from('session_bookings')
+          .select('session_id')
+          .in('session_id', weekSessionIds)
+          .eq('status', 'confirmed'),
+        supabase
+          .from('session_bookings')
+          .select('session_id')
+          .eq('student_id', user.id)
+          .eq('organization_id', orgId)
+          .in('session_id', weekSessionIds)
+          .eq('status', 'confirmed'),
+      ])
+    : [{ data: [] }, { data: [] }]
+
+  const weekBookedCount = new Map<string, number>()
+  for (const b of (weekBookedRaw ?? []) as { session_id: string }[]) {
+    weekBookedCount.set(b.session_id, (weekBookedCount.get(b.session_id) ?? 0) + 1)
+  }
+  const myWeekSessionIds = new Set(
+    (myWeekBookingsRaw ?? []).map((b: { session_id: string }) => b.session_id),
+  )
+
+  const agendaSessions: AgendaSession[] = weekSessionRows
+    .map((row) => {
+      const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
+      if (!cls) return null
+      // Kids só aparece para dependentes — mesma regra das turmas de hoje.
+      if (cls.type === 'kids' && !membership?.is_dependent) return null
+      return {
+        id: row.id,
+        date: row.session_date,
+        className: cls.name,
+        start: cls.start_time,
+        end: cls.end_time,
+        booked: weekBookedCount.get(row.id) ?? 0,
+        capacity: cls.max_students,
+        mine: myWeekSessionIds.has(row.id),
+        fixed: enrolledClassIds.has(row.class_id),
+        kids: cls.type === 'kids',
+      }
+    })
+    .filter((s): s is AgendaSession => s !== null)
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))
+
+  // Destaque: as aulas do aluno vêm primeiro; sem nenhuma, oferece as que ainda
+  // têm vaga. O card final é escolhido no cliente, pelo relógio do aluno.
+  const mySessions = agendaSessions.filter((s) => s.mine || s.fixed)
+  const spotlightCandidates: SpotlightCandidate[] = (
+    mySessions.length > 0
+      ? mySessions.map((s) => ({ ...s, state: 'booked' as const }))
+      : agendaSessions
+          .filter((s) => s.booked < s.capacity)
+          .map((s) => ({ ...s, state: 'available' as const }))
+  )
+    .slice(0, 6)
+    .map(({ id, className, date, start, end, booked, capacity, state }) => ({
+      id,
+      className,
+      date,
+      start,
+      end,
+      booked,
+      capacity,
+      state,
+    }))
+
+  // ── Dados de ação das turmas de hoje ──────────────────────────────────────
   const todayClassIds = todayClasses.map((c) => c.id)
 
   // Today's sessions for today's classes
@@ -189,21 +297,6 @@ export default async function HomePage() {
   for (const e of (enrollCountsRaw ?? []) as { class_id: string }[]) {
     countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1)
   }
-
-  // Student's fixed enrollments
-  const { data: studentEnrollmentsRaw } = todayClassIds.length > 0
-    ? await supabase
-        .from('enrollments')
-        .select('class_id')
-        .eq('student_id', user.id)
-        .eq('organization_id', orgId)
-        .in('class_id', todayClassIds)
-        .eq('is_active', true)
-    : { data: [] }
-
-  const enrolledClassIds = new Set(
-    (studentEnrollmentsRaw ?? []).map((e: { class_id: string }) => e.class_id),
-  )
 
   // Student's bookings for today's sessions
   const { data: studentBookingsRaw } = todaySessionIds.length > 0
@@ -319,8 +412,45 @@ export default async function HomePage() {
     dailyBookingCount = count ?? 0
   }
 
+  // Bloco de hoje com as ações reais (agendar, fila, sair), injetado na agenda.
+  const todayContent = todayClasses.length > 0 ? (
+    <div className="space-y-3">
+      {todayClasses.map((c) => {
+        const nextSession = nextSessionByClass.get(c.id) ?? null
+        const nextId = nextSession?.id
+        const isEnrolled = enrolledClassIds.has(c.id)
+        const bookingId = nextId ? bookingBySession.get(nextId) : undefined
+        const hasBooking = !!bookingId
+        const sessionBookedCount = nextId ? (bookedCountBySession.get(nextId) ?? 0) : 0
+        const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
+        const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
+        const attendees = nextId && sessionAttendeesMap[nextId]?.length
+          ? sessionAttendeesMap[nextId]
+          : (classAttendeesMap[c.id] ?? [])
+
+        return (
+          <div key={c.id} className="space-y-1">
+            <ClassCard class_={c} enrolledCount={countByClass.get(c.id) ?? 0} />
+            <AgendarClient
+              class_={c}
+              nextSession={nextSession}
+              isEnrolled={isEnrolled}
+              hasBooking={hasBooking}
+              bookingId={bookingId}
+              sessionBookedCount={sessionBookedCount}
+              sessionWaitlistCount={sessionWaitlistCount}
+              waitlistEntry={waitlistEntry}
+              attendees={attendees}
+              dailyBookingCount={dailyBookingCount}
+            />
+          </div>
+        )
+      })}
+    </div>
+  ) : null
+
   return (
-    <div className="p-4 space-y-6 pb-24">
+    <div className="space-y-5 p-4 pb-24">
       <PushOnboardingCard />
 
       {recRaw && (
@@ -332,102 +462,94 @@ export default async function HomePage() {
         />
       )}
 
-      <div data-tour="tour-aluno-progresso">
-        <StatHeader
-          name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
-          stats={[
-            ...(showCredits
-              ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
-              : [{ label: 'Plano', value: membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
-            { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-          ]}
-        />
-      </div>
+      <Reveal step={0}>
+        <div data-tour="tour-aluno-progresso">
+          <HeroHeader
+            name={profile?.full_name?.split(' ')[0] ?? 'atleta'}
+            stats={[
+              ...(showCredits
+                ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
+                : [{ label: 'Plano', value: membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
+              { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
+              { label: 'Nesta semana', value: mySessions.length },
+            ]}
+          />
+        </div>
+      </Reveal>
+
+      {spotlightCandidates.length > 0 && (
+        <Reveal step={1}>
+          <NextClassSpotlight candidates={spotlightCandidates} todayISO={today} />
+        </Reveal>
+      )}
 
       {isPartner && checkinProgress && (
-        <CheckinProgressCard
-          partner={membership!.partner as 'wellhub' | 'totalpass'}
-          progress={checkinProgress}
-        />
+        <Reveal step={2}>
+          <CheckinProgressCard
+            partner={membership!.partner as 'wellhub' | 'totalpass'}
+            progress={checkinProgress}
+          />
+        </Reveal>
       )}
 
       {showPlanCTA && (
-        <Link href="/financeiro">
-          <Card className="bg-gradient-to-br from-brand-600 to-brand-800 border-none hover:opacity-90 transition-opacity cursor-pointer">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-white">Assine um plano</p>
-                <p className="text-xs text-white/80 mt-0.5">
-                  Aulas incluídas todo mês, sem pagar aula avulsa.
-                </p>
+        <Reveal step={2}>
+          <Link href="/financeiro" className="group block">
+            <div className="sheen relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-brand-600 to-brand-800 p-4 shadow-[0_18px_44px_-26px_rgb(var(--brand-600)/0.95)] transition-transform duration-200 group-hover:-translate-y-0.5">
+              <div className="relative flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-bold text-white">Assine um plano</p>
+                  <p className="mt-0.5 text-xs text-white/80">
+                    Aulas incluídas todo mês, sem pagar aula avulsa.
+                  </p>
+                </div>
+                <span className="shrink-0 text-xl text-white transition-transform group-hover:translate-x-1">
+                  →
+                </span>
               </div>
-              <span className="text-white text-xl shrink-0">→</span>
             </div>
-          </Card>
-        </Link>
+          </Link>
+        </Reveal>
       )}
 
-      {nextMatch && <NextMatchCard match={nextMatch} />}
+      {nextMatch && (
+        <Reveal step={3}>
+          <NextMatchCard match={nextMatch} />
+        </Reveal>
+      )}
 
-      {/* Aulas de hoje com ações inline */}
-      {todayClasses.length > 0 && (
-        <section>
-          <SectionHeader title="Aulas de hoje" />
-          <div className="space-y-3">
-            {todayClasses.map((c) => {
-              const nextSession = nextSessionByClass.get(c.id) ?? null
-              const nextId = nextSession?.id
-              const isEnrolled = enrolledClassIds.has(c.id)
-              const bookingId = nextId ? bookingBySession.get(nextId) : undefined
-              const hasBooking = !!bookingId
-              const sessionBookedCount = nextId ? (bookedCountBySession.get(nextId) ?? 0) : 0
-              const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
-              const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
-              const attendees = nextId && sessionAttendeesMap[nextId]?.length
-                ? sessionAttendeesMap[nextId]
-                : (classAttendeesMap[c.id] ?? [])
-
-              return (
-                <div key={c.id} className="space-y-1">
-                  <ClassCard class_={c} enrolledCount={countByClass.get(c.id) ?? 0} />
-                  <AgendarClient
-                    class_={c}
-                    nextSession={nextSession}
-                    isEnrolled={isEnrolled}
-                    hasBooking={hasBooking}
-                    bookingId={bookingId}
-                    sessionBookedCount={sessionBookedCount}
-                    sessionWaitlistCount={sessionWaitlistCount}
-                    waitlistEntry={waitlistEntry}
-                    attendees={attendees}
-                    dailyBookingCount={dailyBookingCount}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        </section>
+      {/* Agenda da semana — hoje traz as ações completas de agendamento. */}
+      {(agendaSessions.length > 0 || todayContent) && (
+        <Reveal step={3} as="section">
+          <SectionHeader title="Sua semana" href="/agendar" linkLabel="agendar" />
+          <WeekAgenda todayISO={today} sessions={agendaSessions} todayContent={todayContent} />
+        </Reveal>
       )}
 
       {/* Day Use hoje */}
       {todayDayUse.length > 0 && (
-        <section>
+        <Reveal step={4} as="section">
           <SectionHeader title="Day Use hoje" href="/agendar/dayuse" linkLabel="reservar" />
           <div className="space-y-2">
             {todayDayUse.map((slot) => (
-              <Link key={slot.id} href="/agendar/dayuse">
-                <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
+              <Link key={slot.id} href="/agendar/dayuse" className="group block">
+                <Card glass interactive>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white">
-                        {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
-                      </p>
-                      {slot.notes && (
-                        <p className="text-xs text-slate-400 mt-0.5 truncate">{slot.notes}</p>
-                      )}
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
+                        <Sun className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white">
+                          {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
+                        </p>
+                        {slot.notes && (
+                          <p className="mt-0.5 truncate text-xs text-slate-400">{slot.notes}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full">
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="rounded-full border border-sky-700/50 bg-sky-900/40 px-2 py-0.5 text-xs text-sky-300">
                         Espaço {slot.court}
                       </span>
                       <span className="text-xs text-slate-400">Day Use · Gratuito</span>
@@ -437,12 +559,12 @@ export default async function HomePage() {
               </Link>
             ))}
           </div>
-        </section>
+        </Reveal>
       )}
 
       {/* Próximas aulas agendadas */}
-      <section>
-        <SectionHeader title="Minhas Próximas Aulas" href="/aulas" linkLabel="ver todas" />
+      <Reveal step={5} as="section">
+        <SectionHeader title="Minhas próximas aulas" href="/aulas" linkLabel="ver todas" />
         {nextSessions.length === 0 ? (
           <EmptyState
             icon={CalendarPlus}
@@ -458,11 +580,11 @@ export default async function HomePage() {
               const cls = session ? (Array.isArray(session.class) ? session.class[0] : session.class) : null
               if (!session || !cls) return null
               return (
-                <Card key={item.id}>
+                <Card key={item.id} glass>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{cls.name}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-white">{cls.name}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">
                         {formatDate(session.session_date, "EEE, dd 'de' MMM")} · {formatTime(cls.start_time)}
                       </p>
                     </div>
@@ -473,21 +595,26 @@ export default async function HomePage() {
             })}
           </div>
         )}
-      </section>
+      </Reveal>
 
       {myTournaments.length > 0 && (
-        <section>
-          <SectionHeader title="Meus Torneios" href="/torneios" />
+        <Reveal step={6} as="section">
+          <SectionHeader title="Meus torneios" href="/torneios" />
           <div className="space-y-2">
             {myTournaments.map((t) => (
-              <Link key={t.id} href={`/torneios/${t.id}`}>
-                <Card accent className="hover:border-brand-600/50 transition-colors cursor-pointer">
+              <Link key={t.id} href={`/torneios/${t.id}`} className="group block">
+                <Card glass accent interactive>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{t.name}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        {formatDate(t.date, "dd 'de' MMMM")}
-                      </p>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
+                        <Trophy className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{t.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {formatDate(t.date, "dd 'de' MMMM")}
+                        </p>
+                      </div>
                     </div>
                     <Badge variant={t.status === 'in_progress' ? 'warning' : 'success'}>
                       {t.status === 'in_progress' ? 'Em andamento' : 'Inscrito'}
@@ -497,32 +624,35 @@ export default async function HomePage() {
               </Link>
             ))}
           </div>
-        </section>
+        </Reveal>
       )}
 
       {tournaments.filter((t) => !myTournamentIds.has(t.id)).length > 0 && (
-        <section>
-          <SectionHeader title="Próximos Torneios" href="/torneios" />
+        <Reveal step={7} as="section">
+          <SectionHeader title="Próximos torneios" href="/torneios" />
           <div className="space-y-2">
             {tournaments
               .filter((t) => !myTournamentIds.has(t.id))
               .slice(0, 3)
               .map((tournament) => (
-                <Link key={tournament.id} href={`/torneios/${tournament.id}`}>
-                  <Card className="hover:border-brand-600/50 transition-colors cursor-pointer">
+                <Link key={tournament.id} href={`/torneios/${tournament.id}`} className="group block">
+                  <Card glass interactive>
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{tournament.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{tournament.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">
                           {formatDate(tournament.date, "dd 'de' MMMM")}
                         </p>
                       </div>
+                      <span className="text-xs text-slate-400 transition-colors group-hover:text-brand-400">
+                        ver →
+                      </span>
                     </div>
                   </Card>
                 </Link>
               ))}
           </div>
-        </section>
+        </Reveal>
       )}
     </div>
   )

@@ -1,24 +1,24 @@
 {
-  "generatedAt": "2026-07-09T00:12:50.424Z",
+  "generatedAt": "2026-07-22T03:35:45.440Z",
   "academy": {
-    "name": "Arena FAQ Demo 1783555847471",
+    "name": "Arena FAQ Demo 1784691178741",
     "fullName": "Professor Demonstração",
-    "email": "faq.academia.1783555847471@example.com",
+    "email": "faq.academia.1784691178741@example.com",
     "password": "senha123",
-    "document": "14611067530",
+    "document": "10773187154",
     "phone": "(11) 98888-7777"
   },
   "managedStudent": {
     "fullName": "Aluno Gerenciado Demo",
-    "email": "faq.aluno.gerenciado.1783555847471@example.com",
-    "tempPassword": "hmcTEGJ7GF"
+    "email": "faq.aluno.gerenciado.1784691178741@example.com",
+    "tempPassword": "vXB9BCmbbc"
   },
   "inviteStudent": {
     "fullName": "Aluna Convidada Demo",
-    "email": "faq.aluno.convite.1783555847471@example.com",
+    "email": "faq.aluno.convite.1784691178741@example.com",
     "password": "senha123"
   },
-  "inviteCode": "1O2LVJCW",
+  "inviteCode": "WU2IUWPM",
   "results": [
     {
       "name": "landing",
