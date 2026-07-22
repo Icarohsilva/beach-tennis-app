@@ -5,7 +5,11 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { generateGridDay } from '@/features/aulas/gridActions'
 
-/** Re-roda a geração/reserva do dia-da-semana informado (reserva quem virou elegível). */
+/**
+ * Re-roda a geração/reserva do dia-da-semana informado (reserva quem virou elegível).
+ * Escopo: regenera/reconcilia TODAS as turmas da organização nesse dia-da-semana,
+ * não apenas a turma da chamada onde o botão está renderizado.
+ */
 export function RegenerateTodayButton({ dayOfWeek }: { dayOfWeek: number }) {
   const router = useRouter()
   const [msg, setMsg] = useState<string | null>(null)
@@ -16,7 +20,7 @@ export function RegenerateTodayButton({ dayOfWeek }: { dayOfWeek: number }) {
         size="sm" variant="secondary" loading={pending}
         onClick={() => start(async () => {
           const r = await generateGridDay(dayOfWeek)
-          setMsg(r.error ? `Erro: ${r.error}` : `${r.reservados ?? 0} reservados.`)
+          setMsg(r.error ? `Erro: ${r.error}` : `Dia regerado: ${r.reservados ?? 0} reservados no dia.`)
           router.refresh()
         })}
       >

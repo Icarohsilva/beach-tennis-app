@@ -5,7 +5,7 @@ import type { EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
 
 const STATUS_META: Record<EnrollmentStatus, { label: string; cls: string }> = {
   elegivel: { label: '✅ Elegível', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
-  a_confirmar: { label: '🔵 Wellhub a confirmar', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
+  a_confirmar: { label: '🔵 Parceiro a confirmar', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
   sem_plano: { label: '⚠️ Sem plano', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
 }
 
