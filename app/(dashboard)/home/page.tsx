@@ -8,6 +8,7 @@ import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { addDaysISO } from '@/lib/utils/agenda'
+import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { HeroHeader } from '@/features/home/HeroHeader'
 import { NextClassSpotlight, type SpotlightCandidate } from '@/features/home/NextClassSpotlight'
 import { WeekAgenda, type AgendaSession } from '@/features/home/WeekAgenda'
@@ -195,37 +196,93 @@ export default async function HomePage() {
   const weekSessionRows = (weekSessionsRaw ?? []) as unknown as WeekSessionRow[]
   const weekSessionIds = weekSessionRows.map((s) => s.id)
 
-  const [{ data: weekBookedRaw }, { data: myWeekBookingsRaw }] = weekSessionIds.length > 0
-    ? await Promise.all([
-        adminClient
-          .from('session_bookings')
-          .select('session_id')
-          .in('session_id', weekSessionIds)
-          .eq('status', 'confirmed'),
-        supabase
-          .from('session_bookings')
-          .select('session_id')
-          .eq('student_id', user.id)
-          .eq('organization_id', orgId)
-          .in('session_id', weekSessionIds)
-          .eq('status', 'confirmed'),
-      ])
-    : [{ data: [] }, { data: [] }]
+  // Reservas da janela em confirmed E cancelled: a cancelada é o opt-out do
+  // aluno fixo ("não venho nesta data") e precisa tirá-lo da lista de presentes.
+  const { data: weekBookingsRaw } = weekSessionIds.length > 0
+    ? await adminClient
+        .from('session_bookings')
+        .select('id, session_id, student_id, status, from_enrollment, profiles(full_name)')
+        .in('session_id', weekSessionIds)
+        .in('status', ['confirmed', 'cancelled'])
+    : { data: [] }
 
-  const weekBookedCount = new Map<string, number>()
-  for (const b of (weekBookedRaw ?? []) as { session_id: string }[]) {
-    weekBookedCount.set(b.session_id, (weekBookedCount.get(b.session_id) ?? 0) + 1)
+  type BookingRow = {
+    id: string
+    session_id: string
+    student_id: string
+    status: string
+    from_enrollment: boolean
+    profiles: { full_name: string } | { full_name: string }[] | null
   }
-  const myWeekSessionIds = new Set(
-    (myWeekBookingsRaw ?? []).map((b: { session_id: string }) => b.session_id),
-  )
+
+  const bookedBySession = new Map<string, AttendeeRef[]>()
+  const optedOutBySession = new Map<string, Set<string>>()
+  const myBookingBySession = new Map<string, { id: string; fromEnrollment: boolean }>()
+  const weekBookedCount = new Map<string, number>()
+
+  for (const b of (weekBookingsRaw ?? []) as unknown as BookingRow[]) {
+    if (b.status === 'confirmed') {
+      const p = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
+      bookedBySession.set(b.session_id, [
+        ...(bookedBySession.get(b.session_id) ?? []),
+        { id: b.student_id, name: p?.full_name ?? 'Aluno' },
+      ])
+      weekBookedCount.set(b.session_id, (weekBookedCount.get(b.session_id) ?? 0) + 1)
+      if (b.student_id === user.id) {
+        myBookingBySession.set(b.session_id, { id: b.id, fromEnrollment: b.from_enrollment })
+      }
+    } else if (b.status === 'cancelled') {
+      const set = optedOutBySession.get(b.session_id) ?? new Set<string>()
+      set.add(b.student_id)
+      optedOutBySession.set(b.session_id, set)
+    }
+  }
+
+  // Alunos fixos das turmas envolvidas (agenda da semana + turmas de hoje).
+  const weekClassIds = weekSessionRows.map((s) => s.class_id)
+  const todayClassIdsForRoster = todayClasses.map((c) => c.id)
+  const rosterClassIds = Array.from(new Set([...weekClassIds, ...todayClassIdsForRoster]))
+
+  const { data: rosterRaw } = rosterClassIds.length > 0
+    ? await adminClient
+        .from('enrollments')
+        .select('class_id, student_id, profiles(full_name)')
+        .in('class_id', rosterClassIds)
+        .eq('is_active', true)
+    : { data: [] }
+
+  const enrolledByClass = new Map<string, AttendeeRef[]>()
+  for (const e of (rosterRaw ?? []) as unknown as {
+    class_id: string
+    student_id: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }[]) {
+    const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
+    enrolledByClass.set(e.class_id, [
+      ...(enrolledByClass.get(e.class_id) ?? []),
+      { id: e.student_id, name: p?.full_name ?? 'Aluno' },
+    ])
+  }
+
+  const countByClass = new Map<string, number>()
+  enrolledByClass.forEach((people, classId) => countByClass.set(classId, people.length))
+
+  /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram. */
+  function attendeesOf(sessionId: string, classId: string): string[] {
+    return mergeSessionAttendees({
+      booked: bookedBySession.get(sessionId) ?? [],
+      enrolled: enrolledByClass.get(classId) ?? [],
+      optedOut: optedOutBySession.get(sessionId) ?? new Set<string>(),
+    }).map((a) => a.name)
+  }
 
   const agendaSessions: AgendaSession[] = weekSessionRows
-    .map((row) => {
+    .map((row): AgendaSession | null => {
       const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
       if (!cls) return null
       // Kids só aparece para dependentes — mesma regra das turmas de hoje.
       if (cls.type === 'kids' && !membership?.is_dependent) return null
+      const myBooking = myBookingBySession.get(row.id)
       return {
         id: row.id,
         date: row.session_date,
@@ -234,9 +291,12 @@ export default async function HomePage() {
         end: cls.end_time,
         booked: weekBookedCount.get(row.id) ?? 0,
         capacity: cls.max_students,
-        mine: myWeekSessionIds.has(row.id),
+        mine: !!myBooking,
         fixed: enrolledClassIds.has(row.class_id),
         kids: cls.type === 'kids',
+        attendees: attendeesOf(row.id, row.class_id),
+        bookingId: myBooking?.id,
+        fromEnrollment: myBooking?.fromEnrollment,
       }
     })
     .filter((s): s is AgendaSession => s !== null)
@@ -284,83 +344,15 @@ export default async function HomePage() {
   }
   const todaySessionIds = todaySessions.map((s) => s.id)
 
-  // Enrollment counts per class
-  const { data: enrollCountsRaw } = todayClassIds.length > 0
-    ? await adminClient
-        .from('enrollments')
-        .select('class_id')
-        .in('class_id', todayClassIds)
-        .eq('is_active', true)
-    : { data: [] }
-
-  const countByClass = new Map<string, number>()
-  for (const e of (enrollCountsRaw ?? []) as { class_id: string }[]) {
-    countByClass.set(e.class_id, (countByClass.get(e.class_id) ?? 0) + 1)
-  }
-
-  // Student's bookings for today's sessions
-  const { data: studentBookingsRaw } = todaySessionIds.length > 0
-    ? await supabase
-        .from('session_bookings')
-        .select('id, session_id')
-        .eq('student_id', user.id)
-        .eq('organization_id', orgId)
-        .in('session_id', todaySessionIds)
-        .eq('status', 'confirmed')
-    : { data: [] }
-
+  // Contagens e reservas de hoje saem dos mapas da semana: as sessões de hoje
+  // já estão na janela, então não há por que consultá-las de novo.
   const bookingBySession = new Map<string, string>()
-  for (const b of (studentBookingsRaw ?? []) as { id: string; session_id: string }[]) {
-    bookingBySession.set(b.session_id, b.id)
+  for (const id of todaySessionIds) {
+    const mine = myBookingBySession.get(id)
+    if (mine) bookingBySession.set(id, mine.id)
   }
 
-  // Booked counts for today's sessions
-  const { data: bookedCountsRaw } = todaySessionIds.length > 0
-    ? await adminClient
-        .from('session_bookings')
-        .select('session_id')
-        .in('session_id', todaySessionIds)
-        .eq('status', 'confirmed')
-    : { data: [] }
-
-  const bookedCountBySession = new Map<string, number>()
-  for (const b of (bookedCountsRaw ?? []) as { session_id: string }[]) {
-    bookedCountBySession.set(b.session_id, (bookedCountBySession.get(b.session_id) ?? 0) + 1)
-  }
-
-  // Attendees for today's sessions
-  const { data: sessionAttendeesRaw } = todaySessionIds.length > 0
-    ? await adminClient
-        .from('session_bookings')
-        .select('session_id, profiles(full_name)')
-        .in('session_id', todaySessionIds)
-        .eq('status', 'confirmed')
-    : { data: [] }
-
-  const sessionAttendeesMap: Record<string, string[]> = {}
-  for (const b of (sessionAttendeesRaw ?? []) as { session_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
-    const p = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
-    if (p?.full_name) {
-      sessionAttendeesMap[b.session_id] = [...(sessionAttendeesMap[b.session_id] ?? []), p.full_name]
-    }
-  }
-
-  // Fixed enrollment attendees per class (fallback when no session)
-  const { data: enrollAttendeesRaw } = todayClassIds.length > 0
-    ? await adminClient
-        .from('enrollments')
-        .select('class_id, profiles(full_name)')
-        .in('class_id', todayClassIds)
-        .eq('is_active', true)
-    : { data: [] }
-
-  const classAttendeesMap: Record<string, string[]> = {}
-  for (const e of (enrollAttendeesRaw ?? []) as { class_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
-    const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
-    if (p?.full_name) {
-      classAttendeesMap[e.class_id] = [...(classAttendeesMap[e.class_id] ?? []), p.full_name]
-    }
-  }
+  const bookedCountBySession = weekBookedCount
 
   // Student's waitlist entries for today's sessions
   const { data: waitlistRaw } = todaySessionIds.length > 0
@@ -424,9 +416,9 @@ export default async function HomePage() {
         const sessionBookedCount = nextId ? (bookedCountBySession.get(nextId) ?? 0) : 0
         const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
         const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
-        const attendees = nextId && sessionAttendeesMap[nextId]?.length
-          ? sessionAttendeesMap[nextId]
-          : (classAttendeesMap[c.id] ?? [])
+        const attendees = nextId
+          ? attendeesOf(nextId, c.id)
+          : (enrolledByClass.get(c.id) ?? []).map((a) => a.name)
 
         return (
           <div key={c.id} className="space-y-1">

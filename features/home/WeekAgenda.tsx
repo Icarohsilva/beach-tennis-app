@@ -1,12 +1,12 @@
 // features/home/WeekAgenda.tsx
 'use client'
 import { useState } from 'react'
-import Link from 'next/link'
 import { CalendarDays, Check, Users } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { buildWeekDays } from '@/lib/utils/agenda'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Badge } from '@/components/ui/Badge'
+import { SessionModal } from './SessionModal'
 
 export interface AgendaSession {
   id: string
@@ -23,6 +23,12 @@ export interface AgendaSession {
   /** O aluno é aluno fixo da turma. */
   fixed: boolean
   kids: boolean
+  /** Nomes de quem é esperado na aula (fixos + reservas). */
+  attendees: string[]
+  /** Reserva do aluno nesta sessão, quando existe — necessária para sair. */
+  bookingId?: string
+  /** A reserva do aluno veio da matrícula fixa (sai devolvendo crédito). */
+  fromEnrollment?: boolean
 }
 
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
@@ -36,7 +42,8 @@ function localDate(iso: string): Date {
 /**
  * Agenda dos próximos 7 dias. A faixa superior mostra a semana inteira de
  * relance — quais dias têm aula e quais são os do aluno — e abrir um dia troca
- * a lista abaixo sem ir ao servidor.
+ * a lista abaixo sem ir ao servidor. Tocar numa aula abre a ficha dela ali
+ * mesmo, com a lista de quem vai e a ação de entrar ou sair.
  */
 export function WeekAgenda({
   todayISO,
@@ -54,8 +61,10 @@ export function WeekAgenda({
 }) {
   const days = buildWeekDays(todayISO, 7, sessions)
   const [selected, setSelected] = useState(todayISO)
+  const [openSessionId, setOpenSessionId] = useState<string | null>(null)
   const selectedDay = days.find((d) => d.date === selected) ?? days[0]
   const showTodayContent = selected === todayISO && !!todayContent
+  const openSession = sessions.find((s) => s.id === openSessionId) ?? null
 
   return (
     <div>
@@ -126,7 +135,7 @@ export function WeekAgenda({
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-7 text-center">
             <CalendarDays className="mx-auto h-6 w-6 text-slate-600" />
             <p className="mt-2 text-sm font-semibold text-slate-300">Nenhuma aula neste dia</p>
-            <p className="mt-0.5 text-xs text-slate-500">Escolha outro dia da faixa acima.</p>
+            <p className="mt-0.5 text-xs text-slate-400">Escolha outro dia da faixa acima.</p>
           </div>
         ) : (
           selectedDay.items.map((session, i) => {
@@ -134,7 +143,12 @@ export function WeekAgenda({
             const isMine = session.mine || session.fixed
 
             return (
-              <Link key={session.id} href="/agendar" className="group block">
+              <button
+                key={session.id}
+                type="button"
+                onClick={() => setOpenSessionId(session.id)}
+                className="group block w-full text-left"
+              >
                 <div
                   className={cn(
                     'glass relative overflow-hidden rounded-2xl border p-3.5 transition-all duration-200 group-hover:-translate-y-0.5',
@@ -179,27 +193,34 @@ export function WeekAgenda({
                       </div>
                     </div>
 
-                    <div className="shrink-0 self-center">
+                    <div className="flex shrink-0 flex-col items-end gap-1 self-center">
                       {isMine ? (
                         <span className="flex items-center gap-1 rounded-full bg-brand-500/15 px-2 py-1 text-[10px] font-bold text-brand-300">
                           <Check className="h-3 w-3" />
                           {session.fixed && !session.mine ? 'Fixa' : 'Sua'}
                         </span>
-                      ) : isFull ? (
-                        <Badge variant="danger">Lotada</Badge>
                       ) : (
-                        <span className="text-[10px] font-semibold text-slate-400 transition-colors group-hover:text-brand-400">
-                          Entrar →
-                        </span>
+                        isFull && <Badge variant="danger">Lotada</Badge>
                       )}
+                      <span className="text-[10px] font-semibold text-slate-400 transition-colors group-hover:text-brand-400">
+                        Ver / Entrar →
+                      </span>
                     </div>
                   </div>
                 </div>
-              </Link>
+              </button>
             )
           })
         )}
       </div>
+
+      {openSession && (
+        <SessionModal
+          session={openSession}
+          isToday={openSession.date === todayISO}
+          onClose={() => setOpenSessionId(null)}
+        />
+      )}
     </div>
   )
 }

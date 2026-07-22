@@ -425,6 +425,74 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
 }
 
 // ---------------------------------------------------------------------------
+// skipEnrollmentForSession — mesmo opt-out preventivo do skipEnrollmentNoBooking,
+// mas numa sessão escolhida. O outro sempre mira a PRÓXIMA sessão da turma, o
+// que erraria a data quando o aluno recusa uma aula mais adiante na agenda.
+// ---------------------------------------------------------------------------
+
+export async function skipEnrollmentForSession(sessionId: string): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, class_id, status')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .single()
+
+  if (!session) return { error: 'Sessão não encontrada.' }
+  if (session.status !== 'scheduled') return { error: 'Esta aula não está mais aberta.' }
+
+  const { count: enrolled } = await adminClient
+    .from('enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', user.id)
+    .eq('class_id', session.class_id)
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+
+  if ((enrolled ?? 0) === 0) return { error: 'Você não está matriculado nesta turma.' }
+
+  const { count: existing } = await adminClient
+    .from('session_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', user.id)
+    .eq('session_id', sessionId)
+    .eq('status', 'confirmed')
+
+  if ((existing ?? 0) > 0) {
+    return { error: 'Você já tem um agendamento confirmado. Use "Sair desta aula".' }
+  }
+
+  // Reserva cancelada marca o opt-out; a reconciliação respeita e não reativa.
+  const { error: upsertErr } = await adminClient.from('session_bookings').upsert(
+    {
+      organization_id: orgId,
+      student_id: user.id,
+      session_id: sessionId,
+      type: 'extra',
+      status: 'cancelled',
+      from_enrollment: true,
+      credit_used: false,
+      cancelled_at: new Date().toISOString(),
+    },
+    { onConflict: 'student_id,session_id' },
+  )
+  if (upsertErr) return { error: 'Erro ao registrar a falta. Tente novamente.' }
+
+  revalidatePath('/home')
+  revalidatePath('/agendar')
+  revalidatePath('/aulas')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
 // cancelBooking
 // ---------------------------------------------------------------------------
 

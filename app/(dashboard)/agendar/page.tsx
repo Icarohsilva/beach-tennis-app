@@ -6,6 +6,7 @@ import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } 
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import type { Class, ClassSession } from '@/types'
 
 export default async function AgendarPage() {
@@ -145,38 +146,57 @@ export default async function AgendarPage() {
     bookedCountBySession.set(b.session_id, (bookedCountBySession.get(b.session_id) ?? 0) + 1)
   }
 
-  // Attendees per next session (names)
+  // Reservas por sessão em confirmed E cancelled: a cancelada é o opt-out do
+  // aluno fixo e precisa tirá-lo da lista de presentes.
   const { data: sessionAttendeesRaw } = nextSessionIds.length > 0
     ? await adminClient
         .from('session_bookings')
-        .select('session_id, profiles(full_name)')
+        .select('session_id, student_id, status, profiles(full_name)')
         .in('session_id', nextSessionIds)
-        .eq('status', 'confirmed')
+        .in('status', ['confirmed', 'cancelled'])
     : { data: [] }
 
-  const sessionAttendeesMap: Record<string, string[]> = {}
-  for (const b of (sessionAttendeesRaw ?? []) as { session_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
-    const p = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
-    if (p?.full_name) {
-      sessionAttendeesMap[b.session_id] = [...(sessionAttendeesMap[b.session_id] ?? []), p.full_name]
+  const bookedBySession = new Map<string, AttendeeRef[]>()
+  const optedOutBySession = new Map<string, Set<string>>()
+  for (const b of (sessionAttendeesRaw ?? []) as unknown as {
+    session_id: string
+    student_id: string
+    status: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }[]) {
+    if (b.status === 'confirmed') {
+      const p = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
+      bookedBySession.set(b.session_id, [
+        ...(bookedBySession.get(b.session_id) ?? []),
+        { id: b.student_id, name: p?.full_name ?? 'Aluno' },
+      ])
+    } else if (b.status === 'cancelled') {
+      const set = optedOutBySession.get(b.session_id) ?? new Set<string>()
+      set.add(b.student_id)
+      optedOutBySession.set(b.session_id, set)
     }
   }
 
-  // Fixed enrollment attendees per class (shown when no session bookings yet)
+  // Alunos fixos por turma — somam com as reservas na lista de presentes.
   const { data: enrollAttendeesRaw } = classIds.length > 0
     ? await adminClient
         .from('enrollments')
-        .select('class_id, profiles(full_name)')
+        .select('class_id, student_id, profiles(full_name)')
         .in('class_id', classIds)
         .eq('is_active', true)
     : { data: [] }
 
-  const classAttendeesMap: Record<string, string[]> = {}
-  for (const e of (enrollAttendeesRaw ?? []) as { class_id: string; profiles: { full_name: string } | { full_name: string }[] | null }[]) {
+  const enrolledByClass = new Map<string, AttendeeRef[]>()
+  for (const e of (enrollAttendeesRaw ?? []) as unknown as {
+    class_id: string
+    student_id: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }[]) {
     const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
-    if (p?.full_name) {
-      classAttendeesMap[e.class_id] = [...(classAttendeesMap[e.class_id] ?? []), p.full_name]
-    }
+    enrolledByClass.set(e.class_id, [
+      ...(enrolledByClass.get(e.class_id) ?? []),
+      { id: e.student_id, name: p?.full_name ?? 'Aluno' },
+    ])
   }
 
   // Student's waitlist entries for next sessions
@@ -270,10 +290,11 @@ export default async function AgendarPage() {
           const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
           const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
 
-          // Attendees: session bookings take priority, fall back to enrolled students
-          const attendees = nextId && sessionAttendeesMap[nextId]?.length
-            ? sessionAttendeesMap[nextId]
-            : (classAttendeesMap[c.id] ?? [])
+          const attendees = mergeSessionAttendees({
+            booked: nextId ? (bookedBySession.get(nextId) ?? []) : [],
+            enrolled: enrolledByClass.get(c.id) ?? [],
+            optedOut: (nextId ? optedOutBySession.get(nextId) : undefined) ?? new Set<string>(),
+          }).map((a) => a.name)
 
           const dailyBookingCount = nextSession
             ? (dailyBookingCountByDate[nextSession.session_date] ?? 0)
