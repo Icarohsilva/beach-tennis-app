@@ -20,4 +20,11 @@ describe('canAccessArea', () => {
   it('integracoes é acessível ao professor (não é owner-only)', () => {
     expect(canAccessArea('integracoes', false)).toBe(true)
   })
+  it('professor vê relatórios', () => {
+    expect(canAccessArea('relatorios', false)).toBe(true)
+  })
+
+  it('dono vê relatórios', () => {
+    expect(canAccessArea('relatorios', true)).toBe(true)
+  })
 })

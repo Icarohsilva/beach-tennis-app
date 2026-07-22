@@ -81,6 +81,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin/dashboard', label: 'Dashboard', area: 'dashboard' },
     { href: '/admin/alunos', label: 'Alunos', area: 'alunos' },
     { href: '/admin/grade', label: 'Grade de Aulas', area: 'aulas' },
+    { href: '/admin/relatorios', label: 'Relatórios', area: 'relatorios' },
     { href: '/admin/financeiro', label: 'Financeiro', area: 'financeiro' },
     { href: '/admin/notificacoes', label: 'Notificações', area: 'notificacoes' },
     { href: '/admin/torneios', label: 'Torneios', area: 'torneios' },
