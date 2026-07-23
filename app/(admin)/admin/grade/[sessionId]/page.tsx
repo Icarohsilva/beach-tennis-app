@@ -37,15 +37,36 @@ export default async function SessionDetailPage({ params }: Props) {
   }
   const cls = Array.isArray(typedSession.class) ? typedSession.class[0] : typedSession.class
 
-  // Fetch confirmed bookings for the session
+  // Quem a aula toca: reservas confirmadas + alunos fixos da turma, menos quem
+  // avisou que não vem. Mesma regra da agenda do aluno — sem isso o fixo sem
+  // reserva gerada não aparece na chamada e a falta dele nunca é registrada.
   const { data: bookings } = await adminClient
     .from('session_bookings')
-    .select('student_id')
+    .select('student_id, status')
     .eq('session_id', params.sessionId)
     .eq('organization_id', orgId)
-    .eq('status', 'confirmed')
+    .in('status', ['confirmed', 'cancelled'])
 
-  const studentIds = (bookings ?? []).map((b: { student_id: string }) => b.student_id)
+  const bookingRows = (bookings ?? []) as { student_id: string; status: string }[]
+  const confirmedIds = bookingRows.filter((b) => b.status === 'confirmed').map((b) => b.student_id)
+  const optedOut = new Set(bookingRows.filter((b) => b.status === 'cancelled').map((b) => b.student_id))
+
+  const { data: fixedRaw } = await adminClient
+    .from('enrollments')
+    .select('student_id')
+    .eq('class_id', typedSession.class_id)
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+
+  const fixedIds = ((fixedRaw ?? []) as { student_id: string }[]).map((e) => e.student_id)
+
+  const seen = new Set<string>()
+  const studentIds: string[] = []
+  for (const id of [...confirmedIds, ...fixedIds.filter((f) => !optedOut.has(f))]) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    studentIds.push(id)
+  }
 
   // Identidade (full_name) vem de profiles; nível/tipo são por-academia e vêm
   // da membership do aluno NESTA org.

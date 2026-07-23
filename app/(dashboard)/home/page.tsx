@@ -16,6 +16,8 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
+import { getStudentFrequency } from '@/features/relatorios/query'
+import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard'
 import { PushOnboardingCard } from '@/components/pwa/PushOnboardingCard'
 import { CalendarPlus, Sun } from 'lucide-react'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
@@ -113,6 +115,10 @@ export default async function HomePage() {
       .lte('checkin_date', to)
     checkinProgress = computeProgress(membership.monthly_checkin_target, count ?? 0)
   }
+  const frequencyWindow = getMonthWindow(new Date())
+  const frequency = orgId
+    ? await getStudentFrequency(orgId, user.id, frequencyWindow, today)
+    : null
   const todayDayUse = (todayDayUseData ?? []) as Pick<DayUseSlot, 'id' | 'court' | 'start_time' | 'end_time' | 'capacity' | 'notes'>[]
 
   type SessionRow = {
@@ -329,6 +335,10 @@ export default async function HomePage() {
           />
         </Reveal>
       )}
+
+      <Reveal step={2}>
+        <StudentFrequencyCard totals={frequency} periodLabel={formatDate(today, 'MMMM')} />
+      </Reveal>
 
       {showPlanCTA && (
         <Reveal step={2}>

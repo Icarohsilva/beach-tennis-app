@@ -3,7 +3,7 @@
 // Dono (owner) acessa tudo; professor NÃO acessa financeiro/configurações/equipe.
 export type AdminArea =
   | 'dashboard' | 'aulas' | 'alunos' | 'notificacoes' | 'torneios'
-  | 'financeiro' | 'configuracoes' | 'equipe' | 'integracoes'
+  | 'financeiro' | 'configuracoes' | 'equipe' | 'integracoes' | 'relatorios'
 
 const OWNER_ONLY: AdminArea[] = ['financeiro', 'configuracoes', 'equipe']
 

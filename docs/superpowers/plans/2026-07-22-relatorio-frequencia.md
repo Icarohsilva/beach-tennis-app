@@ -340,17 +340,25 @@ git commit -m "feat(frequencia): regra pura de presenca presumida com correcao"
 
 **Files:**
 - Modify: `lib/utils/monthWindow.ts`
-- Test: `lib/utils/monthWindow.test.ts` (criar)
+- Modify: `lib/utils/monthWindow.test.ts` (**já existe** — cobre `getMonthWindow` e
+  `getRemainingMonthWindow` com 4 casos vindos do check-in)
+
+> ⚠️ **Não recrie o arquivo de teste.** Ele já existe e cobre as funções que o
+> check-in usa. Substituí-lo apagaria essa regressão. **Acrescente** os dois
+> `describe` abaixo ao final do arquivo e **troque a linha de import** para
+> incluir os novos nomes.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `lib/utils/monthWindow.test.ts`:
+Em `lib/utils/monthWindow.test.ts`, troque a primeira linha de import por:
 
 ```ts
-// lib/utils/monthWindow.test.ts
-import { describe, it, expect } from 'vitest'
-import { getWeekWindow, shiftWindow, getMonthWindow } from './monthWindow'
+import { getMonthWindow, getRemainingMonthWindow, getWeekWindow, shiftWindow } from './monthWindow'
+```
 
+E acrescente ao final do arquivo:
+
+```ts
 describe('getWeekWindow', () => {
   it('vai de domingo a sábado da semana da data', () => {
     // 2026-07-22 é uma quarta-feira
@@ -438,7 +446,8 @@ export function shiftWindow(window: DateWindow, kind: WindowKind, offset: number
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npm run test:run -- lib/utils/monthWindow.test.ts`
-Expected: PASS — 5 tests.
+Expected: PASS — **9 testes** (os 4 que já existiam + os 5 novos). Se vierem só
+5, o arquivo foi substituído em vez de acrescentado — desfaça e refaça.
 
 Run a segunda vez a suíte de check-in, que já usava este arquivo:
 `npm run test:run -- lib/checkin`

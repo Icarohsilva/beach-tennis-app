@@ -199,6 +199,7 @@ await safe('admin-alunos-e-criar', async () => {
 
 // Grade de aulas
 await capture(admin, '/admin/grade', 'admin-grade')
+await capture(admin, '/admin/relatorios', 'admin-relatorios')
 await capture(admin, '/admin/grade/nova-turma', 'admin-grade-nova-turma')
 
 // Financeiro
