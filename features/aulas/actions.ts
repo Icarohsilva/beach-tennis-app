@@ -10,6 +10,8 @@ import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+import { summarizeDebts } from '@/lib/utils/debtRules'
+import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
@@ -184,26 +186,35 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
   // Dívida aberta = payments pendente COM session_id. O filtro de session_id é
   // essencial: compra de crédito abandonada no checkout também fica 'pending',
   // mas com session_id null — sem o filtro ela bloquearia o aluno para sempre
-  // (spec §4).
-  const { count: debtCount } = await adminClient
+  // (spec §4). Desde 2026-07-22, ter pendência não basta: precisa ter valor e
+  // ter passado a carência (spec cobrança §2) — senão uma dívida de R$ 0
+  // (academia sem preço configurado) travava o aluno indefinidamente.
+  const { data: debtRows } = await adminClient
     .from('payments')
-    .select('id', { count: 'exact', head: true })
+    .select('id, amount, created_at, receipt_url')
     .eq('student_id', user.id)
     .eq('organization_id', orgId)
     .eq('status', 'pending')
     .not('session_id', 'is', null)
 
+  const graceDays = await getDebtGraceDays(adminClient, orgId)
+  const debtSummary = summarizeDebts(
+    ((debtRows ?? []) as { id: string; amount: number; created_at: string; receipt_url: string | null }[])
+      .map((r) => ({ id: r.id, amount: Number(r.amount), createdAt: r.created_at, receiptUrl: r.receipt_url })),
+    graceDays,
+    new Date(),
+  )
+
   const decision = resolveClassAccess({
     partner: profile.partner,
     hasActivePlan,
     creditsBalance: profile.credits_balance,
-    hasOpenDebt: (debtCount ?? 0) > 0,
+    hasOpenDebt: debtSummary.isBlocked,
   })
 
   if ('denied' in decision) {
     return {
-      error:
-        'Você tem uma aula em aberto. Regularize o pagamento com a academia para agendar novamente.',
+      error: `Você tem R$ ${debtSummary.total.toFixed(2).replace('.', ',')} em aberto. Regularize em Financeiro para voltar a agendar.`,
     }
   }
 
