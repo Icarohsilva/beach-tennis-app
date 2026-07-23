@@ -10,6 +10,7 @@ import {
   getPartnerRevenueThisMonth,
 } from '@/features/financeiro/partnerRevenueActions'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { getOrgDebtors } from '@/features/financeiro/debtQueries'
 import type { PaymentStatus } from '@/types'
 
 interface RevenueRow {
@@ -107,6 +108,10 @@ export default async function FinanceiroPage() {
     }
   }
 
+  // ─── Devedores de aula avulsa (pendência de aula já assistida) ───────────
+  const aulaDebtors = await getOrgDebtors(adminClient, orgId as string)
+  const totalInadimplentes = inadimplentes.length + aulaDebtors.length
+
   // ─── Pagamentos pendentes ────────────────────────────────────────────────
   const { data: pendingPaymentsRaw } = await adminClient
     .from('payments')
@@ -183,11 +188,13 @@ export default async function FinanceiroPage() {
             <p className="text-xs text-yellow-400 mt-1">{formatCurrency(pendingRevenue)} pendente</p>
           )}
         </Card>
-        <Card>
-          <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Inadimplentes</p>
-          <p className="text-2xl font-bold text-red-400">{inadimplentes.length}</p>
-          <p className="text-xs text-slate-400 mt-1">assinaturas vencidas ou com último pagamento falhou</p>
-        </Card>
+        <Link href="/admin/financeiro/cobranca" className="block">
+          <Card className="h-full transition-colors hover:border-brand-500/50">
+            <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Inadimplentes</p>
+            <p className="text-2xl font-bold text-red-400">{totalInadimplentes}</p>
+            <p className="text-xs text-slate-400 mt-1">assinaturas vencidas e aulas avulsas em aberto →</p>
+          </Card>
+        </Link>
         <Card>
           <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Pagamentos pendentes</p>
           <p className="text-2xl font-bold text-yellow-400">{pendingPayments.length}</p>
