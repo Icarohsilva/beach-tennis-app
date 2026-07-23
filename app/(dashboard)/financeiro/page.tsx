@@ -10,6 +10,7 @@ import { CancelPlanButton } from '@/features/financeiro/CancelPlanButton'
 import { CheckoutReturnBanner } from '@/features/financeiro/CheckoutReturnBanner'
 import { BuyCreditsCard } from '@/features/financeiro/BuyCreditsCard'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
+import { DebtSection } from '@/features/financeiro/DebtSection'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import type { Payment, Periodicity, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
@@ -127,6 +128,8 @@ export default async function FinanceiroAlunoPage({
         <h1 className="text-2xl font-bold text-white">Financeiro</h1>
         <p className="text-slate-400 text-sm mt-1">Seu plano, pagamentos e contratação</p>
       </div>
+
+      <DebtSection userId={user.id} orgId={orgId} mpConnected={mpConnected} />
 
       {recRaw && (
         <RecommendationBanner
