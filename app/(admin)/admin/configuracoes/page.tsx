@@ -1,6 +1,7 @@
 import { createAdminClient, getCurrentOrgId, requireOwner } from '@/lib/supabase/server'
 import { SystemSettingsForm } from './SystemSettingsForm'
 import { GridAutoForm } from './GridAutoForm'
+import { CobrancaForm } from './CobrancaForm'
 import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
@@ -35,6 +36,12 @@ export default async function ConfiguracoesPage() {
     grid_auto_enabled: (map.get('grid_auto_enabled') ?? 'false') === 'true',
     grid_auto_day: Number(map.get('grid_auto_day') ?? 1),
     grid_auto_hour: Number(map.get('grid_auto_hour') ?? 6),
+  }
+
+  const cobranca = {
+    pix_key: map.get('pix_key') ?? '',
+    pix_key_owner: map.get('pix_key_owner') ?? '',
+    debt_block_grace_days: Number(map.get('debt_block_grace_days') ?? 7),
   }
 
   const { data: orgRow } = await adminClient
@@ -89,6 +96,14 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <GridAutoForm settings={gridAuto} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Cobrança de aulas avulsas</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Chave PIX para o aluno pagar aulas em aberto e a carência antes de bloquear novos agendamentos.
+        </p>
+      </div>
+      <CobrancaForm settings={cobranca} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Personalização</h2>

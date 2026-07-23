@@ -430,6 +430,9 @@ export async function updateSystemSettings(settings: {
   grid_auto_enabled?: boolean
   grid_auto_day?: number
   grid_auto_hour?: number
+  pix_key?: string
+  pix_key_owner?: string
+  debt_block_grace_days?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -467,6 +470,14 @@ export async function updateSystemSettings(settings: {
     (!Number.isInteger(settings.grid_auto_hour) || settings.grid_auto_hour < 0 || settings.grid_auto_hour > 23)
   ) {
     return { error: 'Hora da geração automática inválida.' }
+  }
+  if (
+    settings.debt_block_grace_days !== undefined &&
+    (!Number.isInteger(settings.debt_block_grace_days) ||
+      settings.debt_block_grace_days < 0 ||
+      settings.debt_block_grace_days > 90)
+  ) {
+    return { error: 'Carência de bloqueio inválida (0 a 90 dias).' }
   }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
