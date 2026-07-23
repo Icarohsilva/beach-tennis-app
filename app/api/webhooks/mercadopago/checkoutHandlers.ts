@@ -18,6 +18,7 @@ interface PaymentRow {
   amount: number
   credits_qty: number | null
   dayuse_booking_id: string | null
+  session_id: string | null
 }
 
 export async function handleOrgCheckoutPayment(
@@ -42,7 +43,7 @@ export async function handleOrgCheckoutPayment(
   const admin = createAdminClient()
   const { data: payRaw } = await admin
     .from('payments')
-    .select('id, organization_id, student_id, status, type, amount, credits_qty, dayuse_booking_id')
+    .select('id, organization_id, student_id, status, type, amount, credits_qty, dayuse_booking_id, session_id')
     .eq('id', ref)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -68,6 +69,28 @@ export async function handleOrgCheckoutPayment(
   }
 
   const gatewayPaymentId = String(mpPay.id)
+
+  // Quitação de DÍVIDA de aula (session_id não nulo) — distinta da COMPRA de
+  // créditos, que também é type='per_class' mas tem session_id null e
+  // credits_qty preenchido. Aqui NÃO se concede crédito: o aluno está pagando
+  // uma aula que já assistiu. Usar o record_checkout_credit_purchase daqui
+  // daria crédito que ele não comprou.
+  if (pay.type === 'per_class' && pay.session_id) {
+    const { error: updErr } = await admin
+      .from('payments')
+      .update({
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+        gateway_payment_id: gatewayPaymentId,
+        settled_method: 'mercadopago',
+      })
+      .eq('id', pay.id)
+      .eq('status', 'pending') // idempotente: reentrega do MP não reescreve
+    if (updErr) {
+      throw new Error(`[webhook/mp] baixa de divida falhou: ${updErr.message}`)
+    }
+    return
+  }
 
   if (pay.type === 'per_class') {
     // Marca paid + concede crédito (não expira, spec §3.4) na MESMA
