@@ -2,6 +2,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Sora } from 'next/font/google'
 import './globals.css'
+import { CookieBanner } from '@/components/ui/CookieBanner'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const sora = Sora({ subsets: ['latin'], weight: ['400', '600', '700', '800'], variable: '--font-sora' })
@@ -46,7 +47,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={`${inter.className} ${inter.variable} ${sora.variable}`}>{children}</body>
+      <body className={`${inter.className} ${inter.variable} ${sora.variable}`}>
+        {children}
+        <CookieBanner />
+      </body>
     </html>
   )
 }
