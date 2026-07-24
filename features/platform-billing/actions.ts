@@ -3,6 +3,8 @@
 import { requireOwner, createAdminClient } from '@/lib/supabase/server'
 import { PLATFORM_PLAN } from '@/lib/billing/platformPlan'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
+import { mpCancelPreapproval } from '@/lib/billing/mpClient'
+import { sendEmail } from '@/lib/notifications/email'
 
 // Inicia a assinatura da plataforma (Preapproval no MercadoPago). Owner-only.
 // Devolve init_point (URL hospedada do MP) para o client redirecionar. Não tocamos no cartão.
@@ -64,4 +66,68 @@ export async function subscribeToPlatform(): Promise<{ error?: string; initPoint
     .eq('organization_id', ctx.organizationId)
 
   return { initPoint: data.init_point }
+}
+
+// Cancela a assinatura da plataforma (landing promete "cancela em 1 clique" — este é
+// o botão que cumpre essa promessa). Owner-only. Cancela no MP primeiro (nunca deixar
+// o MP cobrando uma assinatura que a academia já considera encerrada) e só then marca
+// local — mesmo padrão de cancelSubscription (aluno) em features/financeiro/actions.ts.
+export async function cancelPlatformSubscription(): Promise<{ error?: string }> {
+  const ctx = await requireOwner()
+  const admin = createAdminClient()
+
+  const { data: sub } = await admin
+    .from('platform_subscriptions')
+    .select('mp_preapproval_id, status')
+    .eq('organization_id', ctx.organizationId)
+    .maybeSingle()
+
+  if (!sub || sub.status === 'canceled') return { error: 'Nenhuma assinatura ativa encontrada.' }
+
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN
+  if (sub.mp_preapproval_id && token) {
+    try {
+      await mpCancelPreapproval(token, sub.mp_preapproval_id)
+    } catch (e) {
+      console.error('[platform-billing] cancelamento no MP falhou', e)
+      return { error: 'Não foi possível cancelar no Mercado Pago. Tente novamente.' }
+    }
+  }
+
+  const { error } = await admin
+    .from('platform_subscriptions')
+    .update({ status: 'canceled', updated_at: new Date().toISOString() })
+    .eq('organization_id', ctx.organizationId)
+  if (error) return { error: 'Erro ao cancelar assinatura.' }
+
+  return {}
+}
+
+// Solicitação de reembolso/arrependimento (art. 49 CDC — 7 dias). Registra o PEDIDO;
+// NÃO chama a API de refund do MP automaticamente (mover dinheiro é decisão humana).
+// O time da plataforma processa manualmente e marca o status em /super-admin/reembolsos.
+export async function requestPlatformRefund(reason: string): Promise<{ error?: string }> {
+  const ctx = await requireOwner()
+  const admin = createAdminClient()
+
+  const { error } = await admin.from('platform_refund_requests').insert({
+    organization_id: ctx.organizationId,
+    requested_by: ctx.userId,
+    reason: reason.trim() || null,
+  })
+  if (error) return { error: 'Não foi possível registrar a solicitação. Tente novamente.' }
+
+  try {
+    const to = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
+    const { data: userRes } = await admin.auth.admin.getUserById(ctx.userId)
+    await sendEmail({
+      to,
+      subject: 'Nova solicitação de reembolso — assinatura da plataforma',
+      html: `<p>${userRes?.user?.email ?? ctx.userId} (org ${ctx.organizationId}) solicitou reembolso da assinatura.</p><p>Motivo: ${reason.trim() || '(não informado)'}</p>`,
+    })
+  } catch (e) {
+    console.error('[platform-billing] falha ao notificar solicitação de reembolso', e)
+  }
+
+  return {}
 }
