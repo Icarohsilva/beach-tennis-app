@@ -7,6 +7,8 @@ import { normalizeSports } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
 import { generateTempPassword } from '@/lib/auth/tempPassword'
 import { setStudentType } from '@/features/checkin/actions'
+import { acceptLegalDocuments } from '@/features/legal/actions'
+import { OWNER_REQUIRED_SLUGS } from '@/lib/legal/documents'
 
 // Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
 const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
@@ -114,6 +116,14 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
     .update({ role: 'admin' })
     .eq('user_id', created.user.id)
     .eq('organization_id', org.id)
+
+  // Registra o aceite dos termos + contrato SaaS + DPA. Já rodamos 100% server-side
+  // com created.user.id confiável — sem o risco de IDOR do fluxo de cadastro de aluno
+  // (ver features/legal/actions.ts). Best-effort: não reverte a criação da academia.
+  const acceptRes = await acceptLegalDocuments(created.user.id, OWNER_REQUIRED_SLUGS)
+  if (acceptRes.error) {
+    console.error('[createAcademy] falha ao registrar aceite legal', acceptRes.error)
+  }
 
   return { inviteCode }
 }

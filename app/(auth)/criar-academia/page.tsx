@@ -9,6 +9,7 @@ import { formatDocument, isValidDocument } from '@/lib/validation/documento'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { Checkbox } from '@/components/ui/Checkbox'
 
 export default function CriarAcademiaPage() {
   const router = useRouter()
@@ -17,6 +18,8 @@ export default function CriarAcademiaPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [acceptedContract, setAcceptedContract] = useState(false)
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -31,6 +34,10 @@ export default function CriarAcademiaPage() {
 
     if (!isValidDocument(form.document)) {
       setError('CPF ou CNPJ inválido.')
+      return
+    }
+    if (!acceptedTerms || !acceptedContract) {
+      setError('Você precisa aceitar os termos abaixo para criar a academia.')
       return
     }
 
@@ -76,6 +83,41 @@ export default function CriarAcademiaPage() {
         />
         <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
+
+        <Checkbox
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+          required
+          label={
+            <>
+              Li e aceito os{' '}
+              <Link href="/legal/termos-de-uso" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/legal/politica-privacidade" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Política de Privacidade
+              </Link>
+            </>
+          }
+        />
+        <Checkbox
+          checked={acceptedContract}
+          onChange={(e) => setAcceptedContract(e.target.checked)}
+          required
+          label={
+            <>
+              Li e aceito o{' '}
+              <Link href="/legal/contrato-assinatura-saas" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Contrato de Assinatura SaaS
+              </Link>{' '}
+              e o{' '}
+              <Link href="/legal/dpa-tratamento-dados" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Acordo de Tratamento de Dados (DPA)
+              </Link>
+            </>
+          }
+        />
 
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" loading={loading} size="lg" className="w-full">

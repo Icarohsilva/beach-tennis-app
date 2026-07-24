@@ -5,11 +5,15 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { clearMustChangePassword } from '@/features/auth/actions'
+import { acceptLegalDocuments } from '@/features/legal/actions'
+import { STUDENT_REQUIRED_SLUGS } from '@/lib/legal/documents'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { Checkbox } from '@/components/ui/Checkbox'
 
 export default function DefinirSenhaPage() {
   const router = useRouter()
@@ -17,6 +21,7 @@ export default function DefinirSenhaPage() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -29,13 +34,21 @@ export default function DefinirSenhaPage() {
       setError('As senhas não coincidem.')
       return
     }
+    if (!acceptedTerms) {
+      setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
+      return
+    }
     setLoading(true)
     const supabase = createClient()
-    const { error: updErr } = await supabase.auth.updateUser({ password })
+    const { data: userData, error: updErr } = await supabase.auth.updateUser({ password })
     if (updErr) {
       setError('Não foi possível alterar a senha. Tente novamente.')
       setLoading(false)
       return
+    }
+    // Usuário já autenticado neste ponto — sessão real, sem risco de IDOR.
+    if (userData.user) {
+      await acceptLegalDocuments(userData.user.id, STUDENT_REQUIRED_SLUGS)
     }
     const res = await clearMustChangePassword()
     setLoading(false)
@@ -56,6 +69,23 @@ export default function DefinirSenhaPage() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="Nova senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         <Input label="Confirmar nova senha" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        <Checkbox
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+          required
+          label={
+            <>
+              Li e aceito os{' '}
+              <Link href="/legal/termos-de-uso" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/legal/politica-privacidade" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Política de Privacidade
+              </Link>
+            </>
+          }
+        />
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" loading={loading} size="lg" className="w-full">
           Salvar e continuar
