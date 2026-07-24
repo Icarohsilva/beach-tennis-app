@@ -1,4 +1,5 @@
 import { Logo } from '@/components/ui/Logo'
+import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <p className="text-slate-400 text-sm">Gestão para arenas e academias</p>
         </div>
         {children}
+        <LegalFooterLinks className="mt-6" />
       </div>
     </div>
   )

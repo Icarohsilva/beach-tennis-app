@@ -8,6 +8,7 @@ import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 import { Logo } from '@/components/ui/Logo'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
+import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
 import { TourProvider } from '@/components/tour/TourProvider'
 import { HelpButton } from '@/components/tour/HelpButton'
@@ -79,8 +80,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
       <main className="pt-11 pb-24">
         {children}
-        <div className="mt-8 mb-4 flex justify-center">
+        <div className="mt-8 mb-4 flex flex-col items-center gap-3">
           <PoweredBy />
+          <LegalFooterLinks />
         </div>
       </main>
       <BottomNav />

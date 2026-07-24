@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Menu, X } from 'lucide-react'
 import { LogoutButton } from './LogoutButton'
+import { LegalFooterLinks } from './LegalFooterLinks'
 
 interface NavLink { href: string; label: string }
 
@@ -56,6 +57,7 @@ export function AdminMobileNav({
                 Sair
               </LogoutButton>
             </div>
+            <LegalFooterLinks className="px-4 py-3" />
           </nav>
         </div>
       )}

@@ -6,6 +6,7 @@ import { WhatsAppChat } from './_landing/WhatsAppChat'
 import { Reveal } from './_landing/Reveal'
 import { LiveDemo } from './_landing/LiveDemo'
 import { StickyCta } from './_landing/StickyCta'
+import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
 const INSTAGRAM_URL = 'https://www.instagram.com/arenahub.app/'
@@ -337,6 +338,11 @@ export default function LandingPage() {
             <div className={s.priceBig}>R$ 49,90<small> /mês</small></div>
             <div className={s.priceAnchor}>menos que uma aula avulsa · ~R$ 1,66/dia</div>
             <p>Depois do mês grátis. Cancele quando quiser.</p>
+            <p className={s.priceFinePrint}>
+              Preço promocional de lançamento. Reajustes futuros seguem o critério do{' '}
+              <Link href="/legal/contrato-assinatura-saas">Contrato de Assinatura</Link>, sempre com
+              aviso prévio.
+            </p>
             <div className={s.priceFeats}>
               <span className={s.priceFeat}>✓ Alunos ilimitados</span>
               <span className={s.priceFeat}>✓ Turmas ilimitadas</span>
@@ -373,7 +379,7 @@ export default function LandingPage() {
             </details>
             <details className={s.faqItem}>
               <summary>E se eu desistir? Cobra cancelamento?</summary>
-              <p>Zero taxa de cancelamento. Você cancela com um clique no painel. Os dados ficam disponíveis pra exportar por 30 dias.</p>
+              <p>Zero taxa de cancelamento. Você cancela com um clique no painel. Seus dados continuam disponíveis por um período após o cancelamento — para reativar ou solicitar exportação, é só falar com a gente.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Funciona pra qualquer modalidade?</summary>
@@ -479,6 +485,9 @@ export default function LandingPage() {
               <WhatsAppIconSmall />
             </a>
           </div>
+        </div>
+        <div className={s.wrap}>
+          <LegalFooterLinks className="mt-4" />
         </div>
       </footer>
 

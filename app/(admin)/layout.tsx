@@ -12,6 +12,7 @@ import { canAccessArea, type AdminArea } from '@/lib/org/permissions'
 import { getPlatformAccess } from '@/lib/billing/access'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
+import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
 import { TourProvider } from '@/components/tour/TourProvider'
 import { HelpButton } from '@/components/tour/HelpButton'
@@ -128,6 +129,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Sair
           </LogoutButton>
           <PoweredBy className="mt-3" />
+          <LegalFooterLinks className="mt-2" />
         </div>
       </aside>
       <AdminMobileNav
