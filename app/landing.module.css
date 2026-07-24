@@ -708,6 +708,18 @@
   font-weight: 600;
   margin: -4px 0 10px;
 }
+.priceFinePrint {
+  position: relative;
+  font-size: 11px;
+  color: var(--mut-2);
+  opacity: 0.8;
+  margin-top: 6px;
+}
+.priceFinePrint a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .priceReassure {
   position: relative;
   display: flex;

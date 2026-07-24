@@ -9,6 +9,7 @@ import { PLATFORM_PLAN } from '@/lib/billing/platformPlan'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { SubscribeButton } from './SubscribeButton'
+import { ManageSubscriptionActions } from './ManageSubscriptionActions'
 
 // O que a academia leva ao assinar — comunica o valor do plano.
 const FEATURES = [
@@ -88,6 +89,10 @@ export default async function AssinaturaPage({
           <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-white/80">
             <Sparkles className="h-3.5 w-3.5" /> Primeiro mês grátis
           </p>
+          <p className="mt-1 text-[11px] text-white/60">
+            Preço promocional válido durante a oferta de lançamento — reajustes, se houver, com
+            aviso prévio.
+          </p>
         </div>
 
         <div className="space-y-5 p-6">
@@ -133,6 +138,8 @@ export default async function AssinaturaPage({
                 </div>
               </div>
             )}
+
+            {ctx.isOwner && (isTrialing || isActive) && <ManageSubscriptionActions />}
 
             {isBlocked && (
               <>
