@@ -1,7 +1,6 @@
 // app/selecionar-academia/AcademyChooser.tsx
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { setActiveOrg } from '@/features/organizations/setActiveOrg'
 import { Card } from '@/components/ui/Card'
 
@@ -12,7 +11,6 @@ interface Option {
 }
 
 export function AcademyChooser({ options }: { options: Option[] }) {
-  const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
 
@@ -25,10 +23,13 @@ export function AcademyChooser({ options }: { options: Option[] }) {
       setBusy(null)
       return
     }
-    // Admin cai no painel; aluno na home. O layout de destino revalida o cookie.
+    // Admin cai no painel; aluno na home. Navegação FORÇADA (hard nav), não
+    // router.push(): o painel admin tem um redirect() dentro do layout (gate de
+    // assinatura) que é conhecidamente não-confiável do Next.js em navegação
+    // client-side — produz tela em branco até um reload manual. Hard nav sempre
+    // completa a cadeia de redirect corretamente, igual a um F5.
     const role = options.find((o) => o.organization_id === orgId)?.role
-    router.push(role === 'admin' ? '/admin/dashboard' : '/home')
-    router.refresh()
+    window.location.href = role === 'admin' ? '/admin/dashboard' : '/home'
   }
 
   return (

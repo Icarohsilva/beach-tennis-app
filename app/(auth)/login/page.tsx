@@ -2,14 +2,13 @@
 'use client'
 import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 
 function LoginInner() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   // Convite na URL: depois do login, volta pro fluxo de entrar na academia.
   const inviteCode = (searchParams.get('convite') ?? '').trim()
@@ -38,8 +37,7 @@ function LoginInner() {
     }
     // Veio de um convite: manda pro fluxo de entrar na academia (já logado).
     if (inviteCode) {
-      router.push(`/cadastro?convite=${encodeURIComponent(inviteCode)}`)
-      router.refresh()
+      window.location.href = `/cadastro?convite=${encodeURIComponent(inviteCode)}`
       return
     }
     // Papel vem de memberships (profiles.role foi dropada no cutover de identidade).
@@ -49,8 +47,13 @@ function LoginInner() {
       .select('role')
       .eq('user_id', authData.user.id)
     const isAdmin = (memberships ?? []).some((m) => m.role === 'admin')
-    router.push(isAdmin ? '/admin/dashboard' : '/home')
-    router.refresh()
+    // Navegação FORÇADA (hard nav), não router.push(): o painel admin tem um
+    // redirect() dentro de app/(admin)/layout.tsx (gate de assinatura) que é
+    // conhecidamente não-confiável do Next.js quando disparado por navegação
+    // client-side — produz tela em branco (RSC stream incompleto) até um reload
+    // manual. Um hard nav sempre completa a cadeia de redirect corretamente,
+    // igual a um F5. Ver github.com/vercel/next.js/issues/43464 e /issues/67427.
+    window.location.href = isAdmin ? '/admin/dashboard' : '/home'
   }
 
   const cadastroHref = inviteCode ? `/cadastro?convite=${encodeURIComponent(inviteCode)}` : '/cadastro'
