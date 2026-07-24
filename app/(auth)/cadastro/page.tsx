@@ -6,9 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { resolveInviteCode, joinAcademy } from '@/features/organizations/actions'
 import { setActiveOrg } from '@/features/organizations/setActiveOrg'
+import { acceptLegalDocuments } from '@/features/legal/actions'
+import { STUDENT_REQUIRED_SLUGS } from '@/lib/legal/documents'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { Checkbox } from '@/components/ui/Checkbox'
+import * as Sentry from '@sentry/nextjs'
 
 function CadastroInner() {
   const router = useRouter()
@@ -28,6 +32,7 @@ function CadastroInner() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmEmail, setConfirmEmail] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   // Resolve o código de convite → nome da academia. Sem código válido = bloqueia.
   useEffect(() => {
@@ -68,6 +73,10 @@ function CadastroInner() {
       setError('Informe o ID do seu Gympass/TotalPass.')
       return
     }
+    if (!acceptedTerms) {
+      setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
+      return
+    }
     setLoading(true)
     setError('')
     const supabase = createClient()
@@ -93,6 +102,12 @@ function CadastroInner() {
       }
       setLoading(false)
       return
+    }
+    if (data.user) {
+      // Best-effort: nunca bloqueia o cadastro se o registro do aceite falhar.
+      acceptLegalDocuments(data.user.id, STUDENT_REQUIRED_SLUGS).catch((e) => {
+        Sentry.captureException(e, { tags: { flow: 'cadastro_aluno_legal_acceptance' } })
+      })
     }
     if (data.session) {
       router.push('/home')
@@ -230,6 +245,23 @@ function CadastroInner() {
           <Input label="ID do Gympass/TotalPass" value={partnerId} onChange={(e) => setPartnerId(e.target.value)} required />
         )}
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
+        <Checkbox
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+          required
+          label={
+            <>
+              Li e aceito os{' '}
+              <Link href="/legal/termos-de-uso" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/legal/politica-privacidade" target="_blank" className="text-brand-400 hover:text-brand-300 underline">
+                Política de Privacidade
+              </Link>
+            </>
+          }
+        />
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" loading={loading} size="lg" className="w-full">Criar conta</Button>
       </form>
