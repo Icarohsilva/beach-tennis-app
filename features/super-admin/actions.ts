@@ -197,3 +197,46 @@ export async function reactivateOrganization(orgId: string): Promise<{ error?: s
   revalidatePath(`/super-admin/${orgId}`)
   return {}
 }
+
+// ---------------------------------------------------------------------------
+// Solicitações de exclusão de conta e de reembolso — fluxos de REGISTRO (ver
+// migration 20260724100000_legal_foundation.sql). A execução (anonimizar dados,
+// devolver dinheiro) continua manual/deliberada; aqui só se marca o status.
+// ---------------------------------------------------------------------------
+
+export type AccountDeletionStatus = 'pendente' | 'em_andamento' | 'concluida' | 'cancelada'
+export type PlatformRefundStatus = 'pendente' | 'aprovada' | 'recusada' | 'reembolsada'
+
+export async function setAccountDeletionStatus(
+  id: string,
+  status: AccountDeletionStatus,
+): Promise<{ error?: string }> {
+  const gate = await requirePlatformAdmin()
+  if ('error' in gate) return { error: gate.error }
+  const admin = createAdminClient()
+  const isTerminal = status === 'concluida' || status === 'cancelada'
+  const { error } = await admin
+    .from('account_deletion_requests')
+    .update({ status, resolved_at: isTerminal ? new Date().toISOString() : null })
+    .eq('id', id)
+  if (error) return { error: 'Não foi possível atualizar a solicitação.' }
+  revalidatePath('/super-admin/exclusoes')
+  return {}
+}
+
+export async function setPlatformRefundStatus(
+  id: string,
+  status: PlatformRefundStatus,
+): Promise<{ error?: string }> {
+  const gate = await requirePlatformAdmin()
+  if ('error' in gate) return { error: gate.error }
+  const admin = createAdminClient()
+  const isTerminal = status === 'recusada' || status === 'reembolsada'
+  const { error } = await admin
+    .from('platform_refund_requests')
+    .update({ status, resolved_at: isTerminal ? new Date().toISOString() : null, resolved_by: gate.userId })
+    .eq('id', id)
+  if (error) return { error: 'Não foi possível atualizar a solicitação.' }
+  revalidatePath('/super-admin/reembolsos')
+  return {}
+}

@@ -5,6 +5,7 @@ import { CobrancaForm } from './CobrancaForm'
 import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
+import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
 
@@ -135,6 +136,17 @@ export default async function ConfiguracoesPage() {
         discount2Pct={org.tournament_discount_2_pct ?? 30}
         discount3Pct={org.tournament_discount_3_pct ?? 50}
       />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Zona de risco</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Solicitar exclusão encerra sua conta de dono — nosso time entra em contato antes de
+          processar.
+        </p>
+      </div>
+      <div className="bg-surface-card border border-red-900/30 rounded-xl p-4">
+        <RequestDeletionButton />
+      </div>
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { GenderForm } from '@/features/perfil/GenderForm'
 import { PersonalDataForm } from '@/features/perfil/PersonalDataForm'
 import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
+import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { NotificationToggle } from '@/features/perfil/NotificationToggle'
@@ -338,6 +339,13 @@ export default async function PerfilPage() {
             Informações de saúde para uso em caso de emergência durante a aula. Visível apenas para você e o professor.
           </p>
           <MedicalForm initial={medicalProfile ?? null} />
+        </div>
+      </section>
+
+      {/* Zona de risco */}
+      <section>
+        <div className="bg-surface-card border border-red-900/30 rounded-xl p-4">
+          <RequestDeletionButton />
         </div>
       </section>
 
