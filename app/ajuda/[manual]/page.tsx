@@ -3,7 +3,7 @@ import { join } from 'path'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MarkdownDoc } from './MarkdownDoc'
+import { MarkdownDoc } from '@/components/docs/MarkdownDoc'
 
 const MANUALS = {
   academia: { file: 'academia.md', title: 'Manual da Academia', other: 'aluno', otherLabel: 'Manual do Aluno' },
