@@ -267,6 +267,29 @@ Android, faixa nos dois estados, e o desaparecimento correto após instalar.
 Rodar os testes com o tool PowerShell (`npm run test:run`); via Bash a suíte
 falha de forma intermitente neste ambiente.
 
+## Divergências da implementação
+
+Quatro coisas que a spec não previu e que a implementação precisou resolver:
+
+1. **`pushConfigured` entrou em `PromptInput`.** Sem `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+   `subscribeToPush` aborta antes de pedir a permissão, então ela nunca sai de
+   `default` — e a faixa, que por decisão de produto não fecha, voltaria em toda
+   página pedindo algo impossível de conceder. A decisão agora cala a faixa
+   quando o app não consegue inscrever ninguém.
+2. **O sheet de in-app browser não tem chrome de dispensa.** A spec dizia que o
+   estado não é dispensável, mas o componente ainda renderizava `X`, "Agora não"
+   e fechar no backdrop — a pessoa tocava e continuava presa atrás do overlay.
+3. **z-index subiu de `z-[55]` para `z-[75]`.** O `CookieBanner` é `z-[70]` e
+   também ancorado no rodapé: cobria exatamente a fileira de botões do sheet no
+   primeiro acesso.
+4. **Os textos do passo a passo moraram em `lib/pwa/passosInstalacao.ts`**, e não
+   dentro do componente de animação. A página `/instalar` é Server Component e
+   não pode iterar constante exportada de módulo `'use client'`.
+
+Além disso, `/instalar` precisou de entrada na allowlist do `middleware.ts`
+(estar em `app/(public)/` não basta) e o GIF precisa ser gravado também em
+`public/faq/images/`, de onde o manual servido in-app lê as imagens.
+
 ## Riscos conhecidos
 
 - **`beforeinstallprompt` perdido na hidratação** — mitigado pelo script inline

@@ -308,6 +308,32 @@ await capture(stu, '/comunidade', 'aluno-comunidade')
 await capture(stu, '/torneios', 'aluno-arena')
 await capture(stu, '/perfil', 'aluno-perfil')
 
+// --- Popup de instalação (só aparece em celular) ---------------------------
+// Um contexto não muda de viewport/UA depois de criado, então clonamos a sessão
+// do aluno num contexto "iPhone". shot() usa fullPage, que distorce overlays
+// fixos — aqui o screenshot é direto, sem fullPage.
+await safe('instalar-sheet-ios', async () => {
+  const mobileCtx = await browser.newContext({
+    viewport: { width: 390, height: 780 },
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    storageState: await stuCtx.storageState(),
+  })
+  const mob = await mobileCtx.newPage()
+  await mob.goto(`${BASE_URL}/home`)
+  await mob.getByRole('button', { name: 'Ver como faz' }).waitFor({ timeout: 15000 })
+  await mob.screenshot({ path: join(IMAGES_DIR, 'instalar-sheet-ios.png') })
+  console.log('  📸 instalar-sheet-ios.png')
+
+  // Com os passos abertos: a animação e a lista numerada.
+  await mob.getByRole('button', { name: 'Ver como faz' }).click()
+  await mob.waitForTimeout(1000)
+  await mob.screenshot({ path: join(IMAGES_DIR, 'instalar-passos-ios.png') })
+  console.log('  📸 instalar-passos-ios.png')
+
+  await mobileCtx.close()
+})
+
 await stuCtx.close()
 await browser.close()
 

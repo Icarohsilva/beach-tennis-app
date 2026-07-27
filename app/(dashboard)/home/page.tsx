@@ -18,7 +18,6 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { getStudentFrequency } from '@/features/relatorios/query'
 import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard'
-import { PushOnboardingCard } from '@/components/pwa/PushOnboardingCard'
 import { CalendarPlus, Sun } from 'lucide-react'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
@@ -295,8 +294,6 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-5 p-4 pb-24">
-      <PushOnboardingCard />
-
       {recRaw && (
         <RecommendationBanner
           recommendationId={recRaw.id as string}
