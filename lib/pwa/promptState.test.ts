@@ -83,4 +83,12 @@ describe('resolvePrompt', () => {
       resolvePrompt({ ...base, isIOS: true, isInAppBrowser: true, dismissedAt: NOW }),
     ).toBe('install-ios-inapp')
   })
+
+  it('iOS instalado (standalone) + permissão pendente → pede push, não instalação', () => {
+    expect(resolvePrompt({ ...base, isIOS: true, standalone: true })).toBe('push-ask')
+  })
+
+  it('dispensado exatamente 24h atrás conta como expirado', () => {
+    expect(resolvePrompt({ ...base, isIOS: true, dismissedAt: NOW - DISMISS_WINDOW_MS })).toBe('install-ios')
+  })
 })
