@@ -14,11 +14,21 @@
 import { chromium } from '@playwright/test'
 import sharp from 'sharp'
 import { dirname, join } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BASE_URL = process.env.INSTALL_BASE_URL ?? 'http://localhost:3000'
-const DESTINO = join(__dirname, '..', 'docs', 'faq', 'images', 'instalar-ios.gif')
+const RAIZ = join(__dirname, '..')
+
+// Dois destinos, de propósito. docs/faq/images/ é a fonte que os .md referenciam
+// como `](images/...)`; public/faq/images/ é de onde o app serve o manual, já que
+// app/ajuda/[manual]/page.tsx reescreve esse caminho para `/faq/images/...`.
+// Gravar só no primeiro faz a imagem quebrar dentro do app, sem aviso nenhum.
+const DESTINOS = [
+  join(RAIZ, 'docs', 'faq', 'images', 'instalar-ios.gif'),
+  join(RAIZ, 'public', 'faq', 'images', 'instalar-ios.gif'),
+]
 
 // Precisa bater com SCENE_COUNT/SCENE_MS de lib/pwa/passosInstalacao.ts.
 const CENAS = 6
@@ -43,8 +53,12 @@ for (let cena = 0; cena < CENAS; cena++) {
 
 await browser.close()
 
-await sharp(frames, { join: { across: 1, animated: true } })
+const gif = await sharp(frames, { join: { across: 1, animated: true } })
   .gif({ loop: 0, delay: frames.map(() => DELAY_MS) })
-  .toFile(DESTINO)
+  .toBuffer()
 
-console.log(`\nGIF gerado: ${DESTINO} (${frames.length} quadros, ${DELAY_MS}ms cada)`)
+console.log(`\nGIF gerado com ${frames.length} quadros de ${DELAY_MS}ms:`)
+for (const destino of DESTINOS) {
+  await writeFile(destino, gif)
+  console.log(`  ${destino}`)
+}
