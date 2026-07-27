@@ -16,6 +16,7 @@ import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
 import { TourProvider } from '@/components/tour/TourProvider'
 import { HelpButton } from '@/components/tour/HelpButton'
+import { InstallGate } from '@/components/pwa/InstallGate'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -138,6 +139,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         helpSlot={<HelpButton variant="admin" inline />}
       />
       <main className="flex-1 p-6 mt-14 md:mt-0">
+        <InstallGate />
         {isTrialing && (
           <div
             className={
