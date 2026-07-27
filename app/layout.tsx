@@ -48,6 +48,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className={`${inter.className} ${inter.variable} ${sora.variable}`}>
+        {/* beforeinstallprompt dispara antes de o React hidratar e, sem
+            preventDefault, o navegador consome o evento. Este script roda na
+            análise do HTML e guarda o evento para o InstallGate usar depois. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__arenahubInstallEvent=e;window.dispatchEvent(new Event('arenahub:installable'))});",
+          }}
+        />
         {children}
         <CookieBanner />
       </body>
