@@ -213,11 +213,18 @@ página `/instalar` e como fonte da gravação do GIF.
    um modo em que a animação avança por controle externo em vez de por
    `animation-delay`, garantindo frames determinísticos.
 2. Playwright captura N frames PNG do mockup (viewport de celular).
-3. `sharp` monta os frames num GIF animado (`sharp` suporta saída animada via
-   buffer raw empilhado + `pageHeight`), salvo em
-   `docs/faq/images/instalar-ios.gif`.
-4. Se a montagem via `sharp` falhar, o fallback é adicionar `gifenc` como
-   devDependency — biblioteca pura JS, sem dependências nativas.
+3. `sharp` monta os frames num GIF animado e salva em
+   `docs/faq/images/instalar-ios.gif`. Receita **verificada** nesta versão do
+   projeto (sharp 0.35):
+
+   ```js
+   await sharp(framesPng, { join: { across: 1, animated: true } })
+     .gif({ loop: 0, delay: framesPng.map(() => 120) })
+     .toFile(destino)
+   ```
+
+   O caminho alternativo (buffer raw empilhado com `pageHeight`) **não
+   funciona** — libvips reclama de `field "n-pages" not found`. Use `join`.
 
 Não há ffmpeg na máquina de desenvolvimento e não vamos exigi-lo. GIF (em vez de
 MP4) é a escolha certa aqui: toca sozinho em qualquer lugar e o WhatsApp o
