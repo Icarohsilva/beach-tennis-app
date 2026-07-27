@@ -69,8 +69,12 @@ export function InstallGate() {
     } finally {
       // O evento só pode ser usado uma vez, aceito ou recusado. Mesmo se
       // prompt() lançar, ele já não serve mais — descartar evita reoferecer
-      // um botão que não faz nada.
-      window.__arenahubInstallEvent = undefined
+      // um botão que não faz nada. A comparação importa: se o navegador
+      // disparou um beforeinstallprompt novo enquanto esperávamos, o script
+      // inline já o guardou aqui, e esse ainda é válido.
+      if (window.__arenahubInstallEvent === evt) {
+        window.__arenahubInstallEvent = undefined
+      }
       recompute()
     }
   }
