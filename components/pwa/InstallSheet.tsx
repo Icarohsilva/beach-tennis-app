@@ -14,13 +14,19 @@ export type InstallSheetDecision = 'install-ios' | 'install-ios-inapp' | 'instal
 
 export function InstallSheet({
   decision,
+  manual,
   onDismiss,
   onInstall,
 }: {
   decision: InstallSheetDecision
+  manual: 'aluno' | 'academia'
   onDismiss: () => void
   onInstall: () => Promise<void>
 }) {
+  // O in-app browser não é um convite, é um beco sem saída: resolvePrompt ignora
+  // a dispensa nesse estado. Mostrar X, "Agora não" ou fechar no fundo seria
+  // mentir — a pessoa toca, nada acontece, e ela fica presa atrás do overlay.
+  const dispensavel = decision !== 'install-ios-inapp'
   const [mostrandoPassos, setMostrandoPassos] = useState(false)
   const [instalando, setInstalando] = useState(false)
   const [linkCopiado, setLinkCopiado] = useState(false)
@@ -48,9 +54,12 @@ export function InstallSheet({
   }
 
   return (
+    // z-[75] fica acima do CookieBanner (z-[70]), que também é ancorado no
+    // rodapé: sem isso ele cobre exatamente a fileira de botões do sheet no
+    // primeiro acesso, que é justamente quando o convite mais importa.
     <div
-      className="fixed inset-0 z-[55] flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
-      onClick={onDismiss}
+      className="fixed inset-0 z-[75] flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
+      onClick={dispensavel ? onDismiss : undefined}
       role="dialog"
       aria-modal="true"
       aria-label="Instalar o aplicativo"
@@ -59,13 +68,15 @@ export function InstallSheet({
         className="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl border border-surface-border bg-surface-card p-5 sm:max-w-md sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          onClick={onDismiss}
-          aria-label="Fechar"
-          className="float-right p-1 text-slate-400 transition-colors hover:text-white"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        {dispensavel && (
+          <button
+            onClick={onDismiss}
+            aria-label="Fechar"
+            className="float-right p-1 text-slate-400 transition-colors hover:text-white"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
 
         {decision === 'install-android' && (
           <>
@@ -110,7 +121,7 @@ export function InstallSheet({
                 </ol>
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <Link
-                    href="/ajuda/aluno#instale-o-app-no-seu-celular"
+                    href={`/ajuda/${manual}#instale-o-app-no-seu-celular`}
                     className="text-xs text-brand-400 underline underline-offset-2 hover:text-brand-300"
                   >
                     Ver na ajuda
@@ -152,9 +163,6 @@ export function InstallSheet({
                 ) : (
                   'Copiar link'
                 )}
-              </Button>
-              <Button onClick={onDismiss} variant="ghost">
-                Agora não
               </Button>
             </div>
           </>

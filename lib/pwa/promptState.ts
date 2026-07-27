@@ -9,7 +9,8 @@ export type PromptInput = {
   isInAppBrowser: boolean // Instagram, Facebook, etc.
   standalone: boolean // já instalado / rodando como app
   installable: boolean // beforeinstallprompt capturado
-  pushSupported: boolean
+  pushSupported: boolean // o dispositivo tem as APIs de push
+  pushConfigured: boolean // e o app tem chave VAPID para realmente inscrever
   permission: NotificationPermission
   dismissedAt: number | null // epoch ms da última dispensa do sheet
   now: number
@@ -34,6 +35,10 @@ function dispensadoAgora(dismissedAt: number | null, now: number): boolean {
 // não decidiu (ou decidiu não).
 function decidePush(input: PromptInput): PromptDecision {
   if (!input.pushSupported) return 'none'
+  // Sem chave VAPID o subscribeToPush aborta ANTES de pedir a permissão, então
+  // a permissão nunca sai de 'default' e a faixa — que não tem botão de fechar —
+  // voltaria em toda página para sempre, pedindo algo impossível de conceder.
+  if (!input.pushConfigured) return 'none'
   if (input.permission === 'granted') return 'none'
   if (input.permission === 'denied') return 'push-blocked'
   return 'push-ask'

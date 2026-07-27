@@ -139,7 +139,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         helpSlot={<HelpButton variant="admin" inline />}
       />
       <main className="flex-1 p-6 mt-14 md:mt-0">
-        <InstallGate />
+        <InstallGate manual="academia" />
         {isTrialing && (
           <div
             className={

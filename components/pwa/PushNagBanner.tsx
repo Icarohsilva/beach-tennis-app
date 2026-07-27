@@ -11,9 +11,15 @@ import { subscribeToPush } from '@/lib/pwa/pushClient'
 
 export function PushNagBanner({
   state,
+  standalone,
+  manual,
   onOutcome,
 }: {
   state: 'push-ask' | 'push-blocked'
+  // Instalado não tem barra de endereço nem cadeado, então a instrução para
+  // desbloquear muda completamente.
+  standalone: boolean
+  manual: 'aluno' | 'academia'
   // Dispara em qualquer desfecho — concedeu, negou ou falhou —, porque em todos
   // eles o ambiente mudou e o pai precisa recalcular a decisão.
   onOutcome: () => void
@@ -40,14 +46,15 @@ export function PushNagBanner({
 
   if (state === 'push-blocked') {
     return (
-      <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-slate-600/40 bg-slate-500/10 px-3 py-2 text-xs text-slate-300">
+      <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-600/40 bg-slate-500/10 px-3 py-2 text-xs text-slate-300">
         <BellOff className="h-4 w-4 shrink-0 text-slate-400" />
         <span className="min-w-0 flex-1">
-          As notificações estão bloqueadas no navegador. Toque no cadeado 🔒 ao lado do endereço
-          pra liberar.
+          {standalone
+            ? 'As notificações estão bloqueadas. Libere nas configurações do celular, em Notificações → ArenaHub.'
+            : 'As notificações estão bloqueadas no navegador. Toque no cadeado 🔒 ao lado do endereço pra liberar.'}
         </span>
         <Link
-          href="/ajuda/aluno#instale-o-app-no-seu-celular"
+          href={`/ajuda/${manual}#instale-o-app-no-seu-celular`}
           className="shrink-0 font-semibold text-slate-200 underline underline-offset-2"
         >
           Como faço
@@ -57,7 +64,7 @@ export function PushNagBanner({
   }
 
   return (
-    <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg border border-brand-600/30 bg-brand-600/10 px-3 py-2 text-xs text-brand-100">
+    <div className="mb-3 flex items-center gap-2 rounded-lg border border-brand-600/30 bg-brand-600/10 px-3 py-2 text-xs text-brand-100">
       <Bell className="h-4 w-4 shrink-0 text-brand-400" />
       <span className="min-w-0 flex-1">
         {erro ?? 'Tá faltando combinar o principal: aula cancelada, vaga na fila, lembrete de treino.'}

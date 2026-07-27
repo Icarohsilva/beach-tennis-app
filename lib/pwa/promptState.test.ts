@@ -11,6 +11,7 @@ const base: PromptInput = {
   standalone: false,
   installable: false,
   pushSupported: true,
+  pushConfigured: true,
   permission: 'default',
   dismissedAt: null,
   now: NOW,
@@ -58,6 +59,27 @@ describe('resolvePrompt', () => {
 
   it('sem suporte a push e sem instalação possível → nada', () => {
     expect(resolvePrompt({ ...base, pushSupported: false })).toBe('none')
+  })
+
+  it('sem chave VAPID nunca pede push', () => {
+    // A faixa não tem botão de fechar. Se o app não consegue inscrever ninguém,
+    // pedir a permissão vira um pedido impossível repetido em toda página.
+    expect(resolvePrompt({ ...base, pushConfigured: false })).toBe('none')
+    expect(resolvePrompt({ ...base, standalone: true, pushConfigured: false })).toBe('none')
+  })
+
+  it('sem chave VAPID também não mostra o aviso de bloqueado', () => {
+    expect(
+      resolvePrompt({ ...base, standalone: true, permission: 'denied', pushConfigured: false }),
+    ).toBe('none')
+  })
+
+  it('sem chave VAPID a instalação continua sendo oferecida', () => {
+    // Instalar não depende de push: o convite segue valendo.
+    expect(resolvePrompt({ ...base, isIOS: true, pushConfigured: false })).toBe('install-ios')
+    expect(resolvePrompt({ ...base, installable: true, pushConfigured: false })).toBe(
+      'install-android',
+    )
   })
 
   it('dispensado há menos de 24h esconde o sheet', () => {

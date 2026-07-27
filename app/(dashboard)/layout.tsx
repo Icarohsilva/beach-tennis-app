@@ -80,7 +80,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {unreadCount > 0 && <span className="sr-only">{unreadCount} notificações não lidas</span>}
       </header>
       <main className="pt-11 pb-24">
-        <InstallGate />
+        {/* px-4 aqui, e não no componente: o layout admin já tem p-6 próprio. */}
+        <div className="px-4">
+          <InstallGate manual="aluno" />
+        </div>
         {children}
         <div className="mt-8 mb-4 flex flex-col items-center gap-3">
           <PoweredBy />

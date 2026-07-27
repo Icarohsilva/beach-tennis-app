@@ -20,16 +20,21 @@ declare global {
   }
 }
 
-export function InstallGate() {
+export function InstallGate({ manual = 'aluno' }: { manual?: 'aluno' | 'academia' }) {
   const [decision, setDecision] = useState<PromptDecision>('none')
+  const [standalone, setStandalone] = useState(false)
 
   const recompute = useCallback(() => {
     if (typeof window === 'undefined') return
     const env = readEnvironment()
+    setStandalone(env.standalone)
     setDecision(
       resolvePrompt({
         ...env,
         installable: Boolean(window.__arenahubInstallEvent),
+        // Inlinado no build. Sem a chave, subscribeToPush aborta antes de pedir
+        // a permissão, e a faixa (que não fecha) pediria algo impossível.
+        pushConfigured: Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
         permission: 'Notification' in window ? Notification.permission : 'denied',
         dismissedAt: readDismissedAt(),
         now: Date.now(),
@@ -81,7 +86,21 @@ export function InstallGate() {
 
   if (decision === 'none') return null
   if (decision === 'push-ask' || decision === 'push-blocked') {
-    return <PushNagBanner state={decision} onOutcome={recompute} />
+    return (
+      <PushNagBanner
+        state={decision}
+        standalone={standalone}
+        manual={manual}
+        onOutcome={recompute}
+      />
+    )
   }
-  return <InstallSheet decision={decision} onDismiss={dispensar} onInstall={instalar} />
+  return (
+    <InstallSheet
+      decision={decision}
+      manual={manual}
+      onDismiss={dispensar}
+      onInstall={instalar}
+    />
+  )
 }
