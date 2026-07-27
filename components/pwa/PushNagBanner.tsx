@@ -6,14 +6,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Bell, BellOff } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 import { subscribeToPush } from '@/lib/pwa/pushClient'
 
 export function PushNagBanner({
   state,
-  onGranted,
+  onOutcome,
 }: {
   state: 'push-ask' | 'push-blocked'
-  onGranted: () => void
+  // Dispara em qualquer desfecho — concedeu, negou ou falhou —, porque em todos
+  // eles o ambiente mudou e o pai precisa recalcular a decisão.
+  onOutcome: () => void
 }) {
   const [busy, setBusy] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
@@ -21,12 +24,18 @@ export function PushNagBanner({
   async function ativar() {
     setBusy(true)
     setErro(null)
-    const res = await subscribeToPush()
-    setBusy(false)
-    // Sucesso ou recusa, o ambiente mudou: recalcula (a faixa some se virou
-    // 'granted', vira 'push-blocked' se a pessoa clicou em Bloquear).
-    if (res.error) setErro(res.error)
-    onGranted()
+    try {
+      const res = await subscribeToPush()
+      if (res.error) setErro(res.error)
+    } finally {
+      // requestPermission() e a server action de salvar ficam fora do try/catch
+      // do pushClient, então podem lançar. Sem o finally o botão trava
+      // desabilitado até a pessoa recarregar a página.
+      setBusy(false)
+    }
+    // Concedeu, negou ou falhou: em todos os casos o pai recalcula (a faixa some
+    // se virou 'granted', vira 'push-blocked' se a pessoa clicou em Bloquear).
+    onOutcome()
   }
 
   if (state === 'push-blocked') {
@@ -53,13 +62,9 @@ export function PushNagBanner({
       <span className="min-w-0 flex-1">
         {erro ?? 'Tá faltando combinar o principal: aula cancelada, vaga na fila, lembrete de treino.'}
       </span>
-      <button
-        onClick={ativar}
-        disabled={busy}
-        className="shrink-0 rounded-md bg-gradient-to-r from-brand-600 to-brand-700 px-2.5 py-1 font-semibold text-white transition-opacity disabled:opacity-50"
-      >
-        {busy ? '...' : 'Ativar'}
-      </button>
+      <Button onClick={ativar} loading={busy} size="sm" className="shrink-0">
+        Ativar
+      </Button>
     </div>
   )
 }
