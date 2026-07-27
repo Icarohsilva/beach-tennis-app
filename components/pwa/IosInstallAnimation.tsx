@@ -7,27 +7,9 @@
 // /instalar e a captura de frames do GIF (via a prop `scene`).
 import { useEffect, useState } from 'react'
 import { Share, ChevronLeft, ChevronRight, BookOpen, Copy, Star, SquarePlus } from 'lucide-react'
-
-export const SCENE_LEGENDAS = [
-  'Toque no botão Compartilhar, na barra de baixo',
-  'O menu vai subir na tela',
-  'Role a lista até achar a opção',
-  'Toque em "Adicionar à Tela de Início"',
-  'Confirme em "Adicionar", lá em cima',
-  'Pronto! O ArenaHub está na sua tela 🎉',
-] as const
-
-export const SCENE_COUNT = SCENE_LEGENDAS.length
-export const SCENE_MS = 2200
-
-// Passos em texto, para quem não quer esperar o loop, para prefers-reduced-motion
-// e para leitores de tela.
-export const PASSOS_TEXTO = [
-  'Abra o ArenaHub no Safari (não funciona pelo Instagram nem pelo Chrome).',
-  'Toque no botão Compartilhar — o quadradinho com a seta pra cima, na barra de baixo.',
-  'Role o menu e toque em "Adicionar à Tela de Início".',
-  'Toque em "Adicionar" no canto superior direito. O ícone aparece na sua tela.',
-] as const
+// As constantes vivem fora deste módulo porque ele é 'use client' e a página
+// /instalar, que é Server Component, precisa iterar PASSOS_TEXTO.
+import { SCENE_LEGENDAS, SCENE_COUNT, SCENE_MS } from '@/lib/pwa/passosInstalacao'
 
 function Dedo({ className }: { className: string }) {
   return (

@@ -3,7 +3,8 @@
 // compartilhável nos grupos das academias e fonte dos frames do GIF (?cena=N
 // congela a animação num quadro específico).
 import type { Metadata } from 'next'
-import { IosInstallAnimation, PASSOS_TEXTO } from '@/components/pwa/IosInstallAnimation'
+import { IosInstallAnimation } from '@/components/pwa/IosInstallAnimation'
+import { PASSOS_TEXTO } from '@/lib/pwa/passosInstalacao'
 import { Logo } from '@/components/ui/Logo'
 
 export const metadata: Metadata = {

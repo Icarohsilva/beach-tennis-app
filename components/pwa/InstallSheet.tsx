@@ -7,7 +7,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { X, Share, Compass, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { IosInstallAnimation, PASSOS_TEXTO } from './IosInstallAnimation'
+import { PASSOS_TEXTO } from '@/lib/pwa/passosInstalacao'
+import { IosInstallAnimation } from './IosInstallAnimation'
 
 export type InstallSheetDecision = 'install-ios' | 'install-ios-inapp' | 'install-android'
 
