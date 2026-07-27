@@ -26,8 +26,14 @@ export function InstallSheet({
 
   async function instalar() {
     setInstalando(true)
-    await onInstall()
-    setInstalando(false)
+    try {
+      await onInstall()
+    } finally {
+      // O prompt nativo é uma superfície que pode lançar (segunda chamada,
+      // navegador bloqueando). Sem o finally, o botão trava em "carregando"
+      // para sempre e a pessoa não consegue nem tentar de novo.
+      setInstalando(false)
+    }
   }
 
   async function copiarLink() {
