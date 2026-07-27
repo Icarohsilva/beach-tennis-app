@@ -14,6 +14,8 @@
 
 ## Índice
 
+- [Instale o app no seu celular](#instale-o-app-no-seu-celular)
+
 1. [O que é o ArenaHub](#1-o-que-é-o-arenahub)
 2. [Cadastro da academia](#2-cadastro-da-academia)
 3. [Onboarding — endereço, esportes e marca](#3-onboarding--endereço-esportes-e-marca)
@@ -29,6 +31,36 @@
 13. [Configurações](#13-configurações)
 14. [Equipe — convidar alunos e professores](#14-equipe--convidar-alunos-e-professores)
 15. [Assinatura da plataforma](#15-assinatura-da-plataforma)
+
+---
+
+## Instale o app no seu celular
+
+O painel da academia também funciona instalado, e é assim que você recebe os
+avisos no celular: aluno entrando na fila de espera, cancelamento em cima da
+hora, pagamento confirmado.
+
+### No iPhone
+
+![Passo a passo de instalação no iPhone](images/instalar-ios.gif)
+
+1. Abra o ArenaHub no **Safari** (não pelo Instagram nem pelo Chrome).
+2. Toque no botão **Compartilhar**, na barra de baixo.
+3. Role o menu e toque em **"Adicionar à Tela de Início"**.
+4. Toque em **"Adicionar"** no canto superior direito.
+
+### No Android
+
+Abra o ArenaHub e toque em **Instalar** no aviso que aparece. Se ele não
+aparecer, use os três pontinhos do Chrome → **"Instalar aplicativo"**.
+
+### Ative as notificações
+
+Depois de instalar, abra o app pela tela de início e toque em **Ativar** na faixa
+do topo. Sem essa permissão o celular não te avisa de nada.
+
+Você pode mandar este link direto para seus alunos: **arenahub.website/instalar**
+— é a mesma explicação, numa página só.
 
 ---
 

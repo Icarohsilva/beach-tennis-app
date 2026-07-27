@@ -14,6 +14,8 @@
 
 ## Índice
 
+- [Instale o app no seu celular](#instale-o-app-no-seu-celular)
+
 1. [Como entrar na academia](#1-como-entrar-na-academia)
    - [A) Cadastro pelo link de convite](#a-cadastro-pelo-link-de-convite)
    - [B) Aluno cadastrado pela academia (senha temporária)](#b-aluno-cadastrado-pela-academia-senha-temporária)
@@ -25,6 +27,41 @@
 7. [Comunidade](#7-comunidade)
 8. [Torneios — inscrição](#8-torneios--inscrição)
 9. [Perfil — dados, créditos e ficha](#9-perfil--dados-créditos-e-ficha)
+
+---
+
+## Instale o app no seu celular
+
+O ArenaHub funciona melhor instalado: abre direto da tela de início, sem digitar
+endereço, e é a única forma de receber os avisos de aula cancelada, vaga liberada
+na fila e lembrete de treino.
+
+### No iPhone
+
+O iPhone não tem botão de instalar — o caminho é pelo Safari:
+
+![Passo a passo de instalação no iPhone](images/instalar-ios.gif)
+
+1. Abra o ArenaHub no **Safari**. Pelo Instagram, pelo Facebook ou pelo Chrome
+   não funciona — o menu deles não tem a opção.
+2. Toque no botão **Compartilhar** (o quadradinho com a seta pra cima, na barra
+   de baixo).
+3. Role o menu e toque em **"Adicionar à Tela de Início"**.
+4. Toque em **"Adicionar"** no canto superior direito.
+
+### No Android
+
+Bem mais rápido: abra o ArenaHub e toque em **Instalar** no aviso que aparece.
+Se o aviso não aparecer, toque nos três pontinhos do Chrome e escolha
+**"Instalar aplicativo"**.
+
+### Depois de instalar: ative as notificações
+
+Abra o app pela tela de início e toque em **Ativar** na faixa laranja do topo. O
+celular vai perguntar se você permite notificações — responda **Permitir**.
+
+Se você tocou em "Bloquear" sem querer, dá pra reverter: toque no cadeado 🔒 ao
+lado do endereço no navegador e libere as notificações do site.
 
 ---
 
