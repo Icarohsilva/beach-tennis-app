@@ -31,6 +31,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/experimental') ||
     pathname.startsWith('/arenas') ||
     pathname.startsWith('/ajuda') ||
+    pathname.startsWith('/instalar') ||
     pathname.startsWith('/legal') ||
     pathname.startsWith('/t/')
   ) {
