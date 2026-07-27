@@ -16,6 +16,11 @@
 
 - **Rode os testes pelo tool PowerShell**, não pelo Bash: `npm run test:run`. Via Bash a suíte falha de forma intermitente neste ambiente com erro de `config` undefined.
 - **Não rode `npm run dev` pelo Bash.** Use o tool `preview_start` do Browser pane.
+- **`npx tsc --noEmit` já falha nesta branch, antes de qualquer mudança**: 9 erros
+  pré-existentes em `lib/branding/palette.test.ts`, `lib/branding/theme.test.ts`,
+  `lib/torneios/schedule/americano.test.ts` e `types/index.test.ts`. Todos em
+  arquivos de teste, nenhum em código de app. Onde este plano diz "Esperado:
+  nenhum erro", leia **"nenhum erro novo além desses 9"**.
 - O repositório está na branch `main`. Crie uma branch antes do primeiro commit:
   `git checkout -b feat/popup-instalacao-pwa`
 
