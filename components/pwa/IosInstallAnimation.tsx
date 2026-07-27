@@ -61,6 +61,7 @@ export function IosInstallAnimation({ scene: forcada }: { scene?: number }) {
       {/* Moldura do iPhone. data-install-stage é o alvo do script de captura. */}
       <div
         data-install-stage
+        aria-hidden
         className="relative h-[400px] w-[200px] shrink-0 overflow-hidden rounded-[30px] border-4 border-slate-700 bg-slate-950 shadow-2xl"
       >
         {/* Notch */}
@@ -133,11 +134,15 @@ export function IosInstallAnimation({ scene: forcada }: { scene?: number }) {
               <p className="text-[7px] text-slate-400">arenahub.website</p>
             </div>
           </div>
-          {/* A lista "rola": um translate negativo revela a opção que interessa. */}
+          {/* A lista "rola" por translate. Cada Linha é h-12 (48px) + gap de 4px
+              do space-y-1, então as linhas ficam em 0/52/104/156/208. A janela
+              tem 104px de altura, e -156px encosta a linha alvo ("Adicionar à
+              Tela de Início") no topo dela. Mexer em h-12, no space-y-1 ou na
+              altura da janela exige refazer esta conta. */}
           <div className="h-[104px] overflow-hidden">
             <div
               className={`space-y-1 transition-transform duration-500 ${
-                listaRolada ? '-translate-y-[52px]' : 'translate-y-0'
+                listaRolada ? '-translate-y-[156px]' : 'translate-y-0'
               }`}
             >
               <Linha icone={<Copy size={11} />} texto="Copiar" />
@@ -176,7 +181,7 @@ export function IosInstallAnimation({ scene: forcada }: { scene?: number }) {
 
         {/* --- Dedo --- */}
         {scene === 0 && <Dedo className="bottom-2 left-[86px] z-30" />}
-        {scene === 3 && <Dedo className="bottom-[46px] left-[30px] z-30" />}
+        {scene === 3 && <Dedo className="bottom-[74px] left-[30px] z-30" />}
         {scene === 4 && <Dedo className="right-2 top-6 z-30" />}
       </div>
 
