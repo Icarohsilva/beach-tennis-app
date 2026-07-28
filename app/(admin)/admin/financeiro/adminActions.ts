@@ -50,6 +50,9 @@ export interface CreatePlanData {
   name: string
   description?: string
   classes_per_week: number
+  cycle: 'weekly' | 'monthly'
+  max_classes_per_day: number
+  refund_on_late_cancel: boolean
 }
 
 export async function createPlan(data: CreatePlanData): Promise<{ error?: string; planId?: string }> {
@@ -64,6 +67,9 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
         name: data.name.trim(),
         description: data.description?.trim() || null,
         classes_per_week: data.classes_per_week,
+        cycle: data.cycle,
+        max_classes_per_day: data.max_classes_per_day,
+        refund_on_late_cancel: data.refund_on_late_cancel,
         is_active: true,
         organization_id: orgId,
       })
