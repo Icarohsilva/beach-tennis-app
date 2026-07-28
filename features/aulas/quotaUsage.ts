@@ -10,6 +10,7 @@ import {
 } from '@/lib/utils/classQuota'
 import { addDaysStr } from '@/lib/utils/gridSchedule'
 import { canCancelWithRefund } from '@/lib/utils/creditRules'
+import { sessionStartIso } from '@/lib/utils/sessionTime'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -65,8 +66,7 @@ export async function getQuotaSnapshot(
     const cls = Array.isArray(sess.classes) ? sess.classes[0] : sess.classes
     const confirmed = b.status === 'confirmed'
 
-    // Horário da aula é hora de parede BRT (−03:00), igual gridSchedule.ts.
-    const startIso = `${sess.session_date}T${cls.start_time}-03:00`
+    const startIso = sessionStartIso(sess.session_date, cls.start_time)
 
     return {
       sessionDate: sess.session_date,
