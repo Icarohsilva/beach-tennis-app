@@ -14,6 +14,8 @@ interface SystemSettings {
   credit_expiry_days: number
   cancellation_window_hours: number
   default_checkin_target: number
+  quota_enforcement_enabled: boolean
+  max_classes_per_day: number
 }
 
 export default async function ConfiguracoesPage() {
@@ -33,6 +35,8 @@ export default async function ConfiguracoesPage() {
     credit_expiry_days: Number(map.get('credit_expiry_days') ?? 30),
     cancellation_window_hours: Number(map.get('cancellation_window_hours') ?? 5),
     default_checkin_target: Number(map.get('default_checkin_target') ?? DEFAULT_CHECKIN_TARGET),
+    quota_enforcement_enabled: map.get('quota_enforcement_enabled') === 'true',
+    max_classes_per_day: Number(map.get('max_classes_per_day') ?? 2),
   }
 
   const gridAuto = {
