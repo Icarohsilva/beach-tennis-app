@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { togglePlanActive, createPlan, saveBillingOption } from './adminActions'
+import { togglePlanActive, createPlan, updatePlan, saveBillingOption } from './adminActions'
 import type { CreatePlanData } from './adminActions'
 import { PlanFormFields } from './PlanFormFields'
 import { PERIODICITIES, PERIODICITY_LABELS } from '@/lib/billing/periodicity'
@@ -40,6 +40,9 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [createForm, setCreateForm] = useState<CreatePlanData>(emptyCreateForm)
+
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<CreatePlanData>(emptyCreateForm)
 
   // Edição por (planId, periodicity): preço em texto + habilitado.
   const [editing, setEditing] = useState<{
@@ -75,6 +78,20 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
         setShowCreateForm(false)
         setCreateForm(emptyCreateForm)
         setSuccess('Plano criado. Agora habilite as periodicidades e preços.')
+        router.refresh()
+      }
+    })
+  }
+
+  function handleUpdatePlan() {
+    if (!editingPlanId) return
+    setError(null)
+    startTransition(async () => {
+      const result = await updatePlan({ id: editingPlanId, ...editForm })
+      if (result.error) setError(result.error)
+      else {
+        setEditingPlanId(null)
+        setSuccess('Plano atualizado com sucesso.')
         router.refresh()
       }
     })
@@ -135,28 +152,62 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
 
       {plans.map((plan) => (
         <Card key={plan.id}>
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-white font-semibold text-sm">{plan.name}</h3>
-                <Badge variant={plan.is_active ? 'success' : 'danger'}>
-                  {plan.is_active ? 'Ativo' : 'Inativo'}
-                </Badge>
+          {editingPlanId === plan.id ? (
+            <div className="space-y-3 mb-3 pb-3 border-b border-surface-border">
+              <PlanFormFields value={editForm} onChange={setEditForm} />
+              <div className="flex gap-2">
+                <Button size="sm" variant="primary" loading={pending} onClick={handleUpdatePlan}>
+                  Salvar
+                </Button>
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => setEditingPlanId(null)}>
+                  Cancelar
+                </Button>
               </div>
-              {plan.description && <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>}
-              <p className="text-xs text-slate-400 mt-1">
-                {plan.classes_per_week}x/semana
-              </p>
             </div>
-            <Button
-              size="sm"
-              variant={plan.is_active ? 'danger' : 'secondary'}
-              loading={pending}
-              onClick={() => handleToggle(plan.id, plan.is_active)}
-            >
-              {plan.is_active ? 'Desativar' : 'Ativar'}
-            </Button>
-          </div>
+          ) : (
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-white font-semibold text-sm">{plan.name}</h3>
+                  <Badge variant={plan.is_active ? 'success' : 'danger'}>
+                    {plan.is_active ? 'Ativo' : 'Inativo'}
+                  </Badge>
+                </div>
+                {plan.description && <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>}
+                <p className="text-xs text-slate-400 mt-1">
+                  {plan.classes_per_week}x/semana
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    setEditingPlanId(plan.id)
+                    setEditForm({
+                      name: plan.name,
+                      description: plan.description ?? undefined,
+                      classes_per_week: plan.classes_per_week,
+                      cycle: plan.cycle,
+                      max_classes_per_day: plan.max_classes_per_day,
+                      refund_on_late_cancel: plan.refund_on_late_cancel,
+                    })
+                  }}
+                >
+                  Editar
+                </Button>
+                <Button
+                  size="sm"
+                  variant={plan.is_active ? 'danger' : 'secondary'}
+                  loading={pending}
+                  onClick={() => handleToggle(plan.id, plan.is_active)}
+                >
+                  {plan.is_active ? 'Desativar' : 'Ativar'}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Periodicidades */}
           <div className="space-y-2 pt-3 border-t border-surface-border">
