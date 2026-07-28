@@ -90,6 +90,43 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
   }
 }
 
+export interface UpdatePlanData extends CreatePlanData {
+  id: string
+}
+
+export async function updatePlan(data: UpdatePlanData): Promise<{ error?: string }> {
+  try {
+    const { adminClient, orgId } = await assertAdmin()
+
+    if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
+    if (data.cycle !== 'weekly' && data.cycle !== 'monthly') {
+      return { error: 'Ciclo da cota inválido.' }
+    }
+    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day <= 0) {
+      return { error: 'Máximo de aulas por dia deve ser um número inteiro positivo.' }
+    }
+
+    const { error } = await adminClient
+      .from('subscription_plans')
+      .update({
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        classes_per_week: data.classes_per_week,
+        cycle: data.cycle,
+        max_classes_per_day: data.max_classes_per_day,
+        refund_on_late_cancel: data.refund_on_late_cancel,
+      })
+      .eq('id', data.id)
+      .eq('organization_id', orgId)
+
+    if (error) return { error: 'Erro ao atualizar plano.' }
+    revalidatePath('/admin/financeiro/planos')
+    return {}
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }
+  }
+}
+
 // Liga/desliga e precifica uma periodicidade do plano (upsert por plan+periodicity).
 export async function saveBillingOption(
   planId: string,
