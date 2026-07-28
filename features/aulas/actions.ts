@@ -9,9 +9,11 @@ import { offerWaitlistSpot } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
-import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
+import { getQuotaSnapshot } from './quotaUsage'
+import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
@@ -181,7 +183,19 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
 
   // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
   // da reconciliação (spec §1).
-  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, user.id, orgId)
+  // getActivePlan devolve a configuração de cota, não só o sim/não — a cota
+  // precisa de classes_per_week, cycle e max_classes_per_day.
+  const plan = await getActivePlan(adminClient, user.id, orgId)
+  const hasActivePlan = plan !== null
+
+  const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
+  const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
+
+  // Só paga o custo das duas queries da cota quando a academia ligou a regra.
+  const snapshot =
+    quotaEnforced && plan
+      ? await getQuotaSnapshot(adminClient, user.id, orgId, plan, session.session_date)
+      : null
 
   // Dívida aberta = payments pendente COM session_id. O filtro de session_id é
   // essencial: compra de crédito abandonada no checkout também fica 'pending',
@@ -210,9 +224,23 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     hasActivePlan,
     creditsBalance: profile.credits_balance,
     hasOpenDebt: debtSummary.isBlocked,
+    quotaEnforced,
+    quotaRemaining: snapshot?.remaining ?? null,
+    bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
+    maxClassesPerDay: plan?.maxClassesPerDay ?? orgDailyCap,
   })
 
   if ('denied' in decision) {
+    if (decision.denied === 'daily_cap') {
+      const teto = plan?.maxClassesPerDay ?? orgDailyCap
+      return { error: `Você já tem ${teto} aulas reservadas neste dia — é o limite do seu plano.` }
+    }
+    if (decision.denied === 'quota_exhausted') {
+      const periodo = plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'
+      return {
+        error: `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
+      }
+    }
     return {
       error: `Você tem R$ ${debtSummary.total.toFixed(2).replace('.', ',')} em aberto. Regularize em Financeiro para voltar a agendar.`,
     }
