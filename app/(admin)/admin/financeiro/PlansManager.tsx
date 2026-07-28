@@ -162,7 +162,7 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
                   step="1"
                   value={createForm.max_classes_per_day}
                   onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, max_classes_per_day: parseInt(e.target.value) || 1 }))
+                    setCreateForm((f) => ({ ...f, max_classes_per_day: Math.max(1, parseInt(e.target.value) || 1) }))
                   }
                 />
               </div>

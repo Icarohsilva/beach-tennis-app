@@ -60,6 +60,12 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
     const { adminClient, orgId } = await assertAdmin()
 
     if (!data.name.trim()) return { error: 'Nome é obrigatório.' }
+    if (data.cycle !== 'weekly' && data.cycle !== 'monthly') {
+      return { error: 'Ciclo da cota inválido.' }
+    }
+    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day <= 0) {
+      return { error: 'Máximo de aulas por dia deve ser um número inteiro positivo.' }
+    }
 
     const { data: plan, error } = await adminClient
       .from('subscription_plans')
