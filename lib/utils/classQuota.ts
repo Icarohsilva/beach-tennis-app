@@ -48,3 +48,54 @@ export function countCycleWeeks(from: string, to: string): number {
   }
   return count
 }
+
+export interface PlanQuota {
+  classesPerWeek: number
+  cycle: PlanCycle
+  maxClassesPerDay: number
+  refundOnLateCancel: boolean
+}
+
+export interface QuotaBooking {
+  sessionDate: string
+  status: 'confirmed' | 'cancelled'
+  /** Cancelada fora da janela de cancelamento (creditRules.canCancelWithRefund). */
+  cancelledLate: boolean
+}
+
+export interface QuotaResult {
+  limit: number
+  used: number
+  remaining: number
+}
+
+/**
+ * O max() é a peça central: a matrícula fixa NUNCA pode ser bloqueada pela
+ * cota. Num mês com 5 ocorrências do dia da turma, o aluno de plano 2x/semana
+ * tem 10 sessões fixas contra uma cota de 8 — sem o max() ele seria barrado na
+ * própria aula que assinou. O primeiro termo cobre o caso oposto: aluno com
+ * plano e nenhuma fixa, que só reserva avulso.
+ */
+export function resolveQuota(input: {
+  plan: PlanQuota
+  cycleWeeks: number
+  bookings: QuotaBooking[]
+  fixedSessionsInCycle: number
+}): QuotaResult {
+  const { plan, cycleWeeks, bookings, fixedSessionsInCycle } = input
+
+  const limit = Math.max(plan.classesPerWeek * cycleWeeks, fixedSessionsInCycle)
+
+  const used = bookings.filter(
+    (b) =>
+      b.status === 'confirmed' ||
+      (b.status === 'cancelled' && b.cancelledLate && !plan.refundOnLateCancel),
+  ).length
+
+  return { limit, used, remaining: Math.max(0, limit - used) }
+}
+
+/** Reservas confirmadas do aluno numa data — insumo do teto diário. */
+export function countOnDate(bookings: QuotaBooking[], dateStr: string): number {
+  return bookings.filter((b) => b.status === 'confirmed' && b.sessionDate === dateStr).length
+}
