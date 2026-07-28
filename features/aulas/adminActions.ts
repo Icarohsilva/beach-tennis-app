@@ -13,6 +13,7 @@ import type { AddStudentReason, CheckinPartner } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { requireAdmin } from './authGuards'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
@@ -131,6 +132,71 @@ export async function enrollStudentInClass(
 // cancelEnrollment
 // ---------------------------------------------------------------------------
 
+/**
+ * Cancela as reservas que a matrícula já tinha gerado para as aulas futuras da
+ * turma, estornando o crédito de quem debitou.
+ *
+ * Sem isto, sair da turma deixa as reservas 'confirmed' para trás e o aluno
+ * continua aparecendo na chamada para sempre: a grade monta o roster unindo
+ * reservas confirmadas + matrículas ativas, e regerar não conserta (o upsert de
+ * sessões é idempotente e reconcileEnrollmentCredits só adiciona, nunca remove).
+ * Mesmo tratamento que deleteClass já dava ao excluir a turma inteira.
+ */
+async function cancelFutureEnrollmentBookings(
+  adminClient: ReturnType<typeof createAdminClient>,
+  enrollment: { student_id: string; class_id: string; organization_id: string },
+  now: string,
+): Promise<void> {
+  const today = brtToday(new Date())
+
+  const { data: futureSessions } = await adminClient
+    .from('class_sessions')
+    .select('id')
+    .eq('class_id', enrollment.class_id)
+    .gte('session_date', today)
+
+  const sessionIds = ((futureSessions ?? []) as { id: string }[]).map((s) => s.id)
+  if (sessionIds.length === 0) return
+
+  // Só as reservas nascidas da matrícula: avulsa/reposição que o aluno pagou do
+  // próprio bolso continua valendo depois de ele sair da turma fixa.
+  const { data: bookingsRaw } = await adminClient
+    .from('session_bookings')
+    .select('id, session_id, credit_used')
+    .eq('student_id', enrollment.student_id)
+    .in('session_id', sessionIds)
+    .eq('status', 'confirmed')
+    .eq('from_enrollment', true)
+
+  const bookings = (bookingsRaw ?? []) as { id: string; session_id: string; credit_used: boolean }[]
+
+  for (const b of bookings) {
+    await adminClient
+      .from('session_bookings')
+      .update({ status: 'cancelled', cancelled_at: now })
+      .eq('id', b.id)
+
+    if (!b.credit_used) continue
+
+    // Mesma regra do cancelBooking: crédito debitado por aula que não vai
+    // acontecer volta para o aluno. Falha aqui é logada, não reverte o
+    // cancelamento — a matrícula já foi encerrada de forma durável.
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: enrollment.student_id,
+      p_org: enrollment.organization_id,
+      p_delta: 1,
+      p_type: 'refunded',
+      p_reason: 'Estorno — matrícula na turma encerrada',
+      p_session_id: b.session_id,
+    })
+    if (creditErr) {
+      console.error('[cancelEnrollment] adjust_credits falhou', {
+        bookingId: b.id, sessionId: b.session_id, error: creditErr.message,
+      })
+    }
+  }
+}
+
 export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: string }> {
   const { error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
@@ -140,7 +206,7 @@ export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: 
 
   const { data: enrollmentData } = await adminClient
     .from('enrollments')
-    .select('student_id')
+    .select('student_id, class_id, organization_id')
     .eq('id', enrollmentId)
     .single()
 
@@ -150,8 +216,18 @@ export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: 
     .eq('id', enrollmentId)
 
   if (error) return { error: 'Erro ao cancelar matrícula.' }
-  if (enrollmentData) revalidatePath(`/admin/alunos/${enrollmentData.student_id}`)
+
+  if (enrollmentData) {
+    const enrollment = enrollmentData as {
+      student_id: string
+      class_id: string
+      organization_id: string
+    }
+    await cancelFutureEnrollmentBookings(adminClient, enrollment, now)
+    revalidatePath(`/admin/alunos/${enrollment.student_id}`)
+  }
   revalidatePath('/admin/alunos')
+  revalidatePath('/admin/grade')
   return {}
 }
 

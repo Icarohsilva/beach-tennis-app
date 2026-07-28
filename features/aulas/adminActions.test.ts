@@ -21,7 +21,7 @@ vi.mock('./authGuards', () => ({
   requireAdmin: vi.fn(),
 }))
 
-import { adminSkipEnrollmentDate, adminUnskipEnrollmentDate } from './adminActions'
+import { adminSkipEnrollmentDate, adminUnskipEnrollmentDate, cancelEnrollment } from './adminActions'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
 import { revalidatePath } from 'next/cache'
@@ -230,5 +230,164 @@ describe('adminUnskipEnrollmentDate', () => {
     expect(result).toEqual({})
     expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
     expect(revalidatePath).not.toHaveBeenCalledWith(expect.stringContaining('/editar'), expect.anything())
+  })
+})
+
+/**
+ * Stub que grava a tabela, a operação e os filtros de cada chamada, para poder
+ * afirmar POR QUAIS reservas a action passou (o filtro é o comportamento aqui:
+ * avulsa não pode ser tocada).
+ */
+interface Call {
+  table: string
+  op: 'select' | 'update'
+  payload?: Record<string, unknown>
+  filters: Record<string, unknown>
+}
+
+function makeCancelClient(opts: {
+  enrollment?: { student_id: string; class_id: string; organization_id: string } | null
+  futureSessions?: { id: string }[]
+  bookings?: { id: string; session_id: string; credit_used: boolean }[]
+  updateError?: { message: string } | null
+}) {
+  const calls: Call[] = []
+  const rpc = vi.fn().mockResolvedValue({ error: null })
+
+  const from = vi.fn((table: string) => {
+    const rec: Call = { table, op: 'select', filters: {} }
+    calls.push(rec)
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      update: (p: Record<string, unknown>) => {
+        rec.op = 'update'
+        rec.payload = p
+        return builder
+      },
+      eq: (k: string, v: unknown) => {
+        rec.filters[k] = v
+        return builder
+      },
+      in: (k: string, v: unknown) => {
+        rec.filters[k] = v
+        return builder
+      },
+      gte: (k: string, v: unknown) => {
+        rec.filters[k] = v
+        return builder
+      },
+      single: () => Promise.resolve({ data: opts.enrollment ?? null, error: null }),
+      then: (resolve: (v: { data: unknown; error: unknown }) => void) => {
+        let data: unknown = null
+        if (rec.op === 'select' && table === 'class_sessions') data = opts.futureSessions ?? []
+        if (rec.op === 'select' && table === 'session_bookings') data = opts.bookings ?? []
+        const error = rec.op === 'update' && table === 'enrollments' ? opts.updateError ?? null : null
+        return Promise.resolve({ data, error }).then(resolve)
+      },
+    }
+    return builder
+  })
+
+  return { client: { from, rpc } as never, calls, rpc }
+}
+
+const ENROLLMENT = { student_id: 'stu-1', class_id: 'class-1', organization_id: 'org-1' }
+
+describe('cancelEnrollment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+  })
+
+  it('cancela as reservas futuras geradas pela matrícula (senão o aluno some da turma mas fica na chamada para sempre)', async () => {
+    const { client, calls } = makeCancelClient({
+      enrollment: ENROLLMENT,
+      futureSessions: [{ id: 'sess-1' }, { id: 'sess-2' }],
+      bookings: [
+        { id: 'bk-1', session_id: 'sess-1', credit_used: false },
+        { id: 'bk-2', session_id: 'sess-2', credit_used: false },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await cancelEnrollment('enr-1')
+
+    expect(result).toEqual({})
+    const cancelled = calls.filter((c) => c.table === 'session_bookings' && c.op === 'update')
+    expect(cancelled.map((c) => c.filters.id)).toEqual(['bk-1', 'bk-2'])
+    for (const c of cancelled) {
+      expect(c.payload).toEqual({ status: 'cancelled', cancelled_at: expect.any(String) })
+    }
+  })
+
+  it('busca só reservas confirmadas nascidas da matrícula — avulsa paga com crédito continua valendo', async () => {
+    const { client, calls } = makeCancelClient({
+      enrollment: ENROLLMENT,
+      futureSessions: [{ id: 'sess-1' }],
+      bookings: [],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await cancelEnrollment('enr-1')
+
+    const lookup = calls.find((c) => c.table === 'session_bookings' && c.op === 'select')
+    expect(lookup?.filters).toMatchObject({
+      student_id: 'stu-1',
+      session_id: ['sess-1'],
+      status: 'confirmed',
+      from_enrollment: true,
+    })
+  })
+
+  it('estorna 1 crédito por reserva que havia debitado crédito', async () => {
+    const { client, rpc } = makeCancelClient({
+      enrollment: ENROLLMENT,
+      futureSessions: [{ id: 'sess-1' }, { id: 'sess-2' }],
+      bookings: [
+        { id: 'bk-1', session_id: 'sess-1', credit_used: true },
+        { id: 'bk-2', session_id: 'sess-2', credit_used: false },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await cancelEnrollment('enr-1')
+
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledWith('adjust_credits', {
+      p_student_id: 'stu-1',
+      p_org: 'org-1',
+      p_delta: 1,
+      p_type: 'refunded',
+      p_reason: expect.any(String),
+      p_session_id: 'sess-1',
+    })
+  })
+
+  it('não toca em reserva nenhuma quando a turma não tem sessão futura', async () => {
+    const { client, calls, rpc } = makeCancelClient({
+      enrollment: ENROLLMENT,
+      futureSessions: [],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await cancelEnrollment('enr-1')
+
+    expect(calls.some((c) => c.table === 'session_bookings')).toBe(false)
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('não mexe em reservas quando a própria desativação da matrícula falha', async () => {
+    const { client, calls } = makeCancelClient({
+      enrollment: ENROLLMENT,
+      futureSessions: [{ id: 'sess-1' }],
+      bookings: [{ id: 'bk-1', session_id: 'sess-1', credit_used: true }],
+      updateError: { message: 'boom' },
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await cancelEnrollment('enr-1')
+
+    expect(result).toEqual({ error: 'Erro ao cancelar matrícula.' })
+    expect(calls.some((c) => c.table === 'session_bookings')).toBe(false)
   })
 })
