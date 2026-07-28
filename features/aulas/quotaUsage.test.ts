@@ -15,7 +15,11 @@ const PLANO: PlanQuota = {
  * Mesma técnica de features/aulas/gridGeneration.test.ts.
  */
 function makeClient(opts: {
-  bookings?: { status: string; cancelled_at: string | null; class_sessions: { session_date: string } }[]
+  bookings?: {
+    status: string
+    cancelled_at: string | null
+    class_sessions: { session_date: string; classes: { start_time: string } }
+  }[]
   enrollments?: { classes: { day_of_week: number } }[]
 }) {
   const from = vi.fn((table: string) => {
@@ -40,8 +44,16 @@ describe('getQuotaSnapshot', () => {
   it('conta as reservas confirmadas do ciclo contra o limite do plano', async () => {
     const client = makeClient({
       bookings: [
-        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-07' } },
-        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-09' } },
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-07', classes: { start_time: '18:00:00' } },
+        },
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-09', classes: { start_time: '18:00:00' } },
+        },
       ],
       enrollments: [],
     })
@@ -57,9 +69,21 @@ describe('getQuotaSnapshot', () => {
   it('conta as reservas do aluno na data pedida para o teto diário', async () => {
     const client = makeClient({
       bookings: [
-        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-28' } },
-        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-28' } },
-        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-29' } },
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-28', classes: { start_time: '18:00:00' } },
+        },
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-28', classes: { start_time: '18:00:00' } },
+        },
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-29', classes: { start_time: '18:00:00' } },
+        },
       ],
       enrollments: [],
     })
@@ -88,13 +112,51 @@ describe('getQuotaSnapshot', () => {
         {
           status: 'cancelled',
           cancelled_at: '2026-07-07T10:00:00Z',
-          class_sessions: { session_date: '2026-07-07' },
+          class_sessions: { session_date: '2026-07-07', classes: { start_time: '18:00:00' } },
         },
       ],
       enrollments: [],
     })
 
     const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', PLANO, '2026-07-28')
+
+    expect(snap.used).toBe(0)
+  })
+
+  it('cancelamento tardio queima a vaga quando o plano não reembolsa', async () => {
+    const planoSemReembolso: PlanQuota = { ...PLANO, refundOnLateCancel: false }
+    const client = makeClient({
+      // Aula 2026-07-07 às 18:00 BRT = 21:00Z. Cancelou 20:00Z = 1h antes.
+      bookings: [
+        {
+          status: 'cancelled',
+          cancelled_at: '2026-07-07T20:00:00Z',
+          class_sessions: { session_date: '2026-07-07', classes: { start_time: '18:00:00' } },
+        },
+      ],
+      enrollments: [],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', planoSemReembolso, '2026-07-28')
+
+    expect(snap.used).toBe(1)
+  })
+
+  it('cancelamento dentro da janela não queima a vaga', async () => {
+    const planoSemReembolso: PlanQuota = { ...PLANO, refundOnLateCancel: false }
+    const client = makeClient({
+      // Cancelou 2 dias antes — muito além das 5h.
+      bookings: [
+        {
+          status: 'cancelled',
+          cancelled_at: '2026-07-05T12:00:00Z',
+          class_sessions: { session_date: '2026-07-07', classes: { start_time: '18:00:00' } },
+        },
+      ],
+      enrollments: [],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', planoSemReembolso, '2026-07-28')
 
     expect(snap.used).toBe(0)
   })

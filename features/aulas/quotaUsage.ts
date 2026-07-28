@@ -9,6 +9,7 @@ import {
   type QuotaBooking,
 } from '@/lib/utils/classQuota'
 import { addDaysStr } from '@/lib/utils/gridSchedule'
+import { canCancelWithRefund } from '@/lib/utils/creditRules'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -45,7 +46,7 @@ export async function getQuotaSnapshot(
 
   const { data: bookingsRaw } = await client
     .from('session_bookings')
-    .select('status, cancelled_at, class_sessions!inner(session_date)')
+    .select('status, cancelled_at, class_sessions!inner(session_date, classes!inner(start_time))')
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
     .gte('class_sessions.session_date', window.from)
@@ -55,18 +56,25 @@ export async function getQuotaSnapshot(
     (bookingsRaw ?? []) as unknown as {
       status: string
       cancelled_at: string | null
-      class_sessions: { session_date: string } | { session_date: string }[]
+      class_sessions:
+        | { session_date: string; classes: { start_time: string } | { start_time: string }[] }
+        | { session_date: string; classes: { start_time: string } | { start_time: string }[] }[]
     }[]
   ).map((b) => {
     const sess = Array.isArray(b.class_sessions) ? b.class_sessions[0] : b.class_sessions
+    const cls = Array.isArray(sess.classes) ? sess.classes[0] : sess.classes
+    const confirmed = b.status === 'confirmed'
+
+    // Horário da aula é hora de parede BRT (−03:00), igual gridSchedule.ts.
+    const startIso = `${sess.session_date}T${cls.start_time}-03:00`
+
     return {
       sessionDate: sess.session_date,
-      status: b.status === 'confirmed' ? 'confirmed' : 'cancelled',
-      // cancelledLate só muda o resultado quando o plano NÃO reembolsa; nos
-      // demais casos resolveQuota descarta a cancelada de qualquer jeito.
-      // Determinar "tarde" exige o horário da turma, então só pagamos esse
-      // custo quando importa — ver a nota abaixo.
-      cancelledLate: false,
+      status: confirmed ? ('confirmed' as const) : ('cancelled' as const),
+      cancelledLate:
+        !confirmed && b.cancelled_at !== null
+          ? !canCancelWithRefund(startIso, b.cancelled_at)
+          : false,
     }
   })
 
