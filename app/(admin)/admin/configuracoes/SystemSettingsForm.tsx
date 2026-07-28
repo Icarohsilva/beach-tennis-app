@@ -138,7 +138,7 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
             type="checkbox"
             checked={quotaEnabled}
             onChange={(e) => setQuotaEnabled(e.target.checked)}
-            className="mt-1"
+            className="mt-1 w-4 h-4 accent-brand-500"
           />
           <span>
             Limitar aulas pelo plano
