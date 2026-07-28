@@ -1,109 +1,38 @@
 // app/(auth)/nova-senha/page.tsx
-// Destino do link de recuperação de senha. O createBrowserClient (@supabase/ssr,
-// fluxo PKCE) detecta o ?code na URL e estabelece a sessão de recuperação
-// automaticamente ao carregar. Aqui o usuário define a nova senha via updateUser.
-'use client'
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Card } from '@/components/ui/Card'
-import Link from 'next/link'
+// Server Component: o formulário só aparece se /nova-senha/confirmar tiver acabado de
+// validar o token (cookie marcador) E existir sessão. Antes isto era um Client
+// Component que confiava no supabase-js para detectar o ?code sozinho — e quando o
+// code_verifier não estava naquele navegador ele silenciosamente reaproveitava a
+// sessão anterior, mostrando "link expirado" (ou trocando a senha da conta errada).
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { RECOVERY_COOKIE } from '@/lib/auth/sessionCookies'
+import { NovaSenhaForm } from './NovaSenhaForm'
+import { LinkInvalido } from './LinkInvalido'
 
-export default function NovaSenhaPage() {
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(false)
-  // linkInvalido: o Supabase volta com #error=...&error_code=otp_expired no hash
-  // quando o link expirou ou já foi usado.
-  const [linkInvalido, setLinkInvalido] = useState(false)
+export const dynamic = 'force-dynamic'
 
-  useEffect(() => {
-    const hash = window.location.hash
-    if (hash.includes('error') || hash.includes('otp_expired')) {
-      setLinkInvalido(true)
-    }
-  }, [])
+type SearchParams = { [key: string]: string | string[] | undefined }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    if (password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres.')
-      return
-    }
-    if (password !== confirm) {
-      setError('As senhas não coincidem.')
-      return
-    }
-    setLoading(true)
-    const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) {
-      // Sem sessão de recuperação válida (link expirado/inválido) o updateUser falha.
-      setError('Não foi possível alterar a senha. O link pode ter expirado — solicite um novo.')
-      setLinkInvalido(true)
-      setLoading(false)
-      return
-    }
-    setDone(true)
-    setLoading(false)
+const primeiro = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
+
+export default async function NovaSenhaPage({ searchParams }: { searchParams: SearchParams }) {
+  // Links que chegam com token ainda não trocado vão para a Route Handler, que é quem
+  // consegue gravar cookie. Cobre os links antigos (?code=) já na caixa de entrada e um
+  // template apontando para /nova-senha em vez de /nova-senha/confirmar.
+  const tokenHash = primeiro(searchParams.token_hash)
+  const code = primeiro(searchParams.code)
+  if (tokenHash || code) {
+    const qs = new URLSearchParams(tokenHash ? { token_hash: tokenHash } : { code: code! })
+    redirect(`/nova-senha/confirmar?${qs.toString()}`)
   }
 
-  if (done) {
-    return (
-      <Card>
-        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
-        <p className="text-green-400 text-sm text-center mb-4">
-          Senha alterada com sucesso!
-        </p>
-        <Link href="/login" className="block text-center text-brand-500 text-sm hover:underline">
-          Ir para o login
-        </Link>
-      </Card>
-    )
-  }
+  const erro = primeiro(searchParams.erro)
+  if (cookies().get(RECOVERY_COOKIE)?.value !== '1') return <LinkInvalido motivo={erro} />
 
-  if (linkInvalido) {
-    return (
-      <Card>
-        <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
-        <p className="text-red-400 text-sm text-center mb-4">
-          Este link de recuperação é inválido ou expirou.
-        </p>
-        <Link href="/recuperar-senha" className="block text-center text-brand-500 text-sm hover:underline">
-          Solicitar um novo link
-        </Link>
-      </Card>
-    )
-  }
+  const { data: { user } } = await createClient().auth.getUser()
+  if (!user) return <LinkInvalido motivo="sessao" />
 
-  return (
-    <Card>
-      <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
-      <h2 className="text-lg font-semibold text-white mb-6">Definir nova senha</h2>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Input
-          label="Nova senha"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <Input
-          label="Confirmar nova senha"
-          type="password"
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          required
-        />
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <Button type="submit" loading={loading} size="lg" className="w-full">
-          Salvar nova senha
-        </Button>
-      </form>
-    </Card>
-  )
+  return <NovaSenhaForm email={user.email ?? ''} />
 }

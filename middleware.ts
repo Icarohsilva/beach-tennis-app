@@ -3,6 +3,7 @@
 // Cookie check is enough for route guarding; real auth validation
 // happens in Server Component layouts (Node.js runtime) via createAdminClient.
 import { NextResponse, type NextRequest } from 'next/server'
+import { hasSessionCookie } from '@/lib/auth/sessionCookies'
 
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl
@@ -39,15 +40,8 @@ export function middleware(request: NextRequest) {
   }
 
   // Protected routes: require a Supabase session cookie.
-  // Supabase SSR sets cookies named sb-<project-ref>-auth-token. Sessões grandes
-  // (ex.: muito user_metadata) são FRAGMENTADAS em sb-<ref>-auth-token.0, .1, ...
-  // que NÃO terminam em "-auth-token". Por isso usamos includes() e não endsWith():
-  // senão usuários com cookie fragmentado caem em loop de redirect para /login.
-  const hasSession = request.cookies.getAll().some(
-    (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token'),
-  )
-
-  if (!hasSession) {
+  // Regra de nomes (fragmentação e code-verifier) em lib/auth/sessionCookies.ts.
+  if (!hasSessionCookie(request.cookies.getAll().map((c) => c.name))) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
