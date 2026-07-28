@@ -259,12 +259,17 @@ export interface TrialBooking {
   created_at: string
 }
 
+export type PlanCycle = 'weekly' | 'monthly'
+
 export interface SubscriptionPlan {
   id: string
   organization_id: string
   name: string
   description: string | null
   classes_per_week: number
+  cycle: PlanCycle
+  max_classes_per_day: number
+  refund_on_late_cancel: boolean
   is_active: boolean
 }
 
