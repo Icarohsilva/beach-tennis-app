@@ -433,6 +433,8 @@ export async function updateSystemSettings(settings: {
   pix_key?: string
   pix_key_owner?: string
   debt_block_grace_days?: number
+  quota_enforcement_enabled?: boolean
+  max_classes_per_day?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -478,6 +480,13 @@ export async function updateSystemSettings(settings: {
       settings.debt_block_grace_days > 90)
   ) {
     return { error: 'Carência de bloqueio inválida (0 a 90 dias).' }
+  }
+
+  if (
+    settings.max_classes_per_day !== undefined &&
+    (!Number.isInteger(settings.max_classes_per_day) || settings.max_classes_per_day < 1)
+  ) {
+    return { error: 'Máximo de aulas por dia inválido.' }
   }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).

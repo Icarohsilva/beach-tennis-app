@@ -9,7 +9,18 @@ import { ensureClassDebt } from './classDebt'
 function makeClient(opts: {
   booking?: { credit_used: boolean } | null
   membership?: { partner: string | null } | null
-  subscription?: { gateway?: string; current_period_end: string | null } | null
+  subscription?:
+    | {
+        gateway?: string
+        current_period_end: string | null
+        subscription_plans?: {
+          classes_per_week: number
+          cycle: string
+          max_classes_per_day: number
+          refund_on_late_cancel: boolean
+        }
+      }
+    | null
   price?: string | null
   insertError?: { code: string } | null
 }) {
@@ -110,7 +121,16 @@ describe('ensureClassDebt', () => {
     const { client, inserted } = makeClient({
       booking: { credit_used: false },
       membership: { partner: null },
-      subscription: { gateway: 'mercadopago', current_period_end: '2099-01-01T00:00:00Z' },
+      subscription: {
+        gateway: 'mercadopago',
+        current_period_end: '2099-01-01T00:00:00Z',
+        subscription_plans: {
+          classes_per_week: 2,
+          cycle: 'monthly',
+          max_classes_per_day: 2,
+          refund_on_late_cancel: true,
+        },
+      },
       price: '60',
     })
 

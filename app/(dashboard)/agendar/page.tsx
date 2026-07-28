@@ -7,6 +7,10 @@ import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
+import { getActivePlan } from '@/lib/billing/planEligibility'
+import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
+import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
+import { brtToday } from '@/lib/utils/gridSchedule'
 import type { Class, ClassSession } from '@/types'
 
 export default async function AgendarPage() {
@@ -65,6 +69,14 @@ export default async function AgendarPage() {
   const in30Str = in30.toISOString().slice(0, 10)
 
   const adminClient = createAdminClient()
+
+  // Retrato da cota do plano (se a academia liga a cota e o aluno tem plano ativo).
+  const plan = orgId ? await getActivePlan(adminClient, user.id, orgId) : null
+  const quotaOn = orgId ? await isQuotaEnforced(adminClient, orgId) : false
+  const quota =
+    quotaOn && plan && orgId
+      ? await getQuotaSnapshot(adminClient, user.id, orgId, plan, brtToday(new Date()))
+      : null
 
   // Fetch next 30 days of sessions for available classes
   const { data: sessionsRaw } = classIds.length > 0
@@ -266,6 +278,22 @@ export default async function AgendarPage() {
         <Link href="/financeiro" className="text-sm text-brand-500 font-medium">
           Sem créditos? Compre uma aula avulsa →
         </Link>
+      )}
+
+      {quota && (
+        <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+          <p className="text-sm text-slate-400">
+            Aulas do plano {plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}
+          </p>
+          <p className="text-lg font-semibold text-white">
+            {quota.used} de {quota.limit}
+          </p>
+          {quota.remaining === 0 && (
+            <p className="text-xs text-brand-400 mt-1">
+              Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
+            </p>
+          )}
+        </div>
       )}
 
       <Link

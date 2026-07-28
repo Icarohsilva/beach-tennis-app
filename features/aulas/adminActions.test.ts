@@ -21,10 +21,16 @@ vi.mock('./authGuards', () => ({
   requireAdmin: vi.fn(),
 }))
 
-import { adminSkipEnrollmentDate, adminUnskipEnrollmentDate, cancelEnrollment } from './adminActions'
+import {
+  adminSkipEnrollmentDate,
+  adminUnskipEnrollmentDate,
+  cancelEnrollment,
+  enrollStudentInClass,
+} from './adminActions'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
 import { revalidatePath } from 'next/cache'
+import type { PlanQuota } from '@/lib/utils/classQuota'
 
 /**
  * Stub do client Supabase escopado ao que adminSkipEnrollmentDate/
@@ -389,5 +395,130 @@ describe('cancelEnrollment', () => {
 
     expect(result).toEqual({ error: 'Erro ao cancelar matrícula.' })
     expect(calls.some((c) => c.table === 'session_bookings')).toBe(false)
+  })
+})
+
+/**
+ * Stub escopado ao que enrollStudentInClass precisa: lookup de classes
+ * (.single), memberships (.maybeSingle, partner: null para exercitar o
+ * caminho de plano), a cota nova (system_settings + student_subscriptions,
+ * ambos via .maybeSingle) e as contagens de enrollments (existing/capacity
+ * via count head, e a lista de matrículas ativas para a cota via .then).
+ * Adaptado do stub ilustrativo do plano: o original não tratava 'classes' nem
+ * 'memberships' em single()/maybeSingle() (voltavam null, o que barrava a
+ * function antes mesmo de chegar na cota) e não anexava reconcileEnrollmentCredits.
+ */
+function makeEnrollClient(opts: {
+  plan: PlanQuota
+  activeEnrollments: number
+  quotaEnforced: boolean
+  maxStudents?: number
+}) {
+  const rpc = vi.fn().mockResolvedValue({ error: null, data: null })
+  const upsert = vi.fn().mockResolvedValue({ error: null })
+
+  const from = vi.fn((table: string) => {
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: () => builder,
+      // Encadeamento usado por reconcileEnrollmentCredits (chamada ao fim de
+      // enrollStudentInClass) em class_sessions: gte/lte/order antes do await.
+      gte: () => builder,
+      lte: () => builder,
+      order: () => builder,
+      in: () => builder,
+      upsert,
+      single: () => {
+        if (table === 'classes') {
+          return Promise.resolve({
+            data: { id: 'class-x', is_active: true, max_students: opts.maxStudents ?? 10 },
+          })
+        }
+        return Promise.resolve({ data: null, error: null })
+      },
+      maybeSingle: () => {
+        if (table === 'memberships') {
+          return Promise.resolve({ data: { partner: null } })
+        }
+        if (table === 'system_settings') {
+          return Promise.resolve({ data: { value: String(opts.quotaEnforced) } })
+        }
+        if (table === 'student_subscriptions') {
+          return Promise.resolve({
+            data: {
+              gateway: 'manual',
+              current_period_end: null,
+              subscription_plans: {
+                classes_per_week: opts.plan.classesPerWeek,
+                cycle: opts.plan.cycle,
+                max_classes_per_day: opts.plan.maxClassesPerDay,
+                refund_on_late_cancel: opts.plan.refundOnLateCancel,
+              },
+            },
+          })
+        }
+        return Promise.resolve({ data: null })
+      },
+      // Sem .single()/.maybeSingle() no fim da cadeia: usado pelas contagens
+      // de enrollments (count: 'exact', head: true) e pela lista de matrículas
+      // ativas da cota (select('class_id')). `count` fica undefined nas duas
+      // contagens — o `?? 0` do caller trata como "0 já matriculado/lotado",
+      // que é o que os testes precisam (nenhum já ocupa a vaga ou a turma).
+      then: (resolve: (v: { data: unknown; error: unknown; count?: number }) => void) => {
+        const data =
+          table === 'enrollments'
+            ? Array.from({ length: opts.activeEnrollments }, (_, i) => ({
+                class_id: `outra-turma-${i}`,
+              }))
+            : []
+        return Promise.resolve({ data, error: null }).then(resolve)
+      },
+    }
+    return builder
+  })
+
+  return { from, rpc } as never
+}
+
+describe('enrollStudentInClass — cota de fixas', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+  })
+
+  it('rejeita a fixa que ultrapassa classes_per_week do plano', async () => {
+    // Plano 2x/semana, aluno já com 2 matrículas fixas ativas (em OUTRAS turmas).
+    const client = makeEnrollClient({
+      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      activeEnrollments: 2,
+      quotaEnforced: true,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await enrollStudentInClass('stu-1', 'class-3')
+
+    expect(result.error).toContain('2 aulas fixas')
+  })
+
+  it('aceita a fixa que bate no limite exato', async () => {
+    const client = makeEnrollClient({
+      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      activeEnrollments: 1,
+      quotaEnforced: true,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await expect(enrollStudentInClass('stu-1', 'class-2')).resolves.toEqual({})
+  })
+
+  it('não valida nada quando a cota está desligada', async () => {
+    const client = makeEnrollClient({
+      plan: { classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      activeEnrollments: 5,
+      quotaEnforced: false,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await expect(enrollStudentInClass('stu-1', 'class-9')).resolves.toEqual({})
   })
 })

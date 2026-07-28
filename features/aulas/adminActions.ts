@@ -6,7 +6,8 @@ import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/
 import { format, endOfMonth } from 'date-fns'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './creditReconciliation'
-import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
+import { isQuotaEnforced } from './quotaSettings'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
@@ -79,6 +80,30 @@ export async function enrollStudentInClass(
       return {
         error:
           'Aula fixa exige plano ativo ou Wellhub/TotalPass. Para uma aula pontual, adicione o aluno direto na sessão.',
+      }
+    }
+  }
+
+  // Cota: o plano define quantas turmas fixas o aluno pode ter. Sem isto o
+  // admin vincula um plano de 2x/semana a cinco turmas sem nenhum aviso.
+  if (await isQuotaEnforced(adminClient, orgId)) {
+    const plan = await getActivePlan(adminClient, studentId, orgId)
+    if (plan) {
+      const { data: activeRaw } = await adminClient
+        .from('enrollments')
+        .select('class_id')
+        .eq('student_id', studentId)
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+
+      const jaTem = ((activeRaw ?? []) as { class_id: string }[]).filter(
+        (e) => e.class_id !== classId,
+      ).length
+
+      if (jaTem + 1 > plan.classesPerWeek) {
+        return {
+          error: `O plano deste aluno dá ${plan.classesPerWeek} aulas fixas por semana e ele já tem ${jaTem}. Troque o plano ou remova uma turma fixa.`,
+        }
       }
     }
   }
@@ -579,12 +604,20 @@ export async function addStudentToSession(
 
   const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
 
-  // Note o hasOpenDebt: false — o admin ignora o bloqueio (ver doc acima).
+  // Note o hasOpenDebt: false — o admin ignora o bloqueio (ver doc acima). Pela
+  // mesma razão o admin também ignora a cota e o teto diário (spec de cota
+  // §5, "addStudentToSession: inalterado"): quotaEnforced: false desliga todo
+  // o eixo em resolveClassAccess, então os demais campos de cota nunca são
+  // lidos — os valores abaixo só existem para satisfazer o tipo.
   const decision = resolveClassAccess({
     partner: mem.partner as CheckinPartner | null,
     hasActivePlan,
     creditsBalance: mem.credits_balance,
     hasOpenDebt: false,
+    quotaEnforced: false,
+    quotaRemaining: null,
+    bookingsOnDate: 0,
+    maxClassesPerDay: Infinity,
   })
 
   // 'denied' é inalcançável com hasOpenDebt: false, mas o TypeScript não sabe.

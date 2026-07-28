@@ -22,6 +22,9 @@ const emptyCreateForm: CreatePlanData = {
   name: '',
   description: '',
   classes_per_week: 2,
+  cycle: 'monthly',
+  max_classes_per_day: 2,
+  refund_on_late_cancel: true,
 }
 
 function formatCurrency(amount: number) {
@@ -137,6 +140,43 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
                 onChange={(e) => setCreateForm((f) => ({ ...f, classes_per_week: parseInt(e.target.value) || 0 }))}
               />
             </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Ciclo da cota</label>
+                <select
+                  value={createForm.cycle}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, cycle: e.target.value as 'weekly' | 'monthly' }))
+                  }
+                  className="w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-white text-sm"
+                >
+                  <option value="monthly">Mensal — remaneja aulas dentro do mês</option>
+                  <option value="weekly">Semanal — zera todo domingo</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Máximo de aulas por dia</label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={createForm.max_classes_per_day}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, max_classes_per_day: Math.max(1, parseInt(e.target.value) || 1) }))
+                  }
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={createForm.refund_on_late_cancel}
+                onChange={(e) =>
+                  setCreateForm((f) => ({ ...f, refund_on_late_cancel: e.target.checked }))
+                }
+              />
+              Cancelamento fora do prazo devolve a aula
+            </label>
             <div className="flex gap-2">
               <Button size="sm" variant="primary" loading={pending} onClick={handleCreatePlan}>
                 Criar Plano
