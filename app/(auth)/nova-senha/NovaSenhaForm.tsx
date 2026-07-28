@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { RECOVERY_COOKIE } from '@/lib/auth/sessionCookies'
+import { mensagemErroSenha } from '@/lib/auth/authErrors'
 
 export function NovaSenhaForm({ email }: { email: string }) {
   const [password, setPassword] = useState('')
@@ -33,7 +34,7 @@ export function NovaSenhaForm({ email }: { email: string }) {
     const supabase = createClient()
     const { error: erroUpdate } = await supabase.auth.updateUser({ password })
     if (erroUpdate) {
-      setError(erroUpdate.message || 'Não foi possível alterar a senha. Tente novamente.')
+      setError(mensagemErroSenha(erroUpdate.code))
       setLoading(false)
       return
     }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { mensagemErroSenha } from '@/lib/auth/authErrors'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
@@ -42,7 +43,7 @@ export function AccountSecurityForm({ currentEmail }: Props) {
     if (wantsPassword) {
       const { error: pwErr } = await supabase.auth.updateUser({ password })
       if (pwErr) {
-        setError('Não foi possível alterar a senha. Tente sair e entrar novamente.')
+        setError(mensagemErroSenha(pwErr.code))
         setPending(false)
         return
       }

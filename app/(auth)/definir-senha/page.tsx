@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { clearMustChangePassword } from '@/features/auth/actions'
+import { mensagemErroSenha } from '@/lib/auth/authErrors'
 import { acceptLegalDocuments } from '@/features/legal/actions'
 import { STUDENT_REQUIRED_SLUGS } from '@/lib/legal/documents'
 import { Button } from '@/components/ui/Button'
@@ -42,7 +43,8 @@ export default function DefinirSenhaPage() {
     const supabase = createClient()
     const { data: userData, error: updErr } = await supabase.auth.updateUser({ password })
     if (updErr) {
-      setError('Não foi possível alterar a senha. Tente novamente.')
+      // same_password é o erro mais provável aqui: o aluno repete a senha temporária.
+      setError(mensagemErroSenha(updErr.code))
       setLoading(false)
       return
     }
