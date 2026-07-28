@@ -147,10 +147,10 @@ export default async function AdminDashboardPage() {
       </Reveal>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Alunos ativos" value={activeStudents ?? 0} icon={Users} step={1} />
-        <StatCard label="Aulas hoje" value={todaySessionsCount ?? 0} icon={CalendarDays} step={2} />
-        <StatCard label="Matrículas ativas" value={activeEnrollments ?? 0} icon={ClipboardCheck} step={3} />
-        <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} icon={Sun} step={4} />
+        <StatCard label="Alunos ativos" value={activeStudents ?? 0} icon={Users} step={1} href="/admin/alunos" />
+        <StatCard label="Aulas hoje" value={todaySessionsCount ?? 0} icon={CalendarDays} step={2} href="/admin/grade" />
+        <StatCard label="Matrículas ativas" value={activeEnrollments ?? 0} icon={ClipboardCheck} step={3} href="/admin/grade" />
+        <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} icon={Sun} step={4} href="/admin/grade/dayuse" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

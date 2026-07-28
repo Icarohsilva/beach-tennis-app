@@ -1,5 +1,7 @@
 // components/ui/StatCard.tsx
+import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
+import { ArrowUpRight } from 'lucide-react'
 import { AnimatedNumber } from './AnimatedNumber'
 import { cn } from '@/lib/utils/cn'
 
@@ -13,6 +15,12 @@ interface StatCardProps {
   suffix?: string
   /** Posição na cascata de entrada. */
   step?: number
+  /**
+   * Destino do card. Com href o card inteiro vira link (a seta no canto avisa que
+   * é clicável, inclusive no toque — não depende de hover). Sem href, continua
+   * sendo só um indicador.
+   */
+  href?: string
   className?: string
 }
 
@@ -20,15 +28,17 @@ interface StatCardProps {
  * Indicador numérico do painel. Números contam de zero ao montar; textos (ex.:
  * 'Wellhub') entram direto. O ícone é decorativo — o rótulo já nomeia o dado.
  */
-export function StatCard({ label, value, hint, icon: Icon, suffix, step = 0, className }: StatCardProps) {
-  return (
-    <div
-      className={cn(
-        'glass reveal group relative overflow-hidden rounded-2xl border border-white/[0.07] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-600/40',
-        className,
-      )}
-      style={{ '--reveal-delay': `${step * 70}ms` } as React.CSSProperties}
-    >
+export function StatCard({ label, value, hint, icon: Icon, suffix, step = 0, href, className }: StatCardProps) {
+  const classes = cn(
+    'glass reveal group relative block overflow-hidden rounded-2xl border border-white/[0.07] p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-600/40',
+    href &&
+      'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+    className,
+  )
+  const style = { '--reveal-delay': `${step * 70}ms` } as React.CSSProperties
+
+  const conteudo = (
+    <>
       {/* Brilho de marca que acende no hover. */}
       <div
         aria-hidden
@@ -48,7 +58,30 @@ export function StatCard({ label, value, hint, icon: Icon, suffix, step = 0, cla
         {typeof value === 'number' ? <AnimatedNumber value={value} suffix={suffix} /> : value}
       </p>
 
-      {hint && <p className="relative mt-1 text-xs text-slate-400">{hint}</p>}
+      {hint && (
+        <p className={cn('relative mt-1 text-xs text-slate-400', href && 'pr-5')}>{hint}</p>
+      )}
+
+      {href && (
+        <ArrowUpRight
+          aria-hidden
+          className="absolute bottom-3 right-3 h-4 w-4 text-slate-500 transition-colors duration-200 group-hover:text-brand-400"
+        />
+      )}
+    </>
+  )
+
+  if (href) {
+    return (
+      <Link href={href} className={classes} style={style}>
+        {conteudo}
+      </Link>
+    )
+  }
+
+  return (
+    <div className={classes} style={style}>
+      {conteudo}
     </div>
   )
 }
