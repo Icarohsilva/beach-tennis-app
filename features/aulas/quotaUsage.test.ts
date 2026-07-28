@@ -1,0 +1,101 @@
+import { describe, it, expect, vi } from 'vitest'
+import { getQuotaSnapshot } from './quotaUsage'
+import type { PlanQuota } from '@/lib/utils/classQuota'
+
+const PLANO: PlanQuota = {
+  classesPerWeek: 2,
+  cycle: 'monthly',
+  maxClassesPerDay: 2,
+  refundOnLateCancel: true,
+}
+
+/**
+ * Stub escopado ao que getQuotaSnapshot consulta: reservas do aluno na janela
+ * (com a data da sessão embutida) e matrículas fixas ativas com o dia da turma.
+ * Mesma técnica de features/aulas/gridGeneration.test.ts.
+ */
+function makeClient(opts: {
+  bookings?: { status: string; cancelled_at: string | null; class_sessions: { session_date: string } }[]
+  enrollments?: { classes: { day_of_week: number } }[]
+}) {
+  const from = vi.fn((table: string) => {
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: () => builder,
+      gte: () => builder,
+      lte: () => builder,
+      in: () => builder,
+      then: (resolve: (v: { data: unknown }) => void) => {
+        const data =
+          table === 'session_bookings' ? opts.bookings ?? [] : opts.enrollments ?? []
+        return Promise.resolve({ data }).then(resolve)
+      },
+    }
+    return builder
+  })
+  return { from } as never
+}
+
+describe('getQuotaSnapshot', () => {
+  it('conta as reservas confirmadas do ciclo contra o limite do plano', async () => {
+    const client = makeClient({
+      bookings: [
+        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-07' } },
+        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-09' } },
+      ],
+      enrollments: [],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', PLANO, '2026-07-28')
+
+    // Julho/2026 tem 4 segundas → limite 2×4 = 8.
+    expect(snap.limit).toBe(8)
+    expect(snap.used).toBe(2)
+    expect(snap.remaining).toBe(6)
+  })
+
+  it('conta as reservas do aluno na data pedida para o teto diário', async () => {
+    const client = makeClient({
+      bookings: [
+        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-28' } },
+        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-28' } },
+        { status: 'confirmed', cancelled_at: null, class_sessions: { session_date: '2026-07-29' } },
+      ],
+      enrollments: [],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', PLANO, '2026-07-28')
+
+    expect(snap.bookingsOnDate).toBe(2)
+  })
+
+  it('as fixas elevam o limite quando o mês tem mais ocorrências que a cota', async () => {
+    // 2 turmas fixas na quarta-feira; julho/2026 tem 5 quartas (01,08,15,22,29).
+    const client = makeClient({
+      bookings: [],
+      enrollments: [{ classes: { day_of_week: 3 } }, { classes: { day_of_week: 3 } }],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', PLANO, '2026-07-28')
+
+    // 2 fixas × 5 quartas = 10 > 8 do plano.
+    expect(snap.limit).toBe(10)
+  })
+
+  it('ignora as canceladas quando o plano reembolsa', async () => {
+    const client = makeClient({
+      bookings: [
+        {
+          status: 'cancelled',
+          cancelled_at: '2026-07-07T10:00:00Z',
+          class_sessions: { session_date: '2026-07-07' },
+        },
+      ],
+      enrollments: [],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', PLANO, '2026-07-28')
+
+    expect(snap.used).toBe(0)
+  })
+})
