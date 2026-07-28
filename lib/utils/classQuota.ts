@@ -32,3 +32,19 @@ export function cycleWindow(dateStr: string, cycle: PlanCycle): { from: string; 
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(lastDay)}` }
 }
+
+/**
+ * Semanas seg–dom que COMEÇAM dentro de [from, to] — ou seja, quantas
+ * segundas-feiras a janela contém. É a única contagem determinística de
+ * "semanas do mês" (4 ou 5). O descasamento de até 1 para alunos com fixa em
+ * outro dia da semana é absorvido pelo max() de resolveQuota.
+ */
+export function countCycleWeeks(from: string, to: string): number {
+  let count = 0
+  let cursor = from
+  while (cursor <= to) {
+    if (dowOf(cursor) === 1) count++
+    cursor = addDaysStr(cursor, 1)
+  }
+  return count
+}
