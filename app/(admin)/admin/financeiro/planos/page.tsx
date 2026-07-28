@@ -4,8 +4,10 @@ import { PlansManager } from '../PlansManager'
 import { FinanceiroSubnav } from '../FinanceiroSubnav'
 import { SalesSettingsCard } from './SalesSettingsCard'
 import type { SubscriptionPlan, PlanBillingOption } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function PlanosPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   await requireOwner()
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()

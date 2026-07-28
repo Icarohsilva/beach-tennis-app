@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Users } from 'lucide-react'
 import type { Membership, StudentLevel } from '@/types'
 import { CriarAlunoButton } from './CriarAlunoButton'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -21,6 +22,7 @@ interface Props {
 export const dynamic = 'force-dynamic'
 
 export default async function AlunosPage({ searchParams }: Props) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 

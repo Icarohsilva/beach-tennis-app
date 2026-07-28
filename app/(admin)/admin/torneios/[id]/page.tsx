@@ -16,6 +16,7 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
 import type { MatchResultInput } from '@/lib/torneios/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: 'Rascunho',
@@ -31,6 +32,7 @@ function normalizeProf<T>(v: T | T[] | null): T | null {
 interface PageProps { params: { id: string } }
 
 export default async function AdminTorneioDetailPage({ params }: PageProps) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
   if (!orgId) notFound()

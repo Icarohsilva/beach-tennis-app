@@ -4,8 +4,10 @@ import { CreateDayUseForm } from '@/features/dayuse/CreateDayUseForm'
 import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function AdminDayUsePage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
   const today = new Date().toISOString().slice(0, 10)

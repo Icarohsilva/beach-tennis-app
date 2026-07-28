@@ -9,6 +9,7 @@ import { StudentProfileClient } from './StudentProfileClient'
 import { RecommendPlanCard } from './RecommendPlanCard'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import type { Profile, Membership, Enrollment, Class, StudentLevel, PlanBillingOption } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface Props {
   params: { id: string }
@@ -22,6 +23,7 @@ const paymentLabel: Record<string, string> = {
 }
 
 export default async function StudentProfilePage({ params }: Props) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
   if (!orgId) notFound()

@@ -11,12 +11,14 @@ import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getWeekWindow, getMonthWindow, shiftWindow, type WindowKind } from '@/lib/utils/monthWindow'
 import { formatDate } from '@/lib/utils/dateHelpers'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface PageProps {
   searchParams: { periodo?: string; offset?: string }
 }
 
 export default async function RelatoriosPage({ searchParams }: PageProps) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const orgId = await getCurrentOrgId()
   const kind: WindowKind = searchParams.periodo === 'mes' ? 'month' : 'week'
   const offset = Number.parseInt(searchParams.offset ?? '0', 10) || 0

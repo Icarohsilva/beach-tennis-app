@@ -4,8 +4,10 @@ import { FinanceiroSubnav } from '../FinanceiroSubnav'
 import { MpConnectCard } from './MpConnectCard'
 import { GatewayRequestCard } from './GatewayRequestCard'
 import type { GatewayIntegrationRequest } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function IntegracoesPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const ctx = await requireOwner()
   const adminClient = createAdminClient()
 

@@ -7,8 +7,10 @@ import { getOrgDebtors } from '@/features/financeiro/debtQueries'
 import { DebtorRow, type DebtItem } from './DebtorRow'
 import { ChargeButton } from './ChargeButton'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function CobrancaPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   await requireOwner()
   const adminClient = createAdminClient()
   const orgId = (await getCurrentOrgId()) as string

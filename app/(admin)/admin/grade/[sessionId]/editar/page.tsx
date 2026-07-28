@@ -4,8 +4,10 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { EditClassForm } from '@/features/aulas/EditClassForm'
 import { ClassRosterSection } from '@/features/aulas/ClassRosterSection'
 import type { Class } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function EditClassPage({ params }: { params: { sessionId: string } }) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const classId = params.sessionId
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()

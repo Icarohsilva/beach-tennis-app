@@ -13,12 +13,14 @@ import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import type { ClassSession, Profile, Membership, Attendance } from '@/types'
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface Props {
   params: { sessionId: string }
 }
 
 export default async function SessionDetailPage({ params }: Props) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 

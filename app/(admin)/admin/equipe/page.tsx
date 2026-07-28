@@ -2,10 +2,12 @@
 import { createAdminClient, requireOwner } from '@/lib/supabase/server'
 import { InviteCard } from './InviteCard'
 import { EquipeManager, type ProfessorRow } from './EquipeManager'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export const dynamic = 'force-dynamic'
 
 export default async function EquipePage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const ctx = await requireOwner() // redireciona professor → dashboard
 
   const admin = createAdminClient()

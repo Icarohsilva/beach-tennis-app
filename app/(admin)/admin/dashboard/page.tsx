@@ -25,8 +25,10 @@ import { DayTimeline, type TimelineSession } from '@/features/painel/DayTimeline
 import { OccupancyPanel } from '@/features/painel/OccupancyPanel'
 import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export default async function AdminDashboardPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
   const staff = await getStaffContext()

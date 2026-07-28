@@ -2,10 +2,12 @@
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { IntegracoesClient } from './IntegracoesClient'
 import type { OrgIntegrationView, PendingCheckin } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 export const dynamic = 'force-dynamic'
 
 export default async function IntegracoesPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 

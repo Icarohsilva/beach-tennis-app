@@ -8,6 +8,7 @@ import { TournamentDiscountForm } from './TournamentDiscountForm'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface SystemSettings {
   credit_expiry_days: number
@@ -16,6 +17,7 @@ interface SystemSettings {
 }
 
 export default async function ConfiguracoesPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   await requireOwner()
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()

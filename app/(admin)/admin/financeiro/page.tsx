@@ -12,6 +12,7 @@ import {
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { getOrgDebtors } from '@/features/financeiro/debtQueries'
 import type { PaymentStatus } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface RevenueRow {
   amount: number
@@ -41,6 +42,7 @@ interface PendingPayment {
 }
 
 export default async function FinanceiroPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   await requireOwner() // professor → redirecionado para /admin/dashboard
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()

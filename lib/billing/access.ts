@@ -1,4 +1,5 @@
 // lib/billing/access.ts
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/server'
 import {
   computePlatformAccess,
@@ -15,7 +16,11 @@ export interface PlatformAccessResult {
 
 // Lê a assinatura da plataforma da org e calcula o acesso ao painel admin.
 // Service role (ignora RLS); a tabela não é exposta ao cliente.
-export async function getPlatformAccess(orgId: string): Promise<PlatformAccessResult> {
+// cache() do React: no load "duro" o layout e o gate da página consultam o mesmo
+// acesso — com o cache, uma consulta só por request.
+export const getPlatformAccess = cache(async function getPlatformAccess(
+  orgId: string,
+): Promise<PlatformAccessResult> {
   const admin = createAdminClient()
   const { data } = await admin
     .from('platform_subscriptions')
@@ -41,4 +46,4 @@ export async function getPlatformAccess(orgId: string): Promise<PlatformAccessRe
     currentPeriodEnd: state.currentPeriodEnd,
     daysLeft,
   }
-}
+})

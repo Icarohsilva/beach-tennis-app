@@ -12,6 +12,7 @@ import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
 import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -26,6 +27,7 @@ function ago(iso: string): string {
 }
 
 export default async function GradePage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 

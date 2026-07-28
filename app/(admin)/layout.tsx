@@ -91,7 +91,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin/configuracoes', label: 'Configurações', area: 'configuracoes' },
     { href: '/admin/equipe', label: 'Equipe', area: 'equipe' },
   ]
-  const navLinks = allNav.filter((l) => canAccessArea(l.area, isOwner))
+  // Academia bloqueada só enxerga a página de assinatura: sem menu, sem link para
+  // clicar. O gate por página (lib/billing/guard.ts) é quem garante o bloqueio de
+  // fato — esconder o menu é a parte visível, não a tranca.
+  const navLinks = access.allowed ? allNav.filter((l) => canAccessArea(l.area, isOwner)) : []
 
   const tourTargets: Record<string, string> = {
     '/admin/dashboard': 'tour-admin-dashboard',

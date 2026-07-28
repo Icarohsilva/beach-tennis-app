@@ -10,6 +10,7 @@ import { CreateTournamentForm } from './CreateTournamentForm'
 import { TournamentStatusActions } from './TournamentStatusActions'
 import { Trophy } from 'lucide-react'
 import type { Tournament, TournamentStatus } from '@/types'
+import { requirePlatformAccess } from '@/lib/billing/guard'
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: 'Rascunho',
@@ -26,6 +27,7 @@ const STATUS_VARIANTS: Record<TournamentStatus, 'default' | 'success' | 'warning
 }
 
 export default async function AdminTorneiosPage() {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
