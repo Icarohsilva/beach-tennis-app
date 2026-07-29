@@ -114,6 +114,45 @@ describe('reconcileAllActiveEnrollments', () => {
     )
   })
 
+  it('cacheia isQuotaEnforced por academia — não repete a query por aluno', async () => {
+    const client = makeClient({
+      enrollments: [
+        {
+          student_id: 'stu-1', class_id: 'class-1', organization_id: 'org-1',
+          enrolled_at: '2026-01-01T00:00:00Z',
+          classes: { name: 'Turma', day_of_week: 2, start_time: '18:00:00' },
+        },
+        {
+          student_id: 'stu-2', class_id: 'class-2', organization_id: 'org-1',
+          enrolled_at: '2026-01-01T00:00:00Z',
+          classes: { name: 'Turma', day_of_week: 3, start_time: '18:00:00' },
+        },
+      ],
+      memberships: [
+        { user_id: 'stu-1', organization_id: 'org-1', partner: null },
+        { user_id: 'stu-2', organization_id: 'org-1', partner: null },
+      ],
+      subscriptions: [
+        { student_id: 'stu-1', organization_id: 'org-1', gateway: 'manual', current_period_end: null },
+        { student_id: 'stu-2', organization_id: 'org-1', gateway: 'manual', current_period_end: null },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(true)
+    vi.mocked(getActivePlan).mockResolvedValue(PLANO)
+    vi.mocked(getQuotaSnapshot).mockResolvedValue({
+      limit: 8, used: 0, remaining: 8, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
+    })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    // 2 alunos na mesma academia — a pergunta "a cota está ligada?" só é
+    // feita uma vez, não uma vez por aluno (evita reintroduzir o risco de
+    // timeout que o fan-out por org já existe pra evitar).
+    expect(isQuotaEnforced).toHaveBeenCalledTimes(1)
+  })
+
   it('cota desligada não aplica orçamento (comportamento de hoje, sem limite)', async () => {
     const client = makeClient({
       enrollments: [{

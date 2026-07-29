@@ -31,7 +31,7 @@ export async function reconcileAllActiveEnrollments(
 
   let enrollQuery = adminClient
     .from('enrollments')
-    .select('student_id, class_id, organization_id, enrolled_at, classes!inner(name, day_of_week, start_time)')
+    .select('student_id, class_id, organization_id, classes!inner(name, day_of_week, start_time)')
     .eq('is_active', true)
   if (orgId) enrollQuery = enrollQuery.eq('organization_id', orgId)
   const { data: enrollmentsRaw } = await enrollQuery
@@ -41,7 +41,6 @@ export async function reconcileAllActiveEnrollments(
     student_id: string
     class_id: string
     organization_id: string
-    enrolled_at: string
     classes: ClassInfo | ClassInfo[]
   }
   const enrollments = ((enrollmentsRaw ?? []) as unknown as Row[]).map((e) => {
@@ -50,7 +49,6 @@ export async function reconcileAllActiveEnrollments(
       studentId: e.student_id,
       classId: e.class_id,
       organizationId: e.organization_id,
-      enrolledAt: e.enrolled_at,
       className: cls.name,
       dayOfWeek: cls.day_of_week,
       startTime: cls.start_time,
@@ -94,6 +92,18 @@ export async function reconcileAllActiveEnrollments(
   const totals = { booked: 0, skipped: 0, quotaSkipped: 0, processedEnrollments: 0, failed: 0 }
   const skips: QuotaSkip[] = []
 
+  // Cache por academia: dezenas/centenas de alunos do mesmo org não podem
+  // repetir a mesma pergunta ("essa academia ligou a cota?") uma vez por
+  // aluno — isso reintroduziria o risco de timeout serverless que o fan-out
+  // por org (Auditoria #2, abaixo) já existe pra evitar.
+  const quotaEnforcedByOrg = new Map<string, boolean>()
+  async function isQuotaEnforcedCached(organizationId: string): Promise<boolean> {
+    if (!quotaEnforcedByOrg.has(organizationId)) {
+      quotaEnforcedByOrg.set(organizationId, await isQuotaEnforced(adminClient, organizationId))
+    }
+    return quotaEnforcedByOrg.get(organizationId) as boolean
+  }
+
   // Agrupa por aluno (dentro da mesma academia) pra aplicar um orçamento de
   // cota compartilhado entre as fixas dele nesta rodada, na ordem do dia da
   // semana — quem vem mais cedo tem prioridade sobre quem vem depois.
@@ -116,7 +126,7 @@ export async function reconcileAllActiveEnrollments(
     // sem plano ativo — este último é uma inconsistência pré-existente fora
     // do escopo, tratada aqui como "sem limite").
     let budget: number | null = null
-    if (!partner && (await isQuotaEnforced(adminClient, organizationId))) {
+    if (!partner && (await isQuotaEnforcedCached(organizationId))) {
       const plan = await getActivePlan(adminClient, studentId, organizationId)
       if (plan) {
         const snapshot = await getQuotaSnapshot(adminClient, studentId, organizationId, plan, from)
