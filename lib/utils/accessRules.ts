@@ -39,7 +39,11 @@ export interface AccessInput {
  * crédito comprado o compra. Sem essa ordem os eixos se sobreporiam quando o
  * teto estoura com cota ainda disponível.
  *
- * O admin ignora tudo isto: addStudentToSession não passa por aqui.
+ * `addStudentToSession` (admin adiciona aluno manualmente numa sessão) passa
+ * por aqui como qualquer outro caller — dívida continua sempre ignorada
+ * (`hasOpenDebt: false` fixo), mas cota e teto diário agora valem de
+ * verdade, com um `force: true` que o admin usa pra furar essa negação
+ * especificamente quando decide adicionar mesmo assim.
  */
 export function resolveClassAccess(input: AccessInput): AccessDecision {
   if (input.hasOpenDebt) return { denied: 'blocked_by_debt' }
