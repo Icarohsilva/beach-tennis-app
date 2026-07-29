@@ -114,6 +114,51 @@ describe('reconcileAllActiveEnrollments', () => {
     )
   })
 
+  it('matrícula excedente (mais nova) perde a prioridade mesmo caindo antes na semana', async () => {
+    const client = makeClient({
+      enrollments: [
+        // Mais antiga, cai depois na semana (sexta) — deve ser "contada"/protegida.
+        {
+          student_id: 'stu-1', class_id: 'fri-class', organization_id: 'org-1',
+          enrolled_at: '2026-01-01T00:00:00Z',
+          classes: { name: 'Turma Sexta', day_of_week: 5, start_time: '18:00:00' },
+        },
+        // Mais nova, cai antes na semana (segunda) — excedente, já que o
+        // plano só permite 1 fixa por semana.
+        {
+          student_id: 'stu-1', class_id: 'mon-class', organization_id: 'org-1',
+          enrolled_at: '2026-02-01T00:00:00Z',
+          classes: { name: 'Turma Segunda', day_of_week: 1, start_time: '18:00:00' },
+        },
+      ],
+      memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: null }],
+      subscriptions: [{ student_id: 'stu-1', organization_id: 'org-1', gateway: 'manual', current_period_end: null }],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(true)
+    vi.mocked(getActivePlan).mockResolvedValue({ ...PLANO, classesPerWeek: 1 })
+    vi.mocked(getQuotaSnapshot).mockResolvedValue({
+      limit: 4, used: 3, remaining: 1, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
+    })
+    vi.mocked(reconcileEnrollmentCredits).mockImplementation(async (_s, _c, _f, _t, _client, budget) => {
+      const bookedNow = budget == null || budget > 0 ? 1 : 0
+      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1 }
+    })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    // A fixa protegida (sexta, mais antiga) processa primeiro e recebe o
+    // orçamento inteiro, apesar de cair depois na semana.
+    expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
+      1, 'stu-1', 'fri-class', '2026-07-27', '2026-08-02', client, 1,
+    )
+    // A excedente (segunda, mais nova) processa depois e não sobra orçamento,
+    // mesmo caindo antes na semana.
+    expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
+      2, 'stu-1', 'mon-class', '2026-07-27', '2026-08-02', client, 0,
+    )
+  })
+
   it('cacheia isQuotaEnforced por academia — não repete a query por aluno', async () => {
     const client = makeClient({
       enrollments: [

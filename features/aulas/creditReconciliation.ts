@@ -31,7 +31,7 @@ export async function reconcileAllActiveEnrollments(
 
   let enrollQuery = adminClient
     .from('enrollments')
-    .select('student_id, class_id, organization_id, classes!inner(name, day_of_week, start_time)')
+    .select('student_id, class_id, organization_id, enrolled_at, classes!inner(name, day_of_week, start_time)')
     .eq('is_active', true)
   if (orgId) enrollQuery = enrollQuery.eq('organization_id', orgId)
   const { data: enrollmentsRaw } = await enrollQuery
@@ -41,6 +41,7 @@ export async function reconcileAllActiveEnrollments(
     student_id: string
     class_id: string
     organization_id: string
+    enrolled_at: string
     classes: ClassInfo | ClassInfo[]
   }
   const enrollments = ((enrollmentsRaw ?? []) as unknown as Row[]).map((e) => {
@@ -49,6 +50,7 @@ export async function reconcileAllActiveEnrollments(
       studentId: e.student_id,
       classId: e.class_id,
       organizationId: e.organization_id,
+      enrolledAt: e.enrolled_at,
       className: cls.name,
       dayOfWeek: cls.day_of_week,
       startTime: cls.start_time,
@@ -126,17 +128,38 @@ export async function reconcileAllActiveEnrollments(
     // sem plano ativo — este último é uma inconsistência pré-existente fora
     // do escopo, tratada aqui como "sem limite").
     let budget: number | null = null
+    let plan: Awaited<ReturnType<typeof getActivePlan>> = null
     if (!partner && (await isQuotaEnforcedCached(organizationId))) {
-      const plan = await getActivePlan(adminClient, studentId, organizationId)
+      plan = await getActivePlan(adminClient, studentId, organizationId)
       if (plan) {
         const snapshot = await getQuotaSnapshot(adminClient, studentId, organizationId, plan, from)
         budget = snapshot.remaining
       }
     }
 
-    const ordered = [...studentEnrollments].sort(
-      (a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime),
-    )
+    // Mesma regra de "quem conta pro limite" que getQuotaSnapshot usa: as
+    // matrículas mais antigas (por enrolled_at) até classesPerWeek são
+    // "contadas"/protegidas; as excedentes competem pela cota compartilhada
+    // igual uma reserva avulsa. Sem isso, o desempate por dia da semana
+    // abaixo inverteria essa proteção sempre que a excedente caísse mais
+    // cedo na semana do que a matrícula protegida.
+    const countedClassIds = plan
+      ? new Set(
+          [...studentEnrollments]
+            .sort((a, b) => a.enrolledAt.localeCompare(b.enrolledAt))
+            .slice(0, plan.classesPerWeek)
+            .map((e) => e.classId),
+        )
+      : null
+
+    const ordered = [...studentEnrollments].sort((a, b) => {
+      if (countedClassIds) {
+        const aExcess = countedClassIds.has(a.classId) ? 0 : 1
+        const bExcess = countedClassIds.has(b.classId) ? 0 : 1
+        if (aExcess !== bExcess) return aExcess - bExcess
+      }
+      return a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime)
+    })
 
     for (const e of ordered) {
       try {
