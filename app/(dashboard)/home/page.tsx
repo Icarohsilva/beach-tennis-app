@@ -21,6 +21,10 @@ import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard
 import { CalendarPlus, Sun } from 'lucide-react'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
+import { getActivePlan } from '@/lib/billing/planEligibility'
+import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
+import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
+import { brtToday } from '@/lib/utils/gridSchedule'
 import type { Profile, DayUseSlot, Periodicity } from '@/types'
 
 export default async function HomePage() {
@@ -34,6 +38,15 @@ export default async function HomePage() {
   // Campos por-academia vêm da membership da academia ativa; identidade (full_name) de profiles.
   const orgId = await getActiveOrgId()
   const membership = await getActiveMembership()
+
+  // Cota do plano — mesmo retrato exibido em /agendar. Só busca quando a
+  // academia ligou a regra e o aluno tem plano ativo (evita 2 queries à toa).
+  const plan = orgId ? await getActivePlan(adminClient, user.id, orgId) : null
+  const quotaOn = orgId ? await isQuotaEnforced(adminClient, orgId) : false
+  const quota =
+    quotaOn && plan && orgId
+      ? await getQuotaSnapshot(adminClient, user.id, orgId, plan, brtToday(new Date()))
+      : null
 
   const { data: recRaw } = await adminClient
     .from('plan_recommendations')
@@ -317,6 +330,24 @@ export default async function HomePage() {
           />
         </div>
       </Reveal>
+
+      {quota && (
+        <Reveal step={1}>
+          <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
+            <p className="text-sm text-slate-400">
+              Aulas do plano {plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}
+            </p>
+            <p className="text-lg font-semibold text-white">
+              {quota.used} de {quota.limit}
+            </p>
+            {quota.remaining === 0 && (
+              <p className="text-xs text-brand-400 mt-1">
+                Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
+              </p>
+            )}
+          </div>
+        </Reveal>
+      )}
 
       {spotlightCandidates.length > 0 && (
         <Reveal step={1}>
