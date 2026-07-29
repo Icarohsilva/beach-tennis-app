@@ -30,6 +30,7 @@ import {
   adminUnskipEnrollmentDate,
   cancelEnrollment,
   enrollStudentInClass,
+  addStudentToSession,
 } from './adminActions'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
@@ -595,6 +596,187 @@ describe('enrollStudentInClass — orçamento de cota na reconciliação', () =>
 
     expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
       'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, null,
+    )
+  })
+})
+
+/**
+ * Stub escopado ao que addStudentToSession consulta: a sessão (com a data,
+ * pro cálculo de cota), a membership do aluno, o plano ativo dele
+ * (student_subscriptions), as duas chaves de system_settings (cota ligada e
+ * teto diário — o stub não distingue qual chave foi pedida, então sempre
+ * devolve `quotaEnforced`; isso é seguro pros testes deste plano porque
+ * sempre há um `plan` com `maxClassesPerDay` próprio, que sempre vence o
+ * default da academia), e as reservas existentes do aluno (pro cálculo de
+ * cota/teto diário via getQuotaSnapshot).
+ */
+function makeAddStudentClient(opts: {
+  session: { id: string; status: string; session_date: string; max_students: number }
+  membership: { partner: string | null; credits_balance: number }
+  plan: PlanQuota | null
+  quotaEnforced: boolean
+  sessionBookings?: {
+    status: string
+    cancelled_at: string | null
+    class_sessions: { session_date: string; classes: { start_time: string } }
+  }[]
+  bookRpcError?: { message: string } | null
+}) {
+  const rpc = vi.fn((fn: string) => {
+    if (fn === 'book_session_atomic') return Promise.resolve({ error: opts.bookRpcError ?? null })
+    return Promise.resolve({ error: null, data: null })
+  })
+
+  const from = vi.fn((table: string) => {
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: () => builder,
+      gte: () => builder,
+      lte: () => builder,
+      order: () => builder,
+      in: () => builder,
+      single: () => {
+        if (table === 'class_sessions') {
+          return Promise.resolve({
+            data: {
+              id: opts.session.id,
+              status: opts.session.status,
+              session_date: opts.session.session_date,
+              class: { max_students: opts.session.max_students },
+            },
+          })
+        }
+        return Promise.resolve({ data: null })
+      },
+      maybeSingle: () => {
+        if (table === 'memberships') return Promise.resolve({ data: opts.membership })
+        if (table === 'system_settings') {
+          return Promise.resolve({ data: { value: String(opts.quotaEnforced) } })
+        }
+        if (table === 'student_subscriptions') {
+          if (!opts.plan) return Promise.resolve({ data: null })
+          return Promise.resolve({
+            data: {
+              gateway: 'manual',
+              current_period_end: null,
+              subscription_plans: {
+                classes_per_week: opts.plan.classesPerWeek,
+                cycle: opts.plan.cycle,
+                max_classes_per_day: opts.plan.maxClassesPerDay,
+                refund_on_late_cancel: opts.plan.refundOnLateCancel,
+              },
+            },
+          })
+        }
+        return Promise.resolve({ data: null })
+      },
+      then: (resolve: (v: { data: unknown }) => void) => {
+        const data =
+          table === 'session_bookings' ? (opts.sessionBookings ?? []) : []
+        return Promise.resolve({ data }).then(resolve)
+      },
+    }
+    return builder
+  })
+
+  return { client: { from, rpc } as never, rpc }
+}
+
+describe('addStudentToSession — cota e teto diário', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+  })
+
+  it('bloqueia sem force quando o teto diário já foi atingido, e libera com force', async () => {
+    const plano: PlanQuota = {
+      classesPerWeek: 2, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+    }
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: plano,
+      quotaEnforced: true,
+      sessionBookings: [
+        {
+          status: 'confirmed', cancelled_at: null,
+          class_sessions: { session_date: '2026-07-15', classes: { start_time: '10:00:00' } },
+        },
+        {
+          status: 'confirmed', cancelled_at: null,
+          class_sessions: { session_date: '2026-07-15', classes: { start_time: '14:00:00' } },
+        },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const blocked = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(blocked.quotaBlocked).toBe(true)
+    expect(blocked.error).toBeTruthy()
+    expect(rpc).not.toHaveBeenCalled()
+
+    const forced = await addStudentToSession('session-1', 'stu-1', 'open', true)
+    expect(forced.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith(
+      'book_session_atomic',
+      expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
+    )
+  })
+
+  it('bloqueia sem force quando a cota do ciclo está esgotada, e libera com force', async () => {
+    const plano: PlanQuota = {
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+    }
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: plano,
+      quotaEnforced: true,
+      sessionBookings: [
+        {
+          status: 'confirmed', cancelled_at: null,
+          class_sessions: { session_date: '2026-07-13', classes: { start_time: '09:00:00' } },
+        },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const blocked = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(blocked.quotaBlocked).toBe(true)
+    expect(blocked.error).toBeTruthy()
+    expect(rpc).not.toHaveBeenCalled()
+
+    const forced = await addStudentToSession('session-1', 'stu-1', 'open', true)
+    expect(forced.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith(
+      'book_session_atomic',
+      expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
+    )
+  })
+
+  it('cota desligada não bloqueia (comportamento de hoje)', async () => {
+    const plano: PlanQuota = {
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 1, refundOnLateCancel: true,
+    }
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: plano,
+      quotaEnforced: false,
+      sessionBookings: [
+        {
+          status: 'confirmed', cancelled_at: null,
+          class_sessions: { session_date: '2026-07-15', classes: { start_time: '10:00:00' } },
+        },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(result.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith(
+      'book_session_atomic',
+      expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
     )
   })
 })

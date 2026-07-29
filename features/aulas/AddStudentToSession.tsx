@@ -20,7 +20,8 @@ interface Props {
     sessionId: string,
     studentId: string,
     reason: AddStudentReason,
-  ) => Promise<{ error?: string }>
+    force?: boolean,
+  ) => Promise<{ error?: string; quotaBlocked?: boolean }>
 }
 
 const REASONS: { value: AddStudentReason; label: string; hint: string }[] = [
@@ -33,6 +34,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   const [studentId, setStudentId] = useState('')
   const [reason, setReason] = useState<AddStudentReason>('experimental')
   const [error, setError] = useState<string | null>(null)
+  const [quotaBlocked, setQuotaBlocked] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const selected = students.find((s) => s.id === studentId)
@@ -43,17 +45,22 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   function handleSelectStudent(id: string) {
     setStudentId(id)
     setReason('experimental')
+    setError(null)
+    setQuotaBlocked(false)
   }
 
-  function handleAdd() {
+  function handleAdd(force = false) {
     if (!studentId) return
     setError(null)
     startTransition(async () => {
-      const result = await onAdd(sessionId, studentId, needsReason ? reason : 'open')
-      if (result.error) setError(result.error)
-      else {
+      const result = await onAdd(sessionId, studentId, needsReason ? reason : 'open', force)
+      if (result.error) {
+        setError(result.error)
+        setQuotaBlocked(!!result.quotaBlocked)
+      } else {
         setStudentId('')
         setReason('experimental')
+        setQuotaBlocked(false)
       }
     })
   }
@@ -107,15 +114,27 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
 
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
 
-      <Button
-        size="sm"
-        loading={isPending}
-        disabled={!studentId || isPending}
-        onClick={handleAdd}
-        className="w-full"
-      >
-        Adicionar à aula
-      </Button>
+      {quotaBlocked ? (
+        <Button
+          size="sm"
+          variant="danger"
+          loading={isPending}
+          onClick={() => handleAdd(true)}
+          className="w-full"
+        >
+          Adicionar mesmo assim
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          loading={isPending}
+          disabled={!studentId || isPending}
+          onClick={() => handleAdd(false)}
+          className="w-full"
+        >
+          Adicionar à aula
+        </Button>
+      )}
     </Card>
   )
 }

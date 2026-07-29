@@ -7,8 +7,9 @@ import { format, endOfMonth } from 'date-fns'
 import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './reconcileEnrollment'
 import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
-import { isQuotaEnforced } from './quotaSettings'
+import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
 import { computeQuotaBudget } from './quotaBudget'
+import { getQuotaSnapshot } from './quotaUsage'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
@@ -584,7 +585,8 @@ export async function addStudentToSession(
   sessionId: string,
   studentId: string,
   reason: AddStudentReason,
-): Promise<{ error?: string }> {
+  force = false,
+): Promise<{ error?: string; quotaBlocked?: boolean }> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
@@ -592,7 +594,7 @@ export async function addStudentToSession(
 
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, status, class:classes(max_students)')
+    .select('id, status, session_date, class:classes(max_students)')
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .single()
@@ -601,6 +603,7 @@ export async function addStudentToSession(
   if ((session as { status: string }).status !== 'scheduled') {
     return { error: 'Esta sessão não está disponível.' }
   }
+  const sessionDate = (session as { session_date: string }).session_date
 
   const clsRaw = (session as { class: { max_students: number } | { max_students: number }[] }).class
   const cls = Array.isArray(clsRaw) ? clsRaw[0] : clsRaw
@@ -615,28 +618,45 @@ export async function addStudentToSession(
   if (!membership) return { error: 'Aluno não participa desta academia.' }
   const mem = membership as { partner: string | null; credits_balance: number }
 
-  const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
+  const plan = await getActivePlan(adminClient, studentId, orgId)
+  const hasActivePlan = plan !== null
 
-  // Note o hasOpenDebt: false — o admin ignora o bloqueio (ver doc acima). Pela
-  // mesma razão o admin também ignora a cota e o teto diário (spec de cota
-  // §5, "addStudentToSession: inalterado"): quotaEnforced: false desliga todo
-  // o eixo em resolveClassAccess, então os demais campos de cota nunca são
-  // lidos — os valores abaixo só existem para satisfazer o tipo.
+  // Dívida continua sempre furada pelo admin (hasOpenDebt: false) — isso não
+  // muda. Cota e teto diário agora valem de verdade; com force: true o admin
+  // fura especificamente essa negação.
+  const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
+  const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
+  const snapshot =
+    quotaEnforced && plan
+      ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, sessionDate)
+      : null
+
   const decision = resolveClassAccess({
     partner: mem.partner as CheckinPartner | null,
     hasActivePlan,
     creditsBalance: mem.credits_balance,
     hasOpenDebt: false,
-    quotaEnforced: false,
-    quotaRemaining: null,
-    bookingsOnDate: 0,
-    maxClassesPerDay: Infinity,
+    quotaEnforced,
+    quotaRemaining: snapshot?.remaining ?? null,
+    bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
+    maxClassesPerDay: plan?.maxClassesPerDay ?? orgDailyCap,
   })
 
-  // 'denied' é inalcançável com hasOpenDebt: false, mas o TypeScript não sabe.
-  if ('denied' in decision) return { error: 'Não foi possível adicionar o aluno.' }
+  if ('denied' in decision) {
+    // Só 'daily_cap'/'quota_exhausted' são alcançáveis (hasOpenDebt é sempre
+    // false, então 'blocked_by_debt' nunca aparece aqui).
+    if (!force) {
+      const teto = plan?.maxClassesPerDay ?? orgDailyCap
+      const message =
+        decision.denied === 'daily_cap'
+          ? `Esse aluno já tem ${teto} aulas neste dia — é o limite do plano dele.`
+          : `Esse aluno já usou toda a cota do plano ${plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'}.`
+      return { error: message, quotaBlocked: true }
+    }
+    // force: true — segue o fluxo normal abaixo, sem grant (não debita crédito).
+  }
 
-  const useCredit = decision.grant === 'credit'
+  const useCredit = 'grant' in decision && decision.grant === 'credit'
 
   const { error: bookErr } = await adminClient.rpc('book_session_atomic', {
     p_student_id: studentId,
@@ -684,7 +704,7 @@ export async function addStudentToSession(
 
   // Pré-declaração. Só para quem não tem plano/parceiro/crédito — para os outros
   // a aula já está paga e gravar payments aqui seria cobrança dupla.
-  if (decision.grant === 'debt' && reason !== 'open') {
+  if ('grant' in decision && decision.grant === 'debt' && reason !== 'open') {
     const price = await getSingleClassPrice(adminClient, orgId)
 
     const { error: payErr } = await adminClient.from('payments').insert({
