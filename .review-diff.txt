@@ -1,0 +1,1716 @@
+diff --git a/app/(admin)/admin/grade/GridGenerateButtons.tsx b/app/(admin)/admin/grade/GridGenerateButtons.tsx
+index a759343..d1ea965 100644
+--- a/app/(admin)/admin/grade/GridGenerateButtons.tsx
++++ b/app/(admin)/admin/grade/GridGenerateButtons.tsx
+@@ -3,9 +3,18 @@ import { useState, useTransition } from 'react'
+ import { Button } from '@/components/ui/Button'
+ import { generateGridWeek, generateGridDay } from '@/features/aulas/gridActions'
+ 
+-function feedback(r: { error?: string; sessionsCreated?: number; studentsBooked?: number }): string {
++function feedback(r: {
++  error?: string
++  sessionsCreated?: number
++  reservados?: number
++  aConfirmar?: number
++  semPlano?: number
++}): string {
+   if (r.error) return `Erro: ${r.error}`
+-  return `${r.sessionsCreated ?? 0} sessões geradas · ${r.studentsBooked ?? 0} alunos reservados.`
++  const parts = [`${r.sessionsCreated ?? 0} sessões`, `${r.reservados ?? 0} reservados`]
++  if ((r.aConfirmar ?? 0) > 0) parts.push(`${r.aConfirmar} a confirmar`)
++  if ((r.semPlano ?? 0) > 0) parts.push(`${r.semPlano} sem plano`)
++  return parts.join(' · ')
+ }
+ 
+ /** Botão "Gerar semana toda" — vai no topo da grade. */
+diff --git a/app/(admin)/admin/grade/RegenerateTodayButton.tsx b/app/(admin)/admin/grade/RegenerateTodayButton.tsx
+new file mode 100644
+index 0000000..0675624
+--- /dev/null
++++ b/app/(admin)/admin/grade/RegenerateTodayButton.tsx
+@@ -0,0 +1,28 @@
++// app/(admin)/admin/grade/RegenerateTodayButton.tsx
++'use client'
++import { useState, useTransition } from 'react'
++import { useRouter } from 'next/navigation'
++import { Button } from '@/components/ui/Button'
++import { generateGridDay } from '@/features/aulas/gridActions'
++
++/** Re-roda a geração/reserva do dia-da-semana informado (reserva quem virou elegível). */
++export function RegenerateTodayButton({ dayOfWeek }: { dayOfWeek: number }) {
++  const router = useRouter()
++  const [msg, setMsg] = useState<string | null>(null)
++  const [pending, start] = useTransition()
++  return (
++    <div className="flex flex-col items-start gap-1">
++      <Button
++        size="sm" variant="secondary" loading={pending}
++        onClick={() => start(async () => {
++          const r = await generateGridDay(dayOfWeek)
++          setMsg(r.error ? `Erro: ${r.error}` : `${r.reservados ?? 0} reservados.`)
++          router.refresh()
++        })}
++      >
++        Regerar hoje
++      </Button>
++      {msg && <span className="text-xs text-slate-400">{msg}</span>}
++    </div>
++  )
++}
+diff --git a/app/(admin)/admin/grade/[sessionId]/editar/page.tsx b/app/(admin)/admin/grade/[sessionId]/editar/page.tsx
+index 9cbc271..7f31259 100644
+--- a/app/(admin)/admin/grade/[sessionId]/editar/page.tsx
++++ b/app/(admin)/admin/grade/[sessionId]/editar/page.tsx
+@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
+ import Link from 'next/link'
+ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+ import { EditClassForm } from '@/features/aulas/EditClassForm'
++import { ClassRosterSection } from '@/features/aulas/ClassRosterSection'
+ import type { Class } from '@/types'
+ 
+ export default async function EditClassPage({ params }: { params: { sessionId: string } }) {
+@@ -15,6 +16,9 @@ export default async function EditClassPage({ params }: { params: { sessionId: s
+       <Link href="/admin/grade" className="text-slate-400 hover:text-white text-sm">← Grade</Link>
+       <h1 className="text-2xl font-bold text-white">Editar Turma</h1>
+       <EditClassForm class_={data as Class} />
++      <div className="border-t border-surface-border pt-6">
++        <ClassRosterSection classId={classId} orgId={orgId!} />
++      </div>
+     </div>
+   )
+ }
+diff --git a/app/(admin)/admin/grade/[sessionId]/page.tsx b/app/(admin)/admin/grade/[sessionId]/page.tsx
+index 9ad55d4..01f7db4 100644
+--- a/app/(admin)/admin/grade/[sessionId]/page.tsx
++++ b/app/(admin)/admin/grade/[sessionId]/page.tsx
+@@ -11,6 +11,8 @@ import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+ import { Badge } from '@/components/ui/Badge'
+ import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
+ import type { ClassSession, Profile, Membership, Attendance } from '@/types'
++import { RegenerateTodayButton } from '../RegenerateTodayButton'
++import { brtToday } from '@/lib/utils/gridSchedule'
+ 
+ interface Props {
+   params: { sessionId: string }
+@@ -154,6 +156,8 @@ export default async function SessionDetailPage({ params }: Props) {
+     }))
+     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
+ 
++  const isToday = typedSession.session_date === brtToday(new Date())
++
+   return (
+     <div className="space-y-6 max-w-2xl">
+       <div className="flex items-center gap-3">
+@@ -178,17 +182,35 @@ export default async function SessionDetailPage({ params }: Props) {
+         onAdd={addStudentToSession}
+       />
+ 
+-      <AttendanceSheet
+-        sessionId={params.sessionId}
+-        students={students}
+-        onMark={markAttendance}
+-      />
+-
+-      <StartClassClient
+-        sessionId={params.sessionId}
+-        students={students}
+-        isCompleted={typedSession.status === 'completed'}
+-      />
++      {students.length === 0 && typedSession.status !== 'completed' ? (
++        <div className="border border-dashed border-surface-border rounded-xl p-5 text-center space-y-3">
++          <p className="text-sm text-slate-400">Ninguém reservado ainda para esta aula.</p>
++          {isToday ? (
++            <>
++              <p className="text-xs text-slate-500">Adicione um aluno avulso acima, ou regere o dia para reservar quem já tem plano/parceiro ativo.</p>
++              <div className="flex justify-center">
++                <RegenerateTodayButton dayOfWeek={new Date(typedSession.session_date + 'T12:00:00').getDay()} />
++              </div>
++            </>
++          ) : (
++            <p className="text-xs text-slate-500">Adicione um aluno avulso acima.</p>
++          )}
++        </div>
++      ) : (
++        <>
++          <AttendanceSheet
++            sessionId={params.sessionId}
++            students={students}
++            onMark={markAttendance}
++          />
++
++          <StartClassClient
++            sessionId={params.sessionId}
++            students={students}
++            isCompleted={typedSession.status === 'completed'}
++          />
++        </>
++      )}
+     </div>
+   )
+ }
+diff --git a/app/(admin)/admin/grade/page.tsx b/app/(admin)/admin/grade/page.tsx
+index eb4dd90..e834844 100644
+--- a/app/(admin)/admin/grade/page.tsx
++++ b/app/(admin)/admin/grade/page.tsx
+@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/Badge'
+ import { Button } from '@/components/ui/Button'
+ import { SectionHeader } from '@/components/ui/SectionHeader'
+ import { EmptyState } from '@/components/ui/EmptyState'
+-import { formatTime } from '@/lib/utils/dateHelpers'
+-import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
++import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
++import { getClassRoster } from '@/features/aulas/enrollmentRoster'
+ import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
+ import { DeleteClassButton } from './DeleteClassButton'
+ import { CalendarDays } from 'lucide-react'
+@@ -16,6 +16,15 @@ import type { Class, ClassSession } from '@/types'
+ const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+ const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+ 
++function ago(iso: string): string {
++  const diff = Date.now() - new Date(iso).getTime()
++  const h = Math.floor(diff / 3600000)
++  if (h < 1) return 'há minutos'
++  if (h < 24) return `há ${h}h`
++  const d = Math.floor(h / 24)
++  return `há ${d}d`
++}
++
+ export default async function GradePage() {
+   const adminClient = createAdminClient()
+   const orgId = await getCurrentOrgId()
+@@ -71,60 +80,28 @@ export default async function GradePage() {
+     classesByDay.set(c.day_of_week, arr)
+   }
+ 
+-  // Enrolled count per class + contagem de irregulares (sem plano/parceiro).
+-  // Partner/plano são por-academia: vêm da membership do aluno NESTA org (não
+-  // de profiles, que só reflete a academia padrão do aluno multi-vínculo).
++  // Roster (matriculados/elegíveis/a-confirmar/sem-plano) via getClassRoster —
++  // org-wide, sem filtro de dia/turma (esta página mostra a semana toda).
+   const classIds = allClasses.map((c) => c.id)
+-  const { data: enrollRowsRaw } =
+-    classIds.length > 0
+-      ? await adminClient
+-          .from('enrollments')
+-          .select('class_id, student_id')
+-          .in('class_id', classIds)
+-          .eq('organization_id', orgId)
+-          .eq('is_active', true)
+-      : { data: [] }
+-
+-  const enrollRows = (enrollRowsRaw ?? []) as { class_id: string; student_id: string }[]
+-  const enrolledStudentIds = Array.from(new Set(enrollRows.map((e) => e.student_id)))
+-  const { data: enrollMemsRaw } =
+-    enrolledStudentIds.length > 0
+-      ? await adminClient
+-          .from('memberships')
+-          .select('user_id, partner')
+-          .in('user_id', enrolledStudentIds)
+-          .eq('organization_id', orgId)
+-      : { data: [] }
+-
+-  const partnerByStudent = new Map<string, string | null>()
+-  for (const m of (enrollMemsRaw ?? []) as { user_id: string; partner: string | null }[]) {
+-    partnerByStudent.set(m.user_id, m.partner)
+-  }
+-
+-  const { data: subsRaw } =
+-    enrolledStudentIds.length > 0
+-      ? await adminClient
+-          .from('student_subscriptions')
+-          .select('student_id, gateway, current_period_end')
+-          .in('student_id', enrolledStudentIds)
+-          .eq('organization_id', orgId)
+-          .eq('status', 'active')
+-      : { data: [] }
+-
+-  const now = new Date()
+-  const planStudents = new Set(
+-    ((subsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
+-      .filter((s) => isSubscriptionCurrent(s, now))
+-      .map((s) => s.student_id),
+-  )
+-
+-  const enrollCountMap = new Map<string, number>()
+-  const noPlanMap = new Map<string, number>()
+-  for (const e of enrollRows) {
+-    enrollCountMap.set(e.class_id, (enrollCountMap.get(e.class_id) ?? 0) + 1)
+-    const hasPartner = !!partnerByStudent.get(e.student_id)
+-    if (!hasPartner && !planStudents.has(e.student_id)) {
+-      noPlanMap.set(e.class_id, (noPlanMap.get(e.class_id) ?? 0) + 1)
++  const roster = await getClassRoster(adminClient, orgId!)
++
++  // Info de geração por turma: maior session_date e created_at correspondente
++  // (status scheduled). organization_id explícito por defesa em profundidade,
++  // mesmo padrão do resto deste arquivo (linha 41 já faz isso pra sessionsToday).
++  const { data: genRaw } = classIds.length > 0
++    ? await adminClient
++        .from('class_sessions')
++        .select('class_id, session_date, created_at')
++        .in('class_id', classIds)
++        .eq('organization_id', orgId)
++        .eq('status', 'scheduled')
++        .gte('session_date', today)
++    : { data: [] }
++  const genByClass = new Map<string, { lastDate: string; lastCreated: string }>()
++  for (const s of (genRaw ?? []) as { class_id: string; session_date: string; created_at: string }[]) {
++    const cur = genByClass.get(s.class_id)
++    if (!cur || s.session_date > cur.lastDate) {
++      genByClass.set(s.class_id, { lastDate: s.session_date, lastCreated: s.created_at })
+     }
+   }
+ 
+@@ -198,40 +175,39 @@ export default async function GradePage() {
+               </h3>
+               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                 {dayClasses.map((c) => {
+-                  const enrolled = enrollCountMap.get(c.id) ?? 0
+-                  const spotsLeft = c.max_students - enrolled
++                  const rc = roster.byClass.get(c.id) ?? { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0, students: [] }
++                  const gen = genByClass.get(c.id)
+                   return (
+                     <Card key={c.id}>
+-                      {/* Row 1: name + badges + edit link */}
+                       <div className="flex items-center justify-between gap-2 mb-1">
+                         <span className="text-white text-sm font-medium truncate">{c.name}</span>
+                         <div className="flex items-center gap-1 shrink-0">
+                           {c.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
+-                          <Link
+-                            href={`/admin/grade/${c.id}/editar`}
+-                            className="text-xs text-slate-400 hover:text-brand-500 ml-1"
+-                          >
+-                            Editar
+-                          </Link>
++                          <Link href={`/admin/grade/${c.id}/editar`} className="text-xs text-slate-400 hover:text-brand-500 ml-1">Editar</Link>
+                         </div>
+                       </div>
+-                      {/* Row 2: time */}
+-                      <p className="text-xs text-slate-400 mb-1">
+-                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
++                      <p className="text-xs text-slate-400 mb-1">{formatTime(c.start_time)} – {formatTime(c.end_time)}</p>
++
++                      <p className="text-xs text-slate-400 mb-2">
++                        <span className="text-sm font-extrabold text-white">{rc.enrolled}</span> matriculados ·{' '}
++                        <span className="text-sm font-extrabold text-green-400">{rc.eligible}</span> reservados{' '}
++                        <span className="text-slate-500">/ {c.max_students}</span>
++                      </p>
++
++                      <div className="flex flex-wrap gap-1.5 mb-2">
++                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-green-400 bg-green-500/10 border border-green-500/30">✅ {rc.eligible} elegíveis</span>
++                        {rc.pendingConfirmation > 0 && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-blue-400 bg-blue-500/10 border border-blue-500/30">🔵 {rc.pendingConfirmation} a confirmar</span>}
++                        {rc.noPlan > 0 && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-yellow-400 bg-yellow-500/10 border border-yellow-500/30">⚠️ {rc.noPlan} sem plano</span>}
++                      </div>
++
++                      <p className="text-xs text-slate-500 mb-2">
++                        {gen ? <>Próxima gerada: <span className="text-slate-400">{formatDate(gen.lastDate)}</span> · gerada {ago(gen.lastCreated)}</> : 'Ainda não gerada'}
+                       </p>
+-                      {/* Row 3: vagas + alerta de plano */}
+-                      <div className="flex items-center justify-between">
+-                        <p className="text-xs text-slate-400">
+-                          <span className="text-sm font-extrabold text-brand-500">{enrolled}/{c.max_students}</span>{' '}
+-                          <span className={spotsLeft <= 0 ? 'text-red-400' : spotsLeft <= 3 ? 'text-yellow-400' : 'text-green-400'}>vagas</span>
+-                        </p>
+-                        {(noPlanMap.get(c.id) ?? 0) > 0 && (
+-                          <span className="text-xs text-yellow-400 font-medium">
+-                            ⚠️ {noPlanMap.get(c.id)} sem plano ativo
+-                          </span>
+-                        )}
++
++                      <div className="flex items-center justify-between pt-2 border-t border-surface-border">
++                        <Link href={`/admin/grade/${c.id}/editar`} className="text-xs font-semibold text-brand-500 hover:underline">Ver alunos →</Link>
++                        <DeleteClassButton classId={c.id} className={c.name} />
+                       </div>
+-                      <DeleteClassButton classId={c.id} className={c.name} />
+                     </Card>
+                   )
+                 })}
+diff --git a/app/api/cron/weekly-grid-generation/route.ts b/app/api/cron/weekly-grid-generation/route.ts
+index 2ee6527..6d51df6 100644
+--- a/app/api/cron/weekly-grid-generation/route.ts
++++ b/app/api/cron/weekly-grid-generation/route.ts
+@@ -12,8 +12,11 @@ import * as Sentry from '@sentry/nextjs'
+ import { createAdminClient } from '@/lib/supabase/server'
+ import { verifyCronSecret } from '@/lib/auth/cronAuth'
+ import { generateGrid } from '@/features/aulas/gridGeneration'
++import { notifyGridGenerated } from '@/features/aulas/gridNotify'
+ import { brtToday, addDaysStr, shouldRunGridNow } from '@/lib/utils/gridSchedule'
+ 
++export const maxDuration = 300
++
+ export async function GET(req: NextRequest) {
+   if (!verifyCronSecret(req)) {
+     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+@@ -75,6 +78,13 @@ export async function GET(req: NextRequest) {
+             { organization_id: orgId, key: 'grid_auto_last_run', value: now.toISOString() },
+             { onConflict: 'organization_id,key' },
+           )
++
++        // Push/in-app só quando gerou sessões NOVAS de verdade (r.sessionsCreated
++        // conta inserções reais, Task 2) — regeração idempotente numa checagem
++        // seguinte cria 0 e não re-notifica. Passa o admin client já criado.
++        if (r.sessionsCreated > 0) {
++          await notifyGridGenerated(orgId, { kind: 'week' }, admin)
++        }
+       } catch (err) {
+         failed++
+         console.error('[cron/weekly-grid-generation] falhou para uma academia', {
+diff --git a/features/aulas/ClassRosterSection.tsx b/features/aulas/ClassRosterSection.tsx
+new file mode 100644
+index 0000000..68843be
+--- /dev/null
++++ b/features/aulas/ClassRosterSection.tsx
+@@ -0,0 +1,78 @@
++import { createAdminClient } from '@/lib/supabase/server'
++import { getClassRoster } from './enrollmentRoster'
++import { SkipDateButton } from './SkipDateButton'
++import type { EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
++
++const STATUS_META: Record<EnrollmentStatus, { label: string; cls: string }> = {
++  elegivel: { label: '✅ Elegível', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
++  a_confirmar: { label: '🔵 Wellhub a confirmar', cls: 'text-blue-400 bg-blue-500/10 border-blue-500/30' },
++  sem_plano: { label: '⚠️ Sem plano', cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
++}
++
++export async function ClassRosterSection({ classId, orgId }: { classId: string; orgId: string }) {
++  const adminClient = createAdminClient()
++  const roster = await getClassRoster(adminClient, orgId, { classId })
++  const students = roster.byClass.get(classId)?.students ?? []
++
++  const ids = students.map((s) => s.studentId)
++  const { data: profs } = ids.length > 0
++    ? await adminClient.from('profiles').select('id, full_name').in('id', ids)
++    : { data: [] }
++  const nameById = new Map(((profs ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]))
++
++  if (students.length === 0) {
++    return <p className="text-sm text-slate-500">Nenhum aluno matriculado nesta turma.</p>
++  }
++
++  // Próximas sessões geradas (scheduled, hoje em diante) desta turma. Consulta
++  // direta reusando o adminClient/orgId já resolvidos aqui, em vez de disparar
++  // um requireAdmin() (auth.getUser() + role query) redundante.
++  const today = new Date().toISOString().slice(0, 10)
++  const { data: upSessionsRaw } = await adminClient
++    .from('class_sessions')
++    .select('id, session_date')
++    .eq('class_id', classId)
++    .eq('organization_id', orgId)
++    .eq('status', 'scheduled')
++    .gte('session_date', today)
++    .order('session_date', { ascending: true })
++  const upSessions = (upSessionsRaw ?? []) as { id: string; session_date: string }[]
++
++  // Datas que cada aluno já está pulando (reserva 'cancelled') → pra oferecer "desfazer".
++  const upIds = upSessions.map((s) => s.id)
++  const { data: skipsRaw } = upIds.length > 0
++    ? await adminClient.from('session_bookings').select('student_id, session_id')
++        .in('session_id', upIds).in('student_id', ids).eq('status', 'cancelled')
++    : { data: [] }
++  const skippedByStudent = new Map<string, Set<string>>()
++  for (const b of (skipsRaw ?? []) as { student_id: string; session_id: string }[]) {
++    const set = skippedByStudent.get(b.student_id) ?? new Set<string>()
++    set.add(b.session_id); skippedByStudent.set(b.student_id, set)
++  }
++
++  return (
++    <div className="space-y-1">
++      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400 mb-2">
++        Alunos da turma <span className="text-slate-500 font-normal">({students.length})</span>
++      </h2>
++      {students
++        .slice()
++        .sort((a, b) => (nameById.get(a.studentId) ?? '').localeCompare(nameById.get(b.studentId) ?? '', 'pt-BR'))
++        .map((s) => {
++          const meta = STATUS_META[s.status]
++          return (
++            <div key={s.studentId} className="flex items-center gap-3 py-3 border-b border-surface-border last:border-0">
++              <div className="flex-1 min-w-0">
++                <p className="text-sm font-medium text-white truncate">{nameById.get(s.studentId) ?? 'Aluno'}</p>
++                <span className={`inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${meta.cls}`}>{meta.label}</span>
++              </div>
++              <SkipDateButton
++                studentId={s.studentId}
++                sessions={upSessions.map((u) => ({ ...u, skipped: skippedByStudent.get(s.studentId)?.has(u.id) ?? false }))}
++              />
++            </div>
++          )
++        })}
++    </div>
++  )
++}
+diff --git a/features/aulas/SkipDateButton.tsx b/features/aulas/SkipDateButton.tsx
+new file mode 100644
+index 0000000..5415eb6
+--- /dev/null
++++ b/features/aulas/SkipDateButton.tsx
+@@ -0,0 +1,49 @@
++'use client'
++import { useState, useTransition } from 'react'
++import { adminSkipEnrollmentDate, adminUnskipEnrollmentDate } from './adminActions'
++import { formatDate } from '@/lib/utils/dateHelpers'
++
++interface SessionOpt { id: string; session_date: string; skipped: boolean }
++
++export function SkipDateButton({ studentId, sessions }: { studentId: string; sessions: SessionOpt[] }) {
++  const [open, setOpen] = useState(false)
++  const [msg, setMsg] = useState<string | null>(null)
++  const [pending, start] = useTransition()
++
++  function toggle(s: SessionOpt) {
++    setOpen(false) // fecha JÁ: some com os botões de data → sem segundo clique na corrida
++    start(async () => {
++      const r = s.skipped
++        ? await adminUnskipEnrollmentDate(studentId, s.id)
++        : await adminSkipEnrollmentDate(studentId, s.id)
++      setMsg(r.error ? `Erro: ${r.error}` : s.skipped ? 'Falta desfeita.' : 'Falta registrada.')
++    })
++  }
++
++  return (
++    <div className="relative">
++      <button
++        type="button" onClick={() => setOpen((v) => !v)} disabled={pending}
++        className="text-xs font-semibold text-slate-300 border border-surface-border rounded-lg px-3 py-1.5 hover:border-brand-500 hover:text-brand-500 disabled:opacity-50"
++      >
++        Faltar em… ▾
++      </button>
++      {open && (
++        <div className="absolute right-0 z-10 mt-1 w-60 bg-surface border border-surface-border rounded-lg p-2">
++          <p className="text-[11px] uppercase tracking-wide text-slate-500 px-2 pb-1">Tirar de qual data?</p>
++          {sessions.length === 0 && <p className="text-xs text-slate-500 px-2 py-1">Sem datas geradas.</p>}
++          {sessions.map((s) => (
++            <button
++              key={s.id} type="button" onClick={() => toggle(s)} disabled={pending}
++              className="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded-md hover:bg-surface-card disabled:opacity-50"
++            >
++              <span className={s.skipped ? 'text-slate-500 line-through' : 'text-slate-200'}>{formatDate(s.session_date)}</span>
++              {s.skipped && <span className="text-[11px] text-brand-500">desfazer</span>}
++            </button>
++          ))}
++        </div>
++      )}
++      {msg && <span className="block text-xs text-slate-400 mt-1">{msg}</span>}
++    </div>
++  )
++}
+diff --git a/features/aulas/adminActions.test.ts b/features/aulas/adminActions.test.ts
+new file mode 100644
+index 0000000..5e42dca
+--- /dev/null
++++ b/features/aulas/adminActions.test.ts
+@@ -0,0 +1,234 @@
++// features/aulas/adminActions.test.ts
++//
++// Este arquivo não tinha testes (convenção deste arquivo: actions admin em
++// geral não são testadas aqui — ver demais funções). Exceção deliberada: a
++// revisão do Task 9 encontrou um bug crítico em adminSkipEnrollmentDate — o
++// upsert sobrescrevia sem estorno uma reserva 'confirmed'+credit_used:true
++// pré-existente (ex.: aluno adicionado à data via addStudentToSession usando
++// crédito). Isso é lógica financeira nova (estorno via adjust_credits) que
++// não existia antes, por isso ganha teste mesmo com o resto do arquivo sem.
++import { describe, it, expect, vi, beforeEach } from 'vitest'
++
++vi.mock('@/lib/supabase/server', () => ({
++  createAdminClient: vi.fn(),
++}))
++
++vi.mock('next/cache', () => ({
++  revalidatePath: vi.fn(),
++}))
++
++vi.mock('./authGuards', () => ({
++  requireAdmin: vi.fn(),
++}))
++
++import { adminSkipEnrollmentDate, adminUnskipEnrollmentDate } from './adminActions'
++import { createAdminClient } from '@/lib/supabase/server'
++import { requireAdmin } from './authGuards'
++import { revalidatePath } from 'next/cache'
++
++/**
++ * Stub do client Supabase escopado ao que adminSkipEnrollmentDate/
++ * adminUnskipEnrollmentDate precisam: lookups pontuais (maybeSingle) por
++ * tabela, upsert/delete em session_bookings e rpc (adjust_credits). Mesma
++ * técnica de features/financeiro/classDebt.test.ts e gridGeneration.test.ts.
++ */
++function makeClient(opts: {
++  session?: { id: string; class_id: string } | null
++  membership?: { user_id: string } | null
++  existingBooking?: { status: string; credit_used: boolean } | null
++  upsertError?: { message: string } | null
++  deleteError?: { message: string } | null
++  rpcError?: { message: string } | null
++}) {
++  const upsert = vi.fn().mockResolvedValue({ error: opts.upsertError ?? null })
++  const rpc = vi.fn().mockResolvedValue({ error: opts.rpcError ?? null })
++
++  const from = vi.fn((table: string) => {
++    const single = () => {
++      if (table === 'class_sessions') return Promise.resolve({ data: opts.session ?? null })
++      if (table === 'memberships') return Promise.resolve({ data: opts.membership ?? null })
++      if (table === 'session_bookings') return Promise.resolve({ data: opts.existingBooking ?? null })
++      return Promise.resolve({ data: null })
++    }
++    const builder: Record<string, unknown> = {
++      select: () => builder,
++      eq: () => builder,
++      maybeSingle: single,
++      single,
++      upsert,
++      delete: () => builder,
++      // Encadeamento de delete().eq()...eq() não termina em maybeSingle(): o
++      // próprio builder precisa ser thenable para o `await` final resolver.
++      then: (resolve: (v: { error: unknown }) => void) =>
++        Promise.resolve({ error: opts.deleteError ?? null }).then(resolve),
++    }
++    return builder
++  })
++
++  return { client: { from, rpc } as never, upsert, rpc }
++}
++
++const ADMIN = { userId: 'admin-1', orgId: 'org-1' }
++
++describe('adminSkipEnrollmentDate', () => {
++  beforeEach(() => {
++    vi.clearAllMocks()
++    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
++  })
++
++  it('estorna 1 crédito quando já havia reserva confirmada com crédito debitado (bug crítico do review)', async () => {
++    const { client, upsert, rpc } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: { status: 'confirmed', credit_used: true },
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({})
++    expect(rpc).toHaveBeenCalledWith('adjust_credits', {
++      p_student_id: 'stu-1',
++      p_org: 'org-1',
++      p_delta: 1,
++      p_type: 'refunded',
++      p_reason: expect.any(String),
++      p_session_id: 'sess-1',
++    })
++    // A reserva ainda é marcada 'cancelled' (com cancelled_at) além do estorno.
++    expect(upsert).toHaveBeenCalledWith(
++      expect.objectContaining({
++        status: 'cancelled',
++        credit_used: false,
++        cancelled_at: expect.any(String),
++      }),
++      { onConflict: 'student_id,session_id' },
++    )
++  })
++
++  it('NÃO estorna crédito quando não havia reserva alguma para a data', async () => {
++    const { client, rpc, upsert } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: null,
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({})
++    expect(rpc).not.toHaveBeenCalled()
++    expect(upsert).toHaveBeenCalled()
++  })
++
++  it('NÃO estorna crédito quando a reserva existente não havia consumido crédito', async () => {
++    const { client, rpc } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: { status: 'confirmed', credit_used: false },
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(rpc).not.toHaveBeenCalled()
++  })
++
++  it('NÃO estorna crédito quando a reserva existente já estava cancelled (mesmo com credit_used true)', async () => {
++    const { client, rpc } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: { status: 'cancelled', credit_used: true },
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(rpc).not.toHaveBeenCalled()
++  })
++
++  it('registra a falta mas devolve aviso quando o estorno de crédito falha (não silencia o erro)', async () => {
++    const { client, upsert } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: { status: 'confirmed', credit_used: true },
++      rpcError: { message: 'boom' },
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
++
++    const result = await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(upsert).toHaveBeenCalled()
++    expect(result.error).toBeTruthy()
++    expect(consoleErrorSpy).toHaveBeenCalledWith(
++      '[adminSkipEnrollmentDate] adjust_credits falhou',
++      expect.objectContaining({ studentId: 'stu-1', sessionId: 'sess-1' }),
++    )
++  })
++
++  it('retorna erro e não grava nada quando o aluno não participa desta academia', async () => {
++    const { client, upsert } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: null,
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({ error: expect.any(String) })
++    expect(upsert).not.toHaveBeenCalled()
++  })
++
++  it('retorna erro quando a sessão não é encontrada nesta academia', async () => {
++    const { client } = makeClient({ session: null })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({ error: 'Sessão não encontrada.' })
++  })
++
++  it('revalida a listagem da grade e a página de edição da turma', async () => {
++    const { client } = makeClient({
++      session: { id: 'sess-1', class_id: 'class-1' },
++      membership: { user_id: 'stu-1' },
++      existingBooking: null,
++    })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    await adminSkipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
++    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/class-1/editar', 'page')
++  })
++})
++
++describe('adminUnskipEnrollmentDate', () => {
++  beforeEach(() => {
++    vi.clearAllMocks()
++    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
++  })
++
++  it('revalida a listagem e a página de edição quando encontra a turma da sessão', async () => {
++    const { client } = makeClient({ session: { id: 'sess-1', class_id: 'class-1' } })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminUnskipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({})
++    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
++    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/class-1/editar', 'page')
++  })
++
++  it('não quebra e revalida só a listagem quando a sessão não é encontrada', async () => {
++    const { client } = makeClient({ session: null })
++    vi.mocked(createAdminClient).mockReturnValue(client)
++
++    const result = await adminUnskipEnrollmentDate('stu-1', 'sess-1')
++
++    expect(result).toEqual({})
++    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
++    expect(revalidatePath).not.toHaveBeenCalledWith(expect.stringContaining('/editar'), expect.anything())
++  })
++})
+diff --git a/features/aulas/adminActions.ts b/features/aulas/adminActions.ts
+index 3eb258b..45dc924 100644
+--- a/features/aulas/adminActions.ts
++++ b/features/aulas/adminActions.ts
+@@ -590,3 +590,121 @@ export async function addStudentToSession(
+   revalidatePath(`/admin/grade/${sessionId}`)
+   return {}
+ }
++
++// ---------------------------------------------------------------------------
++// adminSkipEnrollmentDate / adminUnskipEnrollmentDate
++// ---------------------------------------------------------------------------
++
++/** Admin tira o aluno de UMA data (falta pontual): reserva 'cancelled' na sessão. */
++export async function adminSkipEnrollmentDate(
++  studentId: string,
++  sessionId: string,
++): Promise<{ error?: string }> {
++  const { orgId, error: authErr } = await requireAdmin()
++  if (authErr) return { error: authErr }
++  const adminClient = createAdminClient()
++
++  // Escopo: a sessão é desta academia. Guarda class_id para revalidar também
++  // a página de edição da turma (Task 10), como updateClass já faz.
++  const { data: session } = await adminClient
++    .from('class_sessions')
++    .select('id, class_id')
++    .eq('id', sessionId)
++    .eq('organization_id', orgId)
++    .maybeSingle()
++  if (!session) return { error: 'Sessão não encontrada.' }
++
++  // Mesma checagem de addStudentToSession: aluno precisa participar desta academia.
++  const { data: membership } = await adminClient
++    .from('memberships')
++    .select('user_id')
++    .eq('user_id', studentId)
++    .eq('organization_id', orgId)
++    .maybeSingle()
++  if (!membership) return { error: 'Aluno não participa desta academia.' }
++
++  // Lê a reserva ANTES do upsert: se já havia uma reserva 'confirmed' com
++  // crédito debitado (ex.: addStudentToSession usou 1 crédito para esta data),
++  // o upsert abaixo vai sobrescrevê-la para 'cancelled'/credit_used:false —
++  // sem isto o crédito se perderia sem estorno. Mesma lógica de
++  // skipEnrollmentSession (features/aulas/actions.ts).
++  const { data: existingBooking } = await adminClient
++    .from('session_bookings')
++    .select('status, credit_used')
++    .eq('student_id', studentId)
++    .eq('session_id', sessionId)
++    .eq('organization_id', orgId)
++    .maybeSingle()
++  const needsRefund = existingBooking?.status === 'confirmed' && existingBooking?.credit_used === true
++
++  // Reserva 'cancelled' (unique student_id,session_id): a reconciliação não
++  // re-reserva quem tem QUALQUER reserva na sessão (creditReconciliation).
++  const { error } = await adminClient.from('session_bookings').upsert(
++    {
++      organization_id: orgId,
++      student_id: studentId,
++      session_id: sessionId,
++      status: 'cancelled',
++      from_enrollment: true,
++      credit_used: false,
++      cancelled_at: new Date().toISOString(),
++    },
++    { onConflict: 'student_id,session_id' },
++  )
++  if (error) return { error: `Erro ao registrar falta: ${error.message}` }
++
++  let creditWarning: string | undefined
++  if (needsRefund) {
++    // Crédito de reposição sem vencimento — mesmo tratamento de skipEnrollmentSession.
++    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
++      p_student_id: studentId,
++      p_org: orgId,
++      p_delta: 1,
++      p_type: 'refunded',
++      p_reason: 'Falta pontual registrada pelo admin — crédito reposição sem vencimento',
++      p_session_id: sessionId,
++    })
++    if (creditErr) {
++      console.error('[adminSkipEnrollmentDate] adjust_credits falhou', {
++        studentId, sessionId, error: creditErr.message,
++      })
++      creditWarning = 'Falta registrada, mas houve um erro ao devolver o crédito. Contate o suporte.'
++    }
++  }
++
++  revalidatePath('/admin/grade')
++  revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
++  return creditWarning ? { error: creditWarning } : {}
++}
++
++/** Desfaz a falta: remove a reserva 'cancelled' daquela data (volta a poder reservar). */
++export async function adminUnskipEnrollmentDate(
++  studentId: string,
++  sessionId: string,
++): Promise<{ error?: string }> {
++  const { orgId, error: authErr } = await requireAdmin()
++  if (authErr) return { error: authErr }
++  const adminClient = createAdminClient()
++
++  // Só para revalidar a página de edição da turma (Task 10) além da listagem;
++  // não precisa bloquear o desfazer se a turma não for encontrada.
++  const { data: session } = await adminClient
++    .from('class_sessions')
++    .select('class_id')
++    .eq('id', sessionId)
++    .eq('organization_id', orgId)
++    .maybeSingle()
++
++  const { error } = await adminClient
++    .from('session_bookings')
++    .delete()
++    .eq('student_id', studentId)
++    .eq('session_id', sessionId)
++    .eq('organization_id', orgId)
++    .eq('status', 'cancelled')
++  if (error) return { error: `Erro ao desfazer: ${error.message}` }
++
++  revalidatePath('/admin/grade')
++  if (session) revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
++  return {}
++}
+diff --git a/features/aulas/enrollmentRoster.test.ts b/features/aulas/enrollmentRoster.test.ts
+new file mode 100644
+index 0000000..01e0a29
+--- /dev/null
++++ b/features/aulas/enrollmentRoster.test.ts
+@@ -0,0 +1,125 @@
++import { describe, it, expect } from 'vitest'
++import { getClassRoster } from './enrollmentRoster'
++
++/**
++ * Fake client: `classes` grava os filtros de `.eq()` e o `.then()` de fato
++ * filtra por eles — mesma técnica de gridGeneration.test.ts, para que um teste
++ * que exige filtro por dayOfWeek/classId falhe de verdade se o `.eq(...)`
++ * correspondente for removido do código-fonte. `enrollments`/`memberships`/
++ * `student_subscriptions` continuam pass-through simples: getClassRoster não
++ * aplica opts a elas (só a `classes`).
++ */
++function makeClient(data: {
++  classes: { id: string; day_of_week: number }[]
++  enrollments: { class_id: string; student_id: string }[]
++  memberships: { user_id: string; partner: string | null; pending_partner: string | null }[]
++  subs: { student_id: string; gateway: string; current_period_end: string | null }[]
++}) {
++  return {
++    from(table: string) {
++      if (table === 'classes') {
++        const filters: [string, unknown][] = []
++        const builder: any = {
++          select() { return builder },
++          eq(field: string, value: unknown) {
++            filters.push([field, value])
++            return builder
++          },
++          then(resolve: (v: { data: unknown[] }) => void) {
++            const filtered = data.classes.filter((c) =>
++              filters.every(([field, value]) =>
++                !(field in c) || (c as Record<string, unknown>)[field] === value,
++              ),
++            )
++            resolve({ data: filtered })
++          },
++        }
++        return builder
++      }
++      const rowsByTable: Record<string, unknown[]> = {
++        enrollments: data.enrollments,
++        memberships: data.memberships,
++        student_subscriptions: data.subs,
++      }
++      const builder: any = {
++        _rows: rowsByTable[table] ?? [],
++        select() { return builder },
++        eq() { return builder },
++        in() { return builder },
++        then(resolve: (v: { data: unknown[] }) => void) { resolve({ data: builder._rows }) },
++      }
++      return builder
++    },
++  } as any
++}
++
++describe('getClassRoster', () => {
++  it('classifica cada matriculado por status', async () => {
++    const client = makeClient({
++      classes: [{ id: 'c1', day_of_week: 2 }],
++      enrollments: [
++        { class_id: 'c1', student_id: 'a' },
++        { class_id: 'c1', student_id: 'b' },
++        { class_id: 'c1', student_id: 'd' },
++      ],
++      memberships: [
++        { user_id: 'a', partner: null, pending_partner: null }, // plano → elegivel
++        { user_id: 'b', partner: null, pending_partner: 'wellhub' }, // a_confirmar
++        { user_id: 'd', partner: null, pending_partner: null }, // sem_plano
++      ],
++      subs: [{ student_id: 'a', gateway: 'manual', current_period_end: null }], // manual = vigente
++    })
++    const roster = await getClassRoster(client, 'org1')
++    const c1 = roster.byClass.get('c1')!
++    expect(c1.eligible).toBe(1)
++    expect(c1.pendingConfirmation).toBe(1)
++    expect(c1.noPlan).toBe(1)
++    expect(c1.enrolled).toBe(3)
++  })
++
++  it('filtra por dayOfWeek', async () => {
++    const client = makeClient({
++      classes: [
++        { id: 'c1', day_of_week: 2 },
++        { id: 'c2', day_of_week: 4 }, // fora do escopo do filtro abaixo
++      ],
++      enrollments: [
++        { class_id: 'c1', student_id: 'a' },
++        { class_id: 'c2', student_id: 'z' }, // apareceria em totals se o filtro não funcionasse
++      ],
++      memberships: [
++        { user_id: 'a', partner: 'wellhub', pending_partner: null },
++        { user_id: 'z', partner: 'wellhub', pending_partner: null },
++      ],
++      subs: [],
++    })
++    const roster = await getClassRoster(client, 'org1', { dayOfWeek: 2 })
++    expect(roster.byClass.has('c2')).toBe(false)
++    expect(roster.byClass.has('c1')).toBe(true)
++    expect(roster.totals.enrolled).toBe(1)
++    expect(roster.totals.eligible).toBe(1)
++  })
++
++  it('filtra por classId', async () => {
++    const client = makeClient({
++      classes: [
++        { id: 'c1', day_of_week: 2 },
++        { id: 'c2', day_of_week: 2 }, // mesmo dia, só o id difere
++      ],
++      enrollments: [
++        { class_id: 'c1', student_id: 'a' },
++        { class_id: 'c2', student_id: 'z' }, // apareceria em totals se o filtro não funcionasse
++      ],
++      memberships: [
++        { user_id: 'a', partner: 'wellhub', pending_partner: null },
++        { user_id: 'z', partner: 'wellhub', pending_partner: null },
++      ],
++      subs: [],
++    })
++    const roster = await getClassRoster(client, 'org1', { classId: 'c1' })
++    expect(roster.byClass.has('c2')).toBe(false)
++    expect(roster.byClass.has('c1')).toBe(true)
++    expect(roster.totals.enrolled).toBe(1)
++    expect(roster.totals.eligible).toBe(1)
++  })
++})
+diff --git a/features/aulas/enrollmentRoster.ts b/features/aulas/enrollmentRoster.ts
+new file mode 100644
+index 0000000..0c0c764
+--- /dev/null
++++ b/features/aulas/enrollmentRoster.ts
+@@ -0,0 +1,96 @@
++// features/aulas/enrollmentRoster.ts
++// Roster de alunos por turma com status (spec 2026-07-21 §1). Fonte única
++// reusada pela grade, pelo feedback do "Gerar" e pelo editar-turma.
++import type { createAdminClient } from '@/lib/supabase/server'
++import { classifyEnrollment, type EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
++import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
++import type { CheckinPartner } from '@/types'
++
++type AdminClient = ReturnType<typeof createAdminClient>
++
++export interface RosterStudent {
++  studentId: string
++  classId: string
++  status: EnrollmentStatus
++}
++export interface ClassRosterCounts {
++  enrolled: number
++  eligible: number
++  pendingConfirmation: number
++  noPlan: number
++  students: RosterStudent[]
++}
++export interface Roster {
++  byClass: Map<string, ClassRosterCounts>
++  totals: { enrolled: number; eligible: number; pendingConfirmation: number; noPlan: number }
++}
++
++export async function getClassRoster(
++  client: AdminClient,
++  orgId: string,
++  opts: { dayOfWeek?: number; classId?: string } = {},
++): Promise<Roster> {
++  let clsQ = client.from('classes').select('id, day_of_week').eq('organization_id', orgId).eq('is_active', true)
++  if (opts.dayOfWeek !== undefined) clsQ = clsQ.eq('day_of_week', opts.dayOfWeek)
++  if (opts.classId !== undefined) clsQ = clsQ.eq('id', opts.classId)
++  const { data: classesRaw } = await clsQ
++  const classIds = ((classesRaw ?? []) as { id: string }[]).map((c) => c.id)
++
++  const empty: Roster = { byClass: new Map(), totals: { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0 } }
++  if (classIds.length === 0) return empty
++
++  const { data: enrollRaw } = await client
++    .from('enrollments').select('class_id, student_id')
++    .in('class_id', classIds).eq('organization_id', orgId).eq('is_active', true)
++  const enrolls = (enrollRaw ?? []) as { class_id: string; student_id: string }[]
++  if (enrolls.length === 0) {
++    for (const id of classIds) empty.byClass.set(id, { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0, students: [] })
++    return empty
++  }
++
++  const studentIds = Array.from(new Set(enrolls.map((e) => e.student_id)))
++
++  const { data: memsRaw } = await client
++    .from('memberships').select('user_id, partner, pending_partner')
++    .in('user_id', studentIds).eq('organization_id', orgId)
++  const memById = new Map(
++    ((memsRaw ?? []) as { user_id: string; partner: CheckinPartner | null; pending_partner: CheckinPartner | null }[])
++      .map((m) => [m.user_id, m]),
++  )
++
++  const { data: subsRaw } = await client
++    .from('student_subscriptions').select('student_id, gateway, current_period_end')
++    .in('student_id', studentIds).eq('organization_id', orgId).eq('status', 'active')
++  const now = new Date()
++  const planStudents = new Set(
++    ((subsRaw ?? []) as { student_id: string; gateway: string; current_period_end: string | null }[])
++      .filter((s) => isSubscriptionCurrent(s, now)).map((s) => s.student_id),
++  )
++
++  const byClass = new Map<string, ClassRosterCounts>()
++  for (const id of classIds) byClass.set(id, { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0, students: [] })
++  const totals = { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0 }
++
++  for (const e of enrolls) {
++    // class_id fora do escopo atual (ex.: excluído por opts.dayOfWeek/classId, ou
++    // uma turma que virou inativa entre a query de classes e a de enrollments):
++    // ignora em vez de estourar. Não deveria ocorrer com o client real (a query
++    // já filtra por .in('class_id', classIds)), mas blindar é barato e evita
++    // acoplar a corretude a uma invariante só garantida do lado do banco.
++    const c = byClass.get(e.class_id)
++    if (!c) continue
++    const mem = memById.get(e.student_id)
++    const status = classifyEnrollment({
++      partner: mem?.partner ?? null,
++      pendingPartner: mem?.pending_partner ?? null,
++      hasActivePlan: planStudents.has(e.student_id),
++    })
++    c.enrolled++; totals.enrolled++
++    if (status === 'elegivel') { c.eligible++; totals.eligible++ }
++    else if (status === 'a_confirmar') { c.pendingConfirmation++; totals.pendingConfirmation++ }
++    else { c.noPlan++; totals.noPlan++ }
++    c.students.push({ studentId: e.student_id, classId: e.class_id, status })
++  }
++
++  return { byClass, totals }
++}
+diff --git a/features/aulas/gridActions.test.ts b/features/aulas/gridActions.test.ts
+new file mode 100644
+index 0000000..921e29b
+--- /dev/null
++++ b/features/aulas/gridActions.test.ts
+@@ -0,0 +1,112 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest'
++
++vi.mock('@/lib/supabase/server', () => ({
++  createAdminClient: vi.fn(() => ({})),
++}))
++
++vi.mock('next/cache', () => ({
++  revalidatePath: vi.fn(),
++}))
++
++vi.mock('./authGuards', () => ({
++  requireAdmin: vi.fn(),
++}))
++
++vi.mock('./gridGeneration', () => ({
++  generateGrid: vi.fn(),
++}))
++
++vi.mock('./enrollmentRoster', () => ({
++  getClassRoster: vi.fn(),
++}))
++
++vi.mock('./gridNotify', () => ({
++  notifyGridGenerated: vi.fn(),
++}))
++
++import { generateGridDay, generateGridWeek } from './gridActions'
++import { requireAdmin } from './authGuards'
++import { generateGrid } from './gridGeneration'
++import { getClassRoster, type Roster } from './enrollmentRoster'
++import { notifyGridGenerated } from './gridNotify'
++
++const SAMPLE_ROSTER: Roster = {
++  byClass: new Map(),
++  totals: { enrolled: 10, eligible: 6, pendingConfirmation: 3, noPlan: 1 },
++}
++
++describe('generateGridDay / generateGridWeek', () => {
++  beforeEach(() => {
++    vi.clearAllMocks()
++    vi.mocked(requireAdmin).mockResolvedValue({ userId: 'user-1', orgId: 'org-1' })
++    vi.mocked(getClassRoster).mockResolvedValue(SAMPLE_ROSTER)
++    vi.mocked(notifyGridGenerated).mockResolvedValue(undefined)
++  })
++
++  it('erro do generateGrid interrompe antes do roster e do notify', async () => {
++    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, error: 'boom' })
++
++    const result = await generateGridWeek()
++
++    expect(result).toEqual({ error: 'boom' })
++    expect(getClassRoster).not.toHaveBeenCalled()
++    expect(notifyGridGenerated).not.toHaveBeenCalled()
++  })
++
++  it('nao notifica quando sessionsCreated=0, mas ainda calcula e retorna o roster', async () => {
++    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0 })
++
++    const result = await generateGridDay(2)
++
++    expect(notifyGridGenerated).not.toHaveBeenCalled()
++    expect(getClassRoster).toHaveBeenCalledTimes(1)
++    expect(result).toEqual({
++      sessionsCreated: 0,
++      reservados: 6,
++      aConfirmar: 3,
++      semPlano: 1,
++    })
++  })
++
++  it('notifica com escopo "day" (e roster escopado ao dia) quando generateGridDay cria sessões novas', async () => {
++    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 2, studentsBooked: 5 })
++
++    await generateGridDay(3)
++
++    expect(getClassRoster).toHaveBeenCalledWith(expect.anything(), 'org-1', { dayOfWeek: 3 })
++    expect(notifyGridGenerated).toHaveBeenCalledTimes(1)
++    expect(notifyGridGenerated).toHaveBeenCalledWith('org-1', { kind: 'day', dayOfWeek: 3 })
++  })
++
++  it('notifica com escopo "week" quando generateGridWeek cria sessões novas', async () => {
++    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 4, studentsBooked: 9 })
++
++    await generateGridWeek()
++
++    expect(getClassRoster).toHaveBeenCalledWith(expect.anything(), 'org-1', {})
++    expect(notifyGridGenerated).toHaveBeenCalledTimes(1)
++    expect(notifyGridGenerated).toHaveBeenCalledWith('org-1', { kind: 'week' })
++  })
++
++  it('falha do getClassRoster degrada para zeros em vez de rejeitar, e ainda assim notifica', async () => {
++    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 1, studentsBooked: 1 })
++    vi.mocked(getClassRoster).mockRejectedValue(new Error('roster boom'))
++    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
++
++    const result = await generateGridWeek()
++
++    expect(result).toEqual({
++      sessionsCreated: 1,
++      reservados: 0,
++      aConfirmar: 0,
++      semPlano: 0,
++    })
++    // A falha do roster não pode bloquear o push: sessionsCreated>0 ainda notifica.
++    expect(notifyGridGenerated).toHaveBeenCalledTimes(1)
++    expect(notifyGridGenerated).toHaveBeenCalledWith('org-1', { kind: 'week' })
++    expect(consoleErrorSpy).toHaveBeenCalledWith(
++      '[gridActions] getClassRoster falhou',
++      expect.objectContaining({ orgId: 'org-1' }),
++    )
++  })
++})
+diff --git a/features/aulas/gridActions.ts b/features/aulas/gridActions.ts
+index 823d3be..7641707 100644
+--- a/features/aulas/gridActions.ts
++++ b/features/aulas/gridActions.ts
+@@ -1,14 +1,59 @@
+ // features/aulas/gridActions.ts
+ 'use server'
+ import { revalidatePath } from 'next/cache'
++import { createAdminClient } from '@/lib/supabase/server'
+ import { requireAdmin } from './authGuards'
+ import { generateGrid } from './gridGeneration'
++import { getClassRoster, type Roster } from './enrollmentRoster'
++import { notifyGridGenerated } from './gridNotify'
+ import { brtToday, addDaysStr, nextDateForDayOfWeek } from '@/lib/utils/gridSchedule'
+ 
+ interface GridActionResult {
+   error?: string
+   sessionsCreated?: number
+-  studentsBooked?: number
++  // reservados/aConfirmar/semPlano ficam em pt-BR de propósito: são o shape direto
++  // do texto exibido ao admin (Task 7), diferente do inglês interno de enrollmentRoster.ts.
++  reservados?: number
++  aConfirmar?: number
++  semPlano?: number
++}
++
++/**
++ * Busca o roster com blindagem: se falhar (qualquer uma das queries internas,
++ * ou até createAdminClient()), degrada para contagens zeradas em vez de
++ * derrubar a Server Action. Importante: generateGrid já inseriu as sessões de
++ * forma durável ANTES deste ponto, e o gate de notificação (sessionsCreated >
++ * 0) depende de um upsert idempotente — se a action rejeitar aqui, um retry
++ * encontra as sessões já existentes, sessionsCreated volta 0, e a notificação
++ * daquelas sessões específicas NUNCA mais dispara. Perder o roster não deveria
++ * também bloquear o push.
++ */
++async function getRosterSafe(orgId: string, opts: { dayOfWeek?: number } = {}): Promise<Roster> {
++  try {
++    return await getClassRoster(createAdminClient(), orgId, opts)
++  } catch (err) {
++    console.error('[gridActions] getClassRoster falhou', { orgId, error: err instanceof Error ? err.message : String(err) })
++    return { byClass: new Map(), totals: { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0 } }
++  }
++}
++
++/** Roster (blindado) + notify (best-effort, gated) + revalidate + shape do retorno — cauda compartilhada pelas duas actions. */
++async function finishGeneration(
++  orgId: string,
++  sessionsCreated: number,
++  rosterOpts: { dayOfWeek?: number },
++  notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
++): Promise<GridActionResult> {
++  const roster = await getRosterSafe(orgId, rosterOpts)
++  if (sessionsCreated > 0) await notifyGridGenerated(orgId, notifyScope)
++
++  revalidatePath('/admin/grade')
++  return {
++    sessionsCreated,
++    reservados: roster.totals.eligible,
++    aConfirmar: roster.totals.pendingConfirmation,
++    semPlano: roster.totals.noPlan,
++  }
+ }
+ 
+ /** Gera a próxima ocorrência de um dia-da-semana (todas as turmas do dia). */
+@@ -25,8 +70,7 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
+   const r = await generateGrid(orgId, target, target, { dayOfWeek })
+   if (r.error) return { error: r.error }
+ 
+-  revalidatePath('/admin/grade')
+-  return { sessionsCreated: r.sessionsCreated, studentsBooked: r.studentsBooked }
++  return finishGeneration(orgId, r.sessionsCreated, { dayOfWeek }, { kind: 'day', dayOfWeek })
+ }
+ 
+ /** Gera a semana toda (7 datas a partir de hoje, todas as turmas). */
+@@ -39,6 +83,5 @@ export async function generateGridWeek(): Promise<GridActionResult> {
+   const r = await generateGrid(orgId, from, to)
+   if (r.error) return { error: r.error }
+ 
+-  revalidatePath('/admin/grade')
+-  return { sessionsCreated: r.sessionsCreated, studentsBooked: r.studentsBooked }
++  return finishGeneration(orgId, r.sessionsCreated, {}, { kind: 'week' })
+ }
+diff --git a/features/aulas/gridGeneration.test.ts b/features/aulas/gridGeneration.test.ts
+index 3bce8fb..1eaa174 100644
+--- a/features/aulas/gridGeneration.test.ts
++++ b/features/aulas/gridGeneration.test.ts
+@@ -17,11 +17,35 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
+  * eles — assim um teste que exige filtro por `classId`/`dayOfWeek` falha de
+  * verdade se o `.eq(...)` correspondente for removido do código-fonte.
+  */
+-function makeClient(classes: { id: string; day_of_week: number }[], upsertError: { message: string } | null = null) {
++function makeClient(
++  classes: { id: string; day_of_week: number }[],
++  upsertError: { message: string } | null = null,
++  // Quantas das linhas passadas ao upsert devem ser tratadas como "realmente
++  // inseridas" (o resto simula conflito, como ON CONFLICT DO NOTHING faria).
++  // Default: todas — reflete os fixtures existentes, que geram do zero.
++  insertedCount?: number,
++) {
+   const upserted: unknown[][] = []
+   const from = vi.fn((table: string) => {
+     if (table === 'class_sessions') {
+-      return { upsert: (rows: unknown[]) => { upserted.push(rows); return Promise.resolve({ error: upsertError }) } }
++      return {
++        upsert: (rows: { class_id: string; session_date: string }[]) => {
++          upserted.push(rows)
++          return {
++            select: () =>
++              Promise.resolve(
++                upsertError
++                  ? { data: null, error: upsertError }
++                  : {
++                      data: rows
++                        .slice(0, insertedCount ?? rows.length)
++                        .map((r) => ({ id: `${r.class_id}:${r.session_date}` })),
++                      error: null,
++                    },
++              ),
++          }
++        },
++      }
+     }
+     // classes: encadeia select/eq/eq... e resolve com a lista filtrada (thenable)
+     const filters: [string, unknown][] = []
+@@ -111,4 +135,22 @@ describe('generateGrid', () => {
+       expect.objectContaining({ orgId: 'org-1', error: 'upsert boom' }),
+     )
+   })
++
++  it('conta apenas as sessões realmente inseridas quando há conflito parcial (idempotência)', async () => {
++    // 2 turmas de terça → 2 linhas tentadas no upsert, mas só 1 é nova (a outra
++    // já existia de uma geração anterior e foi pulada pelo ON CONFLICT DO NOTHING).
++    const { client, upserted } = makeClient(
++      [
++        { id: 'c1', day_of_week: 2 },
++        { id: 'c2', day_of_week: 2 },
++      ],
++      null,
++      1,
++    )
++    const r = await generateGrid('org-1', '2026-07-20', '2026-07-26', {}, client)
++
++    expect(upserted[0]).toHaveLength(2) // tentou inserir 2
++    expect(r.sessionsCreated).toBe(1) // mas só 1 foi de fato inserida — não rows.length
++    expect(r.studentsBooked).toBe(3) // reconciliação roda normalmente após conflito parcial
++  })
+ })
+diff --git a/features/aulas/gridGeneration.ts b/features/aulas/gridGeneration.ts
+index 368e540..cadef61 100644
+--- a/features/aulas/gridGeneration.ts
++++ b/features/aulas/gridGeneration.ts
+@@ -9,6 +9,7 @@ import { reconcileAllActiveEnrollments } from './creditReconciliation'
+ type AdminClient = ReturnType<typeof createAdminClient>
+ 
+ export interface GenerateGridResult {
++  /** Sessões efetivamente inseridas nesta chamada — não conta as que já existiam e foram puladas pelo upsert idempotente. */
+   sessionsCreated: number
+   studentsBooked: number
+   /** Presente quando o upsert de class_sessions falhou — chamador não deve tratar como sucesso. */
+@@ -42,11 +43,15 @@ export async function generateGrid(
+   if (classes.length === 0) return { sessionsCreated: 0, studentsBooked: 0 }
+ 
+   const rows = classes.flatMap((c) => buildSessionRows(c.id, c.day_of_week, from, to))
++  let sessionsCreated = 0
+   if (rows.length > 0) {
+     // organization_id é preenchido pelo trigger trg_set_org (deriva de class_id).
+-    const { error: upsertErr } = await client
++    // .select() com ignoreDuplicates devolve SÓ as linhas inseridas (conflitos
++    // são pulados e não voltam) → contagem real de sessões novas, não tentadas.
++    const { data: inserted, error: upsertErr } = await client
+       .from('class_sessions')
+       .upsert(rows, { onConflict: 'class_id,session_date', ignoreDuplicates: true })
++      .select('id')
+ 
+     if (upsertErr) {
+       console.error('[generateGrid] upsert de class_sessions falhou', {
+@@ -54,9 +59,10 @@ export async function generateGrid(
+       })
+       return { sessionsCreated: 0, studentsBooked: 0, error: upsertErr.message }
+     }
++    sessionsCreated = inserted?.length ?? 0
+   }
+ 
+   const rec = await reconcileAllActiveEnrollments(from, to, orgId)
+ 
+-  return { sessionsCreated: rows.length, studentsBooked: rec.booked }
++  return { sessionsCreated, studentsBooked: rec.booked }
+ }
+diff --git a/features/aulas/gridNotify.test.ts b/features/aulas/gridNotify.test.ts
+new file mode 100644
+index 0000000..3ab4d4a
+--- /dev/null
++++ b/features/aulas/gridNotify.test.ts
+@@ -0,0 +1,179 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest'
++
++vi.mock('@/lib/notifications/dispatch', () => ({ notifyUsers: vi.fn() }))
++vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }))
++
++import { notifyGridGenerated } from './gridNotify'
++import { notifyUsers } from '@/lib/notifications/dispatch'
++import * as Sentry from '@sentry/nextjs'
++
++/**
++ * Fake client: `organizations` responde ao `.single()` com o nome configurado
++ * (ou null, simulando org não encontrada). `memberships` grava os filtros de
++ * `.eq()` e o `.then()` de fato filtra por eles — mesma técnica de
++ * gridGeneration.test.ts — para que um teste que exige escopo por org/role/
++ * contract_active falhe de verdade se algum `.eq(...)` for removido do
++ * código-fonte (é exatamente o vazamento entre academias que este helper não
++ * pode cometer).
++ */
++function makeClient(opts: {
++  orgName?: string | null
++  memberships: Array<{ user_id: string; organization_id: string; role: string; contract_active: boolean }>
++}) {
++  const client = {
++    from(table: string) {
++      if (table === 'organizations') {
++        const filters: [string, unknown][] = []
++        const builder: Record<string, unknown> = {}
++        builder.select = () => builder
++        builder.eq = (field: string, value: unknown) => {
++          filters.push([field, value])
++          return builder
++        }
++        builder.single = () => {
++          if (opts.orgName == null) return Promise.resolve({ data: null })
++          // Só devolve o nome se o filtro por id foi de fato aplicado.
++          const filteredById = filters.some(([f]) => f === 'id')
++          return Promise.resolve({ data: filteredById ? { name: opts.orgName } : null })
++        }
++        return builder
++      }
++      if (table === 'memberships') {
++        const filters: [string, unknown][] = []
++        const builder: Record<string, unknown> = {}
++        builder.select = () => builder
++        builder.eq = (field: string, value: unknown) => {
++          filters.push([field, value])
++          return builder
++        }
++        builder.then = (resolve: (v: { data: unknown[] }) => void) => {
++          const filtered = opts.memberships.filter((m) =>
++            filters.every(([field, value]) => (m as Record<string, unknown>)[field] === value),
++          )
++          resolve({ data: filtered.map((m) => ({ user_id: m.user_id })) })
++        }
++        return builder
++      }
++      throw new Error(`tabela inesperada: ${table}`)
++    },
++  }
++  return client as never
++}
++
++describe('notifyGridGenerated', () => {
++  beforeEach(() => {
++    vi.mocked(notifyUsers).mockReset()
++    vi.mocked(Sentry.captureException).mockReset()
++  })
++
++  it('notifica só os alunos ativos da academia informada (escopo semana)', async () => {
++    const client = makeClient({
++      orgName: 'Arena Beach Tennis',
++      memberships: [
++        { user_id: 'aluno-1', organization_id: 'org-1', role: 'student', contract_active: true },
++        { user_id: 'aluno-2', organization_id: 'org-1', role: 'student', contract_active: true },
++        // Não deve aparecer: outra org, outro role, contrato inativo.
++        { user_id: 'aluno-outra-org', organization_id: 'org-2', role: 'student', contract_active: true },
++        { user_id: 'admin-1', organization_id: 'org-1', role: 'admin', contract_active: true },
++        { user_id: 'aluno-inativo', organization_id: 'org-1', role: 'student', contract_active: false },
++      ],
++    })
++
++    await notifyGridGenerated('org-1', { kind: 'week' }, client)
++
++    expect(notifyUsers).toHaveBeenCalledTimes(1)
++    expect(notifyUsers).toHaveBeenCalledWith(client, {
++      orgId: 'org-1',
++      recipients: [{ userId: 'aluno-1' }, { userId: 'aluno-2' }],
++      type: 'grade_disponivel',
++      title: 'Novas aulas na Arena Beach Tennis',
++      body: 'A grade da semana já está disponível. Agende sua aula!',
++      channels: ['push', 'inapp'],
++    })
++  })
++
++  it('escopo dia usa o nome do dia da semana no título e mensagem curta', async () => {
++    const client = makeClient({
++      orgName: 'Arena Beach Tennis',
++      memberships: [{ user_id: 'aluno-1', organization_id: 'org-1', role: 'student', contract_active: true }],
++    })
++
++    await notifyGridGenerated('org-1', { kind: 'day', dayOfWeek: 2 }, client) // terça
++
++    expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
++      title: 'Aulas de terça na Arena Beach Tennis',
++      body: 'Já dá pra agendar. Bora treinar!',
++    }))
++  })
++
++  it('dayOfWeek fora do intervalo cai no fallback "sua turma"', async () => {
++    const client = makeClient({
++      orgName: 'Arena Beach Tennis',
++      memberships: [{ user_id: 'aluno-1', organization_id: 'org-1', role: 'student', contract_active: true }],
++    })
++
++    await notifyGridGenerated('org-1', { kind: 'day', dayOfWeek: 99 }, client)
++
++    expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
++      title: 'Aulas de sua turma na Arena Beach Tennis',
++    }))
++  })
++
++  it('org não encontrada cai no fallback "sua academia" em vez de vazar undefined', async () => {
++    const client = makeClient({
++      orgName: null,
++      memberships: [{ user_id: 'aluno-1', organization_id: 'org-1', role: 'student', contract_active: true }],
++    })
++
++    await notifyGridGenerated('org-1', { kind: 'week' }, client)
++
++    expect(notifyUsers).toHaveBeenCalledWith(client, expect.objectContaining({
++      title: 'Novas aulas na sua academia',
++    }))
++  })
++
++  it('sem destinatários (nenhum aluno ativo na academia) não chama notifyUsers', async () => {
++    const client = makeClient({
++      orgName: 'Arena Beach Tennis',
++      memberships: [
++        { user_id: 'admin-1', organization_id: 'org-1', role: 'admin', contract_active: true },
++        { user_id: 'aluno-inativo', organization_id: 'org-1', role: 'student', contract_active: false },
++      ],
++    })
++
++    await notifyGridGenerated('org-1', { kind: 'week' }, client)
++
++    expect(notifyUsers).not.toHaveBeenCalled()
++  })
++
++  it('nunca lança mesmo se notifyUsers falhar — reporta ao Sentry', async () => {
++    const client = makeClient({
++      orgName: 'Arena Beach Tennis',
++      memberships: [{ user_id: 'aluno-1', organization_id: 'org-1', role: 'student', contract_active: true }],
++    })
++    vi.mocked(notifyUsers).mockRejectedValueOnce(new Error('boom'))
++
++    await expect(notifyGridGenerated('org-1', { kind: 'week' }, client)).resolves.toBeUndefined()
++    expect(Sentry.captureException).toHaveBeenCalledWith(
++      expect.any(Error),
++      expect.objectContaining({ tags: { feature: 'gridNotify' }, extra: { orgId: 'org-1' } }),
++    )
++  })
++
++  it('nunca lança mesmo se a query da organization falhar', async () => {
++    const client = {
++      from(table: string) {
++        if (table === 'organizations') {
++          return {
++            select: () => ({ eq: () => ({ single: () => Promise.reject(new Error('db down')) }) }),
++          }
++        }
++        throw new Error(`tabela inesperada: ${table}`)
++      },
++    } as never
++
++    await expect(notifyGridGenerated('org-1', { kind: 'week' }, client)).resolves.toBeUndefined()
++    expect(notifyUsers).not.toHaveBeenCalled()
++    expect(Sentry.captureException).toHaveBeenCalledTimes(1)
++  })
++})
+diff --git a/features/aulas/gridNotify.ts b/features/aulas/gridNotify.ts
+new file mode 100644
+index 0000000..2af208a
+--- /dev/null
++++ b/features/aulas/gridNotify.ts
+@@ -0,0 +1,56 @@
++// features/aulas/gridNotify.ts
++// Push + in-app por academia ao gerar a grade (spec 2026-07-21 §8). Multi-tenant:
++// puxa o nome da org e notifica só os alunos DELA. Best-effort: nunca lança.
++import * as Sentry from '@sentry/nextjs'
++import { createAdminClient } from '@/lib/supabase/server'
++import { notifyUsers } from '@/lib/notifications/dispatch'
++
++type AdminClient = ReturnType<typeof createAdminClient>
++
++const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
++
++export async function notifyGridGenerated(
++  orgId: string,
++  scope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
++  client?: AdminClient,
++): Promise<void> {
++  try {
++    // Resolvido AQUI DENTRO (não como default de parâmetro) — se createAdminClient()
++    // lançar (ex.: env var ausente), o catch abaixo precisa ver, senão o "nunca
++    // lança" vira mentira justamente no caso comum: chamador sem client próprio.
++    const c = client ?? createAdminClient()
++
++    const { data: org } = await c.from('organizations').select('name').eq('id', orgId).single()
++    const academia = (org as { name: string } | null)?.name ?? 'sua academia'
++
++    const title =
++      scope.kind === 'week'
++        ? `Novas aulas na ${academia}`
++        : `Aulas de ${DIAS[scope.dayOfWeek] ?? 'sua turma'} na ${academia}`
++    const body =
++      scope.kind === 'week'
++        ? 'A grade da semana já está disponível. Agende sua aula!'
++        : 'Já dá pra agendar. Bora treinar!'
++
++    const { data: mems } = await c
++      .from('memberships')
++      .select('user_id')
++      .eq('organization_id', orgId)
++      .eq('role', 'student')
++      .eq('contract_active', true)
++    const recipients = ((mems ?? []) as { user_id: string }[]).map((m) => ({ userId: m.user_id }))
++    if (recipients.length === 0) return
++
++    await notifyUsers(c, {
++      orgId,
++      recipients,
++      type: 'grade_disponivel',
++      title,
++      body,
++      channels: ['push', 'inapp'],
++    })
++  } catch (err) {
++    console.error('[notifyGridGenerated] falhou', { orgId, error: err instanceof Error ? err.message : String(err) })
++    Sentry.captureException(err, { tags: { feature: 'gridNotify' }, extra: { orgId } })
++  }
++}
+diff --git a/lib/utils/enrollmentStatus.test.ts b/lib/utils/enrollmentStatus.test.ts
+new file mode 100644
+index 0000000..629e96c
+--- /dev/null
++++ b/lib/utils/enrollmentStatus.test.ts
+@@ -0,0 +1,23 @@
++import { describe, it, expect } from 'vitest'
++import { classifyEnrollment } from './enrollmentStatus'
++
++describe('classifyEnrollment', () => {
++  it('parceiro confirmado → elegivel', () => {
++    expect(classifyEnrollment({ partner: 'wellhub', pendingPartner: null, hasActivePlan: false })).toBe('elegivel')
++  })
++  it('plano ativo → elegivel', () => {
++    expect(classifyEnrollment({ partner: null, pendingPartner: null, hasActivePlan: true })).toBe('elegivel')
++  })
++  it('pending_partner sem confirmar → a_confirmar', () => {
++    expect(classifyEnrollment({ partner: null, pendingPartner: 'wellhub', hasActivePlan: false })).toBe('a_confirmar')
++  })
++  it('nada → sem_plano', () => {
++    expect(classifyEnrollment({ partner: null, pendingPartner: null, hasActivePlan: false })).toBe('sem_plano')
++  })
++  it('parceiro confirmado vence pending_partner diferente → elegivel', () => {
++    expect(classifyEnrollment({ partner: 'wellhub', pendingPartner: 'totalpass', hasActivePlan: false })).toBe('elegivel')
++  })
++  it('plano ativo vence pending_partner → elegivel', () => {
++    expect(classifyEnrollment({ partner: null, pendingPartner: 'totalpass', hasActivePlan: true })).toBe('elegivel')
++  })
++})
+diff --git a/lib/utils/enrollmentStatus.ts b/lib/utils/enrollmentStatus.ts
+new file mode 100644
+index 0000000..95a2ae9
+--- /dev/null
++++ b/lib/utils/enrollmentStatus.ts
+@@ -0,0 +1,18 @@
++import type { CheckinPartner } from '@/types'
++
++// Puro: classifica como o aluno fixo entra na grade. A reserva só acontece pra
++// 'elegivel' (spec 2026-07-21 §1). 'a_confirmar' = Wellhub/TotalPass declarado
++// mas ainda não confirmado — exibição honesta, NÃO reserva.
++export type EnrollmentStatus = 'elegivel' | 'a_confirmar' | 'sem_plano'
++
++export interface EnrollmentInput {
++  partner: CheckinPartner | null
++  pendingPartner: CheckinPartner | null
++  hasActivePlan: boolean
++}
++
++export function classifyEnrollment(input: EnrollmentInput): EnrollmentStatus {
++  if (input.partner || input.hasActivePlan) return 'elegivel'
++  if (input.pendingPartner) return 'a_confirmar'
++  return 'sem_plano'
++}
+diff --git a/supabase/migrations/20260721000000_class_sessions_created_at.sql b/supabase/migrations/20260721000000_class_sessions_created_at.sql
+new file mode 100644
+index 0000000..a7e373c
+--- /dev/null
++++ b/supabase/migrations/20260721000000_class_sessions_created_at.sql
+@@ -0,0 +1,8 @@
++-- supabase/migrations/20260721000000_class_sessions_created_at.sql
++-- Adiciona created_at para exibir "gerada em/há X" por turma (spec 2026-07-21 §4).
++-- Linhas existentes recebem now() no deploy (a data de geração passada se perde —
++-- aceitável, sem risco destrutivo).
++alter table class_sessions
++  add column if not exists created_at timestamptz not null default now();
++
++create index if not exists idx_class_sessions_class_created on class_sessions (class_id, created_at desc);

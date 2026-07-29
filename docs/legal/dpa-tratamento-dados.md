@@ -40,7 +40,3 @@ Ver seção correspondente na Política de Privacidade — os mesmos suboperador
 ## 9. Vigência e efeitos da rescisão
 
 Este DPA acompanha a vigência do Contrato de Assinatura SaaS. Encerrada a assinatura, os dados dos Alunos são tratados conforme a seção "Dados após o cancelamento" do Contrato de Assinatura SaaS.
-
----
-
-*Rascunho técnico elaborado com base em pesquisa jurídica sobre a LGPD e o Guia Orientativo da ANPD sobre agentes de tratamento — **pendente de revisão por advogado** antes de uso comercial pleno. Não constitui aconselhamento jurídico.*

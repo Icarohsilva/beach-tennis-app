@@ -66,7 +66,3 @@ Solicitações relacionadas à proteção de dados podem ser direcionadas a **su
 ## 13. Alterações
 
 Esta Política pode ser atualizada. Mudanças relevantes serão comunicadas com antecedência razoável.
-
----
-
-*Rascunho técnico elaborado com base em pesquisa jurídica sobre a LGPD — **pendente de revisão por advogado** antes de uso comercial pleno. Não constitui aconselhamento jurídico.*

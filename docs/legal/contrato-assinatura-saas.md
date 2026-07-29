@@ -47,7 +47,3 @@ Este Contrato vigora enquanto a assinatura estiver ativa. Pode ser rescindido po
 ## 10. Alterações
 
 Este Contrato pode ser atualizado. Mudanças relevantes serão comunicadas com antecedência, e a Academia poderá optar por não aceitar a nova versão e rescindir sem multa, conforme aplicável.
-
----
-
-*Rascunho técnico elaborado com base em pesquisa jurídica sobre o CDC (arts. 39, 49 e 51) — **pendente de revisão por advogado** antes de uso comercial pleno. Não constitui aconselhamento jurídico.*

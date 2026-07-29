@@ -59,7 +59,3 @@ Estes Termos são regidos pela legislação brasileira. Fica eleito o foro do do
 ## 12. Contato
 
 Dúvidas, solicitações ou reclamações: **suporte@arenahub.website**.
-
----
-
-*Rascunho técnico elaborado com base em pesquisa jurídica sobre CDC, LGPD e Marco Civil da Internet — **pendente de revisão por advogado** antes de uso comercial pleno. Não constitui aconselhamento jurídico.*
