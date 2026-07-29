@@ -330,7 +330,7 @@ export default async function HomePage() {
                     label: `Aulas do plano ${plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}`,
                     value: `${quota.used}/${quota.limit}`,
                   }]
-                : []),
+                : [{ label: 'Nesta semana', value: mySessions.length }]),
             ]}
           />
         </div>
