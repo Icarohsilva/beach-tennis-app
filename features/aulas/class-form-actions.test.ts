@@ -62,7 +62,7 @@ describe('createClass', () => {
     selectMock.mockReturnValue({ single: singleMock })
     insertMock.mockReturnValue({ select: selectMock })
     fromMock.mockReturnValue({ insert: insertMock })
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 1, studentsBooked: 0 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 1, studentsBooked: 0, quotaSkipped: 0 })
   })
 
   it('chama generateGrid escopado à turma nova, numa janela de 7 dias', async () => {
@@ -86,7 +86,7 @@ describe('createClass', () => {
   })
 
   it('loga erro quando generateGrid não cria a sessão esperada (sessionsCreated=0)', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0 })
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const result = await createClass(validData)

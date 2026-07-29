@@ -11,11 +11,13 @@ import { brtToday, addDaysStr, nextDateForDayOfWeek } from '@/lib/utils/gridSche
 interface GridActionResult {
   error?: string
   sessionsCreated?: number
-  // reservados/aConfirmar/semPlano ficam em pt-BR de propósito: são o shape direto
-  // do texto exibido ao admin (Task 7), diferente do inglês interno de enrollmentRoster.ts.
+  // reservados/aConfirmar/semPlano/semCota ficam em pt-BR de propósito: são o
+  // shape direto do texto exibido ao admin, diferente do inglês interno de
+  // enrollmentRoster.ts.
   reservados?: number
   aConfirmar?: number
   semPlano?: number
+  semCota?: number
 }
 
 /**
@@ -41,6 +43,7 @@ async function getRosterSafe(orgId: string, opts: { dayOfWeek?: number } = {}): 
 async function finishGeneration(
   orgId: string,
   sessionsCreated: number,
+  quotaSkipped: number,
   rosterOpts: { dayOfWeek?: number },
   notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
 ): Promise<GridActionResult> {
@@ -53,6 +56,7 @@ async function finishGeneration(
     reservados: roster.totals.eligible,
     aConfirmar: roster.totals.pendingConfirmation,
     semPlano: roster.totals.noPlan,
+    semCota: quotaSkipped,
   }
 }
 
@@ -70,7 +74,7 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
   if (r.error) return { error: r.error }
 
-  return finishGeneration(orgId, r.sessionsCreated, { dayOfWeek }, { kind: 'day', dayOfWeek })
+  return finishGeneration(orgId, r.sessionsCreated, r.quotaSkipped, { dayOfWeek }, { kind: 'day', dayOfWeek })
 }
 
 /** Gera a semana toda (7 datas a partir de hoje, todas as turmas). */
@@ -83,5 +87,5 @@ export async function generateGridWeek(): Promise<GridActionResult> {
   const r = await generateGrid(orgId, from, to)
   if (r.error) return { error: r.error }
 
-  return finishGeneration(orgId, r.sessionsCreated, {}, { kind: 'week' })
+  return finishGeneration(orgId, r.sessionsCreated, r.quotaSkipped, {}, { kind: 'week' })
 }

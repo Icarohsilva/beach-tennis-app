@@ -4,7 +4,7 @@ import { generateGrid } from './gridGeneration'
 
 vi.mock('./creditReconciliation', () => ({
   reconcileAllActiveEnrollments: vi.fn().mockResolvedValue({
-    booked: 3, skipped: 0, processedEnrollments: 3, failed: 0,
+    booked: 3, skipped: 0, quotaSkipped: 0, processedEnrollments: 3, failed: 0,
   }),
 }))
 import { reconcileAllActiveEnrollments } from './creditReconciliation'
@@ -128,7 +128,7 @@ describe('generateGrid', () => {
     // O chamador (cron) precisa de um jeito de distinguir isto de sucesso —
     // sessionsCreated/studentsBooked zerados sozinhos são indistinguíveis de
     // "sem turmas esta semana".
-    expect(r).toEqual({ sessionsCreated: 0, studentsBooked: 0, error: 'upsert boom' })
+    expect(r).toEqual({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0, error: 'upsert boom' })
     expect(reconcileAllActiveEnrollments).not.toHaveBeenCalled()
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[generateGrid] upsert de class_sessions falhou',

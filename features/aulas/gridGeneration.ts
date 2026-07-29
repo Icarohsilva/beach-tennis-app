@@ -12,6 +12,8 @@ export interface GenerateGridResult {
   /** Sessões efetivamente inseridas nesta chamada — não conta as que já existiam e foram puladas pelo upsert idempotente. */
   sessionsCreated: number
   studentsBooked: number
+  /** Alunos fixos que ficaram sem vínculo nesta rodada por falta de cota. */
+  quotaSkipped: number
   /** Presente quando o upsert de class_sessions falhou — chamador não deve tratar como sucesso. */
   error?: string
 }
@@ -40,7 +42,7 @@ export async function generateGrid(
 
   const { data: classesRaw } = await q
   const classes = (classesRaw ?? []) as { id: string; day_of_week: number }[]
-  if (classes.length === 0) return { sessionsCreated: 0, studentsBooked: 0 }
+  if (classes.length === 0) return { sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0 }
 
   const rows = classes.flatMap((c) => buildSessionRows(c.id, c.day_of_week, from, to))
   let sessionsCreated = 0
@@ -57,12 +59,12 @@ export async function generateGrid(
       console.error('[generateGrid] upsert de class_sessions falhou', {
         orgId, from, to, error: upsertErr.message,
       })
-      return { sessionsCreated: 0, studentsBooked: 0, error: upsertErr.message }
+      return { sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0, error: upsertErr.message }
     }
     sessionsCreated = inserted?.length ?? 0
   }
 
   const rec = await reconcileAllActiveEnrollments(from, to, orgId)
 
-  return { sessionsCreated, studentsBooked: rec.booked }
+  return { sessionsCreated, studentsBooked: rec.booked, quotaSkipped: rec.quotaSkipped }
 }
