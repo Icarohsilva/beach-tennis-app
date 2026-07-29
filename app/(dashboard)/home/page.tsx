@@ -336,7 +336,10 @@ export default async function HomePage() {
         </div>
       </Reveal>
 
-      {quota?.remaining === 0 && (
+      {/* Parceiro (Wellhub/TotalPass) é isento da cota mesmo com plano híbrido
+          vinculado — mesma regra de resolveClassAccess. Mostra o "X de Y" pro
+          aluno acompanhar, mas nunca o aviso de bloqueio, que não se aplica. */}
+      {quota?.remaining === 0 && !isPartner && (
         <Reveal step={1}>
           <p className="text-xs text-brand-400 -mt-2">
             Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
