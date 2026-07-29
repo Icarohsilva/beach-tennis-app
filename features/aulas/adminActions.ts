@@ -626,6 +626,36 @@ export async function addStudentToSession(
   // fura especificamente essa negação.
   const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
   const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
+
+  // Teto diário vale pra todo mundo, ligado ou não à cota do plano — mesmo
+  // mecanismo de bookSession (features/aulas/actions.ts). Sem isto, um aluno
+  // sem plano ativo nunca esbarra em limite nenhum aqui, porque o eixo de
+  // cota do resolveClassAccess só olha bookingsOnDate quando há plano.
+  const dailyCap = plan?.maxClassesPerDay ?? orgDailyCap
+
+  const { count: dailyCount } = await adminClient
+    .from('session_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', studentId)
+    .eq('status', 'confirmed')
+    .in(
+      'session_id',
+      (
+        await adminClient
+          .from('class_sessions')
+          .select('id')
+          .eq('organization_id', orgId)
+          .eq('session_date', sessionDate)
+      ).data?.map((s: { id: string }) => s.id) ?? [],
+    )
+
+  if ((dailyCount ?? 0) >= dailyCap && !force) {
+    return {
+      error: `Esse aluno já tem ${dailyCap} aulas neste dia — é o limite do plano dele.`,
+      quotaBlocked: true,
+    }
+  }
+
   const snapshot =
     quotaEnforced && plan
       ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, sessionDate)
@@ -639,17 +669,18 @@ export async function addStudentToSession(
     quotaEnforced,
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
-    maxClassesPerDay: plan?.maxClassesPerDay ?? orgDailyCap,
+    maxClassesPerDay: dailyCap,
   })
 
   if ('denied' in decision) {
     // Só 'daily_cap'/'quota_exhausted' são alcançáveis (hasOpenDebt é sempre
-    // false, então 'blocked_by_debt' nunca aparece aqui).
+    // false, então 'blocked_by_debt' nunca aparece aqui). O caso 'daily_cap'
+    // já é barrado acima pelo check universal antes de chegar aqui — isto
+    // só é alcançável de fato via force: true (redundância inofensiva).
     if (!force) {
-      const teto = plan?.maxClassesPerDay ?? orgDailyCap
       const message =
         decision.denied === 'daily_cap'
-          ? `Esse aluno já tem ${teto} aulas neste dia — é o limite do plano dele.`
+          ? `Esse aluno já tem ${dailyCap} aulas neste dia — é o limite do plano dele.`
           : `Esse aluno já usou toda a cota do plano ${plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'}.`
       return { error: message, quotaBlocked: true }
     }

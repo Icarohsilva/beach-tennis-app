@@ -615,6 +615,9 @@ function makeAddStudentClient(opts: {
   membership: { partner: string | null; credits_balance: number }
   plan: PlanQuota | null
   quotaEnforced: boolean
+  /** Reservas confirmadas do aluno na data alvo — alimenta o check universal
+   *  de teto diário (novo), que roda ANTES do getQuotaSnapshot. */
+  dailyBookingCount?: number
   sessionBookings?: {
     status: string
     cancelled_at: string | null
@@ -628,8 +631,12 @@ function makeAddStudentClient(opts: {
   })
 
   const from = vi.fn((table: string) => {
+    let isCountQuery = false
     const builder: Record<string, unknown> = {
-      select: () => builder,
+      select: (_cols: string, selectOpts?: { count?: string; head?: boolean }) => {
+        if (selectOpts?.count) isCountQuery = true
+        return builder
+      },
       eq: () => builder,
       gte: () => builder,
       lte: () => builder,
@@ -670,9 +677,16 @@ function makeAddStudentClient(opts: {
         }
         return Promise.resolve({ data: null })
       },
-      then: (resolve: (v: { data: unknown }) => void) => {
-        const data =
-          table === 'session_bookings' ? (opts.sessionBookings ?? []) : []
+      then: (resolve: (v: { data: unknown; count?: number }) => void) => {
+        if (table === 'session_bookings' && isCountQuery) {
+          return Promise.resolve({ data: null, count: opts.dailyBookingCount ?? 0 }).then(resolve)
+        }
+        if (table === 'class_sessions') {
+          // Sub-query de ids de sessão daquele dia — usado só como input do
+          // .in() seguinte; os ids em si não importam pro teste.
+          return Promise.resolve({ data: [{ id: 'other-session-1' }] }).then(resolve)
+        }
+        const data = table === 'session_bookings' ? (opts.sessionBookings ?? []) : []
         return Promise.resolve({ data }).then(resolve)
       },
     }
@@ -697,16 +711,7 @@ describe('addStudentToSession — cota e teto diário', () => {
       membership: { partner: null, credits_balance: 0 },
       plan: plano,
       quotaEnforced: true,
-      sessionBookings: [
-        {
-          status: 'confirmed', cancelled_at: null,
-          class_sessions: { session_date: '2026-07-15', classes: { start_time: '10:00:00' } },
-        },
-        {
-          status: 'confirmed', cancelled_at: null,
-          class_sessions: { session_date: '2026-07-15', classes: { start_time: '14:00:00' } },
-        },
-      ],
+      dailyBookingCount: 2,
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
 
@@ -774,6 +779,29 @@ describe('addStudentToSession — cota e teto diário', () => {
 
     const result = await addStudentToSession('session-1', 'stu-1', 'open')
     expect(result.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith(
+      'book_session_atomic',
+      expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
+    )
+  })
+
+  it('bloqueia pelo teto diário mesmo sem plano ativo, e libera com force', async () => {
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: null,
+      quotaEnforced: true,
+      dailyBookingCount: 2,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const blocked = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(blocked.quotaBlocked).toBe(true)
+    expect(blocked.error).toBeTruthy()
+    expect(rpc).not.toHaveBeenCalled()
+
+    const forced = await addStudentToSession('session-1', 'stu-1', 'open', true)
+    expect(forced.error).toBeUndefined()
     expect(rpc).toHaveBeenCalledWith(
       'book_session_atomic',
       expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
