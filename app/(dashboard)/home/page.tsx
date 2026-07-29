@@ -325,27 +325,22 @@ export default async function HomePage() {
                 ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
                 : [{ label: 'Plano', value: membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
               { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-              { label: 'Nesta semana', value: mySessions.length },
+              ...(quota
+                ? [{
+                    label: `Aulas do plano ${plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}`,
+                    value: `${quota.used}/${quota.limit}`,
+                  }]
+                : []),
             ]}
           />
         </div>
       </Reveal>
 
-      {quota && (
+      {quota?.remaining === 0 && (
         <Reveal step={1}>
-          <div className="rounded-xl border border-surface-border bg-surface-card px-4 py-3">
-            <p className="text-sm text-slate-400">
-              Aulas do plano {plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}
-            </p>
-            <p className="text-lg font-semibold text-white">
-              {quota.used} de {quota.limit}
-            </p>
-            {quota.remaining === 0 && (
-              <p className="text-xs text-brand-400 mt-1">
-                Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
-              </p>
-            )}
-          </div>
+          <p className="text-xs text-brand-400 -mt-2">
+            Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
+          </p>
         </Reveal>
       )}
 
