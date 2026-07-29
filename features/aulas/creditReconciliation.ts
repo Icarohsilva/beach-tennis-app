@@ -5,8 +5,8 @@ import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { reconcileEnrollmentCredits, type ReconcileResult } from './reconcileEnrollment'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced } from './quotaSettings'
-import { getQuotaSnapshot } from './quotaUsage'
 import { notifyQuotaSkips, type QuotaSkip } from './quotaSkipNotify'
+import { computeQuotaBudget } from './quotaBudget'
 
 export type { ReconcileResult }
 export { reconcileEnrollmentCredits }
@@ -126,16 +126,12 @@ export async function reconcileAllActiveEnrollments(
 
     // Orçamento de cota: null = sem limite (parceiro, cota desligada, ou aluno
     // sem plano ativo — este último é uma inconsistência pré-existente fora
-    // do escopo, tratada aqui como "sem limite").
-    let budget: number | null = null
-    let plan: Awaited<ReturnType<typeof getActivePlan>> = null
-    if (!partner && (await isQuotaEnforcedCached(organizationId))) {
-      plan = await getActivePlan(adminClient, studentId, organizationId)
-      if (plan) {
-        const snapshot = await getQuotaSnapshot(adminClient, studentId, organizationId, plan, from)
-        budget = snapshot.remaining
-      }
-    }
+    // do escopo, tratada aqui como "sem limite"). `plan` também alimenta o
+    // desempate de matrículas excedentes logo abaixo — por isso é buscado
+    // aqui, não dentro de computeQuotaBudget.
+    const quotaEnforced = !partner && (await isQuotaEnforcedCached(organizationId))
+    const plan = quotaEnforced ? await getActivePlan(adminClient, studentId, organizationId) : null
+    let budget = await computeQuotaBudget(adminClient, studentId, organizationId, quotaEnforced, plan, partner, from)
 
     // Mesma regra de "quem conta pro limite" que getQuotaSnapshot usa: as
     // matrículas mais antigas (por enrolled_at) até classesPerWeek são

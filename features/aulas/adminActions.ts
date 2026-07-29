@@ -8,7 +8,7 @@ import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './reconcileEnrollment'
 import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced } from './quotaSettings'
-import { getQuotaSnapshot } from './quotaUsage'
+import { computeQuotaBudget } from './quotaBudget'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
@@ -87,24 +87,26 @@ export async function enrollStudentInClass(
 
   // Cota: o plano define quantas turmas fixas o aluno pode ter. Sem isto o
   // admin vincula um plano de 2x/semana a cinco turmas sem nenhum aviso.
-  if (await isQuotaEnforced(adminClient, orgId)) {
-    const plan = await getActivePlan(adminClient, studentId, orgId)
-    if (plan) {
-      const { data: activeRaw } = await adminClient
-        .from('enrollments')
-        .select('class_id')
-        .eq('student_id', studentId)
-        .eq('organization_id', orgId)
-        .eq('is_active', true)
+  // quotaEnforced/activePlanForQuota também alimentam o orçamento da
+  // reconciliação logo abaixo — buscados uma vez só, reusados nos dois lugares.
+  const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
+  const activePlanForQuota = quotaEnforced ? await getActivePlan(adminClient, studentId, orgId) : null
 
-      const jaTem = ((activeRaw ?? []) as { class_id: string }[]).filter(
-        (e) => e.class_id !== classId,
-      ).length
+  if (quotaEnforced && activePlanForQuota) {
+    const { data: activeRaw } = await adminClient
+      .from('enrollments')
+      .select('class_id')
+      .eq('student_id', studentId)
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
 
-      if (jaTem + 1 > plan.classesPerWeek) {
-        return {
-          error: `O plano deste aluno dá ${plan.classesPerWeek} aulas fixas por semana e ele já tem ${jaTem}. Troque o plano ou remova uma turma fixa.`,
-        }
+    const jaTem = ((activeRaw ?? []) as { class_id: string }[]).filter(
+      (e) => e.class_id !== classId,
+    ).length
+
+    if (jaTem + 1 > activePlanForQuota.classesPerWeek) {
+      return {
+        error: `O plano deste aluno dá ${activePlanForQuota.classesPerWeek} aulas fixas por semana e ele já tem ${jaTem}. Troque o plano ou remova uma turma fixa.`,
       }
     }
   }
@@ -145,22 +147,17 @@ export async function enrollStudentInClass(
 
   // Reserva as sessões restantes do mês para esta turma. Não consome crédito:
   // quem chega aqui tem plano ou parceiro (spec §3). Respeita a cota
-  // compartilhada — mesma lógica de features/aulas/creditReconciliation.ts
-  // (se mudar uma, mude a outra): sem isso, matricular perto do fim do mês
-  // reservava tudo até o fim incondicionalmente, ignorando quanto da cota
-  // mensal o aluno já tinha usado.
+  // compartilhada — orçamento calculado por computeQuotaBudget, a mesma
+  // função usada por features/aulas/creditReconciliation.ts: sem isso,
+  // matricular perto do fim do mês reservava tudo até o fim
+  // incondicionalmente, ignorando quanto da cota mensal o aluno já tinha usado.
   const today = format(new Date(), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
 
   const partnerForBudget = (membership as { partner: string | null }).partner
-  let quotaBudget: number | null = null
-  if (!partnerForBudget && (await isQuotaEnforced(adminClient, orgId))) {
-    const activePlan = await getActivePlan(adminClient, studentId, orgId)
-    if (activePlan) {
-      const snapshot = await getQuotaSnapshot(adminClient, studentId, orgId, activePlan, today)
-      quotaBudget = snapshot.remaining
-    }
-  }
+  const quotaBudget = await computeQuotaBudget(
+    adminClient, studentId, orgId, quotaEnforced, activePlanForQuota, partnerForBudget, today,
+  )
 
   await reconcileEnrollmentCredits(studentId, classId, today, monthEnd, adminClient, quotaBudget)
 
