@@ -27,7 +27,7 @@ export async function notifyQuotaSkips(skips: QuotaSkip[], client?: AdminClient)
       byOrg.set(s.orgId, [...(byOrg.get(s.orgId) ?? []), s])
     }
 
-    for (const [orgId, orgSkips] of byOrg) {
+    for (const [orgId, orgSkips] of Array.from(byOrg.entries())) {
       for (const s of orgSkips) {
         await notifyUsers(c, {
           orgId,
