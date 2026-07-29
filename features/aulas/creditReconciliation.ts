@@ -3,6 +3,10 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { reconcileEnrollmentCredits, type ReconcileResult } from './reconcileEnrollment'
+import { getActivePlan } from '@/lib/billing/planEligibility'
+import { isQuotaEnforced } from './quotaSettings'
+import { getQuotaSnapshot } from './quotaUsage'
+import { notifyQuotaSkips, type QuotaSkip } from './quotaSkipNotify'
 
 export type { ReconcileResult }
 export { reconcileEnrollmentCredits }
@@ -27,17 +31,31 @@ export async function reconcileAllActiveEnrollments(
 
   let enrollQuery = adminClient
     .from('enrollments')
-    .select('student_id, class_id, organization_id')
+    .select('student_id, class_id, organization_id, enrolled_at, classes!inner(name, day_of_week, start_time)')
     .eq('is_active', true)
   if (orgId) enrollQuery = enrollQuery.eq('organization_id', orgId)
   const { data: enrollmentsRaw } = await enrollQuery
 
+  type ClassInfo = { name: string; day_of_week: number; start_time: string }
   type Row = {
     student_id: string
     class_id: string
     organization_id: string
+    enrolled_at: string
+    classes: ClassInfo | ClassInfo[]
   }
-  const enrollments = (enrollmentsRaw ?? []) as unknown as Row[]
+  const enrollments = ((enrollmentsRaw ?? []) as unknown as Row[]).map((e) => {
+    const cls = Array.isArray(e.classes) ? e.classes[0] : e.classes
+    return {
+      studentId: e.student_id,
+      classId: e.class_id,
+      organizationId: e.organization_id,
+      enrolledAt: e.enrolled_at,
+      className: cls.name,
+      dayOfWeek: cls.day_of_week,
+      startTime: cls.start_time,
+    }
+  })
 
   // Eixo parceiro é por-academia: indexado por user_id+organization_id.
   let membershipsQuery = adminClient
@@ -74,29 +92,66 @@ export async function reconcileAllActiveEnrollments(
   )
 
   const totals = { booked: 0, skipped: 0, quotaSkipped: 0, processedEnrollments: 0, failed: 0 }
+  const skips: QuotaSkip[] = []
 
+  // Agrupa por aluno (dentro da mesma academia) pra aplicar um orçamento de
+  // cota compartilhado entre as fixas dele nesta rodada, na ordem do dia da
+  // semana — quem vem mais cedo tem prioridade sobre quem vem depois.
+  const byStudent = new Map<string, typeof enrollments>()
   for (const e of enrollments) {
-    const memberKey = `${e.student_id}:${e.organization_id}`
+    const memberKey = `${e.studentId}:${e.organizationId}`
     const partner = partnerByMember.get(memberKey) ?? null
     // Elegível para renovar a fixa = tem parceiro OU plano vigente. É a mesma
-    // regra que enrollStudentInClass aplica na entrada (spec §2). Plano vencido
-    // simplesmente para de ser reservado; a grade sinaliza.
+    // regra que enrollStudentInClass aplica na entrada (spec §2).
     const eligible = partner !== null || activeSubStudents.has(memberKey)
     if (!eligible) continue
+    byStudent.set(memberKey, [...(byStudent.get(memberKey) ?? []), e])
+  }
 
-    try {
-      const r = await reconcileEnrollmentCredits(e.student_id, e.class_id, from, to, adminClient)
-      totals.booked += r.booked
-      totals.skipped += r.skipped
-      totals.processedEnrollments++
-    } catch (err) {
-      totals.failed++
-      console.error('[reconcileAllActiveEnrollments] matrícula falhou', {
-        studentId: e.student_id, classId: e.class_id, organizationId: e.organization_id,
-        error: err instanceof Error ? err.message : String(err),
-      })
+  for (const [memberKey, studentEnrollments] of Array.from(byStudent.entries())) {
+    const { studentId, organizationId } = studentEnrollments[0]
+    const partner = partnerByMember.get(memberKey) ?? null
+
+    // Orçamento de cota: null = sem limite (parceiro, cota desligada, ou aluno
+    // sem plano ativo — este último é uma inconsistência pré-existente fora
+    // do escopo, tratada aqui como "sem limite").
+    let budget: number | null = null
+    if (!partner && (await isQuotaEnforced(adminClient, organizationId))) {
+      const plan = await getActivePlan(adminClient, studentId, organizationId)
+      if (plan) {
+        const snapshot = await getQuotaSnapshot(adminClient, studentId, organizationId, plan, from)
+        budget = snapshot.remaining
+      }
+    }
+
+    const ordered = [...studentEnrollments].sort(
+      (a, b) => a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime),
+    )
+
+    for (const e of ordered) {
+      try {
+        const r = await reconcileEnrollmentCredits(e.studentId, e.classId, from, to, adminClient, budget)
+        totals.booked += r.booked
+        totals.skipped += r.skipped
+        totals.quotaSkipped += r.quotaSkipped
+        totals.processedEnrollments++
+        if (budget !== null) budget -= r.booked
+        if (r.quotaSkipped > 0) {
+          skips.push({
+            studentId: e.studentId, classId: e.classId, className: e.className, orgId: e.organizationId,
+          })
+        }
+      } catch (err) {
+        totals.failed++
+        console.error('[reconcileAllActiveEnrollments] matrícula falhou', {
+          studentId: e.studentId, classId: e.classId, organizationId: e.organizationId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     }
   }
+
+  await notifyQuotaSkips(skips, adminClient)
 
   return totals
 }

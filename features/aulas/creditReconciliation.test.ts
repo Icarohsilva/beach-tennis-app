@@ -1,0 +1,185 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/lib/supabase/server', () => ({
+  createAdminClient: vi.fn(),
+}))
+vi.mock('./reconcileEnrollment', () => ({
+  reconcileEnrollmentCredits: vi.fn(),
+}))
+vi.mock('@/lib/billing/planEligibility', () => ({
+  getActivePlan: vi.fn(),
+}))
+vi.mock('./quotaSettings', () => ({
+  isQuotaEnforced: vi.fn(),
+}))
+vi.mock('./quotaUsage', () => ({
+  getQuotaSnapshot: vi.fn(),
+}))
+vi.mock('./quotaSkipNotify', () => ({
+  notifyQuotaSkips: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { createAdminClient } from '@/lib/supabase/server'
+import { reconcileAllActiveEnrollments } from './creditReconciliation'
+import { reconcileEnrollmentCredits } from './reconcileEnrollment'
+import { getActivePlan } from '@/lib/billing/planEligibility'
+import { isQuotaEnforced } from './quotaSettings'
+import { getQuotaSnapshot } from './quotaUsage'
+import { notifyQuotaSkips } from './quotaSkipNotify'
+
+type EnrollRow = {
+  student_id: string
+  class_id: string
+  organization_id: string
+  enrolled_at: string
+  classes: { name: string; day_of_week: number; start_time: string }
+}
+
+function makeClient(opts: {
+  enrollments: EnrollRow[]
+  memberships?: { user_id: string; organization_id: string; partner: string | null }[]
+  subscriptions?: {
+    student_id: string
+    organization_id: string
+    gateway: string
+    current_period_end: string | null
+  }[]
+}) {
+  const from = vi.fn((table: string) => {
+    const builder: Record<string, unknown> = {
+      select: () => builder,
+      eq: () => builder,
+      then: (resolve: (v: { data: unknown }) => void) => {
+        const data =
+          table === 'enrollments'
+            ? opts.enrollments
+            : table === 'memberships'
+              ? (opts.memberships ?? [])
+              : table === 'student_subscriptions'
+                ? (opts.subscriptions ?? [])
+                : []
+        return Promise.resolve({ data }).then(resolve)
+      },
+    }
+    return builder
+  })
+  return { from } as never
+}
+
+const PLANO = { classesPerWeek: 2, cycle: 'monthly' as const, maxClassesPerDay: 2, refundOnLateCancel: true }
+
+describe('reconcileAllActiveEnrollments', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(notifyQuotaSkips).mockResolvedValue(undefined)
+  })
+
+  it('processa as fixas do aluno em ordem de dia da semana, decrementando o orçamento', async () => {
+    const client = makeClient({
+      enrollments: [
+        {
+          student_id: 'stu-1', class_id: 'thu-class', organization_id: 'org-1',
+          enrolled_at: '2026-01-01T00:00:00Z',
+          classes: { name: 'Turma Quinta', day_of_week: 4, start_time: '18:00:00' },
+        },
+        {
+          student_id: 'stu-1', class_id: 'tue-class', organization_id: 'org-1',
+          enrolled_at: '2026-01-02T00:00:00Z',
+          classes: { name: 'Turma Terça', day_of_week: 2, start_time: '18:00:00' },
+        },
+      ],
+      memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: null }],
+      subscriptions: [{ student_id: 'stu-1', organization_id: 'org-1', gateway: 'manual', current_period_end: null }],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(true)
+    vi.mocked(getActivePlan).mockResolvedValue(PLANO)
+    vi.mocked(getQuotaSnapshot).mockResolvedValue({
+      limit: 8, used: 7, remaining: 1, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
+    })
+    vi.mocked(reconcileEnrollmentCredits).mockImplementation(async (_s, _c, _f, _t, _client, budget) => {
+      const bookedNow = budget == null || budget > 0 ? 1 : 0
+      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1 }
+    })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    // Terça (dia 2) processa antes de Quinta (dia 4), com orçamento inicial 1.
+    expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
+      1, 'stu-1', 'tue-class', '2026-07-27', '2026-08-02', client, 1,
+    )
+    // Depois de reservar a terça (orçamento decrementado pra 0), a quinta recebe orçamento 0.
+    expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
+      2, 'stu-1', 'thu-class', '2026-07-27', '2026-08-02', client, 0,
+    )
+  })
+
+  it('cota desligada não aplica orçamento (comportamento de hoje, sem limite)', async () => {
+    const client = makeClient({
+      enrollments: [{
+        student_id: 'stu-1', class_id: 'class-1', organization_id: 'org-1',
+        enrolled_at: '2026-01-01T00:00:00Z',
+        classes: { name: 'Turma', day_of_week: 2, start_time: '18:00:00' },
+      }],
+      memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: null }],
+      subscriptions: [{ student_id: 'stu-1', organization_id: 'org-1', gateway: 'manual', current_period_end: null }],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(false)
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    expect(getActivePlan).not.toHaveBeenCalled()
+    expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
+      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null,
+    )
+  })
+
+  it('aluno parceiro nunca recebe orçamento, mesmo com cota ligada', async () => {
+    const client = makeClient({
+      enrollments: [{
+        student_id: 'stu-1', class_id: 'class-1', organization_id: 'org-1',
+        enrolled_at: '2026-01-01T00:00:00Z',
+        classes: { name: 'Turma', day_of_week: 2, start_time: '18:00:00' },
+      }],
+      memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: 'wellhub' }],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(true)
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    expect(getActivePlan).not.toHaveBeenCalled()
+    expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
+      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null,
+    )
+  })
+
+  it('notifica os alunos/turmas puladas por falta de cota', async () => {
+    const client = makeClient({
+      enrollments: [{
+        student_id: 'stu-1', class_id: 'class-1', organization_id: 'org-1',
+        enrolled_at: '2026-01-01T00:00:00Z',
+        classes: { name: 'Turma X', day_of_week: 2, start_time: '18:00:00' },
+      }],
+      memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: null }],
+      subscriptions: [{ student_id: 'stu-1', organization_id: 'org-1', gateway: 'manual', current_period_end: null }],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+    vi.mocked(isQuotaEnforced).mockResolvedValue(true)
+    vi.mocked(getActivePlan).mockResolvedValue({ ...PLANO, classesPerWeek: 1 })
+    vi.mocked(getQuotaSnapshot).mockResolvedValue({
+      limit: 4, used: 4, remaining: 0, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
+    })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 1 })
+
+    await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
+
+    expect(notifyQuotaSkips).toHaveBeenCalledWith(
+      [{ studentId: 'stu-1', classId: 'class-1', className: 'Turma X', orgId: 'org-1' }],
+      client,
+    )
+  })
+})
