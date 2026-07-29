@@ -80,19 +80,27 @@ export async function getQuotaSnapshot(
 
   const { data: enrollRaw } = await client
     .from('enrollments')
-    .select('classes!inner(day_of_week)')
+    .select('enrolled_at, classes!inner(day_of_week)')
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
     .eq('is_active', true)
+    .order('enrolled_at', { ascending: true })
 
+  // Só conta pro limite as matrículas mais antigas, até o que o plano ATUAL
+  // permite. Se o aluno tem mais fixas do que classes_per_week hoje (o plano
+  // foi reduzido depois de matriculado), as excedentes (mais novas) não
+  // entram aqui — competem pela cota igual uma reserva avulsa.
   const fixedSessionsInCycle = (
     (enrollRaw ?? []) as unknown as {
+      enrolled_at: string
       classes: { day_of_week: number } | { day_of_week: number }[]
     }[]
-  ).reduce((acc, e) => {
-    const cls = Array.isArray(e.classes) ? e.classes[0] : e.classes
-    return acc + occurrencesOfDay(window.from, window.to, cls.day_of_week)
-  }, 0)
+  )
+    .slice(0, plan.classesPerWeek)
+    .reduce((acc, e) => {
+      const cls = Array.isArray(e.classes) ? e.classes[0] : e.classes
+      return acc + occurrencesOfDay(window.from, window.to, cls.day_of_week)
+    }, 0)
 
   const quota = resolveQuota({
     plan,

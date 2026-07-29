@@ -20,7 +20,7 @@ function makeClient(opts: {
     cancelled_at: string | null
     class_sessions: { session_date: string; classes: { start_time: string } }
   }[]
-  enrollments?: { classes: { day_of_week: number } }[]
+  enrollments?: { classes: { day_of_week: number }; enrolled_at?: string }[]
 }) {
   const from = vi.fn((table: string) => {
     const builder: Record<string, unknown> = {
@@ -29,6 +29,7 @@ function makeClient(opts: {
       gte: () => builder,
       lte: () => builder,
       in: () => builder,
+      order: () => builder,
       then: (resolve: (v: { data: unknown }) => void) => {
         const data =
           table === 'session_bookings' ? opts.bookings ?? [] : opts.enrollments ?? []
@@ -159,5 +160,25 @@ describe('getQuotaSnapshot', () => {
     const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', planoSemReembolso, '2026-07-28')
 
     expect(snap.used).toBe(0)
+  })
+
+  it('conta só as matrículas mais antigas até o limite do plano atual', async () => {
+    // Plano foi reduzido pra 1x/semana, mas o aluno ainda tem 2 matrículas
+    // ativas de quando o plano permitia mais. Só a mais antiga (enrolled_at
+    // menor) conta pro limite — a mais nova é excedente.
+    const planoReduzido: PlanQuota = { ...PLANO, classesPerWeek: 1 }
+    const client = makeClient({
+      bookings: [],
+      enrollments: [
+        { classes: { day_of_week: 3 }, enrolled_at: '2026-06-01T00:00:00Z' }, // quarta, mais antiga
+        { classes: { day_of_week: 5 }, enrolled_at: '2026-07-15T00:00:00Z' }, // sexta, mais nova (excedente)
+      ],
+    })
+
+    const snap = await getQuotaSnapshot(client, 'stu-1', 'org-1', planoReduzido, '2026-07-28')
+
+    // Julho/2026 tem 5 quartas (01,08,15,22,29). Só a matrícula de quarta conta.
+    // A de sexta (excedente) soma 0. max(1×4, 5) = 5.
+    expect(snap.limit).toBe(5)
   })
 })
