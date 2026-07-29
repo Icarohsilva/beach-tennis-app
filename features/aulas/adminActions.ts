@@ -8,6 +8,7 @@ import type { StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './reconcileEnrollment'
 import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced } from './quotaSettings'
+import { getQuotaSnapshot } from './quotaUsage'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
@@ -143,10 +144,25 @@ export async function enrollStudentInClass(
   if (error) return { error: `Erro ao criar matrícula: ${error.message}` }
 
   // Reserva as sessões restantes do mês para esta turma. Não consome crédito:
-  // quem chega aqui tem plano ou parceiro (spec §3).
+  // quem chega aqui tem plano ou parceiro (spec §3). Respeita a cota
+  // compartilhada — mesma lógica de features/aulas/creditReconciliation.ts
+  // (se mudar uma, mude a outra): sem isso, matricular perto do fim do mês
+  // reservava tudo até o fim incondicionalmente, ignorando quanto da cota
+  // mensal o aluno já tinha usado.
   const today = format(new Date(), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
-  await reconcileEnrollmentCredits(studentId, classId, today, monthEnd)
+
+  const partnerForBudget = (membership as { partner: string | null }).partner
+  let quotaBudget: number | null = null
+  if (!partnerForBudget && (await isQuotaEnforced(adminClient, orgId))) {
+    const activePlan = await getActivePlan(adminClient, studentId, orgId)
+    if (activePlan) {
+      const snapshot = await getQuotaSnapshot(adminClient, studentId, orgId, activePlan, today)
+      quotaBudget = snapshot.remaining
+    }
+  }
+
+  await reconcileEnrollmentCredits(studentId, classId, today, monthEnd, adminClient, quotaBudget)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')

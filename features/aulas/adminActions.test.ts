@@ -7,7 +7,7 @@
 // pré-existente (ex.: aluno adicionado à data via addStudentToSession usando
 // crédito). Isso é lógica financeira nova (estorno via adjust_credits) que
 // não existia antes, por isso ganha teste mesmo com o resto do arquivo sem.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: vi.fn(),
@@ -21,6 +21,10 @@ vi.mock('./authGuards', () => ({
   requireAdmin: vi.fn(),
 }))
 
+vi.mock('./reconcileEnrollment', () => ({
+  reconcileEnrollmentCredits: vi.fn().mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 0 }),
+}))
+
 import {
   adminSkipEnrollmentDate,
   adminUnskipEnrollmentDate,
@@ -30,6 +34,7 @@ import {
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
 import { revalidatePath } from 'next/cache'
+import { reconcileEnrollmentCredits } from './reconcileEnrollment'
 import type { PlanQuota } from '@/lib/utils/classQuota'
 
 /**
@@ -413,6 +418,11 @@ function makeEnrollClient(opts: {
   activeEnrollments: number
   quotaEnforced: boolean
   maxStudents?: number
+  sessionBookings?: {
+    status: string
+    cancelled_at: string | null
+    class_sessions: { session_date: string; classes: { start_time: string } }
+  }[]
 }) {
   const rpc = vi.fn().mockResolvedValue({ error: null, data: null })
   const upsert = vi.fn().mockResolvedValue({ error: null })
@@ -460,17 +470,25 @@ function makeEnrollClient(opts: {
         return Promise.resolve({ data: null })
       },
       // Sem .single()/.maybeSingle() no fim da cadeia: usado pelas contagens
-      // de enrollments (count: 'exact', head: true) e pela lista de matrículas
-      // ativas da cota (select('class_id')). `count` fica undefined nas duas
+      // de enrollments (count: 'exact', head: true), pela lista de matrículas
+      // ativas da cota (select('class_id')) e pela query de getQuotaSnapshot
+      // (select('enrolled_at, classes!inner(day_of_week)')) — por isso os
+      // registros trazem os três formatos de campo. `count` fica undefined nas
       // contagens — o `?? 0` do caller trata como "0 já matriculado/lotado",
       // que é o que os testes precisam (nenhum já ocupa a vaga ou a turma).
+      // day_of_week: 1 (segunda) é neutro — nenhum teste deste describe afirma
+      // o valor do orçamento calculado aqui, só que a chamada não quebra.
       then: (resolve: (v: { data: unknown; error: unknown; count?: number }) => void) => {
         const data =
           table === 'enrollments'
             ? Array.from({ length: opts.activeEnrollments }, (_, i) => ({
                 class_id: `outra-turma-${i}`,
+                enrolled_at: new Date(2020, 0, i + 1).toISOString(),
+                classes: { day_of_week: 1 },
               }))
-            : []
+            : table === 'session_bookings'
+              ? (opts.sessionBookings ?? [])
+              : []
         return Promise.resolve({ data, error: null }).then(resolve)
       },
     }
@@ -520,5 +538,63 @@ describe('enrollStudentInClass — cota de fixas', () => {
     vi.mocked(createAdminClient).mockReturnValue(client)
 
     await expect(enrollStudentInClass('stu-1', 'class-9')).resolves.toEqual({})
+  })
+})
+
+describe('enrollStudentInClass — orçamento de cota na reconciliação', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-15T12:00:00-03:00'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('passa o orçamento restante da cota pra reconciliação, em vez de reservar sem limite', async () => {
+    const planoSemanal: PlanQuota = {
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+    }
+    const client = makeEnrollClient({
+      plan: planoSemanal,
+      activeEnrollments: 0,
+      quotaEnforced: true,
+      // Semana de 13 a 19/07 (segunda a domingo, já que 15/07/2026 é quarta).
+      // Plano 1x/semana → limite 1. Já tem 1 confirmada nessa semana → sobra 0.
+      sessionBookings: [
+        {
+          status: 'confirmed',
+          cancelled_at: null,
+          class_sessions: { session_date: '2026-07-14', classes: { start_time: '18:00:00' } },
+        },
+      ],
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await enrollStudentInClass('stu-1', 'class-2')
+
+    expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
+      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, 0,
+    )
+  })
+
+  it('cota desligada continua reservando sem limite (comportamento de hoje)', async () => {
+    const plano: PlanQuota = {
+      classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true,
+    }
+    const client = makeEnrollClient({
+      plan: plano,
+      activeEnrollments: 0,
+      quotaEnforced: false,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await enrollStudentInClass('stu-1', 'class-2')
+
+    expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
+      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, null,
+    )
   })
 })
