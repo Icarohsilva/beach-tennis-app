@@ -2,7 +2,7 @@
 // features/financeiro/actions.ts
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
-import { reconcileEnrollmentCredits } from '@/features/aulas/creditReconciliation'
+import { reconcileEnrollmentCredits } from '@/features/aulas/reconcileEnrollment'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { normalizeSports } from '@/lib/arenas/sports'
 import { getMpAccount } from '@/lib/billing/gatewayAccounts'

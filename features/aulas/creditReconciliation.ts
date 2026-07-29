@@ -1,88 +1,11 @@
 // features/aulas/creditReconciliation.ts
 import { createAdminClient } from '@/lib/supabase/server'
-import { buildReconciliationOps } from '@/lib/utils/reconciliationOps'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { reconcileEnrollmentCredits, type ReconcileResult } from './reconcileEnrollment'
 
-export interface ReconcileResult {
-  booked: number
-  skipped: number
-}
-
-const EMPTY: ReconcileResult = { booked: 0, skipped: 0 }
-
-/**
- * Reserva as sessões da matrícula fixa (aluno+turma) no intervalo [from, to].
- * Idempotente.
- *
- * NÃO mexe em crédito: desde 2026-07 matrícula fixa exige plano ou parceiro, e
- * os dois entram de graça (spec §3). Antes daqui saía um par concede/debita por
- * sessão — era a mecânica de "plano dá crédito", que deixou de existir.
- */
-export async function reconcileEnrollmentCredits(
-  studentId: string,
-  classId: string,
-  from: string,
-  to: string,
-  injectedClient?: ReturnType<typeof createAdminClient>,
-): Promise<ReconcileResult> {
-  const adminClient = injectedClient ?? createAdminClient()
-  const result: ReconcileResult = { ...EMPTY }
-
-  const { data: cls } = await adminClient
-    .from('classes')
-    .select('max_students, organization_id')
-    .eq('id', classId)
-    .single()
-  if (!cls) return result
-
-  const { data: sessionsRaw } = await adminClient
-    .from('class_sessions')
-    .select('id, session_date')
-    .eq('class_id', classId)
-    .eq('status', 'scheduled')
-    .gte('session_date', from)
-    .lte('session_date', to)
-    .order('session_date', { ascending: true })
-
-  const sessions = (sessionsRaw ?? []) as { id: string; session_date: string }[]
-  if (sessions.length === 0) return result
-
-  // Reservas existentes em QUALQUER status. As canceladas entram de propósito:
-  // opt-out de aula fixa (skipEnrollmentNoBooking) e saída com refund
-  // (skipEnrollmentSession) deixam uma reserva 'cancelled', e reconciliar não
-  // pode reativá-las. O unique student_id+session_id garante no máximo uma.
-  const sessionIds = sessions.map((s) => s.id)
-  const { data: existingRaw } = await adminClient
-    .from('session_bookings')
-    .select('session_id')
-    .eq('student_id', studentId)
-    .in('session_id', sessionIds)
-  const bookedSessionIds = new Set(
-    (existingRaw ?? []).map((b: { session_id: string }) => b.session_id),
-  )
-
-  const ops = buildReconciliationOps(sessions, bookedSessionIds)
-
-  for (const op of ops) {
-    const { error: bookErr } = await adminClient.rpc('book_session_atomic', {
-      p_student_id: studentId,
-      p_session_id: op.sessionId,
-      p_max_students: cls.max_students,
-      p_type: 'extra',
-      p_from_enrollment: true,
-      p_credit_used: false,
-    })
-    if (bookErr) {
-      // SESSION_FULL ou ALREADY_BOOKED (corrida): pula.
-      result.skipped++
-      continue
-    }
-    result.booked++
-  }
-
-  return result
-}
+export type { ReconcileResult }
+export { reconcileEnrollmentCredits }
 
 /**
  * Reconcilia matrículas ativas no intervalo [from, to].
@@ -150,7 +73,7 @@ export async function reconcileAllActiveEnrollments(
       .map((s) => `${s.student_id}:${s.organization_id}`),
   )
 
-  const totals = { ...EMPTY, processedEnrollments: 0, failed: 0 }
+  const totals = { booked: 0, skipped: 0, quotaSkipped: 0, processedEnrollments: 0, failed: 0 }
 
   for (const e of enrollments) {
     const memberKey = `${e.student_id}:${e.organization_id}`
