@@ -24,7 +24,13 @@ export const dynamic = 'force-dynamic'
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
-type Filtro = 'todos' | 'com_pendencia' | 'bloqueados' | 'abaixo_da_meta'
+/**
+ * A lista mostra só quem precisa de ação — quem tem pendência em aberto. O
+ * acompanhamento de check-ins do mês de TODO aluno de parceiro vive nos cards de
+ * /admin/alunos, que é onde o professor olha no dia a dia. Aqui os números gerais
+ * ficam nos KPIs do topo, e a lista é a fila de trabalho.
+ */
+type Filtro = 'com_pendencia' | 'bloqueados'
 
 interface SearchParams {
   /** Offset de meses (0 = mês atual, -1 = mês passado). */
@@ -34,10 +40,8 @@ interface SearchParams {
 }
 
 const FILTROS: { value: Filtro; label: string }[] = [
-  { value: 'todos', label: 'Todos' },
   { value: 'com_pendencia', label: 'Com pendência' },
-  { value: 'bloqueados', label: 'Bloqueados' },
-  { value: 'abaixo_da_meta', label: 'Abaixo da meta' },
+  { value: 'bloqueados', label: 'Só bloqueados' },
 ]
 
 export default async function WellhubPage({ searchParams }: { searchParams: SearchParams }) {
@@ -52,7 +56,8 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
   const monthOffset = Number.isInteger(rawMes) ? Math.min(0, Math.max(-12, rawMes)) : 0
   const window = shiftWindow(getMonthWindow(new Date()), 'month', monthOffset)
 
-  const filtro = (FILTROS.find((f) => f.value === searchParams.filtro)?.value ?? 'todos') as Filtro
+  const filtro = (FILTROS.find((f) => f.value === searchParams.filtro)?.value ??
+    'com_pendencia') as Filtro
   const parceiroFiltro =
     searchParams.parceiro === 'wellhub' || searchParams.parceiro === 'totalpass'
       ? (searchParams.parceiro as CheckinPartner)
@@ -74,11 +79,12 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
   const orgName = (org as { name: string } | null)?.name ?? 'sua academia'
   const payUrl = `${getSiteUrl()}/financeiro`
 
+  // Pendência em aberto é o piso da lista, não um filtro opcional: aluno em dia não
+  // aparece aqui.
   const visible = overview.students.filter((s) => {
+    if (s.summary.openCount === 0) return false
     if (parceiroFiltro && s.partner !== parceiroFiltro) return false
-    if (filtro === 'com_pendencia') return s.summary.openCount > 0
     if (filtro === 'bloqueados') return s.summary.blocked
-    if (filtro === 'abaixo_da_meta') return s.progress.remaining > 0
     return true
   })
 
@@ -86,8 +92,6 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
     studentId: s.studentId,
     fullName: s.fullName,
     partner: s.partner,
-    checkinsDone: s.progress.done,
-    checkinTarget: s.progress.target,
     openCount: s.summary.openCount,
     openAmount: s.summary.openAmount,
     blocked: s.summary.blocked,
@@ -99,22 +103,22 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
       status: p.status,
       className: p.className,
     })),
+    hasPhone: !!s.phone,
     // Mensagem montada no servidor com o MESMO builder do notifyUsers: o aluno lê
     // o mesmo texto venha pelo WhatsApp manual ou pela cobrança do app.
-    whatsappUrl:
-      s.phone && s.summary.openCount > 0
-        ? buildWhatsAppUrl(
-            s.phone,
-            buildMissedCheckinMessage({
-              studentName: s.fullName,
-              orgName,
-              dates: s.summary.dates,
-              amount: s.summary.openAmount,
-              blocked: s.summary.blocked,
-              payUrl,
-            }),
-          )
-        : null,
+    whatsappUrl: s.phone
+      ? buildWhatsAppUrl(
+          s.phone,
+          buildMissedCheckinMessage({
+            studentName: s.fullName,
+            orgName,
+            dates: s.summary.dates,
+            amount: s.summary.openAmount,
+            blocked: s.summary.blocked,
+            payUrl,
+          }),
+        )
+      : null,
   }))
 
   const comPendencia = overview.students.filter((s) => s.summary.openCount > 0).length
@@ -123,7 +127,7 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
   function monthHref(offset: number): string {
     const params = new URLSearchParams()
     if (offset !== 0) params.set('mes', String(offset))
-    if (filtro !== 'todos') params.set('filtro', filtro)
+    if (filtro !== 'com_pendencia') params.set('filtro', filtro)
     if (parceiroFiltro) params.set('parceiro', parceiroFiltro)
     const qs = params.toString()
     return qs ? `/admin/wellhub?${qs}` : '/admin/wellhub'
@@ -149,9 +153,16 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {/* Leva para Alunos, onde cada card mostra o progresso do mês do aluno. */}
             <StatCard
               label="Alunos de parceiro"
               value={overview.totals.partnerStudents}
+              hint={
+                overview.totals.belowTarget > 0
+                  ? `${overview.totals.belowTarget} abaixo da meta`
+                  : 'todos na meta'
+              }
+              href="/admin/alunos"
               step={0}
             />
             <StatCard
@@ -260,7 +271,16 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
           {rows.length === 0 ? (
             <Card>
               <p className="text-sm text-slate-400">
-                Nenhum aluno neste filtro. 🎉
+                {filtro === 'bloqueados'
+                  ? 'Nenhum aluno bloqueado. 🎉'
+                  : 'Ninguém com pendência de check-in. 🎉'}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                O acompanhamento de check-ins de todos os alunos de parceiro está em{' '}
+                <Link href="/admin/alunos" className="text-brand-400 hover:text-brand-300">
+                  Alunos
+                </Link>
+                .
               </p>
             </Card>
           ) : (

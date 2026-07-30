@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import {
   settleMissedCheckin,
   settleAllMissedCheckins,
@@ -61,22 +60,26 @@ export interface WellhubStudentRowProps {
   studentId: string
   fullName: string
   partner: CheckinPartner
-  checkinsDone: number
-  checkinTarget: number
   openCount: number
   openAmount: number
   blocked: boolean
   /** Quantas pendências ainda cabem antes de bloquear. null = bloqueio desligado. */
   untilBlock: number | null
   pendencies: WellhubPendencyItem[]
-  /** Link wa.me já com a mensagem e as datas. null quando não há telefone. */
+  /**
+   * O aluno tem telefone cadastrado. Separado do whatsappUrl de propósito: aquele
+   * pode ser null por mais de um motivo, e o aviso "sem telefone" só é honesto
+   * quando é ESTE que é falso.
+   */
+  hasPhone: boolean
+  /** Link wa.me já com a mensagem e as datas das pendências. */
   whatsappUrl: string | null
 }
 
 export function WellhubStudentRow(props: WellhubStudentRowProps) {
   const {
-    studentId, fullName, partner, checkinsDone, checkinTarget,
-    openCount, openAmount, blocked, untilBlock, pendencies, whatsappUrl,
+    studentId, fullName, partner,
+    openCount, openAmount, blocked, untilBlock, pendencies, hasPhone, whatsappUrl,
   } = props
 
   const [expanded, setExpanded] = useState(false)
@@ -120,43 +123,33 @@ export function WellhubStudentRow(props: WellhubStudentRowProps) {
             <Badge variant={partner === 'wellhub' ? 'success' : 'warning'}>
               {PARTNER_LABEL[partner]}
             </Badge>
+            {/* Aluno em dia não chega aqui — a lista é só de quem tem pendência. */}
             {blocked ? (
               <Badge variant="danger">🔒 Bloqueado</Badge>
-            ) : openCount > 0 ? (
+            ) : (
               <Badge variant="warning">
                 {openCount} pendência{openCount !== 1 ? 's' : ''}
               </Badge>
-            ) : (
-              <Badge variant="success">Em dia</Badge>
             )}
           </div>
 
-          <div className="mt-2 max-w-xs">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Check-ins no mês</span>
-              <span className="text-slate-300">
-                {checkinsDone} / {checkinTarget}
-              </span>
-            </div>
-            <OccupancyBar booked={checkinsDone} capacity={Math.max(checkinTarget, 1)} />
-          </div>
-
-          {openCount > 0 && (
-            <p className="text-xs text-slate-400 mt-2">
-              {openAmount > 0 ? `${BRL.format(openAmount)} em aberto · ` : ''}
-              {blocked
-                ? 'já bloqueado'
-                : untilBlock !== null
-                  ? `bloqueia com ${untilBlock} a mais`
-                  : 'bloqueio desligado'}
-            </p>
-          )}
+          {/* O progresso do mês vive nos cards de /admin/alunos, onde o professor
+              acompanha o aluno no dia a dia. Aqui a tela é só sobre o que precisa
+              de ação: a pendência. */}
+          <p className="text-xs text-slate-400 mt-1.5">
+            {openAmount > 0 ? `${BRL.format(openAmount)} em aberto · ` : ''}
+            {blocked
+              ? 'já bloqueado'
+              : untilBlock !== null
+                ? `bloqueia com ${untilBlock} a mais`
+                : 'bloqueio desligado'}
+          </p>
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* Link direto pro WhatsApp do aluno, mensagem já com as datas. Um clique
               por aluno de propósito: navegador não abre várias abas de uma vez. */}
-          {whatsappUrl ? (
+          {whatsappUrl && (
             <a
               href={whatsappUrl}
               target="_blank"
@@ -165,20 +158,21 @@ export function WellhubStudentRow(props: WellhubStudentRowProps) {
             >
               WhatsApp
             </a>
-          ) : (
+          )}
+
+          {/* Só quando é verdade E é acionável: há o que cobrar e falta o meio. */}
+          {!hasPhone && (
             <span
-              title="Aluno sem telefone cadastrado"
+              title="Cadastre o WhatsApp na ficha do aluno para poder cobrar por aqui"
               className="rounded-lg border border-surface-border px-3 py-1.5 text-xs text-slate-500"
             >
               Sem telefone
             </span>
           )}
 
-          {openCount > 0 && (
-            <Button variant="secondary" size="sm" onClick={() => setCharging((v) => !v)}>
-              Notificar
-            </Button>
-          )}
+          <Button variant="secondary" size="sm" onClick={() => setCharging((v) => !v)}>
+            Notificar
+          </Button>
 
           {pendencies.length > 0 && (
             <button

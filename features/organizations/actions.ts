@@ -198,6 +198,11 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
 export interface CreateStudentInput {
   fullName: string
   email: string
+  /**
+   * WhatsApp do aluno. Sem isso a academia não consegue cobrá-lo por WhatsApp em
+   * /admin/wellhub — o cadastro público sempre pediu, a criação pelo admin não.
+   */
+  phone?: string
   gender?: 'M' | 'F'
   partner?: { type: 'wellhub' | 'totalpass'; partnerId: string; monthlyTarget: number }
 }
@@ -222,6 +227,7 @@ export async function createStudent(
 
   const email = input.email.trim()
   const fullName = input.fullName.trim()
+  const phone = input.phone?.trim() ?? ''
   if (!fullName) return { error: 'Informe o nome do aluno.' }
   if (!email) return { error: 'Informe o e-mail do aluno.' }
 
@@ -239,9 +245,12 @@ export async function createStudent(
     password,
     email_confirm: true,
     user_metadata: {
+      // handle_new_user() copia full_name e phone daqui para profiles — mesmo
+      // caminho do cadastro público, sem update extra.
       full_name: fullName,
       org_invite_code: org.invite_code,
       must_change_password: true,
+      ...(phone ? { phone } : {}),
     },
   })
   if (userErr || !created?.user) {

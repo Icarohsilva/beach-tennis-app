@@ -129,17 +129,44 @@ feedback do que a falta causou; e **`Registrar check-in`** no parceiro presente 
 do dia, reusando `recordCheckin` — o caminho de recuperar o repasse quando o webhook falha
 ou o aluno esquece de bipar.
 
-## 6. Controle Wellhub
+## 6. Controle Wellhub — fila de trabalho, não relatório
 
 Rota `/admin/wellhub`, área `wellhub` **não** owner-only (quem faz a chamada é o professor);
-só o card de regras exige dono. Por aluno: progresso do mês, pendências com valor, estado
-(em dia / N pendências / bloqueado), link de WhatsApp com as datas, cobrança multicanal
-(individual e em lote), baixa por pendência ou em lote, e perdão com motivo. Perdoada sai da
-contagem do bloqueio e apaga a cobrança, mas continua no total de "deixou de receber" —
-perdoar não é fingir que não houve perda.
+só o card de regras exige dono.
 
-Filtros por GET (situação, parceiro) e navegação por mês via `shiftWindow`, então o histórico
-sai de graça.
+**A lista mostra apenas alunos com pendência em aberto.** Pendência é o piso da lista, não um
+filtro opcional: quem está em dia não aparece. A tela é a fila de trabalho da academia; os números
+gerais ficam nos KPIs do topo (alunos de parceiro, check-ins do mês, pendências abertas,
+**deixou de receber**, bloqueados).
+
+Por aluno: pendências com valor, estado (N pendências / bloqueado, com "bloqueia com N a mais"),
+link de WhatsApp com as datas, cobrança multicanal (individual e em lote), baixa por pendência ou
+em lote, e perdão com motivo. Perdoada sai da contagem do bloqueio e apaga a cobrança, mas
+continua no total de "deixou de receber" — perdoar não é fingir que não houve perda.
+
+Filtros por GET (com pendência / só bloqueados, e parceiro) e navegação por mês via
+`shiftWindow`, então o histórico sai de graça.
+
+### Acompanhamento do mês fica em Alunos
+
+O progresso de check-ins (`feitos / meta`) de **todo** aluno de parceiro vive nos cards de
+`/admin/alunos`, com barra e o texto "faltam N para a meta" — é a tela que o professor abre no dia
+a dia, e um aluno abaixo da meta ainda não é um problema a cobrar, é um aluno a acompanhar. O KPI
+"Alunos de parceiro" do Controle Wellhub linka para lá, com a contagem de quantos estão abaixo da
+meta.
+
+Reuso: `countDistinctDays` + `computeProgress` + `getOrgDefaultCheckinTarget` (meta 0 na membership
+cai no default da academia, senão o card mostraria "3 / 0"). Uma query de `checkins` do mês para
+todos os alunos de parceiro da lista, agrupada em memória.
+
+### Telefone do aluno
+
+O link de WhatsApp depende de `profiles.phone`, e "Sem telefone" só aparece quando é isso mesmo —
+`hasPhone` é passado separado do `whatsappUrl` justamente para o aviso não mentir. O formulário
+"Criar aluno" passou a pedir o WhatsApp (opcional): antes o aluno cadastrado pelo próprio admin
+nascia sem telefone e a academia não tinha como cobrá-lo por aqui. O valor entra em
+`user_metadata.phone` e o trigger `handle_new_user()` grava em `profiles.phone`, mesmo caminho do
+cadastro público.
 
 ## 7. Aluno
 

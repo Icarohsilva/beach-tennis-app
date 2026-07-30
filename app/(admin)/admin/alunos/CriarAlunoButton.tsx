@@ -11,6 +11,7 @@ export function CriarAlunoButton() {
   const [open, setOpen] = useState(false)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [password, setPassword] = useState<string | null>(null)
@@ -19,7 +20,7 @@ export function CriarAlunoButton() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const res = await createStudent({ fullName, email })
+    const res = await createStudent({ fullName, email, phone })
     setLoading(false)
     if (res.error) {
       setError(res.error)
@@ -33,6 +34,7 @@ export function CriarAlunoButton() {
     setOpen(false)
     setFullName('')
     setEmail('')
+    setPhone('')
     setError('')
     setPassword(null)
   }
@@ -77,6 +79,15 @@ export function CriarAlunoButton() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+            />
+            {/* Opcional, mas é o que habilita cobrar por WhatsApp em Controle
+                Wellhub. Mesma convenção do perfil do aluno. */}
+            <Input
+              label="WhatsApp"
+              type="tel"
+              placeholder="(11) 99999-9999"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex gap-2">
