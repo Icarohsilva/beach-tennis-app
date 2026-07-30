@@ -6,6 +6,8 @@ const base = {
   hasActivePlan: false,
   creditsBalance: 0,
   hasOpenDebt: false,
+  openMissedCheckins: 0,
+  missedCheckinBlockLimit: 0,
   quotaEnforced: false,
   quotaRemaining: null,
   bookingsOnDate: 0,
@@ -115,5 +117,63 @@ describe('resolveClassAccess — cota', () => {
     expect(
       resolveClassAccess({ ...base, quotaEnforced: true, quotaRemaining: null }),
     ).toEqual({ grant: 'debt' })
+  })
+})
+
+describe('resolveClassAccess — pendência de check-in', () => {
+  const parceiro = { ...base, partner: 'wellhub' as const }
+
+  it('limite 0 (default) não bloqueia nem com muitas pendências', () => {
+    expect(
+      resolveClassAccess({ ...parceiro, openMissedCheckins: 9, missedCheckinBlockLimit: 0 }),
+    ).toEqual({ grant: 'partner' })
+  })
+
+  it('abaixo do limite o parceiro entra normalmente', () => {
+    expect(
+      resolveClassAccess({ ...parceiro, openMissedCheckins: 2, missedCheckinBlockLimit: 3 }),
+    ).toEqual({ grant: 'partner' })
+  })
+
+  it('no limite bloqueia o parceiro — que é isento de cota mas não disto', () => {
+    expect(
+      resolveClassAccess({ ...parceiro, openMissedCheckins: 3, missedCheckinBlockLimit: 3 }),
+    ).toEqual({ denied: 'blocked_by_missed_checkins' })
+  })
+
+  it('bloqueia mesmo com plano ativo e crédito em conta', () => {
+    expect(
+      resolveClassAccess({
+        ...parceiro,
+        hasActivePlan: true,
+        creditsBalance: 10,
+        openMissedCheckins: 4,
+        missedCheckinBlockLimit: 2,
+      }),
+    ).toEqual({ denied: 'blocked_by_missed_checkins' })
+  })
+
+  it('dívida de aula avulsa continua tendo precedência', () => {
+    expect(
+      resolveClassAccess({
+        ...parceiro,
+        hasOpenDebt: true,
+        openMissedCheckins: 5,
+        missedCheckinBlockLimit: 2,
+      }),
+    ).toEqual({ denied: 'blocked_by_debt' })
+  })
+
+  it('bloqueia antes de qualquer eixo de cota', () => {
+    expect(
+      resolveClassAccess({
+        ...base,
+        hasActivePlan: true,
+        quotaEnforced: true,
+        quotaRemaining: 5,
+        openMissedCheckins: 2,
+        missedCheckinBlockLimit: 2,
+      }),
+    ).toEqual({ denied: 'blocked_by_missed_checkins' })
   })
 })
