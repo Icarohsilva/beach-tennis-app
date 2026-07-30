@@ -15,6 +15,7 @@ import {
 } from '@/features/aulas/adminActions'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
 import { setStudentType, recordCheckin, clearPendingPartner } from '@/features/checkin/actions'
+import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -136,7 +137,10 @@ export function StudentProfileClient({
   )
   const [linkedPartner, setLinkedPartner] = useState<'wellhub' | 'totalpass' | null>(partner)
   const [checkinList, setCheckinList] = useState(checkins)
-  const [checkinsDone, setCheckinsDone] = useState(checkins.length)
+  // Dias DISTINTOS, não linhas: duas aulas no mesmo dia contam 1 pra meta do mês
+  // (spec 2026-07-29-checkin-diario-unico). Aplicado sobre as linhas que a página já
+  // buscou pro histórico — sem query nova.
+  const [checkinsDone, setCheckinsDone] = useState(countDistinctDays(checkins))
   const [pending, setPending] = useState<'wellhub' | 'totalpass' | null>(pendingPartner)
 
   const [error, setError] = useState<string | null>(null)

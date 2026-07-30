@@ -7,6 +7,7 @@ import type { CheckinPartner } from '@/types'
 import { getValidator } from '@/lib/checkin/validator'
 import { computeProgress, type CheckinProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { countDistinctCheckinDays } from '@/lib/checkin/monthlyProgress'
 import { recordResolvedCheckin } from '@/lib/checkin/ingest'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import { normalizePartnerId } from '@/lib/checkin/partnerId'
@@ -378,20 +379,21 @@ export async function resolvePendingCheckin(
   return {}
 }
 
-/** Conta os check-ins do mês corrente e calcula o progresso. */
+/**
+ * Progresso da meta mensal, contando DIAS distintos com check-in — não linhas
+ * (spec 2026-07-29-checkin-diario-unico). Duas aulas no mesmo dia somam 1.
+ */
 async function monthlyProgress(
   adminClient: ReturnType<typeof createAdminClient>,
   studentId: string,
   orgId: string,
   target: number,
 ): Promise<CheckinProgress> {
-  const { from, to } = getMonthWindow(new Date())
-  const { count } = await adminClient
-    .from('checkins')
-    .select('id', { count: 'exact', head: true })
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .gte('checkin_date', from)
-    .lte('checkin_date', to)
-  return computeProgress(target, count ?? 0)
+  const done = await countDistinctCheckinDays(
+    adminClient,
+    studentId,
+    orgId,
+    getMonthWindow(new Date()),
+  )
+  return computeProgress(target, done)
 }

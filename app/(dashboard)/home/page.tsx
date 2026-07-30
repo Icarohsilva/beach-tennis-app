@@ -15,6 +15,12 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { computeProgress } from '@/lib/checkin/progress'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { countDistinctCheckinDays } from '@/lib/checkin/monthlyProgress'
+import {
+  summarizeMissedCheckins,
+  type MissedCheckinSummary,
+} from '@/lib/checkin/missedCheckins'
+import { getMissedCheckinSettings } from '@/features/checkin/missedCheckinSettings'
 import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { getStudentFrequency } from '@/features/relatorios/query'
 import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard'
@@ -25,7 +31,9 @@ import { getActivePlan } from '@/lib/billing/planEligibility'
 import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { brtToday } from '@/lib/utils/gridSchedule'
-import type { Profile, DayUseSlot, Periodicity } from '@/types'
+import type { Profile, DayUseSlot, Periodicity, MissedCheckinStatus } from '@/types'
+
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default async function HomePage() {
   const supabase = createClient()
@@ -116,16 +124,42 @@ export default async function HomePage() {
   // (mais específica) ou se o aluno já tem plano/pendência em andamento.
   const showPlanCTA = !isPartner && !existingSub && !recRaw
   let checkinProgress: ReturnType<typeof computeProgress> | null = null
-  if (isPartner && membership) {
-    const { from, to } = getMonthWindow(new Date())
-    const { count } = await adminClient
-      .from('checkins')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', user.id)
-      .eq('organization_id', orgId)
-      .gte('checkin_date', from)
-      .lte('checkin_date', to)
-    checkinProgress = computeProgress(membership.monthly_checkin_target, count ?? 0)
+  let missedCheckins: MissedCheckinSummary | null = null
+  if (isPartner && membership && orgId) {
+    // Dias DISTINTOS, não linhas: duas aulas na terça contam 1 pra meta do mês
+    // (spec 2026-07-29-checkin-diario-unico).
+    const done = await countDistinctCheckinDays(
+      adminClient,
+      user.id,
+      orgId,
+      getMonthWindow(new Date()),
+    )
+    checkinProgress = computeProgress(membership.monthly_checkin_target, done)
+
+    const [{ data: missedRaw }, { blockLimit }] = await Promise.all([
+      adminClient
+        .from('missed_checkins')
+        .select('id, session_date, amount, status')
+        .eq('student_id', user.id)
+        .eq('organization_id', orgId)
+        .eq('status', 'open'),
+      getMissedCheckinSettings(adminClient, orgId),
+    ])
+    const summary = summarizeMissedCheckins(
+      ((missedRaw ?? []) as {
+        id: string
+        session_date: string
+        amount: number | string
+        status: MissedCheckinStatus
+      }[]).map((r) => ({
+        id: r.id,
+        sessionDate: r.session_date,
+        amount: Number(r.amount),
+        status: r.status,
+      })),
+      blockLimit,
+    )
+    if (summary.openCount > 0) missedCheckins = summary
   }
   const frequencyWindow = getMonthWindow(new Date())
   const frequency = orgId
@@ -359,6 +393,48 @@ export default async function HomePage() {
             partner={membership!.partner as 'wellhub' | 'totalpass'}
             progress={checkinProgress}
           />
+        </Reveal>
+      )}
+
+      {/* Check-in que não aconteceu: a academia perdeu o repasse daquela aula.
+          Bloqueado ganha o card em destaque; quem só acumulou, a linha discreta —
+          mesma gradação do aviso de cota acima. */}
+      {missedCheckins && (
+        <Reveal step={2}>
+          {missedCheckins.blocked ? (
+            <Link href="/financeiro" className="group block">
+              <div className="sheen relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-brand-600 to-brand-800 p-4 shadow-[0_18px_44px_-26px_rgb(var(--brand-600)/0.95)] transition-transform duration-200 group-hover:-translate-y-0.5">
+                <div className="relative flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-white">Agendamento bloqueado</p>
+                    <p className="mt-0.5 text-xs text-white/80">
+                      {missedCheckins.openCount} check-in
+                      {missedCheckins.openCount !== 1 ? 's' : ''} do parceiro em aberto
+                      {missedCheckins.openAmount > 0
+                        ? ` · ${BRL.format(missedCheckins.openAmount)}`
+                        : ''}
+                      . Resolva para voltar a agendar.
+                    </p>
+                  </div>
+                  <span className="text-lg text-white transition-transform duration-200 group-hover:translate-x-0.5">
+                    →
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ) : (
+            <Link href="/financeiro" className="block text-xs text-brand-400 hover:text-brand-300">
+              {missedCheckins.openCount} check-in
+              {missedCheckins.openCount !== 1 ? 's' : ''} do parceiro em aberto
+              {missedCheckins.openAmount > 0
+                ? ` (${BRL.format(missedCheckins.openAmount)})`
+                : ''}
+              {missedCheckins.untilBlock !== null && missedCheckins.untilBlock > 0
+                ? ` — mais ${missedCheckins.untilBlock} e seu agendamento é bloqueado.`
+                : '.'}{' '}
+              Resolver →
+            </Link>
+          )}
         </Reveal>
       )}
 
