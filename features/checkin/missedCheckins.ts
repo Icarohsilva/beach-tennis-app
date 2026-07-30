@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/nextjs'
 import type { createAdminClient } from '@/lib/supabase/server'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { cancelFutureBookings } from '@/features/aulas/cancelBookings'
+import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import {
   countOpenMissedCheckins,
@@ -62,7 +63,23 @@ export async function ensureMissedCheckin(
   const partner = (membership as { partner: CheckinPartner | null } | null)?.partner
   if (!partner) return { created: false, openCount: 0 }
 
-  // 2. Fez check-in nesse dia → o repasse aconteceu, não há o que cobrar.
+  // 2. Já existe pendência para este par (aluno, sessão), em QUALQUER status?
+  //    Checado antes de qualquer escrita, e não pelo 23505 do índice único, porque
+  //    uma pendência já perdoada tem o payments dela apagado: cair no 23505 depois
+  //    de criar o payments deixaria uma cobrança órfã, invisível nas telas (que leem
+  //    missed_checkins) mas cobrando um check-in que o admin perdoou.
+  const { data: existing } = await client
+    .from('missed_checkins')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('session_id', sessionId)
+    .maybeSingle()
+
+  if (existing) {
+    return { created: false, openCount: await countOpenMissedCheckins(client, studentId, orgId) }
+  }
+
+  // 3. Fez check-in nesse dia → o repasse aconteceu, não há o que cobrar.
   const { count: checkinCount } = await client
     .from('checkins')
     .select('id', { count: 'exact', head: true })
@@ -74,10 +91,10 @@ export async function ensureMissedCheckin(
     return { created: false, openCount: await countOpenMissedCheckins(client, studentId, orgId) }
   }
 
-  // 3. Valor congelado agora: mudar o preço depois não reescreve o histórico.
+  // 4. Valor congelado agora: mudar o preço depois não reescreve o histórico.
   const amount = await resolveMissedCheckinAmount(client, orgId, partner)
 
-  // 4. Com valor, cria também o payments para o aluno poder quitar pelas trilhas que
+  // 5. Com valor, cria também o payments para o aluno poder quitar pelas trilhas que
   //    já existem (PIX + comprovante, Mercado Pago). Sem valor, a pendência é só
   //    controle — mesma filosofia do ensureClassDebt sem single_class_price.
   let paymentId: string | null = null
@@ -99,7 +116,9 @@ export async function ensureMissedCheckin(
     created_by: createdBy,
   })
 
-  // 23505 = índice único: já havia pendência para este par. Idempotência, não erro.
+  // 23505 ainda é possível numa corrida (duas marcações simultâneas): rede de
+  // segurança do índice único, não o caminho normal — o passo 2 é quem trata a
+  // repetição.
   if (error && error.code !== '23505') {
     throw new Error(`Falha ao registrar pendência de check-in: ${error.message}`)
   }
@@ -220,10 +239,15 @@ export async function enforceMissedCheckinBlock(
 
     // onlyFromEnrollment: false — cancela fixa E avulsa. O objetivo declarado é
     // liberar a vaga para quem vai aparecer, não poupar a avulsa.
+    //
+    // A partir de AMANHÃ: a aula de hoje está acontecendo, e cancelar a reserva dela
+    // tiraria o aluno do roster da chamada em curso (o roster exclui reserva
+    // `cancelled`) — ele desapareceria da lista logo depois de ser marcado ausente.
     const { cancelled, freedSessionIds } = await cancelFutureBookings(client, {
       studentId,
       orgId,
       onlyFromEnrollment: false,
+      from: addDaysStr(brtToday(new Date()), 1),
       refundReason: 'Estorno — bloqueio por pendência de check-in',
     })
 

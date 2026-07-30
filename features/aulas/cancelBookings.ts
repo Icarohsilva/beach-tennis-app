@@ -21,6 +21,15 @@ export interface CancelFutureBookingsInput {
    * false = todas as confirmadas, porque o objetivo é liberar a vaga.
    */
   onlyFromEnrollment: boolean
+  /**
+   * Primeira data a cancelar (yyyy-MM-dd). Ausente = hoje.
+   *
+   * O bloqueio por pendência passa amanhã: cancelar a sessão de HOJE tiraria o aluno
+   * do roster da chamada que o professor está fazendo naquele instante (o roster
+   * exclui quem tem reserva `cancelled`), fazendo o aluno desaparecer da lista
+   * logo depois de ser marcado como ausente.
+   */
+  from?: string
   /** Texto do estorno no extrato de créditos. */
   refundReason: string
 }
@@ -43,14 +52,14 @@ export async function cancelFutureBookings(
   input: CancelFutureBookingsInput,
 ): Promise<CancelFutureBookingsResult> {
   const { studentId, orgId, classId, onlyFromEnrollment, refundReason } = input
-  const today = brtToday(new Date())
+  const from = input.from ?? brtToday(new Date())
   const now = new Date().toISOString()
 
   let sessionQuery = client
     .from('class_sessions')
     .select('id')
     .eq('organization_id', orgId)
-    .gte('session_date', today)
+    .gte('session_date', from)
   if (classId) sessionQuery = sessionQuery.eq('class_id', classId)
 
   const { data: futureSessions } = await sessionQuery
