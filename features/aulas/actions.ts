@@ -14,6 +14,15 @@ import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
 import { getQuotaSnapshot } from './quotaUsage'
 import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
+import {
+  ensureMissedCheckin,
+  clearMissedCheckin,
+  enforceMissedCheckinBlock,
+} from '@/features/checkin/missedCheckins'
+import {
+  countOpenMissedCheckins,
+  getMissedCheckinSettings,
+} from '@/features/checkin/missedCheckinSettings'
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
@@ -217,6 +226,10 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     .eq('organization_id', orgId)
     .eq('status', 'pending')
     .not('session_id', 'is', null)
+    // A pendência de check-in também vive em payments, mas tem regra própria
+    // (limite de contagem, não carência). Sem este filtro a mesma falta bloquearia
+    // por dois caminhos, um deles não configurado pela academia.
+    .eq('missed_checkin', false)
 
   const graceDays = await getDebtGraceDays(adminClient, orgId)
   const debtSummary = summarizeDebts(
@@ -226,11 +239,23 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     new Date(),
   )
 
+  // Pendência de check-in do parceiro. Só busca para quem tem parceiro — é o único
+  // aluno que pode ter pendência, e este é o caminho quente de toda reserva.
+  const { blockLimit: missedCheckinBlockLimit } = profile.partner
+    ? await getMissedCheckinSettings(adminClient, orgId)
+    : { blockLimit: 0 }
+  const openMissedCheckins =
+    profile.partner && missedCheckinBlockLimit > 0
+      ? await countOpenMissedCheckins(adminClient, user.id, orgId)
+      : 0
+
   const decision = resolveClassAccess({
     partner: profile.partner,
     hasActivePlan,
     creditsBalance: profile.credits_balance,
     hasOpenDebt: debtSummary.isBlocked,
+    openMissedCheckins,
+    missedCheckinBlockLimit,
     quotaEnforced,
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
@@ -245,6 +270,11 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
       const periodo = plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'
       return {
         error: `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
+      }
+    }
+    if (decision.denied === 'blocked_by_missed_checkins') {
+      return {
+        error: `Você tem ${openMissedCheckins} check-in(s) do parceiro em aberto. Regularize em Financeiro para voltar a agendar.`,
       }
     }
     return {
@@ -667,6 +697,13 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 // markAttendance (admin)
 // ---------------------------------------------------------------------------
 
+/** Efeito da marcação sobre a pendência de check-in, para a chamada dar feedback. */
+export interface MissedCheckinEffect {
+  openCount: number
+  blocked: boolean
+  cancelledBookings: number
+}
+
 /**
  * Marks or updates attendance for a student in a session. Admin only.
  */
@@ -674,7 +711,7 @@ export async function markAttendance(
   sessionId: string,
   studentId: string,
   present: boolean,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; missed?: MissedCheckinEffect }> {
   const supabase = createClient()
   const {
     data: { user },
@@ -723,7 +760,67 @@ export async function markAttendance(
     }
   }
 
-  return {}
+  // A pendência de CHECK-IN é o espelho: nasce na FALTA do aluno de parceiro, que é
+  // quando a academia perde o repasse. Mesmo best-effort da dívida.
+  const missed = await syncMissedCheckin(adminClient, { orgId, studentId, sessionId, present })
+
+  return missed ? { missed } : {}
+}
+
+/**
+ * Reflete a marcação de presença na pendência de check-in do aluno de parceiro.
+ *
+ * Ausente → cria a pendência e aplica o bloqueio se estourou o limite.
+ * Presente → desfaz a pendência (o professor corrigiu a marcação).
+ *
+ * Nunca lança: a marcação de presença é a operação do professor e não pode falhar
+ * porque a contabilidade do parceiro falhou.
+ */
+async function syncMissedCheckin(
+  adminClient: ReturnType<typeof createAdminClient>,
+  input: { orgId: string; studentId: string; sessionId: string; present: boolean },
+): Promise<MissedCheckinEffect | undefined> {
+  const { orgId, studentId, sessionId, present } = input
+
+  try {
+    if (present) {
+      await clearMissedCheckin(adminClient, { orgId, studentId, sessionId })
+      return undefined
+    }
+
+    const { data: session } = await adminClient
+      .from('class_sessions')
+      .select('session_date')
+      .eq('id', sessionId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    const sessionDate = (session as { session_date: string } | null)?.session_date
+    if (!sessionDate) return undefined
+
+    const { created, openCount } = await ensureMissedCheckin(adminClient, {
+      orgId, studentId, sessionId, sessionDate, createdBy: null,
+    })
+    if (openCount === 0) return undefined
+
+    const { blocked, cancelledBookings } = await enforceMissedCheckinBlock(adminClient, {
+      orgId, studentId,
+    })
+
+    // created=false com openCount>0 = pendência já existia (marcação repetida):
+    // ainda vale informar o total em aberto na chamada.
+    void created
+    return { openCount, blocked, cancelledBookings }
+  } catch (err) {
+    console.error('[markAttendance] pendência de check-in falhou', {
+      sessionId, studentId, error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { feature: 'missedCheckins' },
+      extra: { sessionId, studentId, orgId },
+    })
+    return undefined
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -737,7 +834,7 @@ export async function markAttendanceBulk(
   sessionId: string,
   allStudentIds: string[],
   presentIds: string[],
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; missedByStudent?: Record<string, MissedCheckinEffect> }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -785,9 +882,19 @@ export async function markAttendanceBulk(
     }
   }
 
+  // Espelho da dívida: quem FALTOU e é de parceiro gera pendência de check-in; quem
+  // esteve presente tem a pendência daquela aula desfeita (correção de marcação).
+  const missedByStudent: Record<string, MissedCheckinEffect> = {}
+  for (const studentId of allStudentIds) {
+    const effect = await syncMissedCheckin(adminClient, {
+      orgId, studentId, sessionId, present: presentSet.has(studentId),
+    })
+    if (effect) missedByStudent[studentId] = effect
+  }
+
   await adminClient.from('class_sessions').update({ status: 'completed' }).eq('id', sessionId)
 
   const { revalidatePath } = await import('next/cache')
   revalidatePath(`/admin/grade/${sessionId}`)
-  return {}
+  return Object.keys(missedByStudent).length > 0 ? { missedByStudent } : {}
 }

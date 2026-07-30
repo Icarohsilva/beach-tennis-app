@@ -44,7 +44,7 @@ describe('generateGridDay / generateGridWeek', () => {
   })
 
   it('erro do generateGrid interrompe antes do roster e do notify', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0, error: 'boom' })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0, missedCheckinSkipped: 0, error: 'boom' })
 
     const result = await generateGridWeek()
 
@@ -54,7 +54,7 @@ describe('generateGridDay / generateGridWeek', () => {
   })
 
   it('nao notifica quando sessionsCreated=0, mas ainda calcula e retorna o roster', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 0, studentsBooked: 0, quotaSkipped: 0, missedCheckinSkipped: 0 })
 
     const result = await generateGridDay(2)
 
@@ -66,11 +66,12 @@ describe('generateGridDay / generateGridWeek', () => {
       aConfirmar: 3,
       semPlano: 1,
       semCota: 0,
+      comPendenciaCheckin: 0,
     })
   })
 
   it('notifica com escopo "day" (e roster escopado ao dia) quando generateGridDay cria sessões novas', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 2, studentsBooked: 5, quotaSkipped: 1 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 2, studentsBooked: 5, quotaSkipped: 1, missedCheckinSkipped: 0 })
 
     const result = await generateGridDay(3)
 
@@ -81,7 +82,7 @@ describe('generateGridDay / generateGridWeek', () => {
   })
 
   it('notifica com escopo "week" quando generateGridWeek cria sessões novas', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 4, studentsBooked: 9, quotaSkipped: 0 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 4, studentsBooked: 9, quotaSkipped: 0, missedCheckinSkipped: 0 })
 
     await generateGridWeek()
 
@@ -91,7 +92,7 @@ describe('generateGridDay / generateGridWeek', () => {
   })
 
   it('falha do getClassRoster degrada para zeros em vez de rejeitar, e ainda assim notifica', async () => {
-    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 1, studentsBooked: 1, quotaSkipped: 0 })
+    vi.mocked(generateGrid).mockResolvedValue({ sessionsCreated: 1, studentsBooked: 1, quotaSkipped: 0, missedCheckinSkipped: 0 })
     vi.mocked(getClassRoster).mockRejectedValue(new Error('roster boom'))
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -103,6 +104,7 @@ describe('generateGridDay / generateGridWeek', () => {
       aConfirmar: 0,
       semPlano: 0,
       semCota: 0,
+      comPendenciaCheckin: 0,
     })
     // A falha do roster não pode bloquear o push: sessionsCreated>0 ainda notifica.
     expect(notifyGridGenerated).toHaveBeenCalledTimes(1)

@@ -6,7 +6,13 @@ import { reconcileEnrollmentCredits, type ReconcileResult } from './reconcileEnr
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced } from './quotaSettings'
 import { notifyQuotaSkips, type QuotaSkip } from './quotaSkipNotify'
+import { notifyMissedCheckinSkips, type MissedCheckinSkip } from './missedCheckinSkipNotify'
 import { computeQuotaBudget } from './quotaBudget'
+import {
+  getMissedCheckinSettings,
+  countOpenMissedCheckinsByStudent,
+} from '@/features/checkin/missedCheckinSettings'
+import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 
 export type { ReconcileResult }
 export { reconcileEnrollmentCredits }
@@ -26,7 +32,14 @@ export async function reconcileAllActiveEnrollments(
   from: string,
   to: string,
   orgId?: string,
-): Promise<ReconcileResult & { processedEnrollments: number; failed: number }> {
+): Promise<
+  ReconcileResult & {
+    /** Fixas puladas porque o aluno está bloqueado por pendência de check-in. */
+    missedCheckinSkipped: number
+    processedEnrollments: number
+    failed: number
+  }
+> {
   const adminClient = createAdminClient()
 
   let enrollQuery = adminClient
@@ -91,8 +104,32 @@ export async function reconcileAllActiveEnrollments(
       .map((s) => `${s.student_id}:${s.organization_id}`),
   )
 
-  const totals = { booked: 0, skipped: 0, quotaSkipped: 0, processedEnrollments: 0, failed: 0 }
+  const totals = {
+    booked: 0,
+    skipped: 0,
+    quotaSkipped: 0,
+    missedCheckinSkipped: 0,
+    processedEnrollments: 0,
+    failed: 0,
+  }
   const skips: QuotaSkip[] = []
+  const missedSkips: MissedCheckinSkip[] = []
+
+  // Pendência de check-in por academia. Mesmo motivo do cache de isQuotaEnforced:
+  // centenas de matrículas da mesma academia não podem repetir a mesma pergunta.
+  // Uma query por academia devolve a contagem de TODOS os alunos dela.
+  const missedByOrg = new Map<string, { blockLimit: number; counts: Map<string, number> }>()
+  async function missedCheckinsFor(organizationId: string) {
+    if (!missedByOrg.has(organizationId)) {
+      const { blockLimit } = await getMissedCheckinSettings(adminClient, organizationId)
+      const counts =
+        blockLimit > 0
+          ? await countOpenMissedCheckinsByStudent(adminClient, organizationId)
+          : new Map<string, number>()
+      missedByOrg.set(organizationId, { blockLimit, counts })
+    }
+    return missedByOrg.get(organizationId) as { blockLimit: number; counts: Map<string, number> }
+  }
 
   // Cache por academia: dezenas/centenas de alunos do mesmo org não podem
   // repetir a mesma pergunta ("essa academia ligou a cota?") uma vez por
@@ -110,6 +147,7 @@ export async function reconcileAllActiveEnrollments(
   // cota compartilhado entre as fixas dele nesta rodada, na ordem do dia da
   // semana — quem vem mais cedo tem prioridade sobre quem vem depois.
   const byStudent = new Map<string, typeof enrollments>()
+  const blockedSkipsByMember = new Map<string, MissedCheckinSkip>()
   for (const e of enrollments) {
     const memberKey = `${e.studentId}:${e.organizationId}`
     const partner = partnerByMember.get(memberKey) ?? null
@@ -117,8 +155,31 @@ export async function reconcileAllActiveEnrollments(
     // regra que enrollStudentInClass aplica na entrada (spec §2).
     const eligible = partner !== null || activeSubStudents.has(memberKey)
     if (!eligible) continue
+
+    // Bloqueado por pendência de check-in não recebe reserva nova, mesmo sendo
+    // elegível: a fixa dele fica parada até resolver. Agrupa por aluno pra mandar um
+    // aviso só, listando as turmas que ficaram sem reserva.
+    const { blockLimit, counts } = await missedCheckinsFor(e.organizationId)
+    const openCount = counts.get(e.studentId) ?? 0
+    if (isMissedCheckinBlocked(openCount, blockLimit)) {
+      totals.missedCheckinSkipped++
+      const existing = blockedSkipsByMember.get(memberKey)
+      if (existing) {
+        existing.classNames.push(e.className)
+      } else {
+        blockedSkipsByMember.set(memberKey, {
+          studentId: e.studentId,
+          orgId: e.organizationId,
+          openCount,
+          classNames: [e.className],
+        })
+      }
+      continue
+    }
+
     byStudent.set(memberKey, [...(byStudent.get(memberKey) ?? []), e])
   }
+  missedSkips.push(...Array.from(blockedSkipsByMember.values()))
 
   for (const [memberKey, studentEnrollments] of Array.from(byStudent.entries())) {
     const { studentId, organizationId } = studentEnrollments[0]
@@ -181,6 +242,7 @@ export async function reconcileAllActiveEnrollments(
   }
 
   await notifyQuotaSkips(skips, adminClient)
+  await notifyMissedCheckinSkips(missedSkips, adminClient)
 
   return totals
 }

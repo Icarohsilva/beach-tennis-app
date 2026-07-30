@@ -10,12 +10,16 @@ function feedback(r: {
   aConfirmar?: number
   semPlano?: number
   semCota?: number
+  comPendenciaCheckin?: number
 }): string {
   if (r.error) return `Erro: ${r.error}`
   const parts = [`${r.sessionsCreated ?? 0} sessões`, `${r.reservados ?? 0} reservados`]
   if ((r.aConfirmar ?? 0) > 0) parts.push(`${r.aConfirmar} a confirmar`)
   if ((r.semPlano ?? 0) > 0) parts.push(`${r.semPlano} sem plano`)
   if ((r.semCota ?? 0) > 0) parts.push(`${r.semCota} sem cota`)
+  if ((r.comPendenciaCheckin ?? 0) > 0) {
+    parts.push(`🔒 ${r.comPendenciaCheckin} com pendência de check-in`)
+  }
   return parts.join(' · ')
 }
 
