@@ -11,6 +11,7 @@ type FakePayment = {
   created_at: string
   receipt_url: string | null
   session_id: string | null
+  missed_checkin: boolean
   class_sessions: { session_date: string } | { session_date: string }[] | null
 }
 
@@ -92,6 +93,7 @@ const payment = (over: Partial<FakePayment> = {}): FakePayment => ({
   created_at: '2026-07-01T10:00:00+00:00',
   receipt_url: null,
   session_id: 's1',
+  missed_checkin: false,
   class_sessions: { session_date: '2026-07-01' },
   ...over,
 })
@@ -140,13 +142,16 @@ describe('getOrgDebtors', () => {
     expect(dates).toEqual(['2026-07-01', '2026-07-08'])
   })
 
-  it('filtra por organization_id, status=pending e session_id não nulo', async () => {
+  it('filtra por organization_id, status=pending, session_id não nulo e não-check-in', async () => {
     const { client } = makeClient({
       payments: [
         payment({ id: 'ok', student_id: 'a' }), // deve aparecer
         payment({ id: 'other-org', student_id: 'z', organization_id: 'org2' }), // outra academia
         payment({ id: 'paid', student_id: 'z', status: 'paid' }), // já pago
         payment({ id: 'no-session', student_id: 'z', session_id: null }), // pendência de assinatura, não de aula
+        // Pendência de CHECK-IN: tem tela própria (/admin/wellhub) e regra própria
+        // de bloqueio — não pode aparecer na cobrança de aula avulsa.
+        payment({ id: 'checkin', student_id: 'z', missed_checkin: true }),
       ],
       profiles: [{ id: 'a', full_name: 'Aluno A' }],
     })

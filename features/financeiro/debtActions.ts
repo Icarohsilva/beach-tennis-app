@@ -176,6 +176,9 @@ export async function chargeDebt(
     .eq('organization_id', ctx.orgId)
     .eq('status', 'pending')
     .not('session_id', 'is', null)
+    // Mesmo recorte de getOrgDebtors: a pendência de check-in é cobrada pela tela
+    // de Controle Wellhub, com a mensagem dela.
+    .eq('missed_checkin', false)
   const rows = (debtRows ?? []) as { amount: number }[]
   if (rows.length === 0) return { error: 'Este aluno não tem pendências de aula.' }
   const total = Math.round(rows.reduce((s, r) => s + Number(r.amount), 0) * 100) / 100

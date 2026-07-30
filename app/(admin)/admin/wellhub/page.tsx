@@ -1,0 +1,286 @@
+// app/(admin)/admin/wellhub/page.tsx
+// Controle Wellhub: quem é aluno de parceiro, quanto já bipou no mês, quem está
+// devendo check-in e como cobrar.
+import Link from 'next/link'
+import { createAdminClient, getCurrentOrgId, getStaffContext } from '@/lib/supabase/server'
+import { requirePlatformAccess } from '@/lib/billing/guard'
+import { Card } from '@/components/ui/Card'
+import { StatCard } from '@/components/ui/StatCard'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { getWellhubOverview } from '@/features/checkin/missedCheckinQueries'
+import { getPartnerCheckinRates } from '@/features/financeiro/partnerRevenueActions'
+import { buildMissedCheckinMessage } from '@/lib/checkin/missedCheckins'
+import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
+import { getMonthWindow, shiftWindow } from '@/lib/utils/monthWindow'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
+import { formatDate } from '@/lib/utils/dateHelpers'
+import { HeartHandshake } from 'lucide-react'
+import { WellhubSettingsCard } from './WellhubSettingsCard'
+import { WellhubStudentRow } from './WellhubStudentRow'
+import { ChargeAllButton } from './ChargeAllButton'
+import type { CheckinPartner } from '@/types'
+
+export const dynamic = 'force-dynamic'
+
+const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+
+type Filtro = 'todos' | 'com_pendencia' | 'bloqueados' | 'abaixo_da_meta'
+
+interface SearchParams {
+  /** Offset de meses (0 = mês atual, -1 = mês passado). */
+  mes?: string
+  filtro?: string
+  parceiro?: string
+}
+
+const FILTROS: { value: Filtro; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'com_pendencia', label: 'Com pendência' },
+  { value: 'bloqueados', label: 'Bloqueados' },
+  { value: 'abaixo_da_meta', label: 'Abaixo da meta' },
+]
+
+export default async function WellhubPage({ searchParams }: { searchParams: SearchParams }) {
+  await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
+  const adminClient = createAdminClient()
+  const orgId = (await getCurrentOrgId()) as string
+  const staff = await getStaffContext()
+  const isOwner = staff?.isOwner ?? false
+
+  // Offset negativo só (não faz sentido olhar o futuro), limitado a 12 meses atrás.
+  const rawMes = parseInt(searchParams.mes ?? '0', 10)
+  const monthOffset = Number.isInteger(rawMes) ? Math.min(0, Math.max(-12, rawMes)) : 0
+  const window = shiftWindow(getMonthWindow(new Date()), 'month', monthOffset)
+
+  const filtro = (FILTROS.find((f) => f.value === searchParams.filtro)?.value ?? 'todos') as Filtro
+  const parceiroFiltro =
+    searchParams.parceiro === 'wellhub' || searchParams.parceiro === 'totalpass'
+      ? (searchParams.parceiro as CheckinPartner)
+      : null
+
+  const overview = await getWellhubOverview(adminClient, orgId, window)
+
+  // Rates só são lidas para o dono, porque só ele vê o card de configuração que as
+  // exibe como referência (a action é owner-only).
+  const rates = isOwner
+    ? await getPartnerCheckinRates()
+    : { wellhub: 0, totalpass: 0 }
+
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('name')
+    .eq('id', orgId)
+    .maybeSingle()
+  const orgName = (org as { name: string } | null)?.name ?? 'sua academia'
+  const payUrl = `${getSiteUrl()}/financeiro`
+
+  const visible = overview.students.filter((s) => {
+    if (parceiroFiltro && s.partner !== parceiroFiltro) return false
+    if (filtro === 'com_pendencia') return s.summary.openCount > 0
+    if (filtro === 'bloqueados') return s.summary.blocked
+    if (filtro === 'abaixo_da_meta') return s.progress.remaining > 0
+    return true
+  })
+
+  const rows = visible.map((s) => ({
+    studentId: s.studentId,
+    fullName: s.fullName,
+    partner: s.partner,
+    checkinsDone: s.progress.done,
+    checkinTarget: s.progress.target,
+    openCount: s.summary.openCount,
+    openAmount: s.summary.openAmount,
+    blocked: s.summary.blocked,
+    untilBlock: s.summary.untilBlock,
+    pendencies: s.pendencies.map((p) => ({
+      id: p.id,
+      sessionDate: p.sessionDate,
+      amount: p.amount,
+      status: p.status,
+      className: p.className,
+    })),
+    // Mensagem montada no servidor com o MESMO builder do notifyUsers: o aluno lê
+    // o mesmo texto venha pelo WhatsApp manual ou pela cobrança do app.
+    whatsappUrl:
+      s.phone && s.summary.openCount > 0
+        ? buildWhatsAppUrl(
+            s.phone,
+            buildMissedCheckinMessage({
+              studentName: s.fullName,
+              orgName,
+              dates: s.summary.dates,
+              amount: s.summary.openAmount,
+              blocked: s.summary.blocked,
+              payUrl,
+            }),
+          )
+        : null,
+  }))
+
+  const comPendencia = overview.students.filter((s) => s.summary.openCount > 0).length
+  const monthLabel = formatDate(window.from, "MMMM 'de' yyyy")
+
+  function monthHref(offset: number): string {
+    const params = new URLSearchParams()
+    if (offset !== 0) params.set('mes', String(offset))
+    if (filtro !== 'todos') params.set('filtro', filtro)
+    if (parceiroFiltro) params.set('parceiro', parceiroFiltro)
+    const qs = params.toString()
+    return qs ? `/admin/wellhub?${qs}` : '/admin/wellhub'
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Controle Wellhub</h1>
+        <p className="text-slate-400 text-sm mt-1">
+          Check-ins e pendências dos alunos de parceiro (Wellhub e TotalPass)
+        </p>
+      </div>
+
+      {overview.students.length === 0 ? (
+        <EmptyState
+          icon={HeartHandshake}
+          title="Nenhum aluno de parceiro ainda"
+          description="Vincule um aluno ao Wellhub ou TotalPass na ficha dele para acompanhar os check-ins aqui."
+          ctaHref="/admin/alunos"
+          ctaLabel="Ver alunos"
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <StatCard
+              label="Alunos de parceiro"
+              value={overview.totals.partnerStudents}
+              step={0}
+            />
+            <StatCard
+              label="Check-ins no mês"
+              value={overview.totals.checkinDays}
+              hint="dias com check-in"
+              step={1}
+            />
+            <StatCard
+              label="Pendências abertas"
+              value={overview.totals.openCount}
+              hint={
+                overview.totals.openAmount > 0
+                  ? BRL.format(overview.totals.openAmount)
+                  : 'sem valor configurado'
+              }
+              step={2}
+            />
+            <StatCard
+              label="Deixou de receber"
+              value={BRL.format(overview.totals.lostAmount)}
+              hint="no mês, incluindo perdoadas"
+              step={3}
+            />
+            <StatCard
+              label="Bloqueados"
+              value={overview.totals.blockedStudents}
+              hint={
+                overview.blockLimit > 0
+                  ? `limite: ${overview.blockLimit} pendências`
+                  : 'bloqueio desligado'
+              }
+              step={4}
+            />
+          </div>
+
+          {overview.blockLimit === 0 && overview.totals.openCount > 0 && (
+            <p className="text-xs text-brand-400">
+              O bloqueio está desligado: as pendências são registradas e cobradas, mas
+              ninguém deixa de agendar.
+              {isOwner ? ' Ligue em "Regras de pendência", abaixo.' : ''}
+            </p>
+          )}
+
+          {/* Filtros por GET, sem estado no cliente — padrão de /admin/alunos. */}
+          <Card>
+            <form method="GET" className="flex flex-wrap items-end gap-3">
+              {monthOffset !== 0 && <input type="hidden" name="mes" value={monthOffset} />}
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-400">Situação</label>
+                <select
+                  name="filtro"
+                  defaultValue={filtro}
+                  className="bg-surface border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                >
+                  {FILTROS.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-400">Parceiro</label>
+                <select
+                  name="parceiro"
+                  defaultValue={parceiroFiltro ?? ''}
+                  className="bg-surface border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="wellhub">Wellhub</option>
+                  <option value="totalpass">TotalPass</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
+              >
+                Filtrar
+              </button>
+              <Link href="/admin/wellhub" className="text-sm text-slate-400 hover:text-white">
+                Limpar
+              </Link>
+            </form>
+          </Card>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-sm">
+              <Link
+                href={monthHref(monthOffset - 1)}
+                className="text-slate-400 hover:text-white"
+              >
+                ← mês anterior
+              </Link>
+              <span className="text-white font-medium capitalize">{monthLabel}</span>
+              {monthOffset < 0 && (
+                <Link
+                  href={monthHref(monthOffset + 1)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  mês seguinte →
+                </Link>
+              )}
+            </div>
+            {comPendencia > 0 && <ChargeAllButton studentCount={comPendencia} />}
+          </div>
+
+          {rows.length === 0 ? (
+            <Card>
+              <p className="text-sm text-slate-400">
+                Nenhum aluno neste filtro. 🎉
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {rows.map((r) => (
+                <WellhubStudentRow key={r.studentId} {...r} />
+              ))}
+            </div>
+          )}
+
+          {/* Configuração é do dono: mexe em quanto se cobra e em quem é bloqueado. */}
+          {isOwner && (
+            <WellhubSettingsCard
+              blockLimit={overview.blockLimit}
+              price={overview.price}
+              partnerRates={rates}
+            />
+          )}
+        </>
+      )}
+    </div>
+  )
+}
