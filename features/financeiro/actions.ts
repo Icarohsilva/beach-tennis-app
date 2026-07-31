@@ -435,6 +435,7 @@ export async function updateSystemSettings(settings: {
   debt_block_grace_days?: number
   quota_enforcement_enabled?: boolean
   max_classes_per_day?: number
+  video_feed_url?: string
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -487,6 +488,14 @@ export async function updateSystemSettings(settings: {
     (!Number.isInteger(settings.max_classes_per_day) || settings.max_classes_per_day < 1)
   ) {
     return { error: 'Máximo de aulas por dia inválido.' }
+  }
+
+  if (
+    settings.video_feed_url !== undefined &&
+    settings.video_feed_url !== '' &&
+    !/^https?:\/\//i.test(settings.video_feed_url)
+  ) {
+    return { error: 'URL do site de vídeos deve começar com http:// ou https://.' }
   }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).
