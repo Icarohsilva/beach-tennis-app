@@ -35,9 +35,14 @@ export function VideoClient({ videoFeedUrl }: VideoClientProps) {
             >
               Abrir em nova aba →
             </a>
-            {/* allow-scripts + allow-same-origin juntos: necessário pro site de vídeos manter
-                sessão de login (cookies/localStorage). Aceitável aqui pois a URL só é definida
-                por um admin da própria academia, nunca por conteúdo de terceiros/usuário. */}
+            <p className="text-xs text-slate-500">
+              Conteúdo do site de vídeos da academia — fora do controle do ArenaHub. Não
+              compartilhe senhas de outros serviços aqui.
+            </p>
+            {/* allow-scripts + allow-same-origin: necessário pro site de vídeos manter sessão de
+                login (cookies/localStorage). allow-forms: envio do formulário de login.
+                allow-popups: alguns provedores abrem OAuth/2FA em popup. Aceitável pois a URL só
+                é definida por um admin da própria academia, nunca por conteúdo de terceiros/usuário. */}
             <iframe
               src={videoFeedUrl}
               className="w-full h-[75vh] rounded-xl border border-surface-border bg-surface-card"
