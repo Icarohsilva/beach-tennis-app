@@ -105,7 +105,8 @@ preview manual:
 
 ## Documentação a atualizar (convenção do projeto)
 
-- `docs/marketing/capture-prints.mjs` e prints correspondentes.
+- `docs/faq/capture.mjs` (script Playwright de captura de telas da FAQ) e os
+  prints correspondentes em `docs/faq/images/` / `public/faq/images/`.
 - Manuais `academia.md` (fluxo do admin) e `aluno.md` (fluxo do aluno), servidos
   em `/ajuda/[manual]`.
 - `CLAUDE.md`, seção "Planned but Not Yet Implemented": remover/corrigir a menção
