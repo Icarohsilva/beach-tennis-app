@@ -421,10 +421,12 @@ Principais blocos:
 - **Personalização:** logo da academia, cor da marca e **prévia** (com botão de **Agendar aula** para simular a marca).
 - **Vitrine pública:** dados que aparecem no diretório público (CEP, endereço, WhatsApp, esportes oferecidos, flag "aparecer no diretório").
 - **Torneios:** descontos progressivos para inscrições múltiplas na mesma semana (2º e 3º torneio).
+- **Vídeo das quadras:** URL do site externo de câmeras/gravações que o aluno acessa pela aba **Vídeo**. Deixe em branco para esconder essa aba do aluno.
 
 > **🔧 Nos bastidores**
 > - A janela de cancelamento (padrão **5h**) alimenta `canCancelWithRefund()` em `lib/utils/creditRules.ts`: cancelou dentro da janela → recebe crédito de reposição; fora dela → perde o crédito.
 > - A validade do crédito de reposição alimenta `getMakeupCreditExpiry()`.
+> - A URL de vídeos fica em `system_settings` (chave `video_feed_url`), uma por academia — o app do aluno só monta um `<iframe>` com ela, sem integração de login entre os sistemas.
 
 ---
 

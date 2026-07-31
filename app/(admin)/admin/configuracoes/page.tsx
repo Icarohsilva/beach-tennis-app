@@ -5,6 +5,7 @@ import { CobrancaForm } from './CobrancaForm'
 import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
+import { VideoFeedUrlForm } from './VideoFeedUrlForm'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
@@ -50,6 +51,8 @@ export default async function ConfiguracoesPage() {
     pix_key_owner: map.get('pix_key_owner') ?? '',
     debt_block_grace_days: Number(map.get('debt_block_grace_days') ?? 7),
   }
+
+  const videoFeedUrl = map.get('video_feed_url') ?? ''
 
   const { data: orgRow } = await adminClient
     .from('organizations')
@@ -111,6 +114,14 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <CobrancaForm settings={cobranca} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Vídeo das quadras</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          URL do site de câmeras/gravações que os alunos acessam pela aba Vídeo.
+        </p>
+      </div>
+      <VideoFeedUrlForm videoFeedUrl={videoFeedUrl} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Personalização</h2>

@@ -1,12 +1,12 @@
 # Manual do Aluno — ArenaHub
 
 > Guia completo para o **aluno** que vai usar o ArenaHub no dia a dia.
-> Cobre do zero: **cadastro pelo link da academia (ou senha temporária) → primeiro acesso → agendar aulas, day use, financeiro, comunidade, torneios e perfil.**
+> Cobre do zero: **cadastro pelo link da academia (ou senha temporária) → primeiro acesso → agendar aulas, day use, financeiro, vídeos das quadras, torneios e perfil.**
 >
 > Cada seção traz o passo a passo, a tela real do app e um bloco **🔧 Nos bastidores** explicando o que o sistema faz por baixo dos panos.
 
 **Produção:** <https://www.arenahub.website>
-**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Arena · (+) · Comunidade · Perfil.
+**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Arena · (+) · Vídeo · Perfil.
 
 > 💡 Este manual também fica disponível **dentro do app**: toque no botão de ajuda **(?)** → **Documentação**.
 
@@ -24,7 +24,7 @@
 4. [Day use](#4-day-use)
 5. [Arena — torneios e Day Use](#5-arena--torneios-e-day-use)
 6. [Financeiro — plano e pagamentos](#6-financeiro--plano-e-pagamentos)
-7. [Comunidade](#7-comunidade)
+7. [Vídeo](#7-vídeo)
 8. [Torneios — inscrição](#8-torneios--inscrição)
 9. [Perfil — dados, créditos e ficha](#9-perfil--dados-créditos-e-ficha)
 
@@ -132,7 +132,7 @@ A **Home** é o seu resumo: quanto falta para a próxima aula, sua agenda da sem
 - **Assine um plano** — atalho para contratar mensalidade e ter aulas incluídas todo mês.
 - **Sua frequência** — presenças, faltas e aproveitamento do mês. O detalhe por mês e por ano fica no **Perfil**.
 - **Minhas próximas aulas** — se não houver, aparece **Agendar agora**.
-- **Barra inferior:** Home · Arena · **(+)** · Comunidade · Perfil. O botão **(+)** central é o atalho para agendar.
+- **Barra inferior:** Home · Arena · **(+)** · Vídeo · Perfil. O botão **(+)** central é o atalho para agendar.
 
 > **🔧 Nos bastidores**
 > - **Créditos** vêm de `profiles.credits_balance`, que é um valor **em cache** — a fonte da verdade é a tabela `credit_transactions` (cada aula agendada, cancelamento ou reposição é um lançamento).
@@ -201,13 +201,21 @@ Na tela **Financeiro** você vê seu plano atual, os planos disponíveis para co
 
 ---
 
-## 7. Comunidade
+## 7. Vídeo
 
-A aba **Comunidade** é o feed social da sua academia.
+A aba **Vídeo** abre as gravações das câmeras das quadras da sua academia, direto na tela de
+login do site de vídeos configurado pela academia.
 
-![Comunidade](images/aluno-comunidade.png)
+![Vídeo](images/aluno-video.png)
 
-Poste novidades, fotos e recados para a turma. Se ninguém postou ainda, você pode ser o primeiro (**Seja o primeiro a compartilhar com a galera**). Use o **(+)** para criar um post.
+Faça login com as credenciais do próprio site de vídeos (o ArenaHub só exibe a página, não
+guarda essa senha). Se aparecer o aviso **"Vídeos ainda não configurados"**, é porque a
+academia ainda não cadastrou a URL em Configurações — fale com ela. Se a página não carregar
+dentro do app, use o botão **Abrir em nova aba**.
+
+> **🔧 Nos bastidores**
+> - A URL fica salva em `system_settings` (chave `video_feed_url`), uma por academia. O app só
+>   monta um `<iframe>` apontando pra ela — não há integração de login entre os dois sistemas.
 
 ---
 
@@ -253,7 +261,7 @@ A aba **Perfil** concentra seus dados pessoais, segurança, créditos, acesso de
 3. **Agendar** aulas disponíveis (ou reservar **day use**).
 4. **Financeiro** — contratar plano / ver pagamentos.
 5. **Perfil** — completar dados, ID de parceiro, gênero e ficha médica.
-6. Participar da **Comunidade** e dos **Torneios**.
+6. Assistir aos **vídeos das quadras** e participar dos **Torneios**.
 
 > **Instale o app:** adicione o ArenaHub à tela inicial (PWA) para receber notificações push e abrir mais rápido.
 >

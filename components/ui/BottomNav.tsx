@@ -2,13 +2,13 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, MapPin, Plus, Users, User } from 'lucide-react'
+import { Home, MapPin, Plus, Video, User } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
 const navItems = [
   { href: '/home', icon: Home, label: 'Home' },
   { href: '/torneios', icon: MapPin, label: 'Arena', dataTour: 'tour-aluno-arena' },
-  { href: '/comunidade', icon: Users, label: 'Comunidade' },
+  { href: '/video', icon: Video, label: 'Vídeo' },
   { href: '/perfil', icon: User, label: 'Perfil', dataTour: 'tour-aluno-perfil' },
 ]
 
