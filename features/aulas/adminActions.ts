@@ -17,6 +17,12 @@ import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { requireAdmin } from './authGuards'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { cancelFutureBookings } from './cancelBookings'
+import {
+  countOpenMissedCheckins,
+  getMissedCheckinSettings,
+} from '@/features/checkin/missedCheckinSettings'
+import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
@@ -75,13 +81,30 @@ export async function enrollStudentInClass(
 
   if (!membership) return { error: 'Aluno não participa desta academia.' }
 
-  if (!(membership as { partner: string | null }).partner) {
+  const partner = (membership as { partner: string | null }).partner
+
+  if (!partner) {
     const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
 
     if (!hasActivePlan) {
       return {
         error:
           'Aula fixa exige plano ativo ou Wellhub/TotalPass. Para uma aula pontual, adicione o aluno direto na sessão.',
+      }
+    }
+  }
+
+  // Pendência de check-in barra a matrícula fixa SEM escape: matricular é dar uma
+  // vaga recorrente ao aluno que já vem deixando a academia sem repasse. Para uma
+  // aula pontual o admin ainda pode adicioná-lo direto na sessão, com force.
+  if (partner) {
+    const { blockLimit } = await getMissedCheckinSettings(adminClient, orgId)
+    if (blockLimit > 0) {
+      const abertas = await countOpenMissedCheckins(adminClient, studentId, orgId)
+      if (isMissedCheckinBlocked(abertas, blockLimit)) {
+        return {
+          error: `Esse aluno tem ${abertas} pendência(s) de check-in em aberto e está bloqueado. Resolva em Controle Wellhub antes de matricular.`,
+        }
       }
     }
   }
@@ -184,56 +207,14 @@ export async function enrollStudentInClass(
 async function cancelFutureEnrollmentBookings(
   adminClient: ReturnType<typeof createAdminClient>,
   enrollment: { student_id: string; class_id: string; organization_id: string },
-  now: string,
 ): Promise<void> {
-  const today = brtToday(new Date())
-
-  const { data: futureSessions } = await adminClient
-    .from('class_sessions')
-    .select('id')
-    .eq('class_id', enrollment.class_id)
-    .gte('session_date', today)
-
-  const sessionIds = ((futureSessions ?? []) as { id: string }[]).map((s) => s.id)
-  if (sessionIds.length === 0) return
-
-  // Só as reservas nascidas da matrícula: avulsa/reposição que o aluno pagou do
-  // próprio bolso continua valendo depois de ele sair da turma fixa.
-  const { data: bookingsRaw } = await adminClient
-    .from('session_bookings')
-    .select('id, session_id, credit_used')
-    .eq('student_id', enrollment.student_id)
-    .in('session_id', sessionIds)
-    .eq('status', 'confirmed')
-    .eq('from_enrollment', true)
-
-  const bookings = (bookingsRaw ?? []) as { id: string; session_id: string; credit_used: boolean }[]
-
-  for (const b of bookings) {
-    await adminClient
-      .from('session_bookings')
-      .update({ status: 'cancelled', cancelled_at: now })
-      .eq('id', b.id)
-
-    if (!b.credit_used) continue
-
-    // Mesma regra do cancelBooking: crédito debitado por aula que não vai
-    // acontecer volta para o aluno. Falha aqui é logada, não reverte o
-    // cancelamento — a matrícula já foi encerrada de forma durável.
-    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: enrollment.student_id,
-      p_org: enrollment.organization_id,
-      p_delta: 1,
-      p_type: 'refunded',
-      p_reason: 'Estorno — matrícula na turma encerrada',
-      p_session_id: b.session_id,
-    })
-    if (creditErr) {
-      console.error('[cancelEnrollment] adjust_credits falhou', {
-        bookingId: b.id, sessionId: b.session_id, error: creditErr.message,
-      })
-    }
-  }
+  await cancelFutureBookings(adminClient, {
+    studentId: enrollment.student_id,
+    orgId: enrollment.organization_id,
+    classId: enrollment.class_id,
+    onlyFromEnrollment: true,
+    refundReason: 'Estorno — matrícula na turma encerrada',
+  })
 }
 
 export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: string }> {
@@ -262,7 +243,7 @@ export async function cancelEnrollment(enrollmentId: string): Promise<{ error?: 
       class_id: string
       organization_id: string
     }
-    await cancelFutureEnrollmentBookings(adminClient, enrollment, now)
+    await cancelFutureEnrollmentBookings(adminClient, enrollment)
     revalidatePath(`/admin/alunos/${enrollment.student_id}`)
   }
   revalidatePath('/admin/alunos')
@@ -586,7 +567,7 @@ export async function addStudentToSession(
   studentId: string,
   reason: AddStudentReason,
   force = false,
-): Promise<{ error?: string; quotaBlocked?: boolean }> {
+): Promise<{ error?: string; quotaBlocked?: boolean; missedBlocked?: boolean }> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
@@ -661,11 +642,24 @@ export async function addStudentToSession(
       ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, sessionDate)
       : null
 
+  // Pendência de check-in: ao contrário da dívida, esta o admin VÊ. Faz diferença
+  // saber que o aluno está devendo check-in justamente na hora de colocá-lo na aula.
+  // O force existente também fura esta negação — o admin decide.
+  const { blockLimit: missedCheckinBlockLimit } = mem.partner
+    ? await getMissedCheckinSettings(adminClient, orgId)
+    : { blockLimit: 0 }
+  const openMissedCheckins =
+    mem.partner && missedCheckinBlockLimit > 0
+      ? await countOpenMissedCheckins(adminClient, studentId, orgId)
+      : 0
+
   const decision = resolveClassAccess({
     partner: mem.partner as CheckinPartner | null,
     hasActivePlan,
     creditsBalance: mem.credits_balance,
     hasOpenDebt: false,
+    openMissedCheckins,
+    missedCheckinBlockLimit,
     quotaEnforced,
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
@@ -673,11 +667,16 @@ export async function addStudentToSession(
   })
 
   if ('denied' in decision) {
-    // Só 'daily_cap'/'quota_exhausted' são alcançáveis (hasOpenDebt é sempre
-    // false, então 'blocked_by_debt' nunca aparece aqui). O caso 'daily_cap'
-    // já é barrado acima pelo check universal antes de chegar aqui — isto
-    // só é alcançável de fato via force: true (redundância inofensiva).
+    // 'blocked_by_debt' nunca aparece aqui (hasOpenDebt é sempre false). O caso
+    // 'daily_cap' já é barrado acima pelo check universal antes de chegar aqui —
+    // isto só é alcançável de fato via force: true (redundância inofensiva).
     if (!force) {
+      if (decision.denied === 'blocked_by_missed_checkins') {
+        return {
+          error: `Esse aluno tem ${openMissedCheckins} pendência(s) de check-in em aberto.`,
+          missedBlocked: true,
+        }
+      }
       const message =
         decision.denied === 'daily_cap'
           ? `Esse aluno já tem ${dailyCap} aulas neste dia — é o limite do plano dele.`

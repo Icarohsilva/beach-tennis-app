@@ -4,19 +4,41 @@
 import { useState, useTransition } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import type { Profile, Membership, Attendance, AttendanceSource } from '@/types'
+import type {
+  Profile,
+  Membership,
+  Attendance,
+  AttendanceSource,
+  CheckinPartner,
+} from '@/types'
+import type { MissedCheckinEffect } from './actions'
 
-interface StudentAttendance {
+export interface StudentAttendance {
   // id/full_name = identidade (profiles); level/payment_type = por-academia (membership).
   student: Pick<Profile, 'id' | 'full_name'> & Pick<Membership, 'level' | 'payment_type'>
   attendance: Attendance | null
   wouldOweDebt: boolean
+  /** Parceiro confirmado na academia. null = não é aluno de parceiro. */
+  partner: CheckinPartner | null
+  /** Já existe check-in do aluno na data desta aula. */
+  checkedInToday: boolean
+  /** Pendências de check-in em aberto antes desta chamada. */
+  openMissedCheckins: number
 }
 
 interface AttendanceSheetProps {
   sessionId: string
   students: StudentAttendance[]
-  onMark: (sessionId: string, studentId: string, present: boolean) => Promise<{ error?: string }>
+  onMark: (
+    sessionId: string,
+    studentId: string,
+    present: boolean,
+  ) => Promise<{ error?: string; missed?: MissedCheckinEffect }>
+  /** Registra o check-in do parceiro na mão, recuperando o repasse. */
+  onRecordCheckin: (
+    studentId: string,
+    partner: CheckinPartner,
+  ) => Promise<{ error?: string }>
 }
 
 const SOURCE_LABEL: Record<AttendanceSource, string> = {
@@ -31,7 +53,22 @@ const SOURCE_VARIANT: Record<AttendanceSource, 'default' | 'success' | 'warning'
   totalpass: 'warning',
 }
 
-export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheetProps) {
+const PARTNER_LABEL: Record<CheckinPartner, string> = {
+  wellhub: 'Wellhub',
+  totalpass: 'TotalPass',
+}
+
+const PARTNER_VARIANT: Record<CheckinPartner, 'success' | 'warning'> = {
+  wellhub: 'success',
+  totalpass: 'warning',
+}
+
+export function AttendanceSheet({
+  sessionId,
+  students,
+  onMark,
+  onRecordCheckin,
+}: AttendanceSheetProps) {
   const [attendanceMap, setAttendanceMap] = useState<
     Map<string, { status: 'present' | 'absent'; source: AttendanceSource }>
   >(() => {
@@ -48,49 +85,96 @@ export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheet
   })
 
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
+  // Efeito da falta na pendência de check-in, por aluno — feedback imediato do que
+  // a marcação causou (pendência criada, e se bloqueou o aluno).
+  const [missedMap, setMissedMap] = useState<Map<string, MissedCheckinEffect>>(new Map())
+  // Check-in registrado na mão agora, sem esperar o refresh do servidor.
+  const [checkedInNow, setCheckedInNow] = useState<Set<string>>(new Set())
+  const [pendingStudent, setPendingStudent] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  function handleToggle(studentId: string) {
-    const current = attendanceMap.get(studentId)
-    const newPresent = current?.status !== 'present'
+  function setError(studentId: string, message: string | null) {
+    setErrors((prev) => {
+      const next = new Map(prev)
+      if (message) next.set(studentId, message)
+      else next.delete(studentId)
+      return next
+    })
+  }
 
+  function handleMark(studentId: string, present: boolean) {
+    setPendingStudent(studentId)
     startTransition(async () => {
-      const result = await onMark(sessionId, studentId, newPresent)
+      const result = await onMark(sessionId, studentId, present)
+      setPendingStudent(null)
       if (result.error) {
-        setErrors((prev) => new Map(prev).set(studentId, result.error!))
+        setError(studentId, result.error)
         return
       }
-      setErrors((prev) => {
+      setError(studentId, null)
+      setAttendanceMap((prev) =>
+        new Map(prev).set(studentId, { status: present ? 'present' : 'absent', source: 'manual' }),
+      )
+      setMissedMap((prev) => {
         const next = new Map(prev)
-        next.delete(studentId)
-        return next
-      })
-      setAttendanceMap((prev) => {
-        const next = new Map(prev)
-        next.set(studentId, { status: newPresent ? 'present' : 'absent', source: 'manual' })
+        if (result.missed) next.set(studentId, result.missed)
+        else next.delete(studentId)
         return next
       })
     })
   }
 
+  function handleRecordCheckin(studentId: string, partner: CheckinPartner) {
+    setPendingStudent(studentId)
+    startTransition(async () => {
+      const result = await onRecordCheckin(studentId, partner)
+      setPendingStudent(null)
+      if (result.error) {
+        setError(studentId, result.error)
+        return
+      }
+      setError(studentId, null)
+      setCheckedInNow((prev) => new Set(prev).add(studentId))
+    })
+  }
+
   const presentCount = Array.from(attendanceMap.values()).filter((a) => a.status === 'present').length
+  const partnerStudents = students.filter((s) => s.partner)
+  const withCheckin = partnerStudents.filter(
+    (s) => s.checkedInToday || checkedInNow.has(s.student.id),
+  ).length
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between text-sm text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm text-slate-400">
         <span>{students.length} alunos inscritos</span>
         <span className="text-green-400">{presentCount} presentes</span>
       </div>
+
+      {partnerStudents.length > 0 && (
+        <p className="text-xs text-slate-400">
+          {partnerStudents.length} de parceiro ·{' '}
+          <span className={withCheckin === partnerStudents.length ? 'text-green-400' : 'text-yellow-400'}>
+            {withCheckin} com check-in hoje
+          </span>
+        </p>
+      )}
 
       {students.length === 0 ? (
         <p className="text-slate-500 text-sm text-center py-6">Nenhum aluno inscrito nesta sessão.</p>
       ) : (
         <ul className="space-y-2">
-          {students.map(({ student, wouldOweDebt }) => {
+          {students.map(({ student, wouldOweDebt, partner, checkedInToday, openMissedCheckins }) => {
             const att = attendanceMap.get(student.id)
             const isPresent = att?.status === 'present'
+            const isAbsent = att?.status === 'absent'
             const source = att?.source ?? null
             const err = errors.get(student.id)
+            const missed = missedMap.get(student.id)
+            const hasCheckin = checkedInToday || checkedInNow.has(student.id)
+            const rowPending = isPending && pendingStudent === student.id
+            // Aberto ANTES desta chamada, e o que a chamada acabou de causar.
+            const openNow = missed?.openCount ?? openMissedCheckins
 
             return (
               <li
@@ -99,31 +183,90 @@ export function AttendanceSheet({ sessionId, students, onMark }: AttendanceSheet
                   'flex items-center justify-between gap-3 px-4 py-3 rounded-xl border transition-colors',
                   isPresent
                     ? 'border-green-500/50 bg-green-500/10'
-                    : 'border-surface-border bg-surface-card',
+                    : isAbsent
+                      ? 'border-red-500/40 bg-red-500/10'
+                      : 'border-surface-border bg-surface-card',
                 ].join(' ')}
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{student.full_name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {source && (
-                      <Badge variant={SOURCE_VARIANT[source]}>{SOURCE_LABEL[source]}</Badge>
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    {/* Selo do parceiro SEMPRE visível: o professor precisa saber
+                        quem é Wellhub antes de marcar a chamada, não depois. */}
+                    {partner && (
+                      <Badge variant={PARTNER_VARIANT[partner]}>{PARTNER_LABEL[partner]}</Badge>
+                    )}
+                    {source && source !== 'manual' && (
+                      <Badge variant={SOURCE_VARIANT[source]}>
+                        check-in {SOURCE_LABEL[source]}
+                      </Badge>
                     )}
                     {wouldOweDebt && (
                       <span className="text-xs text-yellow-400 font-medium">⚠️ sem plano/crédito</span>
                     )}
+                    {partner && openNow > 0 && (
+                      <span className="text-xs text-red-400 font-medium">
+                        {openNow} pendência{openNow !== 1 ? 's' : ''} de check-in
+                      </span>
+                    )}
                   </div>
+
+                  {/* Presente sem check-in registrado = repasse que a academia vai
+                      perder por falha do webhook ou esquecimento do aluno. Dá pra
+                      recuperar aqui mesmo. */}
+                  {partner && isPresent && !hasCheckin && (
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <span className="text-xs text-yellow-400">⚠️ sem check-in hoje</span>
+                      <button
+                        type="button"
+                        disabled={rowPending}
+                        onClick={() => handleRecordCheckin(student.id, partner)}
+                        className="text-xs text-brand-400 hover:text-brand-300 underline disabled:opacity-50"
+                      >
+                        {rowPending ? 'Registrando…' : 'Registrar check-in'}
+                      </button>
+                    </div>
+                  )}
+
+                  {partner && isPresent && hasCheckin && (
+                    <p className="text-xs text-green-400 mt-1.5">✓ check-in registrado</p>
+                  )}
+
+                  {missed?.blocked && (
+                    <p className="text-xs text-red-400 mt-1.5">
+                      🔒 Aluno bloqueado
+                      {missed.cancelledBookings > 0
+                        ? ` — ${missed.cancelledBookings} reserva(s) futura(s) cancelada(s)`
+                        : ''}
+                    </p>
+                  )}
+
                   {err && <p className="text-xs text-red-400 mt-1">{err}</p>}
                 </div>
 
-                <Button
-                  variant={isPresent ? 'primary' : 'secondary'}
-                  size="sm"
-                  loading={isPending}
-                  onClick={() => handleToggle(student.id)}
-                  className="shrink-0"
-                >
-                  {isPresent ? 'Presente ✓' : 'Ausente'}
-                </Button>
+                {/* Dois botões explícitos: "marcar quem não veio" é uma ação, não a
+                    ausência de outra. O toggle único deixava ausente e não-marcado
+                    indistinguíveis. */}
+                <div className="flex shrink-0 gap-1.5">
+                  <Button
+                    variant={isPresent ? 'primary' : 'secondary'}
+                    size="sm"
+                    loading={rowPending}
+                    onClick={() => handleMark(student.id, true)}
+                    aria-pressed={isPresent}
+                  >
+                    Presente
+                  </Button>
+                  <Button
+                    variant={isAbsent ? 'danger' : 'secondary'}
+                    size="sm"
+                    loading={rowPending}
+                    onClick={() => handleMark(student.id, false)}
+                    aria-pressed={isAbsent}
+                  >
+                    Faltou
+                  </Button>
+                </div>
               </li>
             )
           })}

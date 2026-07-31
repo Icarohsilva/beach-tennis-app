@@ -6,6 +6,11 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
+import {
+  countOpenMissedCheckins,
+  getMissedCheckinSettings,
+} from '@/features/checkin/missedCheckinSettings'
+import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 
 // ---------------------------------------------------------------------------
 // offerWaitlistSpot — called when a spot opens (cancellation or cron)
@@ -309,6 +314,28 @@ export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: 
 
     if ((dailyCount ?? 0) >= 2) {
       return { error: 'Você já atingiu o limite de 2 aulas nessa data.' }
+    }
+  }
+
+  // Pendência de check-in. A fila de espera é a única porta de reserva que não passa
+  // por resolveClassAccess, então a checagem é feita aqui na mão — sem isto, aceitar
+  // uma vaga da fila seria o furo do bloqueio.
+  const { data: mem } = await adminClient
+    .from('memberships')
+    .select('partner')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  if ((mem as { partner: string | null } | null)?.partner) {
+    const { blockLimit } = await getMissedCheckinSettings(adminClient, orgId)
+    if (blockLimit > 0) {
+      const abertas = await countOpenMissedCheckins(adminClient, user.id, orgId)
+      if (isMissedCheckinBlocked(abertas, blockLimit)) {
+        return {
+          error: `Você tem ${abertas} check-in(s) do parceiro em aberto. Regularize em Financeiro para voltar a agendar.`,
+        }
+      }
     }
   }
 

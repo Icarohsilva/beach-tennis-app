@@ -11,6 +11,8 @@ export interface AddableStudent {
   full_name: string
   /** true quando o aluno não tem plano, parceiro nem crédito: entra devendo. */
   wouldOweDebt: boolean
+  /** Pendências de check-in de parceiro em aberto. */
+  openMissedCheckins: number
 }
 
 interface Props {
@@ -21,7 +23,7 @@ interface Props {
     studentId: string,
     reason: AddStudentReason,
     force?: boolean,
-  ) => Promise<{ error?: string; quotaBlocked?: boolean }>
+  ) => Promise<{ error?: string; quotaBlocked?: boolean; missedBlocked?: boolean }>
 }
 
 const REASONS: { value: AddStudentReason; label: string; hint: string }[] = [
@@ -34,7 +36,10 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   const [studentId, setStudentId] = useState('')
   const [reason, setReason] = useState<AddStudentReason>('experimental')
   const [error, setError] = useState<string | null>(null)
+  // Duas negações furáveis pelo mesmo force. Guardadas separadas porque o texto do
+  // botão precisa dizer o que está sendo furado.
   const [quotaBlocked, setQuotaBlocked] = useState(false)
+  const [missedBlocked, setMissedBlocked] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const selected = students.find((s) => s.id === studentId)
@@ -47,6 +52,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
     setReason('experimental')
     setError(null)
     setQuotaBlocked(false)
+    setMissedBlocked(false)
   }
 
   function handleAdd(force = false) {
@@ -57,10 +63,12 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
       if (result.error) {
         setError(result.error)
         setQuotaBlocked(!!result.quotaBlocked)
+        setMissedBlocked(!!result.missedBlocked)
       } else {
         setStudentId('')
         setReason('experimental')
         setQuotaBlocked(false)
+        setMissedBlocked(false)
       }
     })
   }
@@ -81,6 +89,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
           <option key={s.id} value={s.id}>
             {s.full_name}
             {s.wouldOweDebt ? ' — sem plano/crédito' : ''}
+            {s.openMissedCheckins > 0 ? ` — ${s.openMissedCheckins} pendência(s) de check-in` : ''}
           </option>
         ))}
       </select>
@@ -114,7 +123,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
 
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
 
-      {quotaBlocked ? (
+      {quotaBlocked || missedBlocked ? (
         <Button
           size="sm"
           variant="danger"
@@ -122,7 +131,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
           onClick={() => handleAdd(true)}
           className="w-full"
         >
-          Adicionar mesmo assim
+          {missedBlocked ? 'Adicionar mesmo com pendência' : 'Adicionar mesmo assim'}
         </Button>
       ) : (
         <Button

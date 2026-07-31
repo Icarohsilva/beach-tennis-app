@@ -3,7 +3,12 @@ import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Users } from 'lucide-react'
+import { computeProgress } from '@/lib/checkin/progress'
+import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
+import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
+import { getMonthWindow } from '@/lib/utils/monthWindow'
 import type { Membership, StudentLevel } from '@/types'
 import { CriarAlunoButton } from './CriarAlunoButton'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -36,7 +41,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
@@ -63,6 +68,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     parent_id: Membership['parent_id']
     credits_balance: Membership['credits_balance']
     pending_partner: Membership['pending_partner']
+    monthly_checkin_target: number
   }
 
   const students: StudentRow[] = (
@@ -76,6 +82,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       parent_id: string | null
       credits_balance: number
       pending_partner: Membership['pending_partner']
+      monthly_checkin_target: number | null
       profiles: { full_name: string } | { full_name: string }[] | null
     }[]
   )
@@ -92,6 +99,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         parent_id: m.parent_id,
         credits_balance: m.credits_balance,
         pending_partner: m.pending_partner,
+        monthly_checkin_target: m.monthly_checkin_target ?? 0,
       }
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
@@ -129,6 +137,38 @@ export default async function AlunosPage({ searchParams }: Props) {
     const planObj = Array.isArray(s.plan) ? s.plan[0] : s.plan
     if (planObj?.name) planNameMap.set(s.student_id, planObj.name)
   }
+
+  // Progresso de check-in do mês dos alunos de parceiro — é aqui que o professor
+  // acompanha quem está longe da meta (a tela de Controle Wellhub cuida só de quem
+  // já virou pendência). Uma query para todos, agrupada por aluno.
+  const partnerIds = students.filter((s) => s.partner).map((s) => s.id)
+  const monthWindow = getMonthWindow(new Date())
+
+  const { data: checkinsRaw } =
+    partnerIds.length > 0
+      ? await adminClient
+          .from('checkins')
+          .select('student_id, checkin_date')
+          .eq('organization_id', orgId)
+          .in('student_id', partnerIds)
+          .gte('checkin_date', monthWindow.from)
+          .lte('checkin_date', monthWindow.to)
+      : { data: [] }
+
+  const checkinDatesByStudent = new Map<string, { checkin_date: string }[]>()
+  for (const c of (checkinsRaw ?? []) as { student_id: string; checkin_date: string }[]) {
+    checkinDatesByStudent.set(c.student_id, [
+      ...(checkinDatesByStudent.get(c.student_id) ?? []),
+      { checkin_date: c.checkin_date },
+    ])
+  }
+
+  // Meta padrão da academia para quem não tem meta própria — mesma regra da ficha do
+  // aluno e do Controle Wellhub, senão o card mostraria "3 / 0".
+  const orgDefaultTarget =
+    partnerIds.length > 0 && orgId
+      ? await getOrgDefaultCheckinTarget(adminClient, orgId)
+      : 0
 
   return (
     <div className="space-y-6">
@@ -189,6 +229,16 @@ export default async function AlunosPage({ searchParams }: Props) {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {students.map((student) => {
             const enrollCount = enrollCountMap.get(student.id) ?? 0
+            // Dias distintos, não linhas: duas aulas no mesmo dia contam 1 para a
+            // meta (spec 2026-07-29-checkin-diario-unico).
+            const checkinProgress = student.partner
+              ? computeProgress(
+                  student.monthly_checkin_target > 0
+                    ? student.monthly_checkin_target
+                    : orgDefaultTarget,
+                  countDistinctDays(checkinDatesByStudent.get(student.id) ?? []),
+                )
+              : null
 
             return (
               <Link key={student.id} href={`/admin/alunos/${student.id}`}>
@@ -229,6 +279,35 @@ export default async function AlunosPage({ searchParams }: Props) {
                         <span className="text-brand-500">
                           {student.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
                         </span>
+                      </div>
+                    )}
+                    {student.partner && checkinProgress && (
+                      <div className="pt-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span>Check-ins no mês</span>
+                          <span
+                            className={
+                              checkinProgress.remaining === 0 ? 'text-green-400' : 'text-white'
+                            }
+                          >
+                            {checkinProgress.done} / {checkinProgress.target}
+                          </span>
+                        </div>
+                        <OccupancyBar
+                          booked={checkinProgress.done}
+                          capacity={Math.max(checkinProgress.target, 1)}
+                        />
+                        {checkinProgress.remaining > 0 ? (
+                          <p className="mt-1 text-[11px] text-yellow-400">
+                            faltam {checkinProgress.remaining} para a meta
+                          </p>
+                        ) : checkinProgress.ahead > 0 ? (
+                          <p className="mt-1 text-[11px] text-green-400">
+                            {checkinProgress.ahead} acima da meta
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-green-400">meta batida</p>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center justify-between">

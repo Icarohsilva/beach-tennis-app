@@ -35,6 +35,9 @@ export async function getOrgDebtors(client: AdminClient, orgId: string): Promise
     .eq('organization_id', orgId)
     .eq('status', 'pending')
     .not('session_id', 'is', null)
+    // Pendência de check-in de parceiro tem tela própria (/admin/wellhub) e regra
+    // própria de bloqueio. Misturá-la aqui confundiria as duas cobranças.
+    .eq('missed_checkin', false)
     .order('created_at', { ascending: true })
 
   type Row = {

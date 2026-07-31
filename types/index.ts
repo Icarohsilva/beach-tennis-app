@@ -234,6 +234,32 @@ export interface Checkin {
   created_at: string
 }
 
+export type MissedCheckinStatus = 'open' | 'paid' | 'waived'
+
+/**
+ * Check-in que a academia deixou de receber: o aluno de parceiro tinha aula
+ * reservada e o professor marcou AUSENTE na chamada.
+ *
+ * Não confundir com `PendingCheckin` (fila do webhook sem aluno casado) nem com a
+ * pendência financeira de aula avulsa (`Payment` com `session_id`).
+ */
+export interface MissedCheckin {
+  id: string
+  organization_id: string
+  student_id: string
+  session_id: string
+  partner: CheckinPartner
+  session_date: string // YYYY-MM-DD
+  amount: number // reais, congelado no momento da falta
+  status: MissedCheckinStatus
+  payment_id: string | null // null quando amount = 0 (só controle, sem cobrança)
+  resolved_at: string | null
+  resolved_by: string | null
+  resolution_note: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface CreditTransaction {
   id: string
   organization_id: string
@@ -336,6 +362,9 @@ export interface Payment {
   gateway: string
   dayuse_booking_id: string | null
   credits_qty: number | null
+  // true = nasceu de uma pendência de check-in de parceiro, não de aula avulsa.
+  // Quem filtra por dívida de avulsa precisa excluir estes (ver MissedCheckin).
+  missed_checkin: boolean
   paid_at: string | null
   created_at: string
 }

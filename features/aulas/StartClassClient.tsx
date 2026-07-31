@@ -5,10 +5,18 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils/cn'
 import { markAttendanceBulk } from './actions'
+import type { CheckinPartner } from '@/types'
 
 interface Student {
   student: { id: string; full_name: string }
   wouldOweDebt: boolean
+  partner: CheckinPartner | null
+  checkedInToday: boolean
+}
+
+const PARTNER_LABEL: Record<CheckinPartner, string> = {
+  wellhub: 'Wellhub',
+  totalpass: 'TotalPass',
 }
 
 interface Props {
@@ -79,26 +87,34 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
       <h2 className="text-lg font-semibold text-white">Chamada</h2>
 
       <div className="space-y-2">
-        {students.map(({ student, wouldOweDebt }) => {
+        {students.map(({ student, wouldOweDebt, partner, checkedInToday }) => {
           const present = presentIds.has(student.id)
           return (
             <button
               key={student.id}
               onClick={() => toggleStudent(student.id)}
               className={cn(
-                'w-full flex items-center justify-between px-4 py-3 rounded-lg border text-sm font-medium transition-colors',
+                'w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-sm font-medium transition-colors text-left',
                 present
                   ? 'bg-green-900/40 border-green-600 text-green-300'
                   : 'bg-red-900/40 border-red-700 text-red-300',
               )}
             >
-              <span>
+              <span className="min-w-0">
                 {student.full_name}
                 {wouldOweDebt && (
                   <span title="Sem plano/crédito — marcar presença vai gerar dívida"> ⚠️</span>
                 )}
+                {/* Confirmar a chamada com um parceiro ausente cria pendência pra
+                    ele — o professor precisa ver quem é parceiro antes de confirmar. */}
+                {partner && (
+                  <span className="block text-xs font-normal opacity-80">
+                    {PARTNER_LABEL[partner]}
+                    {checkedInToday ? ' · check-in ok' : ' · sem check-in hoje'}
+                  </span>
+                )}
               </span>
-              <span>{present ? 'Presente' : 'Ausente'}</span>
+              <span className="shrink-0">{present ? 'Presente' : 'Faltou'}</span>
             </button>
           )
         })}

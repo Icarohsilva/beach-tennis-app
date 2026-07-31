@@ -10,6 +10,8 @@ import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
+import { getMissedCheckinSettings } from '@/features/checkin/missedCheckinSettings'
+import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import type { Class, ClassSession } from '@/types'
 
@@ -77,6 +79,29 @@ export default async function AgendarPage() {
     quotaOn && plan && orgId
       ? await getQuotaSnapshot(adminClient, user.id, orgId, plan, brtToday(new Date()))
       : null
+
+  // Bloqueio por pendência de check-in: o aluno precisa ver ANTES de tentar
+  // reservar e receber um erro. Só olha quem tem parceiro — é quem pode ter
+  // pendência (mesmo recorte de bookSession).
+  let missedBlock: { openCount: number; openAmount: number } | null = null
+  if (orgId && studentProfile.partner) {
+    const { blockLimit } = await getMissedCheckinSettings(adminClient, orgId)
+    if (blockLimit > 0) {
+      const { data: missedRaw } = await adminClient
+        .from('missed_checkins')
+        .select('amount')
+        .eq('student_id', user.id)
+        .eq('organization_id', orgId)
+        .eq('status', 'open')
+      const rows = (missedRaw ?? []) as { amount: number | string }[]
+      if (isMissedCheckinBlocked(rows.length, blockLimit)) {
+        missedBlock = {
+          openCount: rows.length,
+          openAmount: rows.reduce((s, r) => s + Math.max(Number(r.amount), 0), 0),
+        }
+      }
+    }
+  }
 
   // Fetch next 30 days of sessions for available classes
   const { data: sessionsRaw } = classIds.length > 0
@@ -277,6 +302,23 @@ export default async function AgendarPage() {
       {studentProfile.credits_balance <= 0 && (
         <Link href="/financeiro" className="text-sm text-brand-500 font-medium">
           Sem créditos? Compre uma aula avulsa →
+        </Link>
+      )}
+
+      {missedBlock && (
+        <Link
+          href="/financeiro"
+          className="block rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3"
+        >
+          <p className="text-sm font-semibold text-red-300">Agendamento bloqueado</p>
+          <p className="mt-0.5 text-xs text-red-200/80">
+            {missedBlock.openCount} check-in{missedBlock.openCount !== 1 ? 's' : ''} do
+            parceiro em aberto
+            {missedBlock.openAmount > 0
+              ? ` · ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(missedBlock.openAmount)}`
+              : ''}
+            . Resolva no Financeiro para voltar a agendar →
+          </p>
         </Link>
       )}
 

@@ -8,9 +8,11 @@ import { markAttendance } from '@/features/aulas/actions'
 import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
 import { addStudentToSession } from '@/features/aulas/adminActions'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
+import { recordCheckin } from '@/features/checkin/actions'
+import { countOpenMissedCheckinsByStudent } from '@/features/checkin/missedCheckinSettings'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import type { ClassSession, Profile, Membership, Attendance } from '@/types'
+import type { ClassSession, Profile, Membership, Attendance, CheckinPartner } from '@/types'
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -22,7 +24,9 @@ interface Props {
 export default async function SessionDetailPage({ params }: Props) {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
-  const orgId = await getCurrentOrgId()
+  // Cast como em /admin/financeiro/cobranca: o layout do (admin) já garantiu a
+  // academia ativa antes de qualquer página renderizar.
+  const orgId = (await getCurrentOrgId()) as string
 
   // Fetch session + class
   const { data: session } = await adminClient
@@ -95,14 +99,14 @@ export default async function SessionDetailPage({ params }: Props) {
   const memById = new Map<string, {
     level: Membership['level']
     payment_type: Membership['payment_type']
-    partner: string | null
+    partner: CheckinPartner | null
     credits_balance: number
   }>()
   for (const m of (allMemsRaw ?? []) as {
     user_id: string
     level: Membership['level']
     payment_type: Membership['payment_type']
-    partner: string | null
+    partner: CheckinPartner | null
     credits_balance: number
   }[]) {
     memById.set(m.user_id, {
@@ -112,6 +116,29 @@ export default async function SessionDetailPage({ params }: Props) {
       credits_balance: m.credits_balance,
     })
   }
+
+  // Check-ins do dia desta aula e pendências de check-in em aberto: o professor
+  // precisa dos dois na chamada — quem é de parceiro, quem já bipou, e quem já vem
+  // acumulando falta. Uma query cada, para os alunos desta sessão.
+  const { data: checkinsToday } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('checkins')
+          .select('student_id')
+          .eq('organization_id', orgId)
+          .eq('checkin_date', typedSession.session_date)
+          .in('student_id', studentIds)
+      : { data: [] }
+
+  const checkedInIds = new Set(
+    ((checkinsToday ?? []) as { student_id: string }[]).map((c) => c.student_id),
+  )
+
+  const openMissedByStudent = await countOpenMissedCheckinsByStudent(
+    adminClient,
+    orgId,
+    studentIds,
+  )
 
   // Assinaturas ativas de TODA a academia, buscadas uma vez só (mesmo motivo).
   const { data: allSubsRaw } = await adminClient
@@ -159,6 +186,9 @@ export default async function SessionDetailPage({ params }: Props) {
         },
         attendance: attendanceByStudent.get(p.id) ?? null,
         wouldOweDebt: !hasAccess(p.id),
+        partner: mem?.partner ?? null,
+        checkedInToday: checkedInIds.has(p.id),
+        openMissedCheckins: openMissedByStudent.get(p.id) ?? 0,
       }
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
@@ -171,11 +201,18 @@ export default async function SessionDetailPage({ params }: Props) {
       ? await adminClient.from('profiles').select('id, full_name').in('id', candidateIds)
       : { data: [] }
 
+  const openMissedByCandidate = await countOpenMissedCheckinsByStudent(
+    adminClient,
+    orgId,
+    candidateIds,
+  )
+
   const addableStudents: AddableStudent[] = (candidateProfiles ?? [])
     .map((p: Pick<Profile, 'id' | 'full_name'>) => ({
       id: p.id,
       full_name: p.full_name,
       wouldOweDebt: !hasAccess(p.id),
+      openMissedCheckins: openMissedByCandidate.get(p.id) ?? 0,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
@@ -225,6 +262,7 @@ export default async function SessionDetailPage({ params }: Props) {
             sessionId={params.sessionId}
             students={students}
             onMark={markAttendance}
+            onRecordCheckin={recordCheckin}
           />
 
           <StartClassClient

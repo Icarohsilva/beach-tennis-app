@@ -18,6 +18,7 @@ interface GridActionResult {
   aConfirmar?: number
   semPlano?: number
   semCota?: number
+  comPendenciaCheckin?: number
 }
 
 /**
@@ -44,6 +45,7 @@ async function finishGeneration(
   orgId: string,
   sessionsCreated: number,
   quotaSkipped: number,
+  missedCheckinSkipped: number,
   rosterOpts: { dayOfWeek?: number },
   notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
 ): Promise<GridActionResult> {
@@ -57,6 +59,7 @@ async function finishGeneration(
     aConfirmar: roster.totals.pendingConfirmation,
     semPlano: roster.totals.noPlan,
     semCota: quotaSkipped,
+    comPendenciaCheckin: missedCheckinSkipped,
   }
 }
 
@@ -74,7 +77,10 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
   if (r.error) return { error: r.error }
 
-  return finishGeneration(orgId, r.sessionsCreated, r.quotaSkipped, { dayOfWeek }, { kind: 'day', dayOfWeek })
+  return finishGeneration(
+    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
+    { dayOfWeek }, { kind: 'day', dayOfWeek },
+  )
 }
 
 /** Gera a semana toda (7 datas a partir de hoje, todas as turmas). */
@@ -87,5 +93,8 @@ export async function generateGridWeek(): Promise<GridActionResult> {
   const r = await generateGrid(orgId, from, to)
   if (r.error) return { error: r.error }
 
-  return finishGeneration(orgId, r.sessionsCreated, r.quotaSkipped, {}, { kind: 'week' })
+  return finishGeneration(
+    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
+    {}, { kind: 'week' },
+  )
 }

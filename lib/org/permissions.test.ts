@@ -27,4 +27,12 @@ describe('canAccessArea', () => {
   it('dono vê relatórios', () => {
     expect(canAccessArea('relatorios', true)).toBe(true)
   })
+
+  it('professor vê Controle Wellhub — é ele quem faz a chamada', () => {
+    expect(canAccessArea('wellhub', false)).toBe(true)
+  })
+
+  it('dono vê Controle Wellhub', () => {
+    expect(canAccessArea('wellhub', true)).toBe(true)
+  })
 })
