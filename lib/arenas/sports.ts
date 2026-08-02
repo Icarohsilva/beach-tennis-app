@@ -63,3 +63,37 @@ export function sportLabel(slug: string): string {
   if (isCustomSport(slug)) return slug.slice(CUSTOM_PREFIX.length)
   return SPORT_BY_SLUG.get(slug)?.label ?? slug
 }
+
+// Emoji da tag: custom não tem emoji próprio, cai no genérico.
+export function sportEmoji(slug: string): string {
+  return SPORT_BY_SLUG.get(slug)?.emoji ?? '🏅'
+}
+
+// --- Modalidades no escopo de UMA academia ---------------------------------
+// O esporte do aluno (memberships.sports) e o da turma (classes.sport) só fazem
+// sentido dentro do cardápio da academia (organizations.sports). Academia que
+// ainda não declarou modalidade nenhuma cai no cardápio completo — senão o campo
+// nasceria vazio e inutilizável.
+
+export function sportOptionsForOrg(orgSports: string[] | null | undefined): string[] {
+  const own = normalizeSports(orgSports ?? [])
+  return own.length > 0 ? own : SPORTS.map((s) => s.slug)
+}
+
+// Validador server-side dos esportes de um aluno naquela academia.
+export function normalizeSportsForOrg(
+  input: string[] | null | undefined,
+  orgSports: string[] | null | undefined,
+): string[] {
+  const allowed = new Set(sportOptionsForOrg(orgSports))
+  return normalizeSports(input ?? []).filter((s) => allowed.has(s))
+}
+
+// Variante de valor único, para a modalidade da turma. null = "sem modalidade".
+export function normalizeSportForOrg(
+  input: string | null | undefined,
+  orgSports: string[] | null | undefined,
+): string | null {
+  if (!input) return null
+  return normalizeSportsForOrg([input], orgSports)[0] ?? null
+}

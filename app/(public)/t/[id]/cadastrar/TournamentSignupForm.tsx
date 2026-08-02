@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 
-interface Props { tournamentId: string; orgInviteCode: string | null }
+interface Props { tournamentId: string; orgInviteCode: string | null; sport?: string | null }
 
-export function TournamentSignupForm({ tournamentId, orgInviteCode }: Props) {
+export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null }: Props) {
   const router = useRouter()
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
   const [error, setError] = useState('')
@@ -34,6 +34,8 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode }: Props) {
         data: {
           full_name: form.full_name.trim(),
           ...(orgInviteCode ? { org_invite_code: orgInviteCode } : {}),
+          // handle_new_user grava em memberships.sports.
+          ...(sport ? { sports: sport } : {}),
         },
       },
     })

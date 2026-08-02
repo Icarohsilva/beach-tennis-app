@@ -13,9 +13,14 @@ import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { getMissedCheckinSettings } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import type { Class, ClassSession } from '@/types'
 
-export default async function AgendarPage() {
+export default async function AgendarPage({
+  searchParams,
+}: {
+  searchParams: { esporte?: string }
+}) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -36,10 +41,24 @@ export default async function AgendarPage() {
 
   const allClasses = (classes ?? []) as Class[]
 
-  // Filtra apenas por kids (nível não bloqueia mais).
+  // Filtra apenas por kids (nem nível nem modalidade bloqueiam). A modalidade da
+  // turma é rótulo: o aluno pode reservar qualquer turma, pratique ele o esporte
+  // dela ou não.
   const availableClasses = allClasses.filter(
     (c) => c.type !== 'kids' || studentProfile.is_dependent,
   )
+
+  // Filtro só de exibição, escolhido pelo aluno na tela. Nada aqui muda quem pode
+  // reservar o quê — sem `?esporte=`, a lista mostra tudo.
+  const sportsInGrid = Array.from(
+    new Set(availableClasses.map((c) => c.sport).filter((s): s is string => !!s)),
+  )
+  const sportFilter = sportsInGrid.includes(searchParams.esporte ?? '')
+    ? searchParams.esporte!
+    : ''
+  const visibleClasses = sportFilter
+    ? availableClasses.filter((c) => c.sport === sportFilter)
+    : availableClasses
 
   if (availableClasses.length === 0) {
     return (
@@ -349,8 +368,22 @@ export default async function AgendarPage() {
         <span className="text-2xl">🏖️</span>
       </Link>
 
+      {sportsInGrid.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          <FilterChip href="/agendar" label="Todas" active={!sportFilter} />
+          {sportsInGrid.map((slug) => (
+            <FilterChip
+              key={slug}
+              href={`/agendar?esporte=${encodeURIComponent(slug)}`}
+              label={`${sportEmoji(slug)} ${sportLabel(slug)}`}
+              active={sportFilter === slug}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="space-y-4">
-        {availableClasses.map((c) => {
+        {visibleClasses.map((c) => {
           const nextSession = nextSessionByClass.get(c.id) ?? null
           const nextId = nextSession?.id
           const isEnrolled = enrolledClassIds.has(c.id)
@@ -390,5 +423,23 @@ export default async function AgendarPage() {
         })}
       </div>
     </div>
+  )
+}
+
+// Chip do filtro de modalidade. É só visual: navega com ?esporte= e reduz a lista
+// exibida. Não existe restrição de acesso por modalidade.
+function FilterChip({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={
+        'text-xs rounded-full px-3 py-1.5 border transition-colors ' +
+        (active
+          ? 'border-brand-500 bg-brand-500/15 text-white'
+          : 'border-surface-border bg-surface-card text-slate-400 hover:border-slate-500')
+      }
+    >
+      {label}
+    </Link>
   )
 }

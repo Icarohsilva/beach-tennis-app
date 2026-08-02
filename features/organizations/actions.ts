@@ -1,9 +1,9 @@
 'use server'
 // features/organizations/actions.ts
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getStaffContext, getCurrentOrgId } from '@/lib/supabase/server'
 import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifiers'
-import { normalizeSports } from '@/lib/arenas/sports'
+import { normalizeSports, normalizeSportsForOrg, sportOptionsForOrg } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
 import { generateTempPassword } from '@/lib/auth/tempPassword'
 import { setStudentType } from '@/features/checkin/actions'
@@ -129,20 +129,21 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
 }
 
 // Resolve um código de convite para o nome da academia (uso público no cadastro).
-// Retorna só dados não-sensíveis (nome). null se inválido/inativo.
+// Retorna só dados não-sensíveis (nome + modalidades). null se inválido/inativo.
+// `sports` alimenta o seletor de esportes do aluno no formulário de cadastro.
 export async function resolveInviteCode(
   code: string,
-): Promise<{ orgId: string; orgName: string } | null> {
+): Promise<{ orgId: string; orgName: string; sports: string[] } | null> {
   const c = code.trim().toUpperCase()
   if (!c) return null
   const admin = createAdminClient()
   const { data } = await admin
     .from('organizations')
-    .select('id, name, status')
+    .select('id, name, status, sports')
     .eq('invite_code', c)
     .maybeSingle()
   if (!data || data.status !== 'active') return null
-  return { orgId: data.id, orgName: data.name }
+  return { orgId: data.id, orgName: data.name, sports: sportOptionsForOrg(data.sports ?? []) }
 }
 
 export interface CreateProfessorInput {
@@ -204,6 +205,8 @@ export interface CreateStudentInput {
    */
   phone?: string
   gender?: 'M' | 'F'
+  /** Esportes que o aluno pratica NESTA academia (slugs de lib/arenas/sports.ts). */
+  sports?: string[]
   partner?: { type: 'wellhub' | 'totalpass'; partnerId: string; monthlyTarget: number }
 }
 
@@ -233,11 +236,12 @@ export async function createStudent(
 
   const { data: org } = await admin
     .from('organizations')
-    .select('invite_code')
+    .select('invite_code, sports')
     .eq('id', ctx.organizationId)
     .single()
   if (!org) return { error: 'Academia não encontrada.' }
 
+  const sports = normalizeSportsForOrg(input.sports, org.sports ?? [])
   const password = generateTempPassword()
 
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
@@ -245,12 +249,13 @@ export async function createStudent(
     password,
     email_confirm: true,
     user_metadata: {
-      // handle_new_user() copia full_name e phone daqui para profiles — mesmo
-      // caminho do cadastro público, sem update extra.
+      // handle_new_user() copia full_name e phone daqui para profiles e grava
+      // sports na membership — mesmo caminho do cadastro público, sem update extra.
       full_name: fullName,
       org_invite_code: org.invite_code,
       must_change_password: true,
       ...(phone ? { phone } : {}),
+      ...(sports.length > 0 ? { sports: sports.join(',') } : {}),
     },
   })
   if (userErr || !created?.user) {
@@ -367,7 +372,10 @@ export async function completeOnboarding(
 
 // Entrada self-service numa 2ª (ou N-ésima) academia por código de convite, com o
 // usuário JÁ logado. Cria a membership student e ativa a academia. Idempotente.
-export async function joinAcademy(inviteCode: string): Promise<{ error?: string; orgId?: string }> {
+export async function joinAcademy(
+  inviteCode: string,
+  sports: string[] = [],
+): Promise<{ error?: string; orgId?: string }> {
   const code = inviteCode.trim().toUpperCase()
   if (!code) return { error: 'Informe o código de convite.' }
 
@@ -378,22 +386,70 @@ export async function joinAcademy(inviteCode: string): Promise<{ error?: string;
   const admin = createAdminClient()
   const { data: org } = await admin
     .from('organizations')
-    .select('id, status')
+    .select('id, status, sports')
     .eq('invite_code', code)
     .maybeSingle()
   if (!org || org.status !== 'active') return { error: 'Código de convite inválido.' }
 
+  const chosen = normalizeSportsForOrg(sports, org.sports ?? [])
+
   // Cria a membership se ainda não existir (não rebaixa quem já é admin).
   const { error: insErr } = await admin
     .from('memberships')
-    .insert({ user_id: user.id, organization_id: org.id, role: 'student' })
+    .insert({ user_id: user.id, organization_id: org.id, role: 'student', sports: chosen })
   // 23505 = já participa: tudo bem, segue para ativar.
   if (insErr && insErr.code !== '23505') {
     return { error: 'Não foi possível entrar na academia.' }
   }
 
+  // Já participava: preenche os esportes se ainda estiverem em branco. Não
+  // sobrescreve escolha anterior — reentrar no link não pode apagar o que o
+  // aluno (ou o admin) já tinha configurado.
+  if (insErr?.code === '23505' && chosen.length > 0) {
+    const { data: existing } = await admin
+      .from('memberships')
+      .select('sports')
+      .eq('user_id', user.id)
+      .eq('organization_id', org.id)
+      .maybeSingle()
+    if (!existing?.sports || existing.sports.length === 0) {
+      await admin
+        .from('memberships')
+        .update({ sports: chosen })
+        .eq('user_id', user.id)
+        .eq('organization_id', org.id)
+    }
+  }
+
   revalidatePath('/home')
   return { orgId: org.id }
+}
+
+// Aluno define os próprios esportes na academia ativa. A fonte do user.id é a
+// sessão (nunca o cliente) — mesmo cuidado de selfSetGender.
+export async function selfSetSports(sports: string[]): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { error: 'Academia não encontrada.' }
+
+  const admin = createAdminClient()
+  const { data: org } = await admin
+    .from('organizations')
+    .select('sports')
+    .eq('id', orgId)
+    .maybeSingle()
+
+  const { error } = await admin
+    .from('memberships')
+    .update({ sports: normalizeSportsForOrg(sports, org?.sports ?? []) })
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Erro ao salvar seus esportes. Tente novamente.' }
+  revalidatePath('/perfil')
+  return {}
 }
 
 // Aluno define o próprio gênero (identidade em profiles).

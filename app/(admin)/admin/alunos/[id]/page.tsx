@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
 import { RecommendPlanCard } from './RecommendPlanCard'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
+import { getOrgSports } from '@/lib/arenas/orgSports'
 import type { Profile, Membership, Enrollment, Class, StudentLevel, PlanBillingOption } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 
@@ -34,7 +35,7 @@ export default async function StudentProfilePage({ params }: Props) {
   const { data: membership } = await adminClient
     .from('memberships')
     .select(
-      'level, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner',
+      'level, sports, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner',
     )
     .eq('user_id', params.id)
     .eq('organization_id', orgId)
@@ -57,10 +58,13 @@ export default async function StudentProfilePage({ params }: Props) {
     ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
     ...(membership as Pick<
       Membership,
-      'level' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner'
+      'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner'
     >),
     organization_id: orgId,
   }
+
+  // Cardápio de modalidades da academia — domínio do seletor de esportes do aluno.
+  const orgSports = await getOrgSports(orgId)
 
   // Meta mensal padrão da academia: pré-preenche o campo de meta quando o aluno
   // ainda não tem uma própria (ex.: recém-vinculado a parceiro).
@@ -283,6 +287,8 @@ export default async function StudentProfilePage({ params }: Props) {
           studentId={student.id}
           organizationId={student.organization_id}
           currentLevel={student.level as StudentLevel}
+          currentSports={student.sports ?? []}
+          orgSports={orgSports}
           currentCreditsBalance={student.credits_balance}
           enrollments={enrollments}
           availableClasses={availableClasses}

@@ -23,6 +23,7 @@ import {
   getMissedCheckinSettings,
 } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
+import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
@@ -45,6 +46,39 @@ export async function updateStudentLevel(
 
   if (error) return { error: 'Erro ao atualizar nível.' }
 
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateStudentSports
+// ---------------------------------------------------------------------------
+
+// Esportes que o aluno pratica NESTA academia. Alimenta os rankings da Liga; não
+// tem efeito nenhum sobre o que ele pode reservar.
+export async function updateStudentSports(
+  studentId: string,
+  sports: string[],
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('sports')
+    .eq('id', orgId)
+    .maybeSingle()
+
+  const { error } = await adminClient
+    .from('memberships')
+    .update({ sports: normalizeSportsForOrg(sports, org?.sports ?? []) })
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+
+  if (error) return { error: 'Erro ao atualizar esportes.' }
+
+  revalidatePath(`/admin/alunos/${studentId}`)
+  revalidatePath('/admin/alunos')
   return {}
 }
 

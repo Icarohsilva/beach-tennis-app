@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
+import { SportsPicker } from '@/components/ui/SportsPicker'
 import * as Sentry from '@sentry/nextjs'
 
 function CadastroInner() {
@@ -21,6 +22,9 @@ function CadastroInner() {
 
   const [resolving, setResolving] = useState(true)
   const [orgName, setOrgName] = useState<string | null>(null)
+  // Modalidades da academia — domínio do seletor de esportes do aluno.
+  const [orgSports, setOrgSports] = useState<string[]>([])
+  const [sports, setSports] = useState<string[]>([])
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null)
   const [joining, setJoining] = useState(false)
   // Visitante não logado escolhe entre Entrar (já tem conta) e Criar conta.
@@ -41,6 +45,7 @@ function CadastroInner() {
     resolveInviteCode(inviteCode).then((res) => {
       if (!active) return
       setOrgName(res?.orgName ?? null)
+      setOrgSports(res?.sports ?? [])
       setResolving(false)
     })
     return () => { active = false }
@@ -56,7 +61,7 @@ function CadastroInner() {
   async function handleJoin() {
     setJoining(true)
     setError('')
-    const res = await joinAcademy(inviteCode)
+    const res = await joinAcademy(inviteCode, sports)
     if (res.error || !res.orgId) {
       setError(res.error ?? 'Erro ao entrar na academia.')
       setJoining(false)
@@ -82,6 +87,10 @@ function CadastroInner() {
     const supabase = createClient()
     const meta: Record<string, string> = { full_name: form.full_name, org_invite_code: inviteCode }
     if (form.phone.trim()) meta.phone = form.phone.trim()
+    // Os esportes vão pelo metadata porque handle_new_user() os grava na membership.
+    // Uma server action pós-signUp não serviria: com confirmação de email ligada não
+    // há sessão aqui, e mandar o user_id pelo cliente seria IDOR.
+    if (sports.length > 0) meta.sports = sports.join(',')
     if (partner !== 'none') {
       meta.pending_partner = partner
       meta.partner_id = partnerId.trim()
@@ -163,6 +172,15 @@ function CadastroInner() {
         <p className="text-slate-400 text-sm mb-6">
           Você já tem uma conta. Deseja entrar também na <span className="text-brand-400">{orgName}</span>?
         </p>
+        <div className="mb-6">
+          <SportsPicker
+            value={sports}
+            onChange={setSports}
+            options={orgSports}
+            allowCustom={false}
+            label="Quais esportes você pratica aqui? (opcional)"
+          />
+        </div>
         {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
         <Button onClick={handleJoin} loading={joining} size="lg" className="w-full">
           Entrar nesta academia
@@ -244,6 +262,18 @@ function CadastroInner() {
         {partner !== 'none' && (
           <Input label="ID do Gympass/TotalPass" value={partnerId} onChange={(e) => setPartnerId(e.target.value)} required />
         )}
+        <div>
+          <SportsPicker
+            value={sports}
+            onChange={setSports}
+            options={orgSports}
+            allowCustom={false}
+            label="Quais esportes você pratica aqui? (opcional)"
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Define de quais rankings você participa. Você pode mudar depois no seu perfil.
+          </p>
+        </div>
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
         <Checkbox
           checked={acceptedTerms}

@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/Input'
 import type { StudentLevel, Enrollment, Class } from '@/types'
 import {
   updateStudentLevel,
+  updateStudentSports,
   enrollStudentInClass,
   cancelEnrollment,
   addDependent,
   addCreditsManually,
 } from '@/features/aulas/adminActions'
+import { SportsPicker } from '@/components/ui/SportsPicker'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
 import { setStudentType, recordCheckin, clearPendingPartner } from '@/features/checkin/actions'
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
@@ -58,6 +60,8 @@ interface StudentProfileClientProps {
   studentId: string
   organizationId: string
   currentLevel: StudentLevel
+  currentSports: string[]
+  orgSports: string[]
   currentCreditsBalance: number
   enrollments: EnrollmentWithClass[]
   availableClasses: AvailableClass[]
@@ -92,6 +96,8 @@ export function StudentProfileClient({
   studentId,
   organizationId,
   currentLevel,
+  currentSports,
+  orgSports,
   currentCreditsBalance,
   enrollments,
   availableClasses,
@@ -109,6 +115,7 @@ export function StudentProfileClient({
   checkins,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
+  const [sports, setSports] = useState<string[]>(currentSports)
   const [enrollmentList, setEnrollmentList] = useState(enrollments)
   const [dependentList, setDependentList] = useState(dependents)
   const [creditsBalance, setCreditsBalance] = useState(currentCreditsBalance)
@@ -163,6 +170,21 @@ export function StudentProfileClient({
         return
       }
       notify('Nível atualizado.')
+    })
+  }
+
+  function handleSportsChange(next: string[]) {
+    const previous = sports
+    setSports(next)
+    setError(null)
+    startTransition(async () => {
+      const result = await updateStudentSports(studentId, next)
+      if (result.error) {
+        setSports(previous)
+        setError(result.error)
+        return
+      }
+      notify('Esportes atualizados.')
     })
   }
 
@@ -435,6 +457,21 @@ export function StudentProfileClient({
             </button>
           ))}
         </div>
+      </section>
+
+      {/* Esportes — base dos rankings da Liga. Não restringe turmas. */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">Esportes</h2>
+        <SportsPicker
+          value={sports}
+          onChange={handleSportsChange}
+          options={orgSports}
+          allowCustom={false}
+          label="Esportes que o aluno pratica nesta academia"
+        />
+        <p className="text-xs text-slate-500 mt-2">
+          Define de quais rankings o aluno participa. Não afeta quais turmas ele pode frequentar.
+        </p>
       </section>
 
       {/* Fixed enrollments */}

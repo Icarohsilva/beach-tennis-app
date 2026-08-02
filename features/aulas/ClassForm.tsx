@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClass } from './class-form-actions'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import type { ClassType } from '@/types'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
 
-export function ClassForm() {
+export function ClassForm({ orgSports }: { orgSports: string[] }) {
   const router = useRouter()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +25,7 @@ export function ClassForm() {
       name: fd.get('name') as string,
       description: fd.get('description') as string,
       type: fd.get('type') as ClassType,
+      sport: (fd.get('sport') as string) || null,
       day_of_week: Number(fd.get('day_of_week')),
       start_time: fd.get('start_time') as string,
       end_time: fd.get('end_time') as string,
@@ -52,6 +54,18 @@ export function ClassForm() {
           <option value="adult">Adulto</option>
           <option value="kids">Kids</option>
         </select>
+      </div>
+      <div>
+        <label className="text-sm text-slate-400 block mb-1">Modalidade</label>
+        <select name="sport" className={SELECT_CLS} defaultValue="">
+          <option value="">Sem modalidade</option>
+          {orgSports.map((slug) => (
+            <option key={slug} value={slug}>{sportEmoji(slug)} {sportLabel(slug)}</option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500 mt-1">
+          Só identifica a turma. Não impede nenhum aluno de reservar.
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
