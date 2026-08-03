@@ -9,7 +9,11 @@ vi.mock('./missedCheckinSettings', () => ({
   resolveMissedCheckinAmount: vi.fn(),
 }))
 
-import { ensureMissedCheckin, enforceMissedCheckinBlock } from './missedCheckins'
+import {
+  ensureMissedCheckin,
+  enforceMissedCheckinBlock,
+  resolveOpenMissedCheckinByExtraVisit,
+} from './missedCheckins'
 import { cancelFutureBookings } from '@/features/aulas/cancelBookings'
 import {
   countOpenMissedCheckins,
@@ -186,5 +190,101 @@ describe('enforceMissedCheckinBlock', () => {
     vi.mocked(getMissedCheckinSettings).mockRejectedValue(new Error('boom'))
     const r = await enforceMissedCheckinBlock(client, { orgId: 'org-1', studentId: 'stu-1' })
     expect(r).toEqual({ blocked: false, cancelledBookings: 0 })
+  })
+})
+
+describe('resolveOpenMissedCheckinByExtraVisit', () => {
+  /**
+   * Fake focado no que a função faz: ler a pendência aberta mais antiga, apagar o
+   * payments pendente vinculado (se houver) e atualizar o status. `then` só é
+   * exercitado pelo update de missed_checkins — o select termina em maybeSingle,
+   * que resolve fora da cadeia thenable do builder.
+   */
+  function makeClient(opts: {
+    pendency?: { id: string; payment_id: string | null } | null
+    updateError?: { message: string } | null
+  }) {
+    const deletes: { table: string }[] = []
+    const updates: { table: string; patch: Record<string, unknown> }[] = []
+
+    const from = (table: string) => {
+      const builder: Record<string, unknown> = {
+        select: () => builder,
+        eq: () => builder,
+        order: () => builder,
+        limit: () => builder,
+        maybeSingle: () => {
+          if (table === 'missed_checkins') return Promise.resolve({ data: opts.pendency ?? null })
+          return Promise.resolve({ data: null })
+        },
+        delete: () => {
+          deletes.push({ table })
+          return builder
+        },
+        update: (patch: Record<string, unknown>) => {
+          updates.push({ table, patch })
+          return builder
+        },
+        then: (resolve: (v: { error: unknown }) => void) =>
+          Promise.resolve({
+            error: table === 'missed_checkins' ? (opts.updateError ?? null) : null,
+          }).then(resolve),
+      }
+      return builder
+    }
+
+    return { client: { from } as never, deletes, updates }
+  }
+
+  const INPUT = {
+    orgId: 'org-1',
+    studentId: 'stu-1',
+    partner: 'wellhub' as const,
+    checkinDate: '2026-08-05',
+  }
+
+  it('sem pendência aberta, não faz nada', async () => {
+    const { client, updates, deletes } = makeClient({ pendency: null })
+    const r = await resolveOpenMissedCheckinByExtraVisit(client, INPUT)
+    expect(r).toEqual({ resolved: false })
+    expect(updates).toEqual([])
+    expect(deletes).toEqual([])
+  })
+
+  it('dá baixa na pendência e apaga o payments pendente vinculado', async () => {
+    const { client, updates, deletes } = makeClient({
+      pendency: { id: 'mc-1', payment_id: 'pay-1' },
+    })
+    const r = await resolveOpenMissedCheckinByExtraVisit(client, INPUT)
+
+    expect(r).toEqual({ resolved: true })
+    expect(deletes).toEqual([{ table: 'payments' }])
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toMatchObject({
+      table: 'missed_checkins',
+      patch: {
+        status: 'waived',
+        payment_id: null,
+        resolved_by: null,
+        resolution_note: 'Baixa automática — check-in em 2026-08-05 sem aula vinculada.',
+      },
+    })
+  })
+
+  it('dá baixa mesmo sem payments vinculado (pendência sem valor configurado)', async () => {
+    const { client, deletes } = makeClient({ pendency: { id: 'mc-1', payment_id: null } })
+    const r = await resolveOpenMissedCheckinByExtraVisit(client, INPUT)
+    expect(r).toEqual({ resolved: true })
+    expect(deletes).toEqual([])
+  })
+
+  it('propaga erro do update para o caller decidir (best-effort fica no chamador)', async () => {
+    const { client } = makeClient({
+      pendency: { id: 'mc-1', payment_id: null },
+      updateError: { message: 'db off' },
+    })
+    await expect(resolveOpenMissedCheckinByExtraVisit(client, INPUT)).rejects.toThrow(
+      'Falha ao dar baixa automática na pendência: db off',
+    )
   })
 })

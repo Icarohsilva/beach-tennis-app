@@ -10,6 +10,7 @@ import { normalizePartnerId } from './partnerId'
 import { findSessionInWindow } from './sessionWindow'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
+import { resolveOpenMissedCheckinByExtraVisit } from '@/features/checkin/missedCheckins'
 import * as Sentry from '@sentry/nextjs'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -181,6 +182,27 @@ export async function recordResolvedCheckin(
           extra: { sessionId: linkedSessionId, studentId: input.studentId, orgId: input.orgId },
         })
       }
+    }
+  } else {
+    // Check-in sem aula vinculada: visita avulsa fora da agenda. Vale como
+    // baixa de UMA pendência em aberto (a mais antiga), se o aluno tiver
+    // alguma. Best-effort: nunca pode derrubar o registro do check-in em si.
+    try {
+      await resolveOpenMissedCheckinByExtraVisit(client, {
+        orgId: input.orgId,
+        studentId: input.studentId,
+        partner: input.partner,
+        checkinDate: input.date,
+      })
+    } catch (err) {
+      console.error('[recordResolvedCheckin] baixa automática falhou', {
+        studentId: input.studentId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      Sentry.captureException(err, {
+        tags: { feature: 'missedCheckins' },
+        extra: { studentId: input.studentId, orgId: input.orgId },
+      })
     }
   }
 
