@@ -214,6 +214,79 @@ export async function clearMissedCheckin(
     .eq('missed_checkin', true)
 }
 
+export interface ResolveMissedCheckinByExtraVisitInput {
+  orgId: string
+  studentId: string
+  partner: CheckinPartner
+  /** Data do check-in (YYYY-MM-DD) — vira o resolution_note. */
+  checkinDate: string
+}
+
+/**
+ * Check-in sem aula vinculada = visita avulsa fora da agenda: o aluno apareceu
+ * na academia num dia que não é o de nenhuma aula reservada dele e bipou o
+ * parceiro mesmo assim. Vale como baixa de UMA pendência em aberto — a mais
+ * antiga —, sem esperar o financeiro agir.
+ *
+ * "waived" e não "paid": não houve cobrança quitada, o aluno não pagou nada —
+ * ele só apareceu e bipou. Mesma mecânica de waiveMissedCheckin (apaga o
+ * payments pendente vinculado), só que disparada pelo sistema, não pelo staff:
+ * `resolved_by: null` e nota automática em vez de texto digitado.
+ */
+export async function resolveOpenMissedCheckinByExtraVisit(
+  client: AdminClient,
+  input: ResolveMissedCheckinByExtraVisitInput,
+): Promise<{ resolved: boolean }> {
+  const { orgId, studentId, partner, checkinDate } = input
+
+  // A mais antiga primeiro — é a que está pendente há mais tempo (mesmo
+  // critério de ordenação de summarizeMissedCheckins ao listar datas).
+  const { data: row } = await client
+    .from('missed_checkins')
+    .select('id, payment_id')
+    .eq('organization_id', orgId)
+    .eq('student_id', studentId)
+    .eq('partner', partner)
+    .eq('status', 'open')
+    .order('session_date', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  const pendency = row as { id: string; payment_id: string | null } | null
+  if (!pendency) return { resolved: false }
+
+  // Perdoada não se cobra: apaga o payments pendente, senão o aluno continuaria
+  // vendo a cobrança no Financeiro depois da baixa automática.
+  if (pendency.payment_id) {
+    await client
+      .from('payments')
+      .delete()
+      .eq('id', pendency.payment_id)
+      .eq('organization_id', orgId)
+      .eq('status', 'pending')
+      .eq('missed_checkin', true)
+  }
+
+  const { error } = await client
+    .from('missed_checkins')
+    .update({
+      status: 'waived',
+      payment_id: null,
+      resolved_at: new Date().toISOString(),
+      resolved_by: null,
+      resolution_note: `Baixa automática — check-in em ${checkinDate} sem aula vinculada.`,
+    })
+    .eq('id', pendency.id)
+    .eq('organization_id', orgId)
+    .eq('status', 'open') // corrida: só resolve se ainda estiver aberta
+
+  if (error) {
+    throw new Error(`Falha ao dar baixa automática na pendência: ${error.message}`)
+  }
+
+  return { resolved: true }
+}
+
 /**
  * Aplica o bloqueio: cancela as reservas futuras do aluno, oferece as vagas para a
  * fila de espera e avisa aluno e admins.

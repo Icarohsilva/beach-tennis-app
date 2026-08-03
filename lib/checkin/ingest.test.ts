@@ -13,8 +13,16 @@ vi.mock('@/features/financeiro/classDebt', () => ({
   ensureClassDebt: vi.fn(),
 }))
 
+// resolveOpenMissedCheckinByExtraVisit tem sua própria bateria de testes
+// (features/checkin/missedCheckins.test.ts) — aqui só se prova o WIRING: é
+// chamada (ou não) no caminho certo, com os argumentos certos.
+vi.mock('@/features/checkin/missedCheckins', () => ({
+  resolveOpenMissedCheckinByExtraVisit: vi.fn(),
+}))
+
 import { validateWellhubCheckin } from './wellhubValidate'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
+import { resolveOpenMissedCheckinByExtraVisit } from '@/features/checkin/missedCheckins'
 
 // Client falso: suporta o subconjunto de chamadas que o núcleo faz.
 // - maybeSingle(): memberships (lookup do aluno), checkins (idempotência),
@@ -112,6 +120,7 @@ describe('ingestPartnerCheckin', () => {
   beforeEach(() => {
     vi.mocked(validateWellhubCheckin).mockReset()
     vi.mocked(ensureClassDebt).mockReset()
+    vi.mocked(resolveOpenMissedCheckinByExtraVisit).mockReset().mockResolvedValue({ resolved: false })
   })
 
   it('casa o aluno por wellhub_id e grava o check-in', async () => {
@@ -132,6 +141,14 @@ describe('ingestPartnerCheckin', () => {
     })
     expect(inserts.pending_checkins).toBeUndefined()
     expect(validateWellhubCheckin).not.toHaveBeenCalled()
+    // Sem sessão vinculada (nenhuma classSessions configurada): visita avulsa,
+    // tenta dar baixa numa pendência em aberto.
+    expect(resolveOpenMissedCheckinByExtraVisit).toHaveBeenCalledWith(client, {
+      orgId: 'org-1',
+      studentId: 'student-1',
+      partner: 'wellhub',
+      checkinDate: '2026-06-25',
+    })
   })
 
   it('parqueia como pendente quando o ID não casa', async () => {
@@ -235,6 +252,8 @@ describe('ingestPartnerCheckin', () => {
       studentId: 'student-1',
       sessionId: 'ses-1',
     })
+    // Há sessão vinculada: NÃO é visita avulsa, não tenta dar baixa em nada.
+    expect(resolveOpenMissedCheckinByExtraVisit).not.toHaveBeenCalled()
   })
 
   it('não marca presença quando a sessão existe mas está fora da janela de ±1h', async () => {
@@ -251,6 +270,13 @@ describe('ingestPartnerCheckin', () => {
     expect(res.linkedSessionId).toBeNull()
     expect(upserts.attendance).toBeUndefined()
     expect(ensureClassDebt).not.toHaveBeenCalled()
+    // Sem sessão dentro da janela = visita avulsa: tenta dar baixa numa pendência.
+    expect(resolveOpenMissedCheckinByExtraVisit).toHaveBeenCalledWith(client, {
+      orgId: 'org-1',
+      studentId: 'student-1',
+      partner: 'wellhub',
+      checkinDate: '2026-06-25',
+    })
   })
 
   it('não marca presença quando o aluno não tem reserva confirmada na sessão', async () => {
@@ -266,6 +292,23 @@ describe('ingestPartnerCheckin', () => {
     expect(res.linkedSessionId).toBeNull()
     expect(upserts.attendance).toBeUndefined()
     expect(ensureClassDebt).not.toHaveBeenCalled()
+    expect(resolveOpenMissedCheckinByExtraVisit).toHaveBeenCalledWith(client, {
+      orgId: 'org-1',
+      studentId: 'student-1',
+      partner: 'wellhub',
+      checkinDate: '2026-06-25',
+    })
+  })
+
+  it('a baixa automática falhando não derruba o registro do check-in (best-effort)', async () => {
+    vi.mocked(resolveOpenMissedCheckinByExtraVisit).mockRejectedValue(new Error('boom'))
+    const { client, inserts } = makeFakeClient({
+      membership: { user_id: 'student-1', monthly_checkin_target: 12 },
+      existingCheckin: null,
+    })
+    const res = await ingestPartnerCheckin(base, client)
+    expect(res).toEqual({ recorded: true, pending: false, linkedSessionId: null })
+    expect(inserts.checkins).toHaveLength(1)
   })
 
   it('não gera pendência quando a presença já estava marcada como absent (ignoreDuplicates preserva)', async () => {
@@ -283,5 +326,6 @@ describe('ingestPartnerCheckin', () => {
     const res = await ingestPartnerCheckin(base, client)
     expect(res.linkedSessionId).toBe('ses-1')
     expect(ensureClassDebt).not.toHaveBeenCalled()
+    expect(resolveOpenMissedCheckinByExtraVisit).not.toHaveBeenCalled()
   })
 })
