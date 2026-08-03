@@ -1,5 +1,14 @@
 // features/liga/tournamentPoints.ts
 // Pontos de torneio na Liga: participar e subir no pódio (spec §Fase 1).
+//
+// winner*_partner_id hoje é sempre null em todo o codebase — closeTournament grava
+// null explicitamente e updateWinners/WinnersCard não têm campo de parceiro nenhum
+// (pódio de dupla nunca foi implementado). Isso deixa este arquivo pronto pra premiar
+// o parceiro quando esse dia chegar, mas se updateWinners passar a aceitar parceiro,
+// ele PRECISA gravar winner*_partner_id junto com o vencedor — senão um parceiro
+// antigo (de uma correção anterior) fica premiado por engano num pódio que não é
+// mais dele. Investigado a fundo na revisão da Task 11; não é bug hoje porque o
+// caminho nunca é exercitado, mas passa a ser no dia em que for.
 import { createAdminClient } from '@/lib/supabase/server'
 import { pointsForTournamentResult } from '@/lib/liga/points'
 import { getLigaSettings } from './settings'
