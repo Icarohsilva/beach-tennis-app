@@ -486,3 +486,53 @@ export interface SessionWithClass extends ClassSession {
   class: Class
   bookings_count: number
 }
+
+// --- Liga (gamificação do aluno) -------------------------------------------
+// A divisão é definida em lib/liga/divisions.ts junto da regra de movimentação: a
+// regra pura não pode depender deste arquivo (que importa tipos de Supabase). Aqui só
+// o alias, para que as telas não precisem importar de lib/liga.
+import type { Division } from '@/lib/liga/divisions'
+
+export type LigaDivision = Division
+
+export type LigaPointReason =
+  | 'attendance'
+  | 'streak'
+  | 'tournament_entry'
+  | 'tournament_result'
+  | 'manual'
+  | 'kudos_given'
+  | 'kudos_received'
+
+export interface LigaSeason {
+  id: string
+  organization_id: string
+  starts_on: string // YYYY-MM-DD
+  ends_on: string // YYYY-MM-DD
+  status: 'active' | 'closed'
+  created_at: string
+}
+
+export interface LigaPointEntry {
+  id: string
+  organization_id: string
+  season_id: string
+  student_id: string
+  sport: string
+  points: number
+  reason: LigaPointReason
+  source_id: string | null
+  note: string | null
+  awarded_by: string | null
+  created_at: string
+}
+
+export interface LigaStanding {
+  organization_id: string
+  season_id: string
+  student_id: string
+  sport: string
+  division: LigaDivision
+  points: number
+  streak_weeks: number
+}
