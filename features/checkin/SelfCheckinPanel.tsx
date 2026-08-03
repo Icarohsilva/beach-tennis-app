@@ -23,6 +23,8 @@ interface Props {
   /** 'card' na home, 'inline' dentro da ficha da aula. */
   variant?: 'card' | 'inline'
   className?: string
+  /** Avisa quem envolve o painel (ex.: o popup automático) que o status mudou. */
+  onStatusChange?: (status: 'validated' | 'pending') => void
 }
 
 type Reading =
@@ -61,7 +63,13 @@ function timeLabel(iso: string): string {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export function SelfCheckinPanel({ sessionId, view, variant = 'inline', className }: Props) {
+export function SelfCheckinPanel({
+  sessionId,
+  view,
+  variant = 'inline',
+  className,
+  onStatusChange,
+}: Props) {
   const [status, setStatus] = useState(view.mine?.status ?? null)
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'erro'; text: string } | null>(null)
   const [locating, setLocating] = useState(false)
@@ -147,7 +155,9 @@ export function SelfCheckinPanel({ sessionId, view, variant = 'inline', classNam
           setFeedback({ kind: 'erro', text: result.error })
           return
         }
-        setStatus(result.status ?? 'pending')
+        const finalStatus = result.status ?? 'pending'
+        setStatus(finalStatus)
+        onStatusChange?.(finalStatus)
         setFeedback(
           result.status === 'validated'
             ? { kind: 'ok', text: 'Presença confirmada!' }
