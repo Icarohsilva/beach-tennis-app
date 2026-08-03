@@ -12,7 +12,15 @@ import { recordCheckin } from '@/features/checkin/actions'
 import { countOpenMissedCheckinsByStudent } from '@/features/checkin/missedCheckinSettings'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import type { ClassSession, Profile, Membership, Attendance, CheckinPartner } from '@/types'
+import type {
+  ClassSession,
+  Profile,
+  Membership,
+  Attendance,
+  CheckinPartner,
+  SelfCheckinStatus,
+  SelfCheckinGeoError,
+} from '@/types'
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -174,6 +182,36 @@ export default async function SessionDetailPage({ params }: Props) {
     (attendances ?? []).map((a: Attendance) => [a.student_id, a]),
   )
 
+  // Confirmações que os alunos mandaram pelo app. As validadas já geraram
+  // presença; as pendentes esperam o professor decidir aqui.
+  const { data: selfCheckinsRaw } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('self_checkins')
+          .select('id, student_id, status, distance_m, geo_error')
+          .eq('session_id', params.sessionId)
+          .eq('organization_id', orgId)
+          .in('student_id', studentIds)
+      : { data: [] }
+
+  const selfCheckinByStudent = new Map(
+    ((selfCheckinsRaw ?? []) as {
+      id: string
+      student_id: string
+      status: SelfCheckinStatus
+      distance_m: number | string | null
+      geo_error: SelfCheckinGeoError | null
+    }[]).map((s) => [
+      s.student_id,
+      {
+        id: s.id,
+        status: s.status,
+        distanceM: s.distance_m === null ? null : Number(s.distance_m),
+        geoError: s.geo_error,
+      },
+    ]),
+  )
+
   const students = (profiles ?? [])
     .map((p: Pick<Profile, 'id' | 'full_name'>) => {
       const mem = memById.get(p.id)
@@ -189,6 +227,7 @@ export default async function SessionDetailPage({ params }: Props) {
         partner: mem?.partner ?? null,
         checkedInToday: checkedInIds.has(p.id),
         openMissedCheckins: openMissedByStudent.get(p.id) ?? 0,
+        selfCheckin: selfCheckinByStudent.get(p.id) ?? null,
       }
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))

@@ -6,9 +6,11 @@ import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
 import { VideoFeedUrlForm } from './VideoFeedUrlForm'
+import { SelfCheckinForm } from './SelfCheckinForm'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
+import { DEFAULT_CHECKIN_RADIUS_M } from '@/lib/checkin/selfCheckin'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 
 interface SystemSettings {
@@ -56,7 +58,7 @@ export default async function ConfiguracoesPage() {
 
   const { data: orgRow } = await adminClient
     .from('organizations')
-    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp, tournament_discount_2_pct, tournament_discount_3_pct')
+    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp, tournament_discount_2_pct, tournament_discount_3_pct, self_checkin_enabled, latitude, longitude, checkin_radius_m')
     .eq('id', orgId)
     .single()
 
@@ -76,6 +78,17 @@ export default async function ConfiguracoesPage() {
     whatsapp?: string | null
     tournament_discount_2_pct?: number | null
     tournament_discount_3_pct?: number | null
+    self_checkin_enabled?: boolean
+    latitude?: number | string | null
+    longitude?: number | string | null
+    checkin_radius_m?: number | null
+  }
+
+  const selfCheckin = {
+    enabled: org.self_checkin_enabled ?? false,
+    latitude: org.latitude === null || org.latitude === undefined ? null : Number(org.latitude),
+    longitude: org.longitude === null || org.longitude === undefined ? null : Number(org.longitude),
+    radiusM: org.checkin_radius_m ?? DEFAULT_CHECKIN_RADIUS_M,
   }
 
   const listing = {
@@ -114,6 +127,15 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <CobrancaForm settings={cobranca} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Confirmação de presença pelo aluno</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          O aluno confirma presença pelo app perto do horário da aula, e o app confere a
+          localização dele com a da academia.
+        </p>
+      </div>
+      <SelfCheckinForm settings={selfCheckin} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Vídeo das quadras</h2>

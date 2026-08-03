@@ -46,6 +46,7 @@ Never import `@supabase/supabase-js` directly — always use the wrappers above.
 | [lib/utils/creditRules.ts](lib/utils/creditRules.ts) | `canCancelWithRefund()`, `getMakeupCreditExpiry()` — 5h cancellation window |
 | [lib/utils/dateHelpers.ts](lib/utils/dateHelpers.ts) | `getDatesForDayOfWeekInMonth()`, `formatDate()`, `formatTime()` (pt-BR locale via date-fns) |
 | [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |
+| [lib/checkin/selfCheckin.ts](lib/checkin/selfCheckin.ts) | `resolveSelfCheckinStatus()`, `selfCheckinWindow()`, `haversineMeters()` — geofence e janela (1h antes do início → 1h depois do fim) da confirmação de presença pelo aluno |
 
 These have Vitest unit tests co-located (`.test.ts` files).
 
@@ -56,8 +57,9 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - `profiles.credits_balance` is a **cached** value — source of truth is the `credit_transactions` table
 - `classes` = recurring schedule templates; `class_sessions` = specific dated instances of a class
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
-- Students with `payment_type: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual)
+- Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
+- Presença tem três origens (`attendance.source`): `manual` (professor na chamada), `wellhub`/`totalpass` (webhook do parceiro) e `self` (aluno confirma pelo app). A confirmação do aluno é gravada em `self_checkins` com a evidência de GPS e só vira `attendance` quando `validated`; `pending` espera o professor aprovar. Ver [docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md](docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md)
 
 Migrations live in `supabase/migrations/` and must be applied via `supabase db push`.
 

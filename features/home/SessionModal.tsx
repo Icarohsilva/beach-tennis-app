@@ -9,6 +9,7 @@ import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
+import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
 import type { AgendaSession } from './WeekAgenda'
 
 /**
@@ -150,6 +151,17 @@ export function SessionModal({
             <OccupancyBar booked={session.booked} capacity={session.capacity} className="mt-2" />
           </div>
         </div>
+
+        {/* Confirmação de presença: só para quem está na aula, e o próprio
+            painel se esconde fora da janela. */}
+        {isIn && session.selfCheckin && (
+          <SelfCheckinPanel
+            sessionId={session.id}
+            view={session.selfCheckin}
+            variant="card"
+            className="mt-4"
+          />
+        )}
 
         <div className="mt-4">
           <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
