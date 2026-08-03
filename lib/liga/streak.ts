@@ -15,6 +15,14 @@ import { startOfISOWeek, differenceInCalendarWeeks, parseISO } from 'date-fns'
  *
  * `attendanceDates` são datas 'YYYY-MM-DD' de presenças CONFIRMADAS naquele esporte;
  * duplicadas e datas futuras são ignoradas.
+ *
+ * Contrato de fuso em `today`: `startOfISOWeek` usa o fuso do processo Node, não o do
+ * Brasil. Quem chamar esta função a partir de um cron (Vercel roda em UTC) precisa
+ * garantir que `today` representa o dia/semana correntes em horário de Brasília —
+ * mesma classe de bug já documentada em `docs/faq/...` para outros crons e testes
+ * deste projeto (ver memória "reference-teste-flake-fuso-brt-utc"). Passar `new
+ * Date()` cru só é seguro se o cron rodar num horário UTC que nunca cruze a virada de
+ * dia/semana em BRT.
  */
 export function computeStreakWeeks(attendanceDates: string[], today: Date): number {
   if (attendanceDates.length === 0) return 0
