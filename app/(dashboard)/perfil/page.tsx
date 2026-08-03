@@ -232,6 +232,15 @@ export default async function PerfilPage() {
       {/* Plano Ativo */}
       <section>
         <SectionHeader title="Plano Ativo" />
+        {/* Sempre visível: mesmo quem é de parceiro pode ter pendência de
+            check-in pra resolver em /financeiro, e sem esse link fixo o único
+            caminho até lá era o banner condicional da Home. */}
+        <Link
+          href="/financeiro"
+          className="block text-sm text-brand-500 font-medium mb-3"
+        >
+          Ver financeiro completo (planos, pagamentos) →
+        </Link>
         {isWellhubOrTotalpass ? (
           <div className="bg-surface-card border border-surface-border rounded-xl p-4">
             <p className="text-sm text-slate-300">
@@ -241,19 +250,11 @@ export default async function PerfilPage() {
             </p>
           </div>
         ) : (
-          <>
-            <Link
-              href="/financeiro"
-              className="block text-sm text-brand-500 font-medium mb-3"
-            >
-              Ver financeiro completo (planos, pagamentos) →
-            </Link>
-            <SubscriptionCard
-              subscription={subscription}
-              plan={plan}
-              creditsBalance={profile?.credits_balance ?? 0}
-            />
-          </>
+          <SubscriptionCard
+            subscription={subscription}
+            plan={plan}
+            creditsBalance={profile?.credits_balance ?? 0}
+          />
         )}
       </section>
 
