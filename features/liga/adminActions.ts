@@ -7,7 +7,6 @@ import { getOrgSports } from '@/lib/arenas/orgSports'
 import { normalizeSportForOrg } from '@/lib/arenas/sports'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason } from './season'
-import { awardLigaPoints } from './awardPoints'
 
 const MAX_MANUAL_POINTS = 500
 
@@ -71,19 +70,26 @@ export async function awardLigaBonus(input: AwardBonusInput): Promise<{ error?: 
   const season = await getOrCreateActiveSeason(orgId)
   if (!season) return { error: 'Não foi possível abrir a temporada.' }
 
+  // Chama a RPC direto, sem passar por awardLigaPoints: aquele wrapper é best-effort
+  // de propósito, pensado pra callers onde creditar ponto é efeito colateral de outra
+  // operação (presença, torneio) que não pode falhar por causa da Liga. Aqui é o
+  // contrário — dar o bônus É a operação inteira. Se a RPC falhar, o professor precisa
+  // saber, senão ele acha que o bônus foi dado e o aluno nunca vê o ponto no extrato.
+  //
   // sourceId aleatório: bônus manual não tem evento de origem, e vários bônus na
   // mesma temporada precisam coexistir (o índice único inclui source_id).
-  await awardLigaPoints(adminClient, {
-    orgId,
-    seasonId: season.id,
-    studentId: input.studentId,
-    sport,
-    points: input.points,
-    reason: 'manual',
-    sourceId: crypto.randomUUID(),
-    note,
-    awardedBy: user.id,
+  const { error: rpcError } = await adminClient.rpc('liga_award_points', {
+    p_org: orgId,
+    p_season: season.id,
+    p_student: input.studentId,
+    p_sport: sport,
+    p_points: input.points,
+    p_reason: 'manual',
+    p_source_id: crypto.randomUUID(),
+    p_note: note,
+    p_awarded_by: user.id,
   })
+  if (rpcError) return { error: 'Erro ao lançar o bônus. Tente novamente.' }
 
   revalidatePath('/admin/liga')
   return {}
