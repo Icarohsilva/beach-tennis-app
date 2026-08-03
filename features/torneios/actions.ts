@@ -8,6 +8,7 @@ import { FORMATS } from '@/lib/torneios/formats'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
+import { awardTournamentEntry, syncTournamentResultPoints } from '@/features/liga/tournamentPoints'
 import type {
   StudentLevel,
   TournamentStatus,
@@ -317,6 +318,11 @@ export async function registerForTournament(
     .from('tournament_entries')
     .insert(insertPayload)
   if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  if (entryStatus === 'confirmed') {
+    await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
+  }
+
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
@@ -835,6 +841,12 @@ export async function confirmWaitlistOffer(
 
   if (updateErr) return { error: 'Erro ao confirmar inscrição. Tente novamente.' }
 
+  await awardTournamentEntry(adminClient, {
+    orgId: tournament.organization_id as string,
+    tournamentId,
+    studentId: user.id,
+  })
+
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
@@ -978,6 +990,8 @@ export async function closeTournament(
     .eq('id', tournamentId)
   if (updateErr) return { error: 'Erro ao encerrar torneio. Tente novamente.' }
 
+  await syncTournamentResultPoints(adminClient, { orgId, tournamentId })
+
   revalidatePath(`/admin/torneios/${tournamentId}`)
   revalidatePath(`/t/${tournamentId}`)
   return {}
@@ -1024,6 +1038,16 @@ export async function updateWinners(
     if (invalid.length > 0) return { error: 'Um ou mais vencedores não estão inscritos neste torneio.' }
   }
 
+  const { data: before } = await adminClient
+    .from('tournaments')
+    .select('winner1_id, winner1_partner_id, winner2_id, winner2_partner_id, winner3_id, winner3_partner_id')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  const previousWinnerIds = Object.values(before ?? {}).filter(
+    (v): v is string => typeof v === 'string',
+  )
+
   const { error: updateErr } = await adminClient
     .from('tournaments')
     .update({
@@ -1034,6 +1058,8 @@ export async function updateWinners(
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
   if (updateErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
+
+  await syncTournamentResultPoints(adminClient, { orgId, tournamentId, previousWinnerIds })
 
   revalidatePath(`/admin/torneios/${tournamentId}`)
   revalidatePath(`/t/${tournamentId}`)
