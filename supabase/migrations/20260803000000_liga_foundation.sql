@@ -35,7 +35,9 @@ create table if not exists liga_points (
   )),
   source_id uuid,
   note text,
-  awarded_by uuid references profiles(id),
+  -- set null (não cascade): apagar o professor que deu o bônus não pode apagar o
+  -- registro do ponto do aluno que recebeu.
+  awarded_by uuid references profiles(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
