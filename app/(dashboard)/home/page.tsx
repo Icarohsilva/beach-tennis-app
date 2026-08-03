@@ -11,6 +11,7 @@ import { HeroHeader } from '@/features/home/HeroHeader'
 import { NextClassSpotlight, type SpotlightCandidate } from '@/features/home/NextClassSpotlight'
 import { WeekAgenda, type AgendaSession } from '@/features/home/WeekAgenda'
 import { SelfCheckinCard, type SelfCheckinCandidate } from '@/features/home/SelfCheckinCard'
+import { SelfCheckinModal } from '@/features/home/SelfCheckinModal'
 import { getSelfCheckinViews } from '@/features/checkin/selfCheckinQueries'
 import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -439,6 +440,7 @@ export default async function HomePage() {
       {selfCheckinCandidates.length > 0 && (
         <Reveal step={1}>
           <SelfCheckinCard candidates={selfCheckinCandidates} />
+          <SelfCheckinModal candidates={selfCheckinCandidates} />
         </Reveal>
       )}
 

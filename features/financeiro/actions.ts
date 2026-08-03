@@ -645,7 +645,7 @@ export async function updateOrgSelfCheckin(input: {
     })
     .eq('id', orgId)
 
-  if (updateErr) return { error: 'Erro ao salvar a confirmação de presença.' }
+  if (updateErr) return { error: `Erro ao salvar a confirmação de presença: ${updateErr.message}` }
 
   const { revalidatePath } = await import('next/cache')
   revalidatePath('/admin/configuracoes')
