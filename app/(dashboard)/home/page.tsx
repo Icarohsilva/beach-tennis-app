@@ -10,6 +10,8 @@ import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { HeroHeader } from '@/features/home/HeroHeader'
 import { NextClassSpotlight, type SpotlightCandidate } from '@/features/home/NextClassSpotlight'
 import { WeekAgenda, type AgendaSession } from '@/features/home/WeekAgenda'
+import { SelfCheckinCard, type SelfCheckinCandidate } from '@/features/home/SelfCheckinCard'
+import { getSelfCheckinViews } from '@/features/checkin/selfCheckinQueries'
 import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -291,6 +293,45 @@ export default async function HomePage() {
     }).map((a) => a.name)
   }
 
+  // ── Confirmação de presença pelo app ──────────────────────────────────────
+  // Só as aulas do próprio aluno interessam: é ele quem confirma.
+  const { data: orgSelfCheckinRow } = orgId
+    ? await adminClient
+        .from('organizations')
+        .select('self_checkin_enabled')
+        .eq('id', orgId)
+        .maybeSingle()
+    : { data: null }
+
+  const selfCheckinEnabled =
+    (orgSelfCheckinRow as { self_checkin_enabled: boolean } | null)?.self_checkin_enabled ?? false
+
+  const mySessionRefs = weekSessionRows
+    .filter((row) => {
+      if (myBookingBySession.has(row.id)) return true
+      // Fixo sem reserva conta, a menos que tenha avisado que não vem —
+      // mesma regra de isStudentExpectedInSession, que a action reaplica.
+      if (!enrolledClassIds.has(row.class_id)) return false
+      return !optedOutBySession.get(row.id)?.has(user.id)
+    })
+    .map((row) => {
+      const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
+      return cls
+        ? { id: row.id, date: row.session_date, start: cls.start_time, end: cls.end_time }
+        : null
+    })
+    .filter((s): s is { id: string; date: string; start: string; end: string } => s !== null)
+
+  const selfCheckinViews = orgId
+    ? await getSelfCheckinViews(adminClient, {
+        orgId,
+        studentId: user.id,
+        partner: membership?.partner ?? null,
+        sessions: mySessionRefs,
+        enabled: selfCheckinEnabled,
+      })
+    : new Map()
+
   const agendaSessions: AgendaSession[] = weekSessionRows
     .map((row): AgendaSession | null => {
       const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
@@ -313,6 +354,7 @@ export default async function HomePage() {
         attendees: attendeesOf(row.id, row.class_id),
         bookingId: myBooking?.id,
         fromEnrollment: myBooking?.fromEnrollment,
+        selfCheckin: selfCheckinViews.get(row.id),
       }
     })
     .filter((s): s is AgendaSession => s !== null)
@@ -338,6 +380,18 @@ export default async function HomePage() {
       booked,
       capacity,
       state,
+    }))
+
+  // Candidatas ao atalho de confirmação na home. Qual (se alguma) tem a janela
+  // aberta é decisão do cliente, pelo relógio do aluno.
+  const selfCheckinCandidates: SelfCheckinCandidate[] = mySessions
+    .filter((s) => s.selfCheckin)
+    .map((s) => ({
+      sessionId: s.id,
+      className: s.className,
+      start: s.start,
+      end: s.end,
+      view: s.selfCheckin!,
     }))
 
   return (
@@ -379,6 +433,12 @@ export default async function HomePage() {
           <p className="text-xs text-brand-400 -mt-2">
             Cota esgotada. Cancele uma aula futura ou compre uma avulsa.
           </p>
+        </Reveal>
+      )}
+
+      {selfCheckinCandidates.length > 0 && (
+        <Reveal step={1}>
+          <SelfCheckinCard candidates={selfCheckinCandidates} />
         </Reveal>
       )}
 

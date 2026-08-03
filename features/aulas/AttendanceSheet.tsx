@@ -10,8 +10,20 @@ import type {
   Attendance,
   AttendanceSource,
   CheckinPartner,
+  SelfCheckinStatus,
+  SelfCheckinGeoError,
 } from '@/types'
+import { selfCheckinGeoErrorLabel, formatDistance } from '@/lib/checkin/selfCheckin'
+import { reviewSelfCheckin } from '@/features/checkin/selfCheckinActions'
 import type { MissedCheckinEffect } from './actions'
+
+/** Confirmação que o aluno mandou pelo app, para o professor conferir. */
+export interface StudentSelfCheckin {
+  id: string
+  status: SelfCheckinStatus
+  distanceM: number | null
+  geoError: SelfCheckinGeoError | null
+}
 
 export interface StudentAttendance {
   // id/full_name = identidade (profiles); level/payment_type = por-academia (membership).
@@ -24,6 +36,8 @@ export interface StudentAttendance {
   checkedInToday: boolean
   /** Pendências de check-in em aberto antes desta chamada. */
   openMissedCheckins: number
+  /** Confirmação de presença enviada pelo aluno no app. */
+  selfCheckin?: StudentSelfCheckin | null
 }
 
 interface AttendanceSheetProps {
@@ -45,12 +59,14 @@ const SOURCE_LABEL: Record<AttendanceSource, string> = {
   manual: 'Manual',
   wellhub: 'Wellhub',
   totalpass: 'Totalpass',
+  self: 'App',
 }
 
 const SOURCE_VARIANT: Record<AttendanceSource, 'default' | 'success' | 'warning'> = {
   manual: 'default',
   wellhub: 'success',
   totalpass: 'warning',
+  self: 'success',
 }
 
 const PARTNER_LABEL: Record<CheckinPartner, string> = {
@@ -90,6 +106,8 @@ export function AttendanceSheet({
   const [missedMap, setMissedMap] = useState<Map<string, MissedCheckinEffect>>(new Map())
   // Check-in registrado na mão agora, sem esperar o refresh do servidor.
   const [checkedInNow, setCheckedInNow] = useState<Set<string>>(new Set())
+  // Confirmações do app revisadas nesta tela, por aluno.
+  const [reviewedNow, setReviewedNow] = useState<Map<string, SelfCheckinStatus>>(new Map())
   const [pendingStudent, setPendingStudent] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -138,10 +156,35 @@ export function AttendanceSheet({
     })
   }
 
+  function handleReviewSelfCheckin(studentId: string, selfCheckinId: string, approve: boolean) {
+    setPendingStudent(studentId)
+    startTransition(async () => {
+      const result = await reviewSelfCheckin(selfCheckinId, approve)
+      setPendingStudent(null)
+      if (result.error) {
+        setError(studentId, result.error)
+        return
+      }
+      setError(studentId, null)
+      setReviewedNow((prev) =>
+        new Map(prev).set(studentId, approve ? 'validated' : 'rejected'),
+      )
+      // Aprovar marca presença no servidor; a linha reflete isso na hora.
+      if (approve) {
+        setAttendanceMap((prev) =>
+          new Map(prev).set(studentId, { status: 'present', source: 'self' }),
+        )
+      }
+    })
+  }
+
   const presentCount = Array.from(attendanceMap.values()).filter((a) => a.status === 'present').length
   const partnerStudents = students.filter((s) => s.partner)
   const withCheckin = partnerStudents.filter(
     (s) => s.checkedInToday || checkedInNow.has(s.student.id),
+  ).length
+  const pendingSelf = students.filter(
+    (s) => (reviewedNow.get(s.student.id) ?? s.selfCheckin?.status) === 'pending',
   ).length
 
   return (
@@ -160,11 +203,27 @@ export function AttendanceSheet({
         </p>
       )}
 
+      {/* Aviso antes de encerrar a aula: quem está pendente ainda NÃO tem presença
+          e o encerramento em lote marcaria falta. */}
+      {pendingSelf > 0 && (
+        <p className="text-xs text-yellow-400">
+          {pendingSelf} aluno{pendingSelf !== 1 ? 's' : ''} confirmou presença pelo app e aguarda
+          sua validação.
+        </p>
+      )}
+
       {students.length === 0 ? (
         <p className="text-slate-500 text-sm text-center py-6">Nenhum aluno inscrito nesta sessão.</p>
       ) : (
         <ul className="space-y-2">
-          {students.map(({ student, wouldOweDebt, partner, checkedInToday, openMissedCheckins }) => {
+          {students.map(({
+            student,
+            wouldOweDebt,
+            partner,
+            checkedInToday,
+            openMissedCheckins,
+            selfCheckin,
+          }) => {
             const att = attendanceMap.get(student.id)
             const isPresent = att?.status === 'present'
             const isAbsent = att?.status === 'absent'
@@ -175,6 +234,8 @@ export function AttendanceSheet({
             const rowPending = isPending && pendingStudent === student.id
             // Aberto ANTES desta chamada, e o que a chamada acabou de causar.
             const openNow = missed?.openCount ?? openMissedCheckins
+            // A revisão feita agora vence o que veio do servidor.
+            const selfStatus = reviewedNow.get(student.id) ?? selfCheckin?.status ?? null
 
             return (
               <li
@@ -209,7 +270,47 @@ export function AttendanceSheet({
                         {openNow} pendência{openNow !== 1 ? 's' : ''} de check-in
                       </span>
                     )}
+                    {selfStatus === 'validated' && (
+                      <Badge variant="success">
+                        confirmou no app
+                        {selfCheckin?.distanceM != null
+                          ? ` · ${formatDistance(selfCheckin.distanceM)}`
+                          : ''}
+                      </Badge>
+                    )}
                   </div>
+
+                  {/* Confirmou pelo app mas a localização não fechou: o professor
+                      bate o martelo. Só ele sabe quem estava na quadra. */}
+                  {selfStatus === 'pending' && selfCheckin && (
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                      <span className="text-xs text-yellow-400">
+                        ⚠️ {selfCheckinGeoErrorLabel(selfCheckin.geoError, selfCheckin.distanceM)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={rowPending}
+                        onClick={() => handleReviewSelfCheckin(student.id, selfCheckin.id, true)}
+                        className="text-xs text-brand-400 hover:text-brand-300 underline disabled:opacity-50"
+                      >
+                        Aprovar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={rowPending}
+                        onClick={() => handleReviewSelfCheckin(student.id, selfCheckin.id, false)}
+                        className="text-xs text-slate-400 hover:text-slate-300 underline disabled:opacity-50"
+                      >
+                        Recusar
+                      </button>
+                    </div>
+                  )}
+
+                  {selfStatus === 'rejected' && (
+                    <p className="text-xs text-slate-500 mt-1.5">
+                      Confirmação do app recusada.
+                    </p>
+                  )}
 
                   {/* Presente sem check-in registrado = repasse que a academia vai
                       perder por falha do webhook ou esquecimento do aluno. Dá pra

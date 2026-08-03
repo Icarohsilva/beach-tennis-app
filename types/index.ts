@@ -8,7 +8,8 @@ export type ClassType = 'kids' | 'adult'
 export type BookingStatus = 'confirmed' | 'cancelled'
 export type BookingType = 'extra' | 'makeup'
 export type AttendanceStatus = 'present' | 'absent' | 'late'
-export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass'
+// 'self' = o próprio aluno confirmou pelo app (ver SelfCheckin).
+export type AttendanceSource = 'manual' | 'wellhub' | 'totalpass' | 'self'
 export type CheckinPartner = 'wellhub' | 'totalpass'
 
 /**
@@ -122,6 +123,12 @@ export interface Organization {
   tournament_discount_2_pct: number
   tournament_discount_3_pct: number
   onboarding_completed: boolean
+  // Ponto da quadra, usado para conferir a confirmação de presença do aluno.
+  // null = academia ainda não marcou o ponto (toda confirmação vira pendente).
+  latitude: number | null
+  longitude: number | null
+  checkin_radius_m: number
+  self_checkin_enabled: boolean
   created_at: string
 }
 
@@ -233,6 +240,44 @@ export interface Checkin {
   partner_validated: boolean
   partner_validation_error: string | null
   created_by: string | null
+  created_at: string
+}
+
+export type SelfCheckinStatus = 'validated' | 'pending' | 'rejected'
+
+/** Por que a conferência de localização não pôde validar a confirmação. */
+export type SelfCheckinGeoError =
+  | 'denied' // aluno negou a permissão
+  | 'unavailable' // o dispositivo não conseguiu obter posição
+  | 'timeout' // demorou demais
+  | 'unsupported' // browser sem geolocation
+  | 'org_unset' // a academia não marcou o ponto da quadra
+  | 'inaccurate' // leitura imprecisa demais para afirmar qualquer coisa
+  | 'out_of_range' // fora do raio da academia
+
+/**
+ * Confirmação de presença feita pelo PRÓPRIO aluno pelo app, na janela em torno
+ * da aula. Evidência, não veredito: quando `validated`, gera uma linha em
+ * `attendance` com source='self'; quando `pending`, só vira presença depois de
+ * o professor aprovar na chamada.
+ *
+ * Não confundir com `Checkin` (catraca do parceiro) nem com `Attendance`
+ * (a marcação em si).
+ */
+export interface SelfCheckin {
+  id: string
+  organization_id: string
+  student_id: string
+  session_id: string
+  status: SelfCheckinStatus
+  latitude: number | null
+  longitude: number | null
+  accuracy_m: number | null
+  /** Distância medida até a academia, em metros. null quando não houve GPS. */
+  distance_m: number | null
+  geo_error: SelfCheckinGeoError | null
+  reviewed_by: string | null
+  reviewed_at: string | null
   created_at: string
 }
 

@@ -8,6 +8,7 @@ import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Badge } from '@/components/ui/Badge'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { SessionModal } from './SessionModal'
+import type { SelfCheckinView } from '@/features/checkin/selfCheckinQueries'
 
 export interface AgendaSession {
   id: string
@@ -32,6 +33,11 @@ export interface AgendaSession {
   bookingId?: string
   /** A reserva do aluno veio da matrícula fixa (sai devolvendo crédito). */
   fromEnrollment?: boolean
+  /**
+   * Retrato da confirmação de presença pelo app nesta sessão. Ausente quando a
+   * academia não habilitou o recurso ou a aula não é do aluno.
+   */
+  selfCheckin?: SelfCheckinView
 }
 
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']

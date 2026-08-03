@@ -580,3 +580,75 @@ export async function updateOrgListing(input: {
   revalidatePath('/arenas')
   return {}
 }
+
+// ---------------------------------------------------------------------------
+// updateOrgSelfCheckin (owner only) — ponto da quadra p/ confirmação de presença
+// ---------------------------------------------------------------------------
+
+export async function updateOrgSelfCheckin(input: {
+  enabled: boolean
+  latitude: number | null
+  longitude: number | null
+  radiusM: number
+}): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  // Mesma regra da vitrine: só o dono mexe na configuração da academia.
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  const { data: org } = await adminClient
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', orgId)
+    .single()
+  if ((org as { owner_id: string | null } | null)?.owner_id !== user.id) {
+    return { error: 'Sem permissão.' }
+  }
+
+  const hasPoint = input.latitude !== null && input.longitude !== null
+  if (hasPoint) {
+    if (!Number.isFinite(input.latitude!) || Math.abs(input.latitude!) > 90) {
+      return { error: 'Latitude inválida.' }
+    }
+    if (!Number.isFinite(input.longitude!) || Math.abs(input.longitude!) > 180) {
+      return { error: 'Longitude inválida.' }
+    }
+  }
+  if (!Number.isInteger(input.radiusM) || input.radiusM < 20 || input.radiusM > 5000) {
+    return { error: 'O raio deve ficar entre 20 e 5000 metros.' }
+  }
+  // Sem ponto, toda confirmação cairia como pendente — vira fila de trabalho
+  // para o professor em vez de automação. Melhor barrar aqui.
+  if (input.enabled && !hasPoint) {
+    return { error: 'Marque a localização da academia antes de habilitar a confirmação.' }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('organizations')
+    .update({
+      self_checkin_enabled: input.enabled,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      checkin_radius_m: input.radiusM,
+    })
+    .eq('id', orgId)
+
+  if (updateErr) return { error: 'Erro ao salvar a confirmação de presença.' }
+
+  const { revalidatePath } = await import('next/cache')
+  revalidatePath('/admin/configuracoes')
+  revalidatePath('/home')
+  return {}
+}
