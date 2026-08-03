@@ -79,6 +79,7 @@ set search_path = public
 as $$
 declare
   v_points int;
+  v_current int;
 begin
   delete from liga_points
    where season_id = p_season
@@ -93,8 +94,19 @@ begin
     return; -- nada a revogar
   end if;
 
+  select points into v_current
+    from liga_standings
+   where season_id = p_season and student_id = p_student and sport = p_sport;
+
   -- greatest(0, ...): o cache nunca fica negativo, mesmo que o extrato tenha sido
-  -- mexido à mão em produção.
+  -- mexido à mão em produção. Quando o piso realmente é acionado, extrato e cache já
+  -- tinham divergido ANTES desta chamada — sem o warning, essa divergência fica
+  -- permanentemente invisível.
+  if v_current is not null and v_current - v_points < 0 then
+    raise warning 'liga_revoke_points: clamp em 0 para season=%, student=%, sport=% (cache=% - %)',
+      p_season, p_student, p_sport, v_current, v_points;
+  end if;
+
   update liga_standings
      set points = greatest(0, points - v_points)
    where season_id = p_season
