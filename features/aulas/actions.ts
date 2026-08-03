@@ -8,6 +8,7 @@ import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { offerWaitlistSpot } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
+import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
@@ -760,6 +761,9 @@ export async function markAttendance(
     }
   }
 
+  // Liga: presente credita, ausente revoga. Best-effort, igual à dívida acima.
+  await syncLigaAttendancePoints(adminClient, { orgId, studentId, sessionId, present })
+
   // A pendência de CHECK-IN é o espelho: nasce na FALTA do aluno de parceiro, que é
   // quando a academia perde o repasse. Mesmo best-effort da dívida.
   const missed = await syncMissedCheckin(adminClient, { orgId, studentId, sessionId, present })
@@ -886,6 +890,9 @@ export async function markAttendanceBulk(
   // esteve presente tem a pendência daquela aula desfeita (correção de marcação).
   const missedByStudent: Record<string, MissedCheckinEffect> = {}
   for (const studentId of allStudentIds) {
+    await syncLigaAttendancePoints(adminClient, {
+      orgId, studentId, sessionId, present: presentSet.has(studentId),
+    })
     const effect = await syncMissedCheckin(adminClient, {
       orgId, studentId, sessionId, present: presentSet.has(studentId),
     })
