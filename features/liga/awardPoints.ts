@@ -50,9 +50,20 @@ export async function awardLigaPoints(
       reason: input.reason,
       error: err instanceof Error ? err.message : String(err),
     })
+    // extra curado, não spread de `input`: awardLigaBonus (Task 12) deixa o professor
+    // digitar `note` em texto livre. Esse recado é o que aparece pro aluno no extrato
+    // ("+20 · Destaque da aula de quinta") — não é segredo, mas texto humano
+    // livre não tem por que ir sem curadoria pra um serviço de terceiro por padrão.
     Sentry.captureException(err, {
       tags: { feature: 'liga' },
-      extra: { ...input },
+      extra: {
+        orgId: input.orgId,
+        seasonId: input.seasonId,
+        studentId: input.studentId,
+        sport: input.sport,
+        reason: input.reason,
+        sourceId: input.sourceId,
+      },
     })
   }
 }
