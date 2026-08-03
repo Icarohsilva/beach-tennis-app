@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { createStudent } from '@/features/organizations/actions'
+import { SportsPicker } from '@/components/ui/SportsPicker'
 
-export function CriarAlunoButton() {
+export function CriarAlunoButton({ orgSports }: { orgSports: string[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [sports, setSports] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [password, setPassword] = useState<string | null>(null)
@@ -20,7 +22,7 @@ export function CriarAlunoButton() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const res = await createStudent({ fullName, email, phone })
+    const res = await createStudent({ fullName, email, phone, sports })
     setLoading(false)
     if (res.error) {
       setError(res.error)
@@ -35,6 +37,7 @@ export function CriarAlunoButton() {
     setFullName('')
     setEmail('')
     setPhone('')
+    setSports([])
     setError('')
     setPassword(null)
   }
@@ -88,6 +91,15 @@ export function CriarAlunoButton() {
               placeholder="(11) 99999-9999"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
+            />
+            {/* Esportes que o aluno pratica nesta academia — base dos rankings da
+                Liga. Não restringe em nada quais turmas ele pode frequentar. */}
+            <SportsPicker
+              value={sports}
+              onChange={setSports}
+              options={orgSports}
+              allowCustom={false}
+              label="Esportes (opcional)"
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex gap-2">

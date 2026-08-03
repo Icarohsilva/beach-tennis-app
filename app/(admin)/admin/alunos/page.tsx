@@ -12,12 +12,15 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import type { Membership, StudentLevel } from '@/types'
 import { CriarAlunoButton } from './CriarAlunoButton'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { getOrgSports } from '@/lib/arenas/orgSports'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
 interface SearchParams {
   q?: string
   level?: string
+  esporte?: string
 }
 
 interface Props {
@@ -33,6 +36,8 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   const query = searchParams.q?.trim() ?? ''
   const levelFilter = searchParams.level ?? ''
+  const orgSports = await getOrgSports(orgId)
+  const sportFilter = orgSports.includes(searchParams.esporte ?? '') ? searchParams.esporte! : ''
 
   // Campos por-academia vêm da membership da academia ativa (não de profiles):
   // um aluno multi-vínculo só aparece nesta lista se tiver membership nesta org,
@@ -41,7 +46,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
@@ -54,6 +59,10 @@ export default async function AlunosPage({ searchParams }: Props) {
     dbQuery = dbQuery.eq('level', levelFilter)
   }
 
+  if (sportFilter) {
+    dbQuery = dbQuery.contains('sports', [sportFilter])
+  }
+
   const { data: membershipsRaw } = await dbQuery
 
   // Identidade (full_name) + campos por-academia (Membership) de cada aluno.
@@ -61,6 +70,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     id: string
     full_name: string
     level: Membership['level']
+    sports: Membership['sports']
     payment_type: Membership['payment_type']
     partner: Membership['partner']
     contract_active: Membership['contract_active']
@@ -75,6 +85,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     (membershipsRaw ?? []) as unknown as {
       user_id: string
       level: StudentLevel
+      sports: string[] | null
       payment_type: Membership['payment_type']
       partner: Membership['partner']
       contract_active: boolean
@@ -92,6 +103,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         id: m.user_id,
         full_name: prof?.full_name ?? '',
         level: m.level,
+        sports: m.sports ?? [],
         payment_type: m.payment_type,
         partner: m.partner,
         contract_active: m.contract_active,
@@ -176,7 +188,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         <h1 className="text-2xl font-bold text-white">Alunos</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400">{students.length} alunos</span>
-          <CriarAlunoButton />
+          <CriarAlunoButton orgSports={orgSports} />
         </div>
       </div>
 
@@ -206,13 +218,28 @@ export default async function AlunosPage({ searchParams }: Props) {
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Esporte</label>
+          <select
+            name="esporte"
+            defaultValue={sportFilter}
+            className="bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+          >
+            <option value="">Todos</option>
+            {orgSports.map((slug) => (
+              <option key={slug} value={slug}>
+                {sportLabel(slug)}
+              </option>
+            ))}
+          </select>
+        </div>
         <button
           type="submit"
           className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-xl transition-colors"
         >
           Filtrar
         </button>
-        {(query || levelFilter) && (
+        {(query || levelFilter || sportFilter) && (
           <Link
             href="/admin/alunos"
             className="px-4 py-2 border border-surface-border text-slate-400 hover:text-white text-sm rounded-xl transition-colors"
@@ -256,6 +283,19 @@ export default async function AlunosPage({ searchParams }: Props) {
                       )}
                     </div>
                   </div>
+
+                  {student.sports.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {student.sports.map((slug) => (
+                        <span
+                          key={slug}
+                          className="text-[11px] rounded-full border border-surface-border bg-surface px-2 py-0.5 text-slate-300"
+                        >
+                          {sportEmoji(slug)} {sportLabel(slug)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="space-y-1 text-xs text-slate-400">
                     <div className="flex items-center justify-between">

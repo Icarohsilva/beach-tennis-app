@@ -2,6 +2,7 @@
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatTime } from '@/lib/utils/dateHelpers'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import type { Class } from '@/types'
 
 interface ClassCardProps {
@@ -36,6 +37,12 @@ export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCa
             <span>
               {formatTime(c.start_time)} – {formatTime(c.end_time)}
             </span>
+            {/* Modalidade é rótulo: identifica a turma, não restringe quem entra. */}
+            {c.sport && (
+              <span className="text-slate-300">
+                {sportEmoji(c.sport)} {sportLabel(c.sport)}
+              </span>
+            )}
           </div>
         </div>
 

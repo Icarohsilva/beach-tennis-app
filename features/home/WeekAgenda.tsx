@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils/cn'
 import { buildWeekDays } from '@/lib/utils/agenda'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Badge } from '@/components/ui/Badge'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { SessionModal } from './SessionModal'
 
 export interface AgendaSession {
@@ -23,6 +24,8 @@ export interface AgendaSession {
   /** O aluno é aluno fixo da turma. */
   fixed: boolean
   kids: boolean
+  /** Modalidade da turma (slug). Rótulo — não restringe quem pode reservar. */
+  sport: string | null
   /** Nomes de quem é esperado na aula (fixos + reservas). */
   attendees: string[]
   /** Reserva do aluno nesta sessão, quando existe — necessária para sair. */
@@ -167,6 +170,11 @@ export function WeekAgenda({
                           {session.className}
                         </p>
                         {session.kids && <Badge variant="kids">KIDS</Badge>}
+                        {session.sport && (
+                          <span className="shrink-0 text-[11px] text-slate-400">
+                            {sportEmoji(session.sport)} {sportLabel(session.sport)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-2 flex items-center gap-2">

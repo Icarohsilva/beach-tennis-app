@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { formatDate } from '@/lib/utils/dateHelpers'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
 import type { AgendaSession } from './WeekAgenda'
 
@@ -104,6 +105,11 @@ export function SessionModal({
                 {session.className}
               </h2>
               {session.kids && <Badge variant="kids">KIDS</Badge>}
+              {session.sport && (
+                <span className="shrink-0 text-xs text-slate-400">
+                  {sportEmoji(session.sport)} {sportLabel(session.sport)}
+                </span>
+              )}
             </div>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
               <CalendarDays className="h-3.5 w-3.5" />

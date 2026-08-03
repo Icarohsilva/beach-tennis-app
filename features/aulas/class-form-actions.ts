@@ -4,12 +4,21 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { generateGrid } from './gridGeneration'
 import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
+import { getOrgSports } from '@/lib/arenas/orgSports'
+import { normalizeSportForOrg } from '@/lib/arenas/sports'
 import type { ClassType } from '@/types'
 
 export interface ClassFormData {
   name: string
   description: string
   type: ClassType
+  /**
+   * Modalidade da turma (slug de lib/arenas/sports.ts). null = sem modalidade.
+   * É rótulo, não regra: NENHUM ponto de reserva (bookSession, joinWaitlist,
+   * enrollStudentInClass, /agendar) olha para este campo. Aluno de beach tennis
+   * continua podendo entrar numa turma de futevôlei.
+   */
+  sport: string | null
   day_of_week: number
   start_time: string
   end_time: string
@@ -24,10 +33,12 @@ export async function createClass(data: ClassFormData): Promise<{ error?: string
   const orgId = await getCurrentOrgId()
   if (!orgId) return { error: 'Academia não encontrada.' }
 
+  const sport = normalizeSportForOrg(data.sport, await getOrgSports(orgId))
+
   const adminClient = createAdminClient()
   const { data: newClass, error } = await adminClient
     .from('classes')
-    .insert({ ...data, level: 'iniciante', is_active: true, organization_id: orgId })
+    .insert({ ...data, sport, level: 'iniciante', is_active: true, organization_id: orgId })
     .select('id')
     .single()
   if (error) return { error: error.message }
@@ -59,11 +70,28 @@ export async function updateClass(
   }
   const orgId = await getCurrentOrgId()
   if (!orgId) return { error: 'Academia não encontrada.' }
+
   const adminClient = createAdminClient()
+
+  let payload: Partial<ClassFormData> = data
+  if (data.sport !== undefined) {
+    // A modalidade já gravada continua válida mesmo se a academia parou de
+    // oferecê-la — reeditar a turma por outro motivo não pode zerar o campo.
+    const { data: current } = await adminClient
+      .from('classes')
+      .select('sport')
+      .eq('id', classId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    const allowed = await getOrgSports(orgId)
+    if (current?.sport && !allowed.includes(current.sport)) allowed.push(current.sport)
+    payload = { ...data, sport: normalizeSportForOrg(data.sport, allowed) }
+  }
+
   // Guarda de isolamento: só edita turma da academia ativa.
   const { error } = await adminClient
     .from('classes')
-    .update(data)
+    .update(payload)
     .eq('id', classId)
     .eq('organization_id', orgId)
   if (error) return { error: error.message }

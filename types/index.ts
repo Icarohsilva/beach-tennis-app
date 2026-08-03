@@ -158,6 +158,7 @@ export interface Membership {
   pending_partner: CheckinPartner | null
   wellhub_id: string | null
   totalpass_id: string | null
+  sports: string[] // esportes que a pessoa pratica NESTA academia; slugs de lib/arenas/sports.ts
   created_at: string
 }
 
@@ -167,6 +168,7 @@ export interface Class {
   name: string
   description: string | null
   level: StudentLevel
+  sport: string | null // modalidade da turma; informativa, nunca bloqueia reserva
   type: ClassType
   day_of_week: number // 0=Sunday, 6=Saturday
   start_time: string // HH:MM

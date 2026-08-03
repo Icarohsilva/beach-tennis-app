@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { getClassRoster } from '@/features/aulas/enrollmentRoster'
 import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
 import { DeleteClassButton } from './DeleteClassButton'
@@ -188,7 +189,10 @@ export default async function GradePage() {
                           <Link href={`/admin/grade/${c.id}/editar`} className="text-xs text-slate-400 hover:text-brand-500 ml-1">Editar</Link>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400 mb-1">{formatTime(c.start_time)} – {formatTime(c.end_time)}</p>
+                      <p className="text-xs text-slate-400 mb-1">
+                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                        {c.sport && <span className="ml-2 text-slate-300">{sportEmoji(c.sport)} {sportLabel(c.sport)}</span>}
+                      </p>
 
                       <p className="text-xs text-slate-400 mb-2">
                         <span className="text-sm font-extrabold text-white">{rc.enrolled}</span> matriculados ·{' '}

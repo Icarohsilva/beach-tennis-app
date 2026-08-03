@@ -18,6 +18,11 @@ vi.mock('./gridGeneration', () => ({
   generateGrid: vi.fn().mockResolvedValue({ sessionsCreated: 1, studentsBooked: 0 }),
 }))
 
+// Cardápio de modalidades da academia (organizations.sports).
+vi.mock('@/lib/arenas/orgSports', () => ({
+  getOrgSports: vi.fn().mockResolvedValue(['beach_tennis', 'padel']),
+}))
+
 import { buildSessionRows } from './sessionUtils'
 import { createClass, type ClassFormData } from './class-form-actions'
 import { generateGrid } from './gridGeneration'
@@ -49,6 +54,7 @@ describe('createClass', () => {
     name: 'Turma Iniciante',
     description: '',
     type: 'adult',
+    sport: null,
     day_of_week: 1,
     start_time: '08:00',
     end_time: '09:00',
@@ -96,5 +102,20 @@ describe('createClass', () => {
       '[createClass] generateGrid nao criou a sessao esperada',
       expect.objectContaining({ classId: 'new-class-id', orgId: 'org-1' }),
     )
+  })
+
+  it('grava a modalidade quando ela está no cardápio da academia', async () => {
+    await createClass({ ...validData, sport: 'padel' })
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ sport: 'padel' }))
+  })
+
+  it('zera a modalidade que a academia não oferece', async () => {
+    await createClass({ ...validData, sport: 'futebol' })
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ sport: null }))
+  })
+
+  it('aceita turma sem modalidade', async () => {
+    await createClass(validData)
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ sport: null }))
   })
 })

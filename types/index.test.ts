@@ -5,7 +5,7 @@ describe('types', () => {
   it('Class has court field', () => {
     const c: Class = {
       id: '1', name: 'Terça 18h', description: null,
-      level: 'iniciante', type: 'adult', day_of_week: 2,
+      level: 'iniciante', sport: null, type: 'adult', day_of_week: 2,
       start_time: '18:00', end_time: '19:00',
       max_students: 8, is_active: true, court: 1,
     }

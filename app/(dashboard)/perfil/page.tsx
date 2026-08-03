@@ -6,6 +6,8 @@ import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { GenderForm } from '@/features/perfil/GenderForm'
+import { SportsForm } from '@/features/perfil/SportsForm'
+import { getOrgSports } from '@/lib/arenas/orgSports'
 import { PersonalDataForm } from '@/features/perfil/PersonalDataForm'
 import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
@@ -38,6 +40,8 @@ export default async function PerfilPage() {
     .single()
 
   const membership = await getActiveMembership()
+  // Cardápio de modalidades da academia — domínio do seletor "Meus esportes".
+  const orgSports = await getOrgSports(orgId)
   const profile = membership
     ? {
         full_name: identity?.full_name ?? null,
@@ -319,6 +323,18 @@ export default async function PerfilPage() {
           </div>
         </section>
       )}
+
+      {/* Esportes na academia ativa — base dos rankings da Liga */}
+      <section>
+        <SectionHeader title="Meus esportes" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <p className="text-xs text-slate-500 mb-4">
+            Define de quais rankings você participa nesta academia. Não limita quais aulas você
+            pode reservar.
+          </p>
+          <SportsForm current={membership?.sports ?? []} orgSports={orgSports} />
+        </div>
+      </section>
 
       {/* Gênero (identidade) — usado em torneios por categoria */}
       <section>

@@ -197,7 +197,7 @@ export default async function HomePage() {
   const weekEnd = addDaysISO(today, 6)
   const { data: weekSessionsRaw } = await adminClient
     .from('class_sessions')
-    .select('id, session_date, class_id, classes(name, start_time, end_time, type, max_students)')
+    .select('id, session_date, class_id, classes(name, start_time, end_time, type, sport, max_students)')
     .eq('organization_id', orgId)
     .gte('session_date', today)
     .lte('session_date', weekEnd)
@@ -209,8 +209,8 @@ export default async function HomePage() {
     session_date: string
     class_id: string
     classes:
-      | { name: string; start_time: string; end_time: string; type: string; max_students: number }
-      | { name: string; start_time: string; end_time: string; type: string; max_students: number }[]
+      | { name: string; start_time: string; end_time: string; type: string; sport: string | null; max_students: number }
+      | { name: string; start_time: string; end_time: string; type: string; sport: string | null; max_students: number }[]
       | null
   }
   const weekSessionRows = (weekSessionsRaw ?? []) as unknown as WeekSessionRow[]
@@ -309,6 +309,7 @@ export default async function HomePage() {
         mine: !!myBooking,
         fixed: enrolledClassIds.has(row.class_id),
         kids: cls.type === 'kids',
+        sport: cls.sport ?? null,
         attendees: attendeesOf(row.id, row.class_id),
         bookingId: myBooking?.id,
         fromEnrollment: myBooking?.fromEnrollment,
