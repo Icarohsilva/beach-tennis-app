@@ -59,9 +59,34 @@ Academy/school management app for any activity with classes and students — bea
 | `app/(auth)/` | Public | Login, cadastro, recuperar-senha |
 | `app/(dashboard)/` | Authenticated (cookie) + server-side user check | Student-facing UI with `BottomNav` |
 | `app/(admin)/` | Authenticated + role=admin check | Admin panel with sidebar |
+| `app/(super-admin)/` | Authenticated + `profiles.is_platform_admin` | Painel da PLATAFORMA (dona do SaaS) — ver abaixo |
 | `app/experimental/` | Public | Trial class booking (no login needed) |
 
 **Two-tier route protection:** [middleware.ts](middleware.ts) is Edge Runtime — it checks for a `sb-*-auth-token` cookie only (no Supabase import, no async). Real auth validation happens in each layout Server Component via `createClient()`. Admin role check uses `createAdminClient()` (service role key, bypasses RLS).
+
+### Painel de Plataforma (`app/(super-admin)/`)
+
+Gestão do SaaS em si — receita, retenção e as academias como tenants. Não confundir
+com `app/(admin)/`, que é o painel de UMA academia.
+
+| Rota | Conteúdo |
+|---|---|
+| `/super-admin` | Visão geral: fila de atenção, MRR/ARR/ARPA, churn e conversão de trial, aquisição, uso agregado |
+| `/super-admin/academias` | Tabela de tenants com busca, filtros (assinatura, saúde, UF), ordenação e export CSV |
+| `/super-admin/[id]` | Visão 360 da academia: cobrança, ativação, uso semanal, ações de ciclo de vida e auditoria |
+| `/super-admin/auditoria` | Trilha de todas as ações da plataforma sobre academias |
+| `/super-admin/{reembolsos,exclusoes,feedback}` | Filas operacionais (CDC, LGPD, suporte) |
+
+- [lib/superAdmin/metrics.ts](lib/superAdmin/metrics.ts) — TODA a matemática do painel, pura e testada:
+  `platformSummary()`, `tenantHealth()`, `attentionQueue()`, `growthSeries()`, `cohortRetention()`,
+  `filterTenants()`/`sortTenants()`, `tenantsToCsv()`. Não existe histórico de MRR no schema, então
+  as métricas derivam do estado atual de `platform_subscriptions` + `organizations.created_at`;
+  cada aproximação está comentada no arquivo.
+- [features/super-admin/platformQueries.ts](features/super-admin/platformQueries.ts) — leitura cross-org
+  paginada (o PostgREST corta em 1000 linhas) que monta `TenantSnapshot[]`.
+- Conta **cortesia** (`platform_subscriptions.is_comped`) tem acesso liberado mas fica fora do MRR.
+- Ações que mexem em acesso/cobrança (suspender, estender trial, cortesia) gravam em
+  `platform_admin_audit_log`.
 
 ### Supabase Clients
 
