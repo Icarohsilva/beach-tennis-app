@@ -5,7 +5,6 @@
 // CROSS-ORG é intencional aqui (é o ponto do painel); seguro porque gateado.
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import type { OrgListRow } from '@/lib/superAdmin/filterOrgs'
 
 // Lê o usuário logado + is_platform_admin. Retorna { userId } ou { error }.
 export async function requirePlatformAdmin(): Promise<{ userId: string } | { error: string }> {
@@ -25,176 +24,235 @@ export async function requirePlatformAdmin(): Promise<{ userId: string } | { err
   return { userId: user.id }
 }
 
-// Lista todas as academias com dono (nome) + status da assinatura. Batch para
-// evitar N+1 (nomes de donos e assinaturas resolvidos em 2 queries agregadas).
-export async function listOrganizations(): Promise<{ rows?: OrgListRow[]; error?: string }> {
+// ---------------------------------------------------------------------------
+// Trilha de auditoria — toda ação do super-admin sobre uma academia é gravada.
+// Ver migration 20260806000000_platform_admin_audit_log.sql.
+// ---------------------------------------------------------------------------
+
+export type PlatformAuditAction =
+  | 'suspend_org'
+  | 'reactivate_org'
+  | 'extend_trial'
+  | 'grant_comp'
+  | 'revoke_comp'
+
+// A auditoria NUNCA derruba a ação: se o insert falhar, a operação já foi feita
+// e reverter seria pior. Falha vai para o log do servidor.
+async function recordAudit(
+  actorId: string,
+  orgId: string,
+  action: PlatformAuditAction,
+  details: Record<string, unknown> = {},
+  note?: string,
+): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    await admin.from('platform_admin_audit_log').insert({
+      actor_id: actorId,
+      organization_id: orgId,
+      action,
+      details,
+      note: note?.trim() || null,
+    })
+  } catch (e) {
+    console.error('[super-admin] falha ao gravar auditoria', action, orgId, e)
+  }
+}
+
+export interface AuditEntry {
+  id: string
+  action: PlatformAuditAction
+  details: Record<string, unknown>
+  note: string | null
+  created_at: string
+  actor_name: string | null
+  organization_id: string | null
+  organization_name: string | null
+}
+
+// Lê a trilha (toda a plataforma ou de uma academia). Tolerante: se a migration
+// ainda não foi aplicada, devolve lista vazia em vez de derrubar a página.
+export async function listAuditLog(
+  orgId?: string,
+  limit = 50,
+): Promise<{ entries: AuditEntry[]; error?: string }> {
   const gate = await requirePlatformAdmin()
-  if ('error' in gate) return { error: gate.error }
+  if ('error' in gate) return { entries: [], error: gate.error }
   const admin = createAdminClient()
 
-  const { data: orgsRaw } = await admin
-    .from('organizations')
-    .select('id, name, city, state, owner_id, status, created_at')
+  let query = admin
+    .from('platform_admin_audit_log')
+    .select('id, action, details, note, created_at, actor_id, organization_id')
     .order('created_at', { ascending: false })
-  const orgs = (orgsRaw ?? []) as Array<{
+    .limit(limit)
+  if (orgId) query = query.eq('organization_id', orgId)
+
+  const { data, error } = await query
+  if (error) {
+    console.error('[super-admin] trilha de auditoria indisponível', error)
+    return { entries: [] }
+  }
+
+  const rows = (data ?? []) as Array<{
     id: string
-    name: string
-    city: string | null
-    state: string | null
-    owner_id: string | null
-    status: 'active' | 'suspended'
+    action: PlatformAuditAction
+    details: Record<string, unknown> | null
+    note: string | null
     created_at: string
+    actor_id: string
+    organization_id: string | null
   }>
 
-  const ownerIds = Array.from(
-    new Set(orgs.map((o) => o.owner_id).filter(Boolean)),
-  ) as string[]
-  const { data: owners } = ownerIds.length
-    ? await admin.from('profiles').select('id, full_name').in('id', ownerIds)
-    : { data: [] }
-  const ownerName = new Map(
-    ((owners ?? []) as Array<{ id: string; full_name: string }>).map((p) => [p.id, p.full_name]),
-  )
-
-  const orgIds = orgs.map((o) => o.id)
-  const { data: subs } = orgIds.length
-    ? await admin
-        .from('platform_subscriptions')
-        .select('organization_id, status')
-        .in('organization_id', orgIds)
-    : { data: [] }
-  const subStatus = new Map(
-    ((subs ?? []) as Array<{ organization_id: string; status: string }>).map((s) => [
-      s.organization_id,
-      s.status,
-    ]),
-  )
-
-  const rows: OrgListRow[] = orgs.map((o) => ({
-    id: o.id,
-    name: o.name,
-    city: o.city,
-    state: o.state,
-    owner_name: o.owner_id ? ownerName.get(o.owner_id) ?? null : null,
-    org_status: o.status,
-    sub_status: subStatus.get(o.id) ?? 'none',
-    created_at: o.created_at,
-  }))
-  return { rows }
-}
-
-export interface OrgDetail {
-  id: string
-  name: string
-  slug: string
-  city: string | null
-  state: string | null
-  description: string | null
-  status: 'active' | 'suspended'
-  created_at: string
-  owner_name: string | null
-  owner_email: string | null
-  sub_status: string
-  trial_ends_at: string | null
-  current_period_end: string | null
-  students: number
-  admins: number
-  tournaments: number
-}
-
-// Detalhe de uma academia: dados + dono (nome + e-mail via auth.users) +
-// assinatura + 3 contadores (count exact/head, escopados por organization_id).
-export async function getOrganizationDetail(
-  orgId: string,
-): Promise<{ detail?: OrgDetail; error?: string }> {
-  const gate = await requirePlatformAdmin()
-  if ('error' in gate) return { error: gate.error }
-  const admin = createAdminClient()
-
-  const { data: org } = await admin
-    .from('organizations')
-    .select('id, name, slug, city, state, description, status, created_at, owner_id')
-    .eq('id', orgId)
-    .single()
-  if (!org) return { error: 'Academia não encontrada.' }
-
-  let owner_name: string | null = null
-  let owner_email: string | null = null
-  if (org.owner_id) {
-    const { data: prof } = await admin
-      .from('profiles')
-      .select('full_name')
-      .eq('id', org.owner_id)
-      .single()
-    owner_name = prof?.full_name ?? null
-    const { data: authUser } = await admin.auth.admin.getUserById(org.owner_id)
-    owner_email = authUser?.user?.email ?? null
-  }
-
-  const { data: sub } = await admin
-    .from('platform_subscriptions')
-    .select('status, trial_ends_at, current_period_end')
-    .eq('organization_id', orgId)
-    .maybeSingle()
-
-  const [studentsRes, adminsRes, tournamentsRes] = await Promise.all([
-    admin
-      .from('memberships')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('role', 'student'),
-    admin
-      .from('memberships')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('role', 'admin'),
-    admin
-      .from('tournaments')
-      .select('*', { count: 'exact', head: true })
-      .eq('organization_id', orgId),
+  const actorIds = Array.from(new Set(rows.map((r) => r.actor_id)))
+  const orgIds = Array.from(new Set(rows.map((r) => r.organization_id).filter(Boolean))) as string[]
+  const [actors, orgs] = await Promise.all([
+    actorIds.length
+      ? admin.from('profiles').select('id, full_name').in('id', actorIds)
+      : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+    orgIds.length
+      ? admin.from('organizations').select('id, name').in('id', orgIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ])
+  const actorName = new Map(
+    ((actors.data ?? []) as { id: string; full_name: string | null }[]).map((p) => [p.id, p.full_name]),
+  )
+  const orgName = new Map(
+    ((orgs.data ?? []) as { id: string; name: string }[]).map((o) => [o.id, o.name]),
+  )
 
   return {
-    detail: {
-      id: org.id,
-      name: org.name,
-      slug: org.slug,
-      city: org.city,
-      state: org.state,
-      description: org.description,
-      status: org.status,
-      created_at: org.created_at,
-      owner_name,
-      owner_email,
-      sub_status: sub?.status ?? 'none',
-      trial_ends_at: sub?.trial_ends_at ?? null,
-      current_period_end: sub?.current_period_end ?? null,
-      students: studentsRes.count ?? 0,
-      admins: adminsRes.count ?? 0,
-      tournaments: tournamentsRes.count ?? 0,
-    },
+    entries: rows.map((r) => ({
+      id: r.id,
+      action: r.action,
+      details: r.details ?? {},
+      note: r.note,
+      created_at: r.created_at,
+      actor_name: actorName.get(r.actor_id) ?? null,
+      organization_id: r.organization_id,
+      organization_name: r.organization_id ? orgName.get(r.organization_id) ?? null : null,
+    })),
   }
 }
 
-export async function suspendOrganization(orgId: string): Promise<{ error?: string }> {
+// Revalida as rotas que mostram o estado de uma academia.
+function revalidateOrg(orgId: string): void {
+  revalidatePath('/super-admin')
+  revalidatePath('/super-admin/academias')
+  revalidatePath('/super-admin/auditoria')
+  revalidatePath(`/super-admin/${orgId}`)
+}
+
+export async function suspendOrganization(orgId: string, note?: string): Promise<{ error?: string }> {
   const gate = await requirePlatformAdmin()
   if ('error' in gate) return { error: gate.error }
   const admin = createAdminClient()
   const { error } = await admin.from('organizations').update({ status: 'suspended' }).eq('id', orgId)
   if (error) return { error: 'Não foi possível suspender a academia.' }
-  revalidatePath('/super-admin')
-  revalidatePath(`/super-admin/${orgId}`)
+  await recordAudit(gate.userId, orgId, 'suspend_org', { status: 'suspended' }, note)
+  revalidateOrg(orgId)
   return {}
 }
 
-export async function reactivateOrganization(orgId: string): Promise<{ error?: string }> {
+export async function reactivateOrganization(orgId: string, note?: string): Promise<{ error?: string }> {
   const gate = await requirePlatformAdmin()
   if ('error' in gate) return { error: gate.error }
   const admin = createAdminClient()
   const { error } = await admin.from('organizations').update({ status: 'active' }).eq('id', orgId)
   if (error) return { error: 'Não foi possível reativar a academia.' }
-  revalidatePath('/super-admin')
-  revalidatePath(`/super-admin/${orgId}`)
+  await recordAudit(gate.userId, orgId, 'reactivate_org', { status: 'active' }, note)
+  revalidateOrg(orgId)
+  return {}
+}
+
+/**
+ * Estende o trial em N dias. Conta a partir do fim do trial atual quando ele
+ * ainda está no futuro (senão o cliente perderia os dias restantes) e a partir
+ * de hoje quando já venceu. Volta o status para 'trialing' para reabrir o
+ * acesso ao painel de quem já tinha caído no paywall.
+ */
+export async function extendTrial(
+  orgId: string,
+  days: number,
+  note?: string,
+): Promise<{ error?: string; newTrialEndsAt?: string }> {
+  const gate = await requirePlatformAdmin()
+  if ('error' in gate) return { error: gate.error }
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return { error: 'Informe de 1 a 365 dias.' }
+  }
+  const admin = createAdminClient()
+
+  const { data: sub } = await admin
+    .from('platform_subscriptions')
+    .select('status, trial_ends_at')
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!sub) return { error: 'Academia sem assinatura registrada.' }
+  if (sub.status === 'active') {
+    return { error: 'Assinatura já está ativa — estender trial não se aplica.' }
+  }
+
+  const now = new Date()
+  const current = sub.trial_ends_at ? new Date(sub.trial_ends_at) : null
+  const base = current && current > now ? current : now
+  const newTrialEndsAt = new Date(base.getTime() + days * 86_400_000).toISOString()
+
+  const { error } = await admin
+    .from('platform_subscriptions')
+    .update({ status: 'trialing', trial_ends_at: newTrialEndsAt, updated_at: now.toISOString() })
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Não foi possível estender o trial.' }
+
+  await recordAudit(
+    gate.userId,
+    orgId,
+    'extend_trial',
+    { days, from: sub.trial_ends_at, to: newTrialEndsAt },
+    note,
+  )
+  revalidateOrg(orgId)
+  return { newTrialEndsAt }
+}
+
+/**
+ * Liga/desliga a cortesia. Cortesia = acesso liberado sem cobrança; a academia
+ * some do MRR (não pagou) mas continua contando como conta ativa. Ao conceder,
+ * a assinatura vira 'active' com período longo; ao revogar, volta para trial de
+ * 7 dias para o cliente ter tempo de assinar em vez de perder o acesso na hora.
+ */
+export async function setCompedStatus(
+  orgId: string,
+  comped: boolean,
+  note?: string,
+): Promise<{ error?: string }> {
+  const gate = await requirePlatformAdmin()
+  if ('error' in gate) return { error: gate.error }
+  const admin = createAdminClient()
+
+  const now = new Date()
+  const patch = comped
+    ? {
+        is_comped: true,
+        status: 'active',
+        current_period_end: new Date(now.getTime() + 3650 * 86_400_000).toISOString(),
+        updated_at: now.toISOString(),
+      }
+    : {
+        is_comped: false,
+        status: 'trialing',
+        trial_ends_at: new Date(now.getTime() + 7 * 86_400_000).toISOString(),
+        current_period_end: null,
+        updated_at: now.toISOString(),
+      }
+
+  const { error } = await admin
+    .from('platform_subscriptions')
+    .update(patch)
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Não foi possível atualizar a cortesia.' }
+
+  await recordAudit(gate.userId, orgId, comped ? 'grant_comp' : 'revoke_comp', patch, note)
+  revalidateOrg(orgId)
   return {}
 }
 
