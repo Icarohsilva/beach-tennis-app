@@ -17,6 +17,8 @@ export interface WaitlistRow {
   joinedAt: string
   /** Quando esta pessoa foi avisada da última vaga aberta. */
   notifiedAt: string | null
+  /** WhatsApp do aluno, para o professor chamá-lo direto. null = sem telefone. */
+  phone: string | null
 }
 
 /**
@@ -55,20 +57,24 @@ export async function getSessionWaitlist(
   const studentIds = rows.map((r) => r.student_id)
   const { data: profiles } =
     studentIds.length > 0
-      ? await client.from('profiles').select('id, full_name').in('id', studentIds)
+      ? await client.from('profiles').select('id, full_name, phone').in('id', studentIds)
       : { data: [] }
 
-  const nameById = new Map(
-    ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+  const byId = new Map(
+    ((profiles ?? []) as { id: string; full_name: string; phone: string | null }[]).map((p) => [
+      p.id,
+      p,
+    ]),
   )
 
   return rows.map((r, i) => ({
     id: r.id,
     studentId: r.student_id,
-    fullName: nameById.get(r.student_id) ?? 'Aluno',
+    fullName: byId.get(r.student_id)?.full_name ?? 'Aluno',
     status: r.status,
     position: i + 1,
     joinedAt: r.joined_at,
     notifiedAt: r.notified_at,
+    phone: byId.get(r.student_id)?.phone ?? null,
   }))
 }
