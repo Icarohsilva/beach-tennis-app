@@ -19,6 +19,18 @@ import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 export async function offerWaitlistSpot(sessionId: string): Promise<void> {
   const adminClient = createAdminClient()
 
+  // Varre ofertas vencidas desta sessão antes de escolher o próximo. O cron
+  // (app/api/cron/waitlist-notifications) só roda 1x/dia por limite do plano
+  // Hobby da Vercel, então sem esta varredura preguiçosa uma oferta que venceu
+  // logo depois da passagem do cron ficava 'offered' por quase 24h — a pessoa
+  // já não podia aceitar (janela de 1h fechada) e a fila continuava parada nela.
+  await adminClient
+    .from('waitlists')
+    .update({ status: 'expired' as WaitlistStatus })
+    .eq('session_id', sessionId)
+    .eq('status', 'offered')
+    .lt('notified_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+
   // Find next 'waiting' entry (earliest joined_at is source of truth for queue order)
   const { data: next } = await adminClient
     .from('waitlists')
@@ -97,7 +109,9 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
 // joinWaitlist — student joins the waitlist for a full session
 // ---------------------------------------------------------------------------
 
-export async function joinWaitlist(sessionId: string): Promise<{ error?: string }> {
+export async function joinWaitlist(
+  sessionId: string,
+): Promise<{ error?: string; position?: number }> {
   const supabase = createClient()
   const {
     data: { user },
@@ -171,6 +185,16 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
     return { error: 'Você já está na lista de espera desta sessão.' }
   }
 
+  // Entradas mortas (saiu da fila / perdeu o prazo) de tentativas anteriores.
+  // A unicidade hoje é parcial (só status ativos), mas limpar mantém o histórico
+  // da sessão enxuto e evita depender da versão do índice em cada ambiente.
+  await adminClient
+    .from('waitlists')
+    .delete()
+    .eq('session_id', sessionId)
+    .eq('student_id', user.id)
+    .in('status', ['cancelled', 'expired'])
+
   // Calculate position (count of active waitlist entries + 1)
   const { count: activeCount } = await adminClient
     .from('waitlists')
@@ -194,9 +218,42 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
 
   if (insertErr) return { error: 'Erro ao entrar na lista de espera. Tente novamente.' }
 
+  // Confirmação de entrada na fila: sem isto o aluno só recebe notificação se e
+  // quando uma vaga abrir, e fica sem saber se a entrada valeu nem que lugar pegou.
+  // Best-effort — a fila já está gravada, notificação não pode derrubar a ação.
+  try {
+    const { data: sessionInfo } = await adminClient
+      .from('class_sessions')
+      .select('session_date, class:classes(name)')
+      .eq('id', sessionId)
+      .single()
+    const clsRaw = Array.isArray(sessionInfo?.class) ? sessionInfo!.class[0] : sessionInfo?.class
+    const className = (clsRaw as { name: string } | null)?.name ?? 'sua aula'
+
+    await notifyUsers(adminClient, {
+      orgId,
+      recipients: [{ userId: user.id }],
+      type: 'waitlist_joined',
+      title: 'Você entrou na lista de espera',
+      body:
+        `Você é o ${position}º da fila em ${className} (${sessionInfo?.session_date}). ` +
+        'Se abrir uma vaga, avisamos e você terá 1 hora para confirmar.',
+      channels: ['inapp', 'push'],
+    })
+  } catch (err) {
+    console.error('[joinWaitlist] notifyUsers falhou', {
+      sessionId, studentId: user.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { channel: 'dispatch', notificationType: 'waitlist_joined' },
+      extra: { sessionId, studentId: user.id },
+    })
+  }
+
   revalidatePath('/home')
   revalidatePath('/agendar')
-  return {}
+  return { position }
 }
 
 // ---------------------------------------------------------------------------

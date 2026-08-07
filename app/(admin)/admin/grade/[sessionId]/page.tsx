@@ -7,6 +7,8 @@ import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
 import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
 import { addStudentToSession } from '@/features/aulas/adminActions'
+import { getSessionWaitlist } from '@/features/aulas/waitlistQueries'
+import { WaitlistPanel } from '@/features/aulas/WaitlistPanel'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { recordCheckin } from '@/features/checkin/actions'
 import { countOpenMissedCheckinsByStudent } from '@/features/checkin/missedCheckinSettings'
@@ -255,6 +257,8 @@ export default async function SessionDetailPage({ params }: Props) {
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
+  const waitlist = await getSessionWaitlist(adminClient, params.sessionId, orgId)
+
   const isToday = typedSession.session_date === brtToday(new Date())
 
   return (
@@ -280,6 +284,8 @@ export default async function SessionDetailPage({ params }: Props) {
         students={addableStudents}
         onAdd={addStudentToSession}
       />
+
+      <WaitlistPanel entries={waitlist} />
 
       {students.length === 0 && typedSession.status !== 'completed' ? (
         <div className="border border-dashed border-surface-border rounded-xl p-5 text-center space-y-3">
