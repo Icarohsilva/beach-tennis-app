@@ -290,6 +290,36 @@ export default async function HomePage() {
     ])
   }
 
+  // Fila de espera das sessões da semana, em ordem de chegada. A ordem vem de
+  // joined_at (a coluna `position` nunca é recalculada, então fica defasada).
+  // Erro aqui degrada para fila vazia de propósito: em ambiente sem a tabela
+  // `waitlists` a agenda inteira não pode quebrar por causa disso.
+  const { data: weekWaitlistRaw } = weekSessionIds.length > 0
+    ? await adminClient
+        .from('waitlists')
+        .select('id, session_id, student_id, joined_at, profiles(full_name)')
+        .in('session_id', weekSessionIds)
+        .in('status', ['waiting', 'offered'])
+        .order('joined_at', { ascending: true })
+    : { data: [] }
+
+  const waitlistBySession = new Map<string, string[]>()
+  // sessionId → id da MINHA entrada na fila, para conseguir sair pela ficha.
+  const myWaitlistBySession = new Map<string, string>()
+  for (const w of (weekWaitlistRaw ?? []) as unknown as {
+    id: string
+    session_id: string
+    student_id: string
+    profiles: { full_name: string } | { full_name: string }[] | null
+  }[]) {
+    const p = Array.isArray(w.profiles) ? w.profiles[0] : w.profiles
+    waitlistBySession.set(w.session_id, [
+      ...(waitlistBySession.get(w.session_id) ?? []),
+      p?.full_name ?? 'Aluno',
+    ])
+    if (w.student_id === user.id) myWaitlistBySession.set(w.session_id, w.id)
+  }
+
   /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram. */
   function attendeesOf(sessionId: string, classId: string): string[] {
     return mergeSessionAttendees({
@@ -358,6 +388,8 @@ export default async function HomePage() {
         kids: cls.type === 'kids',
         sport: cls.sport ?? null,
         attendees: attendeesOf(row.id, row.class_id),
+        waitlist: waitlistBySession.get(row.id) ?? [],
+        waitlistEntryId: myWaitlistBySession.get(row.id),
         bookingId: myBooking?.id,
         fromEnrollment: myBooking?.fromEnrollment,
         selfCheckin: selfCheckinViews.get(row.id),

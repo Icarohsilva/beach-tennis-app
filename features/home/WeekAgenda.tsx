@@ -29,6 +29,10 @@ export interface AgendaSession {
   sport: string | null
   /** Nomes de quem é esperado na aula (fixos + reservas). */
   attendees: string[]
+  /** Nomes de quem está na fila de espera, em ordem de chegada. */
+  waitlist: string[]
+  /** Entrada do aluno na fila desta sessão, quando existe — necessária para sair. */
+  waitlistEntryId?: string
   /** Reserva do aluno nesta sessão, quando existe — necessária para sair. */
   bookingId?: string
   /** A reserva do aluno veio da matrícula fixa (sai devolvendo crédito). */
