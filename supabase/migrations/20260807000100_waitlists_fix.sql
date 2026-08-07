@@ -9,12 +9,18 @@
 --    finalmente existir em todo ambiente.
 --
 -- 2) `unique(session_id, student_id)` era global: quem entrava na fila e saía
---    (status 'cancelled'), ou perdia o prazo de 1h ('expired'), ficava com a
---    linha morta no banco e NUNCA mais conseguia voltar para a fila daquela
---    sessão — o insert batia na constraint e devolvia o erro genérico
---    "Erro ao entrar na lista de espera". Trocado por um índice único PARCIAL,
---    que só vale para os status ativos ('waiting','offered'): uma pessoa tem no
---    máximo uma posição ativa, mas pode reentrar depois de sair.
+--    (status 'cancelled'), ou perdia o prazo ('expired'), ficava com a linha
+--    morta no banco e NUNCA mais conseguia voltar para a fila daquela sessão —
+--    o insert batia na constraint e devolvia o erro genérico "Erro ao entrar na
+--    lista de espera". Trocado por um índice único PARCIAL, que só vale para os
+--    status ativos ('waiting','offered'): uma pessoa tem no máximo uma posição
+--    ativa, mas pode reentrar depois de sair.
+--
+-- Nota sobre os status: a vaga não é mais oferecida a uma pessoa por vez. Ao
+-- abrir vaga, a fila inteira é avisada e quem entrar primeiro fica com ela (a
+-- corrida é resolvida em book_session_atomic). Por isso 'offered'/'expired' não
+-- são mais gravados pelo app — ficam no CHECK só para não invalidar linhas
+-- antigas de ambientes que já rodavam o modelo anterior.
 
 create table if not exists waitlists (
   id uuid primary key default gen_random_uuid(),

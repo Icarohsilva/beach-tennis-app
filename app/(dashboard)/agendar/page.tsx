@@ -277,7 +277,7 @@ export default async function AgendarPage({
   // Waitlist counts per next session. Traz student_id/joined_at para derivar
   // também a posição REAL do aluno na fila: a coluna `position` é gravada na
   // entrada e nunca recalculada, então fica defasada assim que alguém sai.
-  // offerWaitlistSpot ordena por joined_at — a mesma fonte usada aqui.
+  // notifyWaitlistSpotOpen ordena por joined_at — a mesma fonte usada aqui.
   const { data: waitlistCountsRaw } = nextSessionIds.length > 0
     ? await adminClient
         .from('waitlists')

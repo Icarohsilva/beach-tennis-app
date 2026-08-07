@@ -18,8 +18,8 @@ export function WaitlistPanel({ entries }: { entries: WaitlistRow[] }) {
         <Badge variant="default">{entries.length}</Badge>
       </div>
       <p className="mb-4 text-xs text-slate-400">
-        Em ordem de chegada. Quando alguém cancela, a vaga é oferecida
-        automaticamente ao primeiro da fila, que tem 1 hora para confirmar.
+        Em ordem de chegada. Quando alguém cancela, todos aqui são avisados na
+        hora e a vaga fica com quem entrar primeiro.
       </p>
 
       <ul className="divide-y divide-surface-border">
@@ -31,16 +31,10 @@ export function WaitlistPanel({ entries }: { entries: WaitlistRow[] }) {
               </span>
               <span className="truncate text-sm text-white">{e.fullName}</span>
             </span>
-            {e.status === 'offered' ? (
-              <span className="shrink-0 text-xs font-semibold text-brand-400">
-                Vaga oferecida
-                {e.offerDeadline ? ` · até ${timeOnly(e.offerDeadline)}` : ''}
-              </span>
-            ) : (
-              <span className="shrink-0 text-xs text-slate-500">
-                Entrou {timeOnly(e.joinedAt)}
-              </span>
-            )}
+            <span className="shrink-0 text-xs text-slate-500">
+              Entrou {timeOnly(e.joinedAt)}
+              {e.notifiedAt ? ` · avisado ${timeOnly(e.notifiedAt)}` : ''}
+            </span>
           </li>
         ))}
       </ul>

@@ -11,22 +11,20 @@ export interface WaitlistRow {
   studentId: string
   fullName: string
   status: Extract<WaitlistStatus, 'waiting' | 'offered'>
-  /** Posição na fila (1 = próximo), derivada de joined_at. */
+  /** Ordem de chegada (1 = entrou primeiro). Não dá prioridade: a vaga é de
+   *  quem entrar primeiro quando abre — serve só para o professor ler a fila. */
   position: number
   joinedAt: string
+  /** Quando esta pessoa foi avisada da última vaga aberta. */
   notifiedAt: string | null
-  /** Prazo final para aceitar (só quando status = 'offered'). */
-  offerDeadline: string | null
 }
 
 /**
  * Fila ativa de uma sessão, em ordem de chegada.
  *
- * A posição é DERIVADA de joined_at, não lida da coluna `position`: aquela
- * coluna é gravada na entrada e nunca recalculada, então fica defasada assim
- * que alguém sai da fila. offerWaitlistSpot também ordena por joined_at — usar
- * a mesma fonte aqui garante que a tela do professor mostre exatamente a ordem
- * em que as vagas serão oferecidas.
+ * A ordem é DERIVADA de joined_at, não lida da coluna `position`: aquela coluna
+ * é gravada na entrada e nunca recalculada, então fica defasada assim que
+ * alguém sai da fila.
  */
 export async function getSessionWaitlist(
   client: AdminClient,
@@ -72,9 +70,5 @@ export async function getSessionWaitlist(
     position: i + 1,
     joinedAt: r.joined_at,
     notifiedAt: r.notified_at,
-    offerDeadline:
-      r.status === 'offered' && r.notified_at
-        ? new Date(new Date(r.notified_at).getTime() + 60 * 60 * 1000).toISOString()
-        : null,
   }))
 }
