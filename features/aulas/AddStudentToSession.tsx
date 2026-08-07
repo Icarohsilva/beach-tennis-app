@@ -23,7 +23,12 @@ interface Props {
     studentId: string,
     reason: AddStudentReason,
     force?: boolean,
-  ) => Promise<{ error?: string; quotaBlocked?: boolean; missedBlocked?: boolean }>
+  ) => Promise<{
+    error?: string
+    quotaBlocked?: boolean
+    missedBlocked?: boolean
+    fullBlocked?: boolean
+  }>
 }
 
 const REASONS: { value: AddStudentReason; label: string; hint: string }[] = [
@@ -40,6 +45,9 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   // botão precisa dizer o que está sendo furado.
   const [quotaBlocked, setQuotaBlocked] = useState(false)
   const [missedBlocked, setMissedBlocked] = useState(false)
+  // Turma no limite. Furável de propósito: falta não devolve vaga, então o
+  // professor precisa poder passar da capacidade para repor quem faltou.
+  const [fullBlocked, setFullBlocked] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   const selected = students.find((s) => s.id === studentId)
@@ -53,6 +61,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
     setError(null)
     setQuotaBlocked(false)
     setMissedBlocked(false)
+    setFullBlocked(false)
   }
 
   function handleAdd(force = false) {
@@ -64,11 +73,13 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
         setError(result.error)
         setQuotaBlocked(!!result.quotaBlocked)
         setMissedBlocked(!!result.missedBlocked)
+        setFullBlocked(!!result.fullBlocked)
       } else {
         setStudentId('')
         setReason('experimental')
         setQuotaBlocked(false)
         setMissedBlocked(false)
+        setFullBlocked(false)
       }
     })
   }
@@ -123,7 +134,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
 
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
 
-      {quotaBlocked || missedBlocked ? (
+      {quotaBlocked || missedBlocked || fullBlocked ? (
         <Button
           size="sm"
           variant="danger"
@@ -131,7 +142,11 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
           onClick={() => handleAdd(true)}
           className="w-full"
         >
-          {missedBlocked ? 'Adicionar mesmo com pendência' : 'Adicionar mesmo assim'}
+          {fullBlocked
+            ? 'Adicionar mesmo com a turma cheia'
+            : missedBlocked
+              ? 'Adicionar mesmo com pendência'
+              : 'Adicionar mesmo assim'}
         </Button>
       ) : (
         <Button

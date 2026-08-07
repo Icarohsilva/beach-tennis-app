@@ -43,6 +43,11 @@ export interface StudentAttendance {
 interface AttendanceSheetProps {
   sessionId: string
   students: StudentAttendance[]
+  /**
+   * A aula já foi iniciada. Enquanto for false a chamada é só leitura: presença
+   * e falta só passam a valer depois que o professor inicia a aula.
+   */
+  classStarted: boolean
   onMark: (
     sessionId: string,
     studentId: string,
@@ -53,6 +58,12 @@ interface AttendanceSheetProps {
     studentId: string,
     partner: CheckinPartner,
   ) => Promise<{ error?: string }>
+  /** Tira o aluno só desta aula. refundCredit = devolver a aula a ele. */
+  onRemove: (
+    sessionId: string,
+    studentId: string,
+    refundCredit: boolean,
+  ) => Promise<{ error?: string; refunded?: boolean }>
 }
 
 const SOURCE_LABEL: Record<AttendanceSource, string> = {
@@ -82,8 +93,10 @@ const PARTNER_VARIANT: Record<CheckinPartner, 'success' | 'warning'> = {
 export function AttendanceSheet({
   sessionId,
   students,
+  classStarted,
   onMark,
   onRecordCheckin,
+  onRemove,
 }: AttendanceSheetProps) {
   const [attendanceMap, setAttendanceMap] = useState<
     Map<string, { status: 'present' | 'absent'; source: AttendanceSource }>
@@ -109,6 +122,10 @@ export function AttendanceSheet({
   // Confirmações do app revisadas nesta tela, por aluno.
   const [reviewedNow, setReviewedNow] = useState<Map<string, SelfCheckinStatus>>(new Map())
   const [pendingStudent, setPendingStudent] = useState<string | null>(null)
+  // Aluno em confirmação de remoção. O diálogo pergunta o que fazer com a aula
+  // dele: devolver (estorna o crédito) ou consumir (leva a falta e perde).
+  const [removing, setRemoving] = useState<StudentAttendance | null>(null)
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
   const [isPending, startTransition] = useTransition()
 
   function setError(studentId: string, message: string | null) {
@@ -139,6 +156,21 @@ export function AttendanceSheet({
         else next.delete(studentId)
         return next
       })
+    })
+  }
+
+  function handleRemove(studentId: string, refundCredit: boolean) {
+    setPendingStudent(studentId)
+    startTransition(async () => {
+      const result = await onRemove(sessionId, studentId, refundCredit)
+      setPendingStudent(null)
+      setRemoving(null)
+      if (result.error) {
+        setError(studentId, result.error)
+        return
+      }
+      setError(studentId, null)
+      setRemovedIds((prev) => new Set(prev).add(studentId))
     })
   }
 
@@ -191,8 +223,16 @@ export function AttendanceSheet({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm text-slate-400">
         <span>{students.length} alunos inscritos</span>
-        <span className="text-green-400">{presentCount} presentes</span>
+        {classStarted && <span className="text-green-400">{presentCount} presentes</span>}
       </div>
+
+      {!classStarted && (
+        <p className="rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-xs text-slate-400">
+          A chamada abre quando você iniciar a aula. Quem já fez check-in entra
+          como presente automaticamente. Até lá dá para remover quem avisou que
+          não vem e liberar a vaga.
+        </p>
+      )}
 
       {partnerStudents.length > 0 && (
         <p className="text-xs text-slate-400">
@@ -216,7 +256,7 @@ export function AttendanceSheet({
         <p className="text-slate-500 text-sm text-center py-6">Nenhum aluno inscrito nesta sessão.</p>
       ) : (
         <ul className="space-y-2">
-          {students.map(({
+          {students.filter((s) => !removedIds.has(s.student.id)).map(({
             student,
             wouldOweDebt,
             partner,
@@ -347,32 +387,145 @@ export function AttendanceSheet({
 
                 {/* Dois botões explícitos: "marcar quem não veio" é uma ação, não a
                     ausência de outra. O toggle único deixava ausente e não-marcado
-                    indistinguíveis. */}
-                <div className="flex shrink-0 gap-1.5">
-                  <Button
-                    variant={isPresent ? 'primary' : 'secondary'}
-                    size="sm"
-                    loading={rowPending}
-                    onClick={() => handleMark(student.id, true)}
-                    aria-pressed={isPresent}
+                    indistinguíveis. Só ficam ativos com a aula iniciada. */}
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  {classStarted && (
+                    <div className="flex gap-1.5">
+                      <Button
+                        variant={isPresent ? 'primary' : 'secondary'}
+                        size="sm"
+                        loading={rowPending}
+                        onClick={() => handleMark(student.id, true)}
+                        aria-pressed={isPresent}
+                      >
+                        Presente
+                      </Button>
+                      <Button
+                        variant={isAbsent ? 'danger' : 'secondary'}
+                        size="sm"
+                        loading={rowPending}
+                        onClick={() => handleMark(student.id, false)}
+                        aria-pressed={isAbsent}
+                      >
+                        Faltou
+                      </Button>
+                    </div>
+                  )}
+                  {hasCheckin && !classStarted && (
+                    <span className="text-xs text-green-400">✓ check-in feito</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={rowPending}
+                    onClick={() => setRemoving(students.find((s) => s.student.id === student.id) ?? null)}
+                    className="text-xs text-red-400 underline hover:text-red-300 disabled:opacity-50"
                   >
-                    Presente
-                  </Button>
-                  <Button
-                    variant={isAbsent ? 'danger' : 'secondary'}
-                    size="sm"
-                    loading={rowPending}
-                    onClick={() => handleMark(student.id, false)}
-                    aria-pressed={isAbsent}
-                  >
-                    Faltou
-                  </Button>
+                    Remover da aula
+                  </button>
                 </div>
               </li>
             )
           })}
         </ul>
       )}
+
+      {removing && (
+        <RemoveStudentDialog
+          student={removing}
+          pending={isPending}
+          onCancel={() => setRemoving(null)}
+          onConfirm={(refund) => handleRemove(removing.student.id, refund)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Confirmação de remoção. O professor precisa dizer o que acontece com a aula
+ * do aluno, porque as duas saídas são legítimas: quem avisou que não vem merece
+ * a aula de volta; quem simplesmente não apareceu consome a aula.
+ */
+function RemoveStudentDialog({
+  student,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  student: StudentAttendance
+  pending: boolean
+  onCancel: () => void
+  onConfirm: (refundCredit: boolean) => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="remove-student-title"
+    >
+      <button
+        type="button"
+        aria-label="Cancelar"
+        onClick={onCancel}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+      />
+      <div className="relative w-full max-w-sm rounded-2xl border border-surface-border bg-surface-card p-5 shadow-2xl">
+        <h3 id="remove-student-title" className="text-base font-bold text-white">
+          Remover {student.student.full_name} desta aula?
+        </h3>
+        <p className="mt-1 text-xs text-slate-400">
+          Sai só desta aula. A matrícula e as próximas datas continuam como estão,
+          e a vaga é liberada para a fila de espera.
+        </p>
+
+        <div className="mt-4 space-y-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm(true)}
+            className="w-full rounded-xl border border-surface-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-brand-500/60 disabled:opacity-50"
+          >
+            <span className="block text-sm font-semibold text-white">
+              Devolver a aula e dar falta
+            </span>
+            <span className="block text-xs text-slate-400">
+              O aluno recebe o crédito de volta para remarcar.
+            </span>
+          </button>
+
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm(false)}
+            className="w-full rounded-xl border border-surface-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-red-500/60 disabled:opacity-50"
+          >
+            <span className="block text-sm font-semibold text-white">
+              Só dar falta, consumindo a aula
+            </span>
+            <span className="block text-xs text-slate-400">
+              O aluno não recebe nada de volta.
+            </span>
+          </button>
+        </div>
+
+        {/* Sem crédito nesta data as duas opções fazem a mesma coisa. Dizer isso
+            evita o professor achar que "devolver" gera um crédito do nada. */}
+        <p className="mt-3 text-[11px] text-slate-500">
+          A devolução só vale para aula paga com crédito. Aluno de plano ou de
+          parceiro não consome crédito nesta data, então as duas opções apenas
+          registram a falta.
+        </p>
+
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="mt-3 w-full text-center text-xs text-slate-400 underline hover:text-slate-300 disabled:opacity-50"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   )
 }

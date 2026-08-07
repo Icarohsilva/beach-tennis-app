@@ -6,7 +6,7 @@ import { AttendanceSheet } from '@/features/aulas/AttendanceSheet'
 import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
 import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
-import { addStudentToSession } from '@/features/aulas/adminActions'
+import { addStudentToSession, removeStudentFromSession } from '@/features/aulas/adminActions'
 import { getSessionWaitlist } from '@/features/aulas/waitlistQueries'
 import { WaitlistPanel } from '@/features/aulas/WaitlistPanel'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
@@ -259,6 +259,17 @@ export default async function SessionDetailPage({ params }: Props) {
 
   const waitlist = await getSessionWaitlist(adminClient, params.sessionId, orgId)
 
+  const { data: orgRow } = await adminClient
+    .from('organizations')
+    .select('name')
+    .eq('id', orgId)
+    .maybeSingle()
+  const orgName = (orgRow as { name: string } | null)?.name ?? 'sua academia'
+
+  // Aula concluída também conta como iniciada: a chamada já foi feita e o
+  // professor ainda precisa poder corrigir uma marcação errada.
+  const classStarted = !!typedSession.started_at || typedSession.status === 'completed'
+
   const isToday = typedSession.session_date === brtToday(new Date())
 
   return (
@@ -285,7 +296,13 @@ export default async function SessionDetailPage({ params }: Props) {
         onAdd={addStudentToSession}
       />
 
-      <WaitlistPanel entries={waitlist} />
+      <WaitlistPanel
+        entries={waitlist}
+        orgName={orgName}
+        className={cls.name}
+        sessionDate={typedSession.session_date}
+        startTime={cls.start_time}
+      />
 
       {students.length === 0 && typedSession.status !== 'completed' ? (
         <div className="border border-dashed border-surface-border rounded-xl p-5 text-center space-y-3">
@@ -303,17 +320,22 @@ export default async function SessionDetailPage({ params }: Props) {
         </div>
       ) : (
         <>
-          <AttendanceSheet
-            sessionId={params.sessionId}
-            students={students}
-            onMark={markAttendance}
-            onRecordCheckin={recordCheckin}
-          />
-
+          {/* Iniciar vem ANTES da lista: é a ação que abre a chamada, e sem ela
+              presença/falta ficam travadas (ver AttendanceSheet). */}
           <StartClassClient
             sessionId={params.sessionId}
             students={students}
             isCompleted={typedSession.status === 'completed'}
+            startedAt={typedSession.started_at}
+          />
+
+          <AttendanceSheet
+            sessionId={params.sessionId}
+            students={students}
+            classStarted={classStarted}
+            onMark={markAttendance}
+            onRecordCheckin={recordCheckin}
+            onRemove={removeStudentFromSession}
           />
         </>
       )}

@@ -193,6 +193,8 @@ export interface ClassSession {
   session_date: string // YYYY-MM-DD
   status: SessionStatus
   notes: string | null
+  /** Quando o professor iniciou a aula. Null = chamada ainda só leitura. */
+  started_at: string | null
 }
 
 export interface Enrollment {

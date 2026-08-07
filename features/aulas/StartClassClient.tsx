@@ -2,9 +2,11 @@
 // features/aulas/StartClassClient.tsx
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils/cn'
 import { markAttendanceBulk } from './actions'
+import { startClass } from './adminActions'
 import type { CheckinPartner } from '@/types'
 
 interface Student {
@@ -23,16 +25,43 @@ interface Props {
   sessionId: string
   students: Student[]
   isCompleted: boolean
+  /** Quando a aula foi iniciada. Null = ainda não iniciada. */
+  startedAt: string | null
 }
 
 type Phase = 'idle' | 'calling' | 'done'
 
-export function StartClassClient({ sessionId, students, isCompleted }: Props) {
+export function StartClassClient({ sessionId, students, isCompleted, startedAt }: Props) {
+  const router = useRouter()
   const allIds = students.map((s) => s.student.id)
-  const [phase, setPhase] = useState<Phase>(isCompleted ? 'done' : 'idle')
-  const [presentIds, setPresentIds] = useState<Set<string>>(new Set(allIds))
+  const [phase, setPhase] = useState<Phase>(
+    isCompleted ? 'done' : startedAt ? 'calling' : 'idle',
+  )
+  // Quem já tem check-in entra presente; o resto o professor confirma. Antes
+  // todo mundo vinha presente por padrão, o que transformava esquecimento em
+  // presença — e presença de parceiro sem check-in é repasse perdido.
+  const [presentIds, setPresentIds] = useState<Set<string>>(
+    () => new Set(students.filter((s) => s.checkedInToday).map((s) => s.student.id)),
+  )
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [autoPresent, setAutoPresent] = useState<number | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  function handleStart() {
+    setErrorMsg(null)
+    startTransition(async () => {
+      const result = await startClass(sessionId)
+      if (result.error) {
+        setErrorMsg(result.error)
+        return
+      }
+      setAutoPresent(result.autoPresent ?? 0)
+      setPhase('calling')
+      // A chamada destrava no servidor (started_at) — recarrega para a lista
+      // vir com as presenças automáticas já aplicadas.
+      router.refresh()
+    })
+  }
 
   function toggleStudent(id: string) {
     setPresentIds((prev) => {
@@ -73,10 +102,15 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="pt-2">
-        <Button onClick={() => setPhase('calling')} variant="primary">
+      <div className="space-y-2 pt-2">
+        <Button onClick={handleStart} variant="primary" loading={isPending} disabled={isPending}>
           Iniciar Aula
         </Button>
+        <p className="text-xs text-slate-400">
+          Ao iniciar, quem já fez check-in entra como presente e a chamada abre
+          para você ajustar o resto.
+        </p>
+        {errorMsg && <p className="text-sm text-red-400">{errorMsg}</p>}
       </div>
     )
   }
@@ -85,6 +119,14 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-white">Chamada</h2>
+
+      {autoPresent !== null && (
+        <p className="text-xs text-green-400">
+          {autoPresent > 0
+            ? `${autoPresent} aluno${autoPresent !== 1 ? 's' : ''} com check-in ${autoPresent !== 1 ? 'entraram' : 'entrou'} como presente.`
+            : 'Ninguém tinha check-in registrado. Marque a presença na mão.'}
+        </p>
+      )}
 
       <div className="space-y-2">
         {students.map(({ student, wouldOweDebt, partner, checkedInToday }) => {

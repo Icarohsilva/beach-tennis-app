@@ -24,6 +24,7 @@ import {
 } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
+import { notifyWaitlistSpotOpen } from './waitlistActions'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
@@ -601,7 +602,13 @@ export async function addStudentToSession(
   studentId: string,
   reason: AddStudentReason,
   force = false,
-): Promise<{ error?: string; quotaBlocked?: boolean; missedBlocked?: boolean }> {
+): Promise<{
+  error?: string
+  quotaBlocked?: boolean
+  missedBlocked?: boolean
+  /** Turma no limite: o professor pode repetir com force para exceder. */
+  fullBlocked?: boolean
+}> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
@@ -722,17 +729,25 @@ export async function addStudentToSession(
 
   const useCredit = 'grant' in decision && decision.grant === 'credit'
 
+  // Capacidade: com force o professor passa do limite da turma de propósito.
+  // Ele precisa disso porque uma falta não devolve a vaga para o aluno seguinte
+  // — sem poder exceder, uma turma cheia de faltosos ficaria bloqueada. O teto
+  // vira Infinity via um número alto; a RPC continua atômica quanto ao resto.
+  const capacity = force ? Number.MAX_SAFE_INTEGER : cls.max_students
+
   const { error: bookErr } = await adminClient.rpc('book_session_atomic', {
     p_student_id: studentId,
     p_session_id: sessionId,
-    p_max_students: cls.max_students,
+    p_max_students: capacity,
     p_type: 'extra',
     p_from_enrollment: false,
     p_credit_used: useCredit,
   })
 
   if (bookErr) {
-    if (bookErr.message.includes('SESSION_FULL')) return { error: 'Esta turma está lotada.' }
+    if (bookErr.message.includes('SESSION_FULL')) {
+      return { error: 'Esta turma está lotada.', fullBlocked: true }
+    }
     if (bookErr.message.includes('ALREADY_BOOKED')) return { error: 'Aluno já está nesta aula.' }
     return { error: 'Erro ao adicionar o aluno.' }
   }
@@ -795,6 +810,220 @@ export async function addStudentToSession(
 
   revalidatePath(`/admin/grade/${sessionId}`)
   return {}
+}
+
+// ---------------------------------------------------------------------------
+// startClass — abre a chamada e dá presença a quem já tem check-in
+// ---------------------------------------------------------------------------
+
+/**
+ * Marca a aula como iniciada e registra presença automática para quem já tem
+ * check-in do dia (parceiro Wellhub/TotalPass ou confirmação validada no app).
+ *
+ * Antes disto a chamada é só leitura: presença e falta só passam a valer depois
+ * que o professor inicia a aula, para não haver falta registrada em aula que
+ * ainda nem começou. Idempotente — reiniciar não duplica presença nem
+ * sobrescreve o que o professor já ajustou na mão.
+ */
+export async function startClass(
+  sessionId: string,
+): Promise<{ error?: string; autoPresent?: number }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  const adminClient = createAdminClient()
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date, started_at, status')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!session) return { error: 'Sessão não encontrada.' }
+  if ((session as { status: string }).status === 'cancelled') {
+    return { error: 'Esta aula foi cancelada.' }
+  }
+
+  const sessionDate = (session as { session_date: string }).session_date
+
+  if (!(session as { started_at: string | null }).started_at) {
+    const { error: startErr } = await adminClient
+      .from('class_sessions')
+      .update({ started_at: new Date().toISOString() })
+      .eq('id', sessionId)
+      .eq('organization_id', orgId)
+    if (startErr) return { error: 'Erro ao iniciar a aula. Tente novamente.' }
+  }
+
+  // Quem está na aula: reservas confirmadas + fixos que não avisaram falta.
+  const { data: bookingRows } = await adminClient
+    .from('session_bookings')
+    .select('student_id, status')
+    .eq('session_id', sessionId)
+    .eq('organization_id', orgId)
+    .in('status', ['confirmed', 'cancelled'])
+
+  const rows = (bookingRows ?? []) as { student_id: string; status: string }[]
+  const expected = new Set(rows.filter((b) => b.status === 'confirmed').map((b) => b.student_id))
+
+  // Check-ins do dia (parceiro) e confirmações validadas pelo app. Ambos são
+  // presença de fato — o professor não deveria ter que remarcar na mão.
+  const [{ data: checkinRows }, { data: selfRows }] = await Promise.all([
+    adminClient
+      .from('checkins')
+      .select('student_id')
+      .eq('organization_id', orgId)
+      .eq('checkin_date', sessionDate),
+    adminClient
+      .from('self_checkins')
+      .select('student_id')
+      .eq('organization_id', orgId)
+      .eq('session_id', sessionId)
+      .eq('status', 'validated'),
+  ])
+
+  const checkedIn = new Set<string>()
+  for (const c of (checkinRows ?? []) as { student_id: string }[]) {
+    if (expected.has(c.student_id)) checkedIn.add(c.student_id)
+  }
+  for (const s of (selfRows ?? []) as { student_id: string }[]) {
+    if (expected.has(s.student_id)) checkedIn.add(s.student_id)
+  }
+
+  if (checkedIn.size === 0) {
+    revalidatePath(`/admin/grade/${sessionId}`)
+    return { autoPresent: 0 }
+  }
+
+  // Não sobrescreve presença já registrada (ignoreDuplicates): se o professor
+  // ou o webhook do parceiro já marcou, aquela marcação continua valendo.
+  const { error: attErr } = await adminClient.from('attendance').upsert(
+    Array.from(checkedIn).map((studentId) => ({
+      organization_id: orgId,
+      session_id: sessionId,
+      student_id: studentId,
+      status: 'present',
+      source: 'manual',
+    })),
+    { onConflict: 'session_id,student_id', ignoreDuplicates: true },
+  )
+  if (attErr) {
+    console.error('[startClass] presença automática falhou', {
+      sessionId, error: attErr.message,
+    })
+  }
+
+  revalidatePath(`/admin/grade/${sessionId}`)
+  return { autoPresent: checkedIn.size }
+}
+
+// ---------------------------------------------------------------------------
+// removeStudentFromSession — tira o aluno SÓ desta aula
+// ---------------------------------------------------------------------------
+
+/**
+ * Remove o aluno desta sessão (e só dela: a matrícula fixa e as outras datas
+ * continuam intactas), registrando a falta e liberando a vaga.
+ *
+ * `refundCredit` é a escolha que o professor faz no diálogo de confirmação:
+ *   - true  → devolve a aula ao aluno (estorna o crédito consumido nesta data)
+ *   - false → a aula é consumida; o aluno leva a falta e não recebe nada de volta
+ *
+ * Só há o que estornar quando a reserva foi paga com crédito. Aluno de plano ou
+ * de parceiro não consome crédito nesta data, então as duas opções registram a
+ * mesma coisa para ele — a UI avisa isso para o professor não se enganar.
+ */
+export async function removeStudentFromSession(
+  sessionId: string,
+  studentId: string,
+  refundCredit: boolean,
+): Promise<{ error?: string; refunded?: boolean }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  const adminClient = createAdminClient()
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, class_id')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!session) return { error: 'Sessão não encontrada.' }
+
+  const { data: existingBooking } = await adminClient
+    .from('session_bookings')
+    .select('status, credit_used, from_enrollment')
+    .eq('student_id', studentId)
+    .eq('session_id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  const booking = existingBooking as
+    | { status: string; credit_used: boolean; from_enrollment: boolean }
+    | null
+
+  // Só devolve o que foi de fato consumido nesta data.
+  const hasCreditToRefund = booking?.status === 'confirmed' && booking?.credit_used === true
+
+  // Reserva 'cancelled' (unique student_id,session_id) marca a falta E impede a
+  // reconciliação de re-reservar o aluno nesta data. from_enrollment preservado:
+  // o fixo continua fixo, só não vem NESTA aula.
+  const { error: upsertErr } = await adminClient.from('session_bookings').upsert(
+    {
+      organization_id: orgId,
+      student_id: studentId,
+      session_id: sessionId,
+      status: 'cancelled',
+      from_enrollment: booking?.from_enrollment ?? true,
+      credit_used: false,
+      cancelled_at: new Date().toISOString(),
+    },
+    { onConflict: 'student_id,session_id' },
+  )
+  if (upsertErr) return { error: `Erro ao remover o aluno: ${upsertErr.message}` }
+
+  // Falta explícita na chamada — o professor tirou o aluno da aula, então a
+  // ausência fica registrada mesmo que a aula ainda não tenha sido iniciada.
+  const { error: attErr } = await adminClient.from('attendance').upsert(
+    {
+      organization_id: orgId,
+      session_id: sessionId,
+      student_id: studentId,
+      status: 'absent',
+      source: 'manual',
+    },
+    { onConflict: 'session_id,student_id' },
+  )
+  if (attErr) {
+    console.error('[removeStudentFromSession] falha ao registrar falta', {
+      sessionId, studentId, error: attErr.message,
+    })
+  }
+
+  let refunded = false
+  if (refundCredit && hasCreditToRefund) {
+    const { error: creditErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_org: orgId,
+      p_delta: 1,
+      p_type: 'refunded',
+      p_reason: 'Removido da aula pelo professor: crédito devolvido',
+      p_session_id: sessionId,
+    })
+    if (creditErr) {
+      console.error('[removeStudentFromSession] adjust_credits falhou', {
+        studentId, sessionId, error: creditErr.message,
+      })
+      return { error: 'Aluno removido, mas houve um erro ao devolver o crédito. Contate o suporte.' }
+    }
+    refunded = true
+  }
+
+  // Vaga liberada: avisa a fila de espera desta sessão.
+  await notifyWaitlistSpotOpen(sessionId)
+
+  revalidatePath(`/admin/grade/${sessionId}`)
+  revalidatePath('/admin/grade')
+  return { refunded }
 }
 
 // ---------------------------------------------------------------------------
