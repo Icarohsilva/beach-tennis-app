@@ -69,7 +69,7 @@ const PLANO_2X: PlanQuota = {
 }
 
 function confirmada(sessionDate: string): QuotaBooking {
-  return { sessionDate, status: 'confirmed', cancelledLate: false }
+  return { sessionDate, status: 'confirmed', cancelledLate: false, adminWaived: false }
 }
 
 describe('resolveQuota', () => {
@@ -111,7 +111,7 @@ describe('resolveQuota', () => {
     const r = resolveQuota({
       plan: plano,
       cycleWeeks: 4,
-      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: true }],
+      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: true, adminWaived: false }],
       fixedSessionsInCycle: 0,
     })
     expect(r.used).toBe(1)
@@ -121,7 +121,7 @@ describe('resolveQuota', () => {
     const r = resolveQuota({
       plan: PLANO_2X,
       cycleWeeks: 4,
-      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: true }],
+      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: true, adminWaived: false }],
       fixedSessionsInCycle: 0,
     })
     expect(r.used).toBe(0)
@@ -132,10 +132,35 @@ describe('resolveQuota', () => {
     const r = resolveQuota({
       plan: plano,
       cycleWeeks: 4,
-      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: false }],
+      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: false, adminWaived: false }],
       fixedSessionsInCycle: 0,
     })
     expect(r.used).toBe(0)
+  })
+
+  it('aula devolvida pelo professor não conta, mesmo cancelada em cima da hora', () => {
+    // O caso que motivou a flag: aluno de plano removido da aula pelo professor
+    // perto do horário. Sem a isenção isso queimaria a aula do ciclo dele.
+    const plano = { ...PLANO_2X, refundOnLateCancel: false }
+    const r = resolveQuota({
+      plan: plano,
+      cycleWeeks: 4,
+      bookings: [{ sessionDate: '2026-07-07', status: 'cancelled', cancelledLate: true, adminWaived: true }],
+      fixedSessionsInCycle: 0,
+    })
+    expect(r.used).toBe(0)
+    expect(r.remaining).toBe(8)
+  })
+
+  it('a isenção não ressuscita vaga de aula que o aluno usou', () => {
+    // adminWaived só vale para reserva cancelada. Presença é aula consumida.
+    const r = resolveQuota({
+      plan: PLANO_2X,
+      cycleWeeks: 4,
+      bookings: [{ sessionDate: '2026-07-07', status: 'confirmed', cancelledLate: false, adminWaived: true }],
+      fixedSessionsInCycle: 0,
+    })
+    expect(r.used).toBe(1)
   })
 
   it('remaining nunca fica negativo', () => {
@@ -155,7 +180,7 @@ describe('countOnDate', () => {
       confirmada('2026-07-28'),
       confirmada('2026-07-28'),
       confirmada('2026-07-29'),
-      { sessionDate: '2026-07-28', status: 'cancelled', cancelledLate: false },
+      { sessionDate: '2026-07-28', status: 'cancelled', cancelledLate: false, adminWaived: false },
     ]
     expect(countOnDate(bookings, '2026-07-28')).toBe(2)
   })

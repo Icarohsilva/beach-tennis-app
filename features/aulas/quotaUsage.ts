@@ -47,7 +47,9 @@ export async function getQuotaSnapshot(
 
   const { data: bookingsRaw } = await client
     .from('session_bookings')
-    .select('status, cancelled_at, class_sessions!inner(session_date, classes!inner(start_time))')
+    .select(
+      'status, cancelled_at, admin_waived, class_sessions!inner(session_date, classes!inner(start_time))',
+    )
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
     .gte('class_sessions.session_date', window.from)
@@ -57,6 +59,7 @@ export async function getQuotaSnapshot(
     (bookingsRaw ?? []) as unknown as {
       status: string
       cancelled_at: string | null
+      admin_waived: boolean | null
       class_sessions:
         | { session_date: string; classes: { start_time: string } | { start_time: string }[] }
         | { session_date: string; classes: { start_time: string } | { start_time: string }[] }[]
@@ -75,6 +78,7 @@ export async function getQuotaSnapshot(
         !confirmed && b.cancelled_at !== null
           ? !canCancelWithRefund(startIso, b.cancelled_at)
           : false,
+      adminWaived: b.admin_waived === true,
     }
   })
 

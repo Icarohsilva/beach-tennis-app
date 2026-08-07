@@ -58,12 +58,12 @@ interface AttendanceSheetProps {
     studentId: string,
     partner: CheckinPartner,
   ) => Promise<{ error?: string }>
-  /** Tira o aluno só desta aula. refundCredit = devolver a aula a ele. */
+  /** Tira o aluno só desta aula. giveBack = devolver a aula a ele. */
   onRemove: (
     sessionId: string,
     studentId: string,
-    refundCredit: boolean,
-  ) => Promise<{ error?: string; refunded?: boolean }>
+    giveBack: boolean,
+  ) => Promise<{ error?: string; refunded?: boolean; quotaWaived?: boolean }>
 }
 
 const SOURCE_LABEL: Record<AttendanceSource, string> = {
@@ -159,10 +159,10 @@ export function AttendanceSheet({
     })
   }
 
-  function handleRemove(studentId: string, refundCredit: boolean) {
+  function handleRemove(studentId: string, giveBack: boolean) {
     setPendingStudent(studentId)
     startTransition(async () => {
-      const result = await onRemove(sessionId, studentId, refundCredit)
+      const result = await onRemove(sessionId, studentId, giveBack)
       setPendingStudent(null)
       setRemoving(null)
       if (result.error) {
@@ -455,7 +455,7 @@ function RemoveStudentDialog({
   student: StudentAttendance
   pending: boolean
   onCancel: () => void
-  onConfirm: (refundCredit: boolean) => void
+  onConfirm: (giveBack: boolean) => void
 }) {
   return (
     <div
@@ -490,7 +490,7 @@ function RemoveStudentDialog({
               Devolver a aula e dar falta
             </span>
             <span className="block text-xs text-slate-400">
-              O aluno recebe o crédito de volta para remarcar.
+              O aluno fica com a aula para usar outro dia.
             </span>
           </button>
 
@@ -504,17 +504,17 @@ function RemoveStudentDialog({
               Só dar falta, consumindo a aula
             </span>
             <span className="block text-xs text-slate-400">
-              O aluno não recebe nada de volta.
+              A aula é gasta: não volta como crédito nem como saldo do plano.
             </span>
           </button>
         </div>
 
-        {/* Sem crédito nesta data as duas opções fazem a mesma coisa. Dizer isso
-            evita o professor achar que "devolver" gera um crédito do nada. */}
+        {/* A devolução existe nas duas moedas. Dizer qual vale para ESTE aluno
+            evita o professor achar que devolveu crédito para quem é de plano. */}
         <p className="mt-3 text-[11px] text-slate-500">
-          A devolução só vale para aula paga com crédito. Aluno de plano ou de
-          parceiro não consome crédito nesta data, então as duas opções apenas
-          registram a falta.
+          {student.partner
+            ? 'Como este aluno é de parceiro, devolver significa que a aula não entra na contagem do plano dele.'
+            : 'Se a aula foi paga com crédito, o crédito volta para o saldo. Se o aluno é de plano, ela não entra na contagem do ciclo.'}
         </p>
 
         <button

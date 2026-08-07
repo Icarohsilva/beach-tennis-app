@@ -924,19 +924,20 @@ export async function startClass(
  * Remove o aluno desta sessão (e só dela: a matrícula fixa e as outras datas
  * continuam intactas), registrando a falta e liberando a vaga.
  *
- * `refundCredit` é a escolha que o professor faz no diálogo de confirmação:
- *   - true  → devolve a aula ao aluno (estorna o crédito consumido nesta data)
- *   - false → a aula é consumida; o aluno leva a falta e não recebe nada de volta
+ * `giveBack` é a escolha do professor no diálogo de confirmação, e ela vale
+ * para todo tipo de aluno — o que muda é a moeda em que a aula é devolvida:
+ *   - quem pagou com crédito → o crédito volta para o saldo;
+ *   - quem é de plano ou parceiro → a aula não entra na contagem do ciclo
+ *     (admin_waived), ficando disponível para ele usar em outro dia.
  *
- * Só há o que estornar quando a reserva foi paga com crédito. Aluno de plano ou
- * de parceiro não consome crédito nesta data, então as duas opções registram a
- * mesma coisa para ele — a UI avisa isso para o professor não se enganar.
+ * Com `giveBack: false` a aula é consumida nas duas moedas: nada é estornado e
+ * a reserva conta na cota como cancelamento em cima da hora.
  */
 export async function removeStudentFromSession(
   sessionId: string,
   studentId: string,
-  refundCredit: boolean,
-): Promise<{ error?: string; refunded?: boolean }> {
+  giveBack: boolean,
+): Promise<{ error?: string; refunded?: boolean; quotaWaived?: boolean }> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
   const adminClient = createAdminClient()
@@ -976,6 +977,9 @@ export async function removeStudentFromSession(
       from_enrollment: booking?.from_enrollment ?? true,
       credit_used: false,
       cancelled_at: new Date().toISOString(),
+      // Isenta a aula da cota do ciclo. É o "devolver" de quem não tem crédito:
+      // sem isto a remoção perto do horário contaria como aula usada.
+      admin_waived: giveBack,
     },
     { onConflict: 'student_id,session_id' },
   )
@@ -1000,7 +1004,7 @@ export async function removeStudentFromSession(
   }
 
   let refunded = false
-  if (refundCredit && hasCreditToRefund) {
+  if (giveBack && hasCreditToRefund) {
     const { error: creditErr } = await adminClient.rpc('adjust_credits', {
       p_student_id: studentId,
       p_org: orgId,
@@ -1023,7 +1027,7 @@ export async function removeStudentFromSession(
 
   revalidatePath(`/admin/grade/${sessionId}`)
   revalidatePath('/admin/grade')
-  return { refunded }
+  return { refunded, quotaWaived: giveBack }
 }
 
 // ---------------------------------------------------------------------------
