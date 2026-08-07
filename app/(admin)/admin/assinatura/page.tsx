@@ -68,7 +68,7 @@ export default async function AssinaturaPage({
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
           <span>
             Recebemos seu retorno do Mercado Pago. A confirmação do pagamento pode levar
-            alguns instantes — atualize a página em um minuto.
+            alguns instantes. Atualize a página em um minuto.
           </span>
         </div>
       )}
@@ -90,7 +90,7 @@ export default async function AssinaturaPage({
             <Sparkles className="h-3.5 w-3.5" /> Primeiro mês grátis
           </p>
           <p className="mt-1 text-[11px] text-white/60">
-            Preço promocional válido durante a oferta de lançamento — reajustes, se houver, com
+            Preço promocional válido durante a oferta de lançamento. Reajustes, se houver, com
             aviso prévio.
           </p>
         </div>
@@ -110,7 +110,7 @@ export default async function AssinaturaPage({
               <>
                 <p className="text-sm text-slate-300">
                   Você está no <strong className="text-white">mês grátis</strong>. Faltam{' '}
-                  <strong className="text-brand-400">{dayLabel(access.daysLeft)}</strong> — assine
+                  <strong className="text-brand-400">{dayLabel(access.daysLeft)}</strong>, assine
                   para manter o painel ativo quando o período terminar.
                 </p>
                 {ctx.isOwner ? (

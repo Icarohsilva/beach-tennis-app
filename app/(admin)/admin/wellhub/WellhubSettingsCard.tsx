@@ -71,7 +71,7 @@ export function WellhubSettingsCard({ blockLimit, price, partnerRates }: Props) 
           <p className="text-xs text-slate-400">
             Ao atingir esse número de check-ins em aberto, o aluno para de conseguir
             agendar aula, deixa de ser vinculado na geração da grade, e as reservas
-            futuras dele são canceladas — as vagas voltam para a fila de espera.
+            futuras dele são canceladas. As vagas voltam para a fila de espera.
             Deixe <strong className="text-slate-300">0</strong> para não bloquear
             ninguém (as pendências continuam sendo registradas e cobradas).
           </p>

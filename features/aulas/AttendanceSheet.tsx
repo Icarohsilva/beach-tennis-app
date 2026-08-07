@@ -337,7 +337,7 @@ export function AttendanceSheet({
                     <p className="text-xs text-red-400 mt-1.5">
                       🔒 Aluno bloqueado
                       {missed.cancelledBookings > 0
-                        ? ` — ${missed.cancelledBookings} reserva(s) futura(s) cancelada(s)`
+                        ? `, ${missed.cancelledBookings} reserva(s) futura(s) cancelada(s)`
                         : ''}
                     </p>
                   )}

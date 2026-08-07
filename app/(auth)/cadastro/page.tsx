@@ -208,10 +208,10 @@ function CadastroInner() {
             href={`/login?convite=${encodeURIComponent(inviteCode)}`}
             className="w-full inline-flex items-center justify-center rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-3 text-sm transition-colors"
           >
-            Já tenho conta — Entrar
+            Já tenho conta · Entrar
           </Link>
           <Button onClick={() => setShowForm(true)} variant="secondary" size="lg" className="w-full">
-            É minha primeira vez — Criar conta
+            É minha primeira vez · Criar conta
           </Button>
         </div>
       </Card>

@@ -179,7 +179,7 @@ export default async function ConfiguracoesPage() {
       <div>
         <h2 className="text-lg font-bold text-white">Zona de risco</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Solicitar exclusão encerra sua conta de dono — nosso time entra em contato antes de
+          Solicitar exclusão encerra sua conta de dono. Nosso time entra em contato antes de
           processar.
         </p>
       </div>

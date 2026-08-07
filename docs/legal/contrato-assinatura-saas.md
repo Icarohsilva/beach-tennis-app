@@ -1,6 +1,6 @@
-# Contrato de Assinatura SaaS — ArenaHub
+# Contrato de Assinatura SaaS | ArenaHub
 
-**Versão 1 — vigente desde 24/07/2026**
+**Versão 1, vigente desde 24/07/2026**
 
 Este Contrato regula a assinatura da plataforma ArenaHub pela Academia (contratante), complementando os Termos de Uso e a Política de Privacidade.
 
@@ -12,7 +12,7 @@ O ArenaHub concede à Academia o direito de uso da plataforma de gestão (agenda
 
 2.1. O valor vigente da assinatura é de **R$ 49,90/mês**. Este é um **preço promocional de lançamento** e pode ser reajustado no futuro.
 
-2.2. Qualquer reajuste será feito **com aviso prévio** (mínimo de 30 dias) e seguirá **critério objetivo e pré-definido** (ex.: índice de inflação, ou tabela de preços comunicada previamente) — nunca um aumento unilateral e arbitrário, conforme o art. 39, X, e o art. 51 do Código de Defesa do Consumidor.
+2.2. Qualquer reajuste será feito **com aviso prévio** (mínimo de 30 dias) e seguirá **critério objetivo e pré-definido** (ex.: índice de inflação, ou tabela de preços comunicada previamente), e nunca um aumento unilateral e arbitrário, conforme o art. 39, X, e o art. 51 do Código de Defesa do Consumidor.
 
 2.3. Caso a Academia não concorde com o reajuste comunicado, poderá **rescindir o contrato sem multa**, encerrando a assinatura antes da data de vigência do novo preço.
 
@@ -34,7 +34,7 @@ Fora do prazo do item 5, a Academia pode cancelar a assinatura a qualquer moment
 
 ## 7. Inadimplência e suspensão
 
-Em caso de atraso ou falha no pagamento, o acesso ao **painel administrativo** da Academia é suspenso até a regularização. Os **Alunos da Academia continuam com acesso normal ao aplicativo** durante esse período — a suspensão afeta apenas a administração, não a experiência dos alunos.
+Em caso de atraso ou falha no pagamento, o acesso ao **painel administrativo** da Academia é suspenso até a regularização. Os **Alunos da Academia continuam com acesso normal ao aplicativo** durante esse período. A suspensão afeta apenas a administração, não a experiência dos alunos.
 
 ## 8. Dados após o cancelamento
 

@@ -203,7 +203,7 @@ export function NotificacoesClient() {
                   { value: 'all' as FilterMode, label: 'Todos os alunos ativos', disabled: false },
                   { value: 'by_level' as FilterMode, label: 'Por nível', disabled: false },
                   { value: 'by_plan' as FilterMode, label: 'Por tipo de plano', disabled: false },
-                  { value: 'pwa_only' as FilterMode, label: 'Somente alunos com PWA instalado — em breve', disabled: true },
+                  { value: 'pwa_only' as FilterMode, label: 'Somente alunos com PWA instalado (em breve)', disabled: true },
                 ] as const
               ).map((f) => (
                 <label

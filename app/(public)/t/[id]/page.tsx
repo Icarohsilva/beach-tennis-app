@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     .not('status', 'eq', 'draft')
     .single()
 
-  if (!t) return { title: 'Torneio — ArenaHub' }
+  if (!t) return { title: 'Torneio | ArenaHub' }
 
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
   const images = t.cover_image_url
@@ -276,7 +276,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
               {/* Na lista de espera */}
               {userEntry.entry_status === 'waitlist' && (
                 <span className="block bg-slate-800/60 text-slate-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
-                  🕐 Você está na lista de espera{waitlistPosition !== null ? ` — posição ${waitlistPosition}` : ''}
+                  🕐 Você está na lista de espera{waitlistPosition !== null ? `, posição ${waitlistPosition}` : ''}
                 </span>
               )}
 
@@ -310,7 +310,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                 href={`/login?next=/t/${t.id}`}
                 className="block w-full bg-gradient-to-r from-orange-600 to-orange-500 text-white text-center rounded-xl py-3 text-base font-semibold hover:from-orange-500 hover:to-orange-400 transition-all"
               >
-                {isPaid ? `Inscrever-se — ${formattedPrice}` : 'Inscrever-se'}
+                {isPaid ? `Inscrever-se · ${formattedPrice}` : 'Inscrever-se'}
               </Link>
               <p className="text-slate-500 text-xs text-center mt-2">
                 Precisa de uma conta?{' '}

@@ -20,7 +20,7 @@ export function generateStaticParams() {
 
 export function generateMetadata({ params }: { params: { manual: string } }): Metadata {
   const manual = MANUALS[params.manual as ManualKey]
-  return { title: manual ? `${manual.title} — ArenaHub` : 'Documentação — ArenaHub' }
+  return { title: manual ? `${manual.title} | ArenaHub` : 'Documentação | ArenaHub' }
 }
 
 function loadContent(file: string): string {

@@ -83,7 +83,7 @@ export function SessionModal({
       }
       setFeedback({
         kind: 'ok',
-        text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Avisamos se abrir vaga — quem entrar primeiro fica com ela.`,
+        text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Avisamos se abrir vaga. Quem entrar primeiro fica com ela.`,
       })
     })
   }
@@ -281,7 +281,7 @@ export function SessionModal({
                 </button>
               </div>
               <p className="text-xs text-slate-400">
-                Se alguém cancelar, avisamos todo mundo da fila — a vaga fica com
+                Se alguém cancelar, avisamos todo mundo da fila. A vaga fica com
                 quem entrar primeiro.
               </p>
             </div>
@@ -297,7 +297,7 @@ export function SessionModal({
                 Entrar na fila de espera
               </Button>
               <p className="text-center text-xs text-slate-400">
-                Turma lotada. Se alguém cancelar, avisamos todo mundo da fila — a
+                Turma lotada. Se alguém cancelar, avisamos todo mundo da fila. A
                 vaga fica com quem entrar primeiro.
               </p>
             </div>

@@ -43,7 +43,7 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold text-white">Relatório de frequência</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Quem está vindo às aulas. A presença é assumida para quem estava previsto — marque a
+            Quem está vindo às aulas. A presença é assumida para quem estava previsto. Marque a
             falta na chamada para corrigir.
           </p>
         </div>
@@ -102,8 +102,8 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
         <Reveal step={6} as="section">
           <SectionHeader title="Aulas sem chamada" />
           <p className="mb-3 text-xs text-slate-400">
-            Nestas aulas todo mundo entrou como presente. Se alguém faltou — ou a aula não
-            aconteceu — ajuste na chamada.
+            Nestas aulas todo mundo entrou como presente. Se alguém faltou, ou a aula não
+            aconteceu, ajuste na chamada.
           </p>
           <div className="space-y-2">
             {report.unrecorded.map((session) => (

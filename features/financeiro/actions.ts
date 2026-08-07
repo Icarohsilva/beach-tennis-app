@@ -272,7 +272,7 @@ export async function cancelSubscription(): Promise<{ error?: string }> {
       p_org: sub.organization_id,
       p_delta: -remaining,
       p_type: 'expired',
-      p_reason: 'Cancelamento de contrato — créditos expirados',
+      p_reason: 'Cancelamento de contrato: créditos expirados',
     })
     if (expireErr) {
       console.error('[cancelSubscription] adjust_credits falhou', {
@@ -354,7 +354,7 @@ export async function adminCancelStudentPlan(
         p_org: sub.organization_id,
         p_delta: -balance,
         p_type: 'expired',
-        p_reason: 'Cancelamento de plano pelo admin — créditos zerados',
+        p_reason: 'Cancelamento de plano pelo admin: créditos zerados',
       })
       if (expireErr) {
         console.error('[adminCancelStudentPlan] adjust_credits falhou', {

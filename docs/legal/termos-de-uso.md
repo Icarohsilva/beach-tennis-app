@@ -1,6 +1,6 @@
-# Termos de Uso — ArenaHub
+# Termos de Uso | ArenaHub
 
-**Versão 1 — vigente desde 24/07/2026**
+**Versão 1, vigente desde 24/07/2026**
 
 ## 1. Partes e definições
 
@@ -12,7 +12,7 @@ Estes Termos regulam o uso da plataforma **ArenaHub** (arenahub.website), operad
 
 ## 2. Objeto
 
-O ArenaHub é uma **plataforma de software (SaaS)** que fornece ferramentas de gestão de turmas, agendamento, controle de presença, créditos, cobrança e comunidade para Academias e seus Alunos. **O ArenaHub não é a Academia**: não presta serviços esportivos, não contrata professores, não é responsável pela qualidade das aulas, pela segurança física dos locais ou pela relação comercial entre Academia e Aluno — essas responsabilidades são inteiramente da Academia.
+O ArenaHub é uma **plataforma de software (SaaS)** que fornece ferramentas de gestão de turmas, agendamento, controle de presença, créditos, cobrança e comunidade para Academias e seus Alunos. **O ArenaHub não é a Academia**: não presta serviços esportivos, não contrata professores, não é responsável pela qualidade das aulas, pela segurança física dos locais ou pela relação comercial entre Academia e Aluno. Essas responsabilidades são inteiramente da Academia.
 
 ## 3. Cadastro e conta
 
@@ -46,11 +46,11 @@ Na máxima extensão permitida pela lei, o ArenaHub não se responsabiliza por: 
 
 ## 9. Suspensão e rescisão de conta
 
-O ArenaHub pode suspender ou encerrar contas em caso de violação destes Termos, fraude, inadimplência ou determinação legal, mediante aviso quando possível. O Usuário pode encerrar sua conta a qualquer momento — ver o fluxo de exclusão de conta disponível no perfil.
+O ArenaHub pode suspender ou encerrar contas em caso de violação destes Termos, fraude, inadimplência ou determinação legal, mediante aviso quando possível. O Usuário pode encerrar sua conta a qualquer momento. Ver o fluxo de exclusão de conta disponível no perfil.
 
 ## 10. Alterações destes Termos
 
-Estes Termos podem ser atualizados para refletir mudanças legais, técnicas ou de produto. Mudanças relevantes serão comunicadas com antecedência razoável, e o uso continuado da plataforma após a vigência da nova versão implica concordância — sem prejuízo do direito de rescisão previsto no Contrato de Assinatura SaaS, quando aplicável.
+Estes Termos podem ser atualizados para refletir mudanças legais, técnicas ou de produto. Mudanças relevantes serão comunicadas com antecedência razoável, e o uso continuado da plataforma após a vigência da nova versão implica concordância, sem prejuízo do direito de rescisão previsto no Contrato de Assinatura SaaS, quando aplicável.
 
 ## 11. Foro e legislação aplicável
 

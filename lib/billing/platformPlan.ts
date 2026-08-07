@@ -4,5 +4,5 @@
 export const PLATFORM_PLAN = {
   priceMonthly: 49.9,
   currency: 'BRL',
-  reason: 'ArenaHub — Assinatura Plataforma',
+  reason: 'ArenaHub · Assinatura Plataforma',
 } as const

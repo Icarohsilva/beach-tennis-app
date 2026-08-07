@@ -42,7 +42,7 @@ export function ClassForm({ orgSports }: { orgSports: string[] }) {
     <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
       <div>
         <label className="text-sm text-slate-400 block mb-1">Nome da turma *</label>
-        <Input name="name" required placeholder="Ex: Terça 18h — Intermediário" />
+        <Input name="name" required placeholder="Ex: Terça 18h · Intermediário" />
       </div>
       <div>
         <label className="text-sm text-slate-400 block mb-1">Descrição (opcional)</label>

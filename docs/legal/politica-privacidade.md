@@ -1,14 +1,14 @@
-# Política de Privacidade — ArenaHub
+# Política de Privacidade | ArenaHub
 
-**Versão 1 — vigente desde 24/07/2026**
+**Versão 1, vigente desde 24/07/2026**
 
-Esta Política explica como o ArenaHub trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei 13.709/2018).
+Esta Política explica como o ArenaHub trata dados pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD, Lei 13.709/2018).
 
 ## 1. Papéis no tratamento de dados
 
 Como o ArenaHub conecta Academias e seus Alunos, os papéis variam por tipo de dado:
 
-- **Dados do Aluno** (agendamentos, presença, créditos, dados de contato): a **Academia** é a **controladora** — ela decide quais dados coletar, para quê e por quanto tempo. O **ArenaHub atua como operador**, processando esses dados conforme as instruções e a configuração da Academia.
+- **Dados do Aluno** (agendamentos, presença, créditos, dados de contato): a **Academia** é a **controladora**: ela decide quais dados coletar, para quê e por quanto tempo. O **ArenaHub atua como operador**, processando esses dados conforme as instruções e a configuração da Academia.
 - **Finalidades próprias do ArenaHub** sobre os mesmos dados (retenção de taxa de intermediação de pagamento, prevenção a fraude, métricas de uso do produto, segurança da plataforma): para essas finalidades específicas, o **ArenaHub atua como controlador** (ou co-controlador, conforme o caso), e essa condição está detalhada no Acordo de Tratamento de Dados (DPA) firmado com cada Academia.
 - **Dados do dono/responsável pela Academia** (como cliente direto do ArenaHub): o **ArenaHub é controlador**.
 
@@ -16,7 +16,7 @@ Como o ArenaHub conecta Academias e seus Alunos, os papéis variam por tipo de d
 
 - **Identificação e contato**: nome completo, e-mail, telefone, CPF/CNPJ (da Academia).
 - **Dados de uso**: agendamentos, presença em aulas, créditos, histórico de pagamentos, participação em torneios e na comunidade.
-- **Dados de pagamento**: processados por parceiros de pagamento (Mercado Pago) — o ArenaHub não armazena dados completos de cartão.
+- **Dados de pagamento**: processados por parceiros de pagamento (Mercado Pago). O ArenaHub não armazena dados completos de cartão.
 - **Dados técnicos**: endereço IP e identificador de navegador, coletados no momento do aceite de termos (para fins de auditoria) e nos registros de acesso padrão de qualquer aplicação web.
 - **Dados de saúde/restrições médicas** (quando o Aluno opta por informar): tratados com base no consentimento específico do titular, usados apenas para segurança durante as atividades.
 
@@ -28,7 +28,7 @@ Viabilizar o agendamento e gestão de aulas; processar pagamentos e cobranças; 
 
 - **Execução de contrato**: agendamento de aulas, cobrança, gestão da matrícula.
 - **Cumprimento de obrigação legal/regulatória**: guarda de registros fiscais e de pagamento.
-- **Legítimo interesse**: prevenção a fraude, segurança da plataforma, métricas agregadas de produto — sempre com avaliação de proporcionalidade e sem prejuízo aos direitos do titular.
+- **Legítimo interesse**: prevenção a fraude, segurança da plataforma, métricas agregadas de produto, sempre com avaliação de proporcionalidade e sem prejuízo aos direitos do titular.
 - **Consentimento**: dados de saúde/restrições médicas informados voluntariamente; comunicações de marketing, quando aplicável.
 
 ## 5. Compartilhamento com terceiros

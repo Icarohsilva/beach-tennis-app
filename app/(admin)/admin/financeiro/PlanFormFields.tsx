@@ -50,8 +50,8 @@ export function PlanFormFields({ value, onChange }: PlanFormFieldsProps) {
             onChange={(e) => onChange({ ...value, cycle: e.target.value as 'weekly' | 'monthly' })}
             className="w-full bg-surface-card border border-surface-border rounded-lg px-3 py-2 text-white text-sm"
           >
-            <option value="monthly">Mensal — remaneja aulas dentro do mês</option>
-            <option value="weekly">Semanal — zera todo domingo</option>
+            <option value="monthly">Mensal · remaneja aulas dentro do mês</option>
+            <option value="weekly">Semanal · zera todo domingo</option>
           </select>
         </div>
         <div>

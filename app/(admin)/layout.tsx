@@ -161,7 +161,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span>
               {trialUrgent ? (
                 <>
-                  Seu mês grátis termina <strong>{trialDaysLabel}</strong> — assine para não
+                  Seu mês grátis termina <strong>{trialDaysLabel}</strong>, assine para não
                   perder o acesso ao painel.
                 </>
               ) : (

@@ -96,7 +96,7 @@ export default async function AgendarDayUsePage({
       {searchParams?.retorno === '1' && (
         <Card>
           <p className="text-sm text-white">
-            Pagamento em processamento — sua reserva será confirmada em instantes.
+            Pagamento em processamento. Sua reserva será confirmada em instantes.
           </p>
         </Card>
       )}

@@ -79,7 +79,7 @@ export function MpConnectCard({ account }: MpConnectCardProps) {
           </div>
           <p className="text-xs text-slate-400 mt-1">
             {connected
-              ? `Conta MP ${account?.mpUserId ?? ''} — os pagamentos dos alunos caem direto nela.`
+              ? `Conta MP ${account?.mpUserId ?? ''}. Os pagamentos dos alunos caem direto nela.`
               : 'Conecte a conta Mercado Pago da academia para vender planos, aula avulsa e day use pelo app.'}
           </p>
         </div>

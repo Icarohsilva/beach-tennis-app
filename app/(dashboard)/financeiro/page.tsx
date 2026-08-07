@@ -144,11 +144,11 @@ export default async function FinanceiroAlunoPage({
       )}
 
       {searchParams.retorno === 'assinatura' && (
-        <CheckoutReturnBanner message="Recebemos seu retorno do Mercado Pago. Assim que o pagamento for confirmado, seu plano é ativado automaticamente — isso costuma levar alguns segundos." />
+        <CheckoutReturnBanner message="Recebemos seu retorno do Mercado Pago. Assim que o pagamento for confirmado, seu plano é ativado automaticamente. Isso costuma levar alguns segundos." />
       )}
 
       {searchParams.retorno === 'avulso' && (
-        <CheckoutReturnBanner message="Recebemos seu pagamento. Os créditos entram no seu saldo assim que o Mercado Pago confirmar — normalmente em segundos." />
+        <CheckoutReturnBanner message="Recebemos seu pagamento. Os créditos entram no seu saldo assim que o Mercado Pago confirmar, normalmente em segundos." />
       )}
 
       <section>

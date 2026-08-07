@@ -56,7 +56,7 @@ export function MedicalForm({ initial }: Props) {
       </div>
 
       <div>
-        <label className="text-xs text-slate-400 block mb-1">Contato de emergência — nome</label>
+        <label className="text-xs text-slate-400 block mb-1">Contato de emergência: nome</label>
         <Input
           name="emergency_name"
           placeholder="Nome completo"
@@ -65,7 +65,7 @@ export function MedicalForm({ initial }: Props) {
       </div>
 
       <div>
-        <label className="text-xs text-slate-400 block mb-1">Contato de emergência — telefone</label>
+        <label className="text-xs text-slate-400 block mb-1">Contato de emergência: telefone</label>
         <Input
           name="emergency_phone"
           type="tel"

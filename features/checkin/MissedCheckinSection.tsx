@@ -157,7 +157,7 @@ export async function MissedCheckinSection({ userId, orgId, mpConnected }: Props
                 />
               ) : (
                 <p className="text-xs text-slate-500">
-                  A academia não definiu valor para este check-in — fale com ela para
+                  A academia não definiu valor para este check-in. Fale com ela para
                   regularizar.
                 </p>
               )}

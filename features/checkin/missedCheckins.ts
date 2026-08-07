@@ -274,7 +274,7 @@ export async function resolveOpenMissedCheckinByExtraVisit(
       payment_id: null,
       resolved_at: new Date().toISOString(),
       resolved_by: null,
-      resolution_note: `Baixa automática — check-in em ${checkinDate} sem aula vinculada.`,
+      resolution_note: `Baixa automática: check-in em ${checkinDate} sem aula vinculada.`,
     })
     .eq('id', pendency.id)
     .eq('organization_id', orgId)
@@ -321,7 +321,7 @@ export async function enforceMissedCheckinBlock(
       orgId,
       onlyFromEnrollment: false,
       from: addDaysStr(brtToday(new Date()), 1),
-      refundReason: 'Estorno — bloqueio por pendência de check-in',
+      refundReason: 'Estorno: bloqueio por pendência de check-in',
     })
 
     if (cancelled === 0) return { blocked: true, cancelledBookings: 0 }

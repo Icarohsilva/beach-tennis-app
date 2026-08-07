@@ -36,7 +36,7 @@ export function VideoClient({ videoFeedUrl }: VideoClientProps) {
               Abrir em nova aba →
             </a>
             <p className="text-xs text-slate-500">
-              Conteúdo do site de vídeos da academia — fora do controle do ArenaHub. Não
+              Conteúdo do site de vídeos da academia, fora do controle do ArenaHub. Não
               compartilhe senhas de outros serviços aqui.
             </p>
             {/* allow-scripts + allow-same-origin: necessário pro site de vídeos manter sessão de

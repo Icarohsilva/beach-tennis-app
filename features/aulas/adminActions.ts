@@ -247,7 +247,7 @@ async function cancelFutureEnrollmentBookings(
     orgId: enrollment.organization_id,
     classId: enrollment.class_id,
     onlyFromEnrollment: true,
-    refundReason: 'Estorno — matrícula na turma encerrada',
+    refundReason: 'Estorno: matrícula na turma encerrada',
   })
 }
 
@@ -666,7 +666,7 @@ export async function addStudentToSession(
 
   if ((dailyCount ?? 0) >= dailyCap && !force) {
     return {
-      error: `Esse aluno já tem ${dailyCap} aulas neste dia — é o limite do plano dele.`,
+      error: `Esse aluno já tem ${dailyCap} aulas neste dia. É o limite do plano dele.`,
       quotaBlocked: true,
     }
   }
@@ -713,7 +713,7 @@ export async function addStudentToSession(
       }
       const message =
         decision.denied === 'daily_cap'
-          ? `Esse aluno já tem ${dailyCap} aulas neste dia — é o limite do plano dele.`
+          ? `Esse aluno já tem ${dailyCap} aulas neste dia. É o limite do plano dele.`
           : `Esse aluno já usou toda a cota do plano ${plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'}.`
       return { error: message, quotaBlocked: true }
     }
@@ -867,7 +867,7 @@ export async function adminSkipEnrollmentDate(
       p_org: orgId,
       p_delta: 1,
       p_type: 'refunded',
-      p_reason: 'Falta pontual registrada pelo admin — crédito reposição sem vencimento',
+      p_reason: 'Falta pontual registrada pelo admin: crédito reposição sem vencimento',
       p_session_id: sessionId,
     })
     if (creditErr) {

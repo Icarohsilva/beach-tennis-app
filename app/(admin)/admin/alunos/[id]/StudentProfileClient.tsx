@@ -524,7 +524,7 @@ export function StudentProfileClient({
                 <option value="">Selecione uma turma...</option>
                 {eligibleClasses.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name} — {DAY_ABBR[c.day_of_week]} {formatTime(c.start_time)}
+                    {c.name} · {DAY_ABBR[c.day_of_week]} {formatTime(c.start_time)}
                   </option>
                 ))}
               </select>
@@ -605,7 +605,7 @@ export function StudentProfileClient({
       {/* Créditos manuais */}
       <section>
         <h2 className="text-base font-semibold text-white mb-3">
-          Créditos —{' '}
+          Créditos ·{' '}
           <span className="text-brand-500">{creditsBalance}</span>{' '}
           disponíve{creditsBalance !== 1 ? 'is' : 'l'}
         </h2>
@@ -729,7 +729,7 @@ export function StudentProfileClient({
                 <option value="">Selecione um plano...</option>
                 {availablePlans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.classes_per_week}x/sem
+                    {p.name} · {p.classes_per_week}x/sem
                   </option>
                 ))}
               </select>

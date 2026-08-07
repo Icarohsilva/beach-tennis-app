@@ -51,7 +51,7 @@ export function LiveDemo() {
             <div className={`${s.card} ${s.cardNew}`}>
               <div>
                 <div className={s.cTitle}>Funcional · Turma A</div>
-                <div className={s.cSub}>Ter 19:00 — 20:00 · Espaço 1</div>
+                <div className={s.cSub}>Ter 19:00 às 20:00 · Espaço 1</div>
               </div>
               <span className={s.okTag}>+ Turma criada</span>
             </div>

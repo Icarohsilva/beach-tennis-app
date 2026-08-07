@@ -264,7 +264,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
 
   if ('denied' in decision) {
     if (decision.denied === 'daily_cap') {
-      return { error: `Você já tem ${dailyCap} aulas reservadas neste dia — é o limite do seu plano.` }
+      return { error: `Você já tem ${dailyCap} aulas reservadas neste dia. É o limite do seu plano.` }
     }
     if (decision.denied === 'quota_exhausted') {
       const periodo = plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'
@@ -324,7 +324,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
       p_org: orgId,
       p_delta: -1,
       p_type: 'used',
-      p_reason: `Agendamento avulso — ${cls.name} (${session.session_date})`,
+      p_reason: `Agendamento avulso: ${cls.name} (${session.session_date})`,
       p_session_id: sessionId,
     })
 
@@ -404,7 +404,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
       p_org: booking.organization_id,
       p_delta: 1,
       p_type: 'refunded',
-      p_reason: 'Falta em aula fixa — crédito reposição sem vencimento',
+      p_reason: 'Falta em aula fixa: crédito reposição sem vencimento',
       p_session_id: booking.session_id,
     })
     if (creditErr) {
@@ -665,7 +665,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
           p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
-          p_reason: `Cancelamento de aula fixa — crédito extra (${session.session_date})`,
+          p_reason: `Cancelamento de aula fixa: crédito extra (${session.session_date})`,
           p_session_id: booking.session_id,
         })
         if (creditErr) {
@@ -691,7 +691,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
           p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
-          p_reason: `Cancelamento com reposição — sessão ${session.session_date}`,
+          p_reason: `Cancelamento com reposição: sessão ${session.session_date}`,
           p_session_id: booking.session_id,
           p_expires_at: expiry.toISOString(),
         })

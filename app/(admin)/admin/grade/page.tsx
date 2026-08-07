@@ -127,7 +127,7 @@ export default async function GradePage() {
 
       {/* Today's sessions */}
       <section>
-        <SectionHeader title={`Hoje — ${DAY_NAMES[dayNumber]}`} />
+        <SectionHeader title={`Hoje · ${DAY_NAMES[dayNumber]}`} />
         {sessionsToday.length === 0 ? (
           <EmptyState icon={CalendarDays} title="Nenhuma sessão hoje." />
         ) : (
