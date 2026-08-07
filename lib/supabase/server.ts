@@ -135,7 +135,7 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   // Papel vem da membership da academia ativa (não mais de profiles.role).
   const { data: membership } = await admin
     .from('memberships')
-    .select('role')
+    .select('role, is_co_owner')
     .eq('user_id', user.id)
     .eq('organization_id', orgId)
     .single()
@@ -150,7 +150,8 @@ export async function getStaffContext(): Promise<StaffContext | null> {
   return {
     userId: user.id,
     organizationId: orgId,
-    isOwner: org?.owner_id === user.id,
+    // Dono original (owner_id) OU co-dono (is_co_owner na membership) — mesmo poder.
+    isOwner: org?.owner_id === user.id || membership.is_co_owner === true,
   }
 }
 

@@ -293,6 +293,16 @@ export async function removeProfessor(profileId: string): Promise<{ error?: stri
   if (profileId === ctx.userId) return { error: 'O dono não pode se remover.' }
 
   const admin = createAdminClient()
+  // isOwner agora também vale para co-donos (is_co_owner) — precisa impedir que
+  // um co-dono remova o dono original (owner_id), que não aparece na lista da UI
+  // mas poderia ser chamado direto pela action.
+  const { data: org } = await admin
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', ctx.organizationId)
+    .single()
+  if (profileId === org?.owner_id) return { error: 'Não é possível remover o dono da academia.' }
+
   // Garante que o alvo pertence à mesma academia (evita remover de outra org).
   // O vínculo por-academia vive em memberships, não mais em profiles.
   const { data: target } = await admin
@@ -307,6 +317,45 @@ export async function removeProfessor(profileId: string): Promise<{ error?: stri
 
   const { error: delErr } = await admin.auth.admin.deleteUser(profileId)
   if (delErr) return { error: 'Não foi possível remover o professor.' }
+  revalidatePath('/admin/equipe')
+  return {}
+}
+
+// Promove/revoga um professor a "admin master" (co-dono): mesmos poderes do
+// dono (financeiro/configurações/equipe/etc.), sem trocar organizations.owner_id.
+// Owner-only (dono original ou já co-dono — poder equivalente).
+export async function setCoOwner(
+  profileId: string,
+  coOwner: boolean,
+): Promise<{ error?: string }> {
+  const ctx = await getStaffContext()
+  if (!ctx) return { error: 'Não autenticado.' }
+  if (!ctx.isOwner) return { error: 'Apenas o dono pode definir admins master.' }
+
+  const admin = createAdminClient()
+  const { data: org } = await admin
+    .from('organizations')
+    .select('owner_id')
+    .eq('id', ctx.organizationId)
+    .single()
+  if (profileId === org?.owner_id) return { error: 'O dono já tem acesso total.' }
+
+  // Só promove quem já é staff (admin) desta academia.
+  const { data: target } = await admin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', profileId)
+    .eq('organization_id', ctx.organizationId)
+    .maybeSingle()
+  if (!target || target.role !== 'admin') return { error: 'Professor não encontrado nesta academia.' }
+
+  const { error: updErr } = await admin
+    .from('memberships')
+    .update({ is_co_owner: coOwner })
+    .eq('user_id', profileId)
+    .eq('organization_id', ctx.organizationId)
+  if (updErr) return { error: 'Não foi possível atualizar o admin master.' }
+
   revalidatePath('/admin/equipe')
   return {}
 }

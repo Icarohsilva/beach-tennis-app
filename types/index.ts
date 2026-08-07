@@ -154,6 +154,7 @@ export interface Membership {
   user_id: string
   organization_id: string
   role: UserRole
+  is_co_owner: boolean // admin com poderes de dono (financeiro/configurações/equipe) sem ser o owner_id da org
   level: StudentLevel
   payment_type: PaymentType // eixo cobrança: 'subscriber' | 'per_class' (não recebe mais wellhub/totalpass)
   partner: CheckinPartner | null // eixo parceiro, independente da cobrança

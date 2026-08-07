@@ -21,18 +21,19 @@ export default async function EquipePage() {
   // das memberships desta org (não de profiles.role, que é o papel padrão).
   const { data: staff } = await admin
     .from('memberships')
-    .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
+    .select('user_id, is_co_owner, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
     .eq('organization_id', ctx.organizationId)
     .eq('role', 'admin')
 
   type StaffRow = {
     user_id: string
+    is_co_owner: boolean
     profiles: { full_name: string } | { full_name: string }[] | null
   }
   const professors: ProfessorRow[] = ((staff ?? []) as unknown as StaffRow[])
     .map((m) => {
       const prof = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
-      return { id: m.user_id, full_name: prof?.full_name ?? '' }
+      return { id: m.user_id, full_name: prof?.full_name ?? '', is_co_owner: m.is_co_owner }
     })
     .filter((p) => p.id !== org?.owner_id)
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
