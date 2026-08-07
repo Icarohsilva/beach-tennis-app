@@ -61,6 +61,12 @@ export interface QuotaBooking {
   status: 'confirmed' | 'cancelled'
   /** Cancelada fora da janela de cancelamento (creditRules.canCancelWithRefund). */
   cancelledLate: boolean
+  /**
+   * Professor devolveu a aula ao remover o aluno. Nunca conta na cota, mesmo
+   * cancelada em cima da hora — é a forma de "devolver" para quem é de plano ou
+   * parceiro, onde não existe crédito a estornar, só contagem a não somar.
+   */
+  adminWaived: boolean
 }
 
 export interface QuotaResult {
@@ -86,10 +92,16 @@ export function resolveQuota(input: {
 
   const limit = Math.max(plan.classesPerWeek * cycleWeeks, fixedSessionsInCycle)
 
+  // A isenção do professor vence a regra de cancelamento tardio: ele viu o
+  // caso concreto e decidiu devolver a aula. Só vale para reserva cancelada —
+  // aula que o aluno de fato usou continua contando.
   const used = bookings.filter(
     (b) =>
       b.status === 'confirmed' ||
-      (b.status === 'cancelled' && b.cancelledLate && !plan.refundOnLateCancel),
+      (b.status === 'cancelled' &&
+        b.cancelledLate &&
+        !b.adminWaived &&
+        !plan.refundOnLateCancel),
   ).length
 
   return { limit, used, remaining: Math.max(0, limit - used) }
