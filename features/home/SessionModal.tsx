@@ -9,7 +9,7 @@ import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
-import { joinWaitlist } from '@/features/aulas/waitlistActions'
+import { joinWaitlist, leaveWaitlist } from '@/features/aulas/waitlistActions'
 import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
 import type { AgendaSession } from './WeekAgenda'
 
@@ -86,6 +86,11 @@ export function SessionModal({
         text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Avisamos se abrir vaga — quem entrar primeiro fica com ela.`,
       })
     })
+  }
+
+  function handleLeaveWaitlist() {
+    if (!session.waitlistEntryId) return
+    run(() => leaveWaitlist(session.waitlistEntryId!), 'Você saiu da fila de espera.')
   }
 
   function handleLeave() {
@@ -206,6 +211,30 @@ export function SessionModal({
           )}
         </div>
 
+        {session.waitlist.length > 0 && (
+          <div className="mt-4">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <Clock className="h-3.5 w-3.5" />
+              Fila de espera ({session.waitlist.length})
+            </p>
+            <ul className="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+              {session.waitlist.map((name, i) => (
+                <li
+                  key={`wl-${name}-${i}`}
+                  className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-300"
+                >
+                  {/* Número é ordem de chegada, não prioridade: a vaga fica com
+                      quem entrar primeiro quando ela abre. */}
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-slate-400">
+                    {i + 1}
+                  </span>
+                  <span className="truncate">{name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {feedback && (
           <p
             role="status"
@@ -236,6 +265,26 @@ export function SessionModal({
                 Sair desta aula
               </button>
             </div>
+          ) : isFull && session.waitlistEntryId ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-brand-300">
+                  Você está na fila de espera
+                </span>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={handleLeaveWaitlist}
+                  className="text-xs font-semibold text-red-400 underline underline-offset-2 transition-colors hover:text-red-300 disabled:opacity-50"
+                >
+                  Sair da fila
+                </button>
+              </div>
+              <p className="text-xs text-slate-400">
+                Se alguém cancelar, avisamos todo mundo da fila — a vaga fica com
+                quem entrar primeiro.
+              </p>
+            </div>
           ) : isFull ? (
             <div className="space-y-2">
               <Button
@@ -251,6 +300,23 @@ export function SessionModal({
                 Turma lotada. Se alguém cancelar, avisamos todo mundo da fila — a
                 vaga fica com quem entrar primeiro.
               </p>
+            </div>
+          ) : session.waitlistEntryId ? (
+            // Estava na fila e abriu vaga: a corrida está aberta para toda a
+            // fila. Entrar aqui passa pelo agendamento normal e já tira da fila.
+            <div className="space-y-2">
+              <p className="text-center text-xs font-semibold text-brand-400">
+                🔔 Vaga disponível! A vaga é de quem entrar primeiro.
+              </p>
+              <Button
+                variant="primary"
+                loading={isPending}
+                disabled={isPending}
+                onClick={handleJoin}
+                className="w-full"
+              >
+                Entrar na aula
+              </Button>
             </div>
           ) : (
             <Button
