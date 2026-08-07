@@ -96,7 +96,7 @@ export function PlanStorefront({ plans, options, mpConnected, hasActivePlan }: P
                 </Button>
               ) : (
                 <p className="text-xs text-slate-400">
-                  Pagamento online indisponível — fale com a academia para contratar.
+                  Pagamento online indisponível. Fale com a academia para contratar.
                 </p>
               )}
             </div>

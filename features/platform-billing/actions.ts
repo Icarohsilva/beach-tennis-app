@@ -122,7 +122,7 @@ export async function requestPlatformRefund(reason: string): Promise<{ error?: s
     const { data: userRes } = await admin.auth.admin.getUserById(ctx.userId)
     await sendEmail({
       to,
-      subject: 'Nova solicitação de reembolso — assinatura da plataforma',
+      subject: 'Nova solicitação de reembolso: assinatura da plataforma',
       html: `<p>${userRes?.user?.email ?? ctx.userId} (org ${ctx.organizationId}) solicitou reembolso da assinatura.</p><p>Motivo: ${reason.trim() || '(não informado)'}</p>`,
     })
   } catch (e) {

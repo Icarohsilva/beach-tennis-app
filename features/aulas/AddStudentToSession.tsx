@@ -88,8 +88,8 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
         {students.map((s) => (
           <option key={s.id} value={s.id}>
             {s.full_name}
-            {s.wouldOweDebt ? ' — sem plano/crédito' : ''}
-            {s.openMissedCheckins > 0 ? ` — ${s.openMissedCheckins} pendência(s) de check-in` : ''}
+            {s.wouldOweDebt ? ' · sem plano/crédito' : ''}
+            {s.openMissedCheckins > 0 ? ` · ${s.openMissedCheckins} pendência(s) de check-in` : ''}
           </option>
         ))}
       </select>
@@ -114,7 +114,7 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
               />
               <span>
                 <span className="text-white font-medium">{r.label}</span>
-                <span className="text-slate-400"> — {r.hint}</span>
+                <span className="text-slate-400"> · {r.hint}</span>
               </span>
             </label>
           ))}

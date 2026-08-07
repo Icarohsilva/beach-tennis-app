@@ -223,9 +223,9 @@ export default async function FinanceiroPage() {
             <p className="text-sm font-semibold text-white">Mercado Pago</p>
             <p className="text-xs text-slate-400 mt-0.5">
               {mpAccount?.status === 'connected'
-                ? `Conectado (conta ${mpAccount.mp_user_id ?? ''}) — alunos podem pagar pelo app.`
+                ? `Conectado (conta ${mpAccount.mp_user_id ?? ''}). Alunos podem pagar pelo app.`
                 : mpAccount?.status === 'expired'
-                  ? 'Conexão expirada — reconecte para voltar a receber pelo app.'
+                  ? 'Conexão expirada. Reconecte para voltar a receber pelo app.'
                   : 'Conecte a conta da academia para receber planos, aula avulsa e day use pelo app.'}
             </p>
           </div>
@@ -300,7 +300,7 @@ export default async function FinanceiroPage() {
                   <div>
                     <p className="text-sm text-white">{r.profiles?.full_name ?? r.id}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Pagou o day use, mas a reserva expirou — estorne no painel do Mercado Pago.
+                      Pagou o day use, mas a reserva expirou. Estorne no painel do Mercado Pago.
                     </p>
                   </div>
                   <span className="text-sm font-semibold text-white">{formatCurrency(r.amount)}</span>

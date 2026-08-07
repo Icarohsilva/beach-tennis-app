@@ -266,7 +266,7 @@ describe('resolveOpenMissedCheckinByExtraVisit', () => {
         status: 'waived',
         payment_id: null,
         resolved_by: null,
-        resolution_note: 'Baixa automática — check-in em 2026-08-05 sem aula vinculada.',
+        resolution_note: 'Baixa automática: check-in em 2026-08-05 sem aula vinculada.',
       },
     })
   })

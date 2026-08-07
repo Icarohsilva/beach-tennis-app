@@ -52,7 +52,7 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
     <form onSubmit={handleSubmit} className="space-y-4 max-w-lg">
       <div>
         <label className="text-sm text-slate-400 block mb-1">Nome da turma *</label>
-        <Input name="name" required placeholder="Ex: Terça 18h — Intermediário" defaultValue={c.name} />
+        <Input name="name" required placeholder="Ex: Terça 18h · Intermediário" defaultValue={c.name} />
       </div>
       <div>
         <label className="text-sm text-slate-400 block mb-1">Descrição (opcional)</label>

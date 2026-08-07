@@ -25,7 +25,7 @@ export function RegisterExternalButton({ tournamentId, isPaid, finalPriceCents }
   }
 
   const label = isPaid
-    ? `Confirmar inscrição${finalPriceCents !== undefined ? ` — R$ ${(finalPriceCents / 100).toFixed(2).replace('.', ',')}` : ''}`
+    ? `Confirmar inscrição${finalPriceCents !== undefined ? ` · R$ ${(finalPriceCents / 100).toFixed(2).replace('.', ',')}` : ''}`
     : 'Inscrever-se'
 
   return (

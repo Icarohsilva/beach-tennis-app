@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/Card'
 
 const MENSAGENS: Record<string, string> = {
   expirado:
-    'Este link já foi usado ou expirou. Só o link do e-mail MAIS RECENTE funciona — pedir um novo invalida os anteriores.',
+    'Este link já foi usado ou expirou. Só o link do e-mail MAIS RECENTE funciona. Pedir um novo invalida os anteriores.',
   outro_navegador:
     'Abra o link no mesmo navegador em que você pediu a recuperação. Se não der, peça um link novo por aqui.',
   invalido: 'Este link de recuperação é inválido.',

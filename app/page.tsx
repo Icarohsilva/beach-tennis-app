@@ -72,7 +72,7 @@ export default function LandingPage() {
               <span className={s.hl}>WhatsApp lotado</span>.
             </h1>
             <p className={s.heroSub}>
-              Aulas, créditos, check-in, pagamentos e torneios — tudo num app só. Sua agenda
+              Aulas, créditos, check-in, pagamentos e torneios. Tudo num app só. Sua agenda
               cheia no automático e seus alunos felizes sem precisar te mandar mensagem.
             </p>
             <div className={s.cluster}>
@@ -114,7 +114,7 @@ export default function LandingPage() {
                   <div className={s.phRow}>
                     <div>
                       <div className={s.phTitle}>Funcional · Turma da manhã</div>
-                      <div className={s.phTime}>19:00 — 20:00 · Espaço 1</div>
+                      <div className={s.phTime}>19:00 às 20:00 · Espaço 1</div>
                     </div>
                     <span className={s.phPill}>confirmada</span>
                   </div>
@@ -124,7 +124,7 @@ export default function LandingPage() {
                   <div className={s.phRow}>
                     <div>
                       <div className={s.phTitle}>Funcional</div>
-                      <div className={s.phTime}>20:15 — 21:00 · Espaço 2</div>
+                      <div className={s.phTime}>20:15 às 21:00 · Espaço 2</div>
                     </div>
                     <span className={`${s.phPill} ${s.phPillBlue}`}>livre</span>
                   </div>
@@ -162,7 +162,7 @@ export default function LandingPage() {
             <div className={s.khead}>
               <div className={s.labelUp}>Você reconhece isso?</div>
               <h2>Sua arena merece mais do que <span className={s.hl}>grupo de WhatsApp</span>.</h2>
-              <p>Se algum desses já travou seu dia, a gente entende — e tem solução.</p>
+              <p>Se algum desses já travou seu dia, a gente entende, e tem solução.</p>
             </div>
           </Reveal>
           <div className={s.problemGrid}>
@@ -200,7 +200,7 @@ export default function LandingPage() {
               <div className={s.feat}>
                 <div className={s.featIc}><CalendarClock size={26} strokeWidth={2} /></div>
                 <h3>Grade inteligente</h3>
-                <p>Turmas recorrentes por nível e horário. Aluno agenda, repõe e entra na fila de espera sozinho — sem você no meio.</p>
+                <p>Turmas recorrentes por nível e horário. Aluno agenda, repõe e entra na fila de espera sozinho, sem você no meio.</p>
               </div>
               <div className={s.feat}>
                 <div className={s.featIc}><CreditCard size={26} strokeWidth={2} /></div>
@@ -215,7 +215,7 @@ export default function LandingPage() {
               <div className={s.feat}>
                 <div className={s.featIc}><BarChart3 size={26} strokeWidth={2} /></div>
                 <h3>Financeiro claro</h3>
-                <p>Mensalidades por Pix, cartão recorrente ou avulso. Inadimplência num painel — você sabe quanto entra.</p>
+                <p>Mensalidades por Pix, cartão recorrente ou avulso. Inadimplência num painel. Você sabe quanto entra.</p>
               </div>
               <div className={s.feat}>
                 <div className={s.featIc}><Trophy size={26} strokeWidth={2} /></div>
@@ -270,7 +270,7 @@ export default function LandingPage() {
             <div className={s.khead}>
               <div className={s.labelUp}>Veja rodando</div>
               <h2>A arena inteira <span className={s.hl}>num fluxo só</span>.</h2>
-              <p>Do agendamento ao dinheiro no painel — sem caderno, sem WhatsApp.</p>
+              <p>Do agendamento ao dinheiro no painel, sem caderno, sem WhatsApp.</p>
             </div>
           </Reveal>
           <LiveDemo />
@@ -379,11 +379,11 @@ export default function LandingPage() {
             </details>
             <details className={s.faqItem}>
               <summary>E se eu desistir? Cobra cancelamento?</summary>
-              <p>Zero taxa de cancelamento. Você cancela com um clique no painel. Seus dados continuam disponíveis por um período após o cancelamento — para reativar ou solicitar exportação, é só falar com a gente.</p>
+              <p>Zero taxa de cancelamento. Você cancela com um clique no painel. Seus dados continuam disponíveis por um período após o cancelamento. Para reativar ou solicitar exportação, é só falar com a gente.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Funciona pra qualquer modalidade?</summary>
-              <p>Sim. Beach tennis, padel, futevôlei, crossfit, pilates, funcional, futebol, luta e mais — qualquer academia ou escola que dá aulas e tem alunos.</p>
+              <p>Sim. Beach tennis, padel, futevôlei, crossfit, pilates, funcional, futebol, luta e mais. Qualquer academia ou escola que dá aulas e tem alunos.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Como funciona o Wellhub e TotalPass?</summary>
@@ -391,11 +391,11 @@ export default function LandingPage() {
             </details>
             <details className={s.faqItem}>
               <summary>Preciso migrar os dados do meu caderno?</summary>
-              <p>Não precisa digitar tudo de uma vez. Você cadastra as turmas e vai adicionando os alunos conforme eles entram pelo link — sem planilha, sem migração forçada.</p>
+              <p>Não precisa digitar tudo de uma vez. Você cadastra as turmas e vai adicionando os alunos conforme eles entram pelo link, sem planilha, sem migração forçada.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Meus alunos vão conseguir usar sozinhos?</summary>
-              <p>Sim. O aluno recebe um link, entra em segundos e já vê as aulas, créditos e o próximo torneio. Sem manual, sem treinamento — é feito pra quem só quer jogar.</p>
+              <p>Sim. O aluno recebe um link, entra em segundos e já vê as aulas, créditos e o próximo torneio. Sem manual, sem treinamento. É feito pra quem só quer jogar.</p>
             </details>
             <details className={s.faqItem}>
               <summary>Funciona sem internet boa no local?</summary>

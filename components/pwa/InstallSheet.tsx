@@ -82,7 +82,7 @@ export function InstallSheet({
           <>
             <h2 className="mb-1 pr-8 text-base font-bold text-white">Instalar o ArenaHub?</h2>
             <p className="mb-4 text-sm text-slate-400">
-              Um toque e ele vira app de verdade no seu celular — abre mais rápido e te avisa das
+              Um toque e ele vira app de verdade no seu celular. Abre mais rápido e te avisa das
               suas aulas.
             </p>
             <div className="flex gap-2">

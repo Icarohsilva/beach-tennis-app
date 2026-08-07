@@ -114,7 +114,7 @@ export function OnboardingForm({ initial }: { initial: OnboardingInitial }) {
           />
           {cepStatus === 'loading' && <p className="text-xs text-slate-400 mt-1">Buscando endereço…</p>}
           {cepStatus === 'notfound' && (
-            <p className="text-xs text-yellow-400 mt-1">CEP não encontrado — preencha manualmente.</p>
+            <p className="text-xs text-yellow-400 mt-1">CEP não encontrado. Preencha manualmente.</p>
           )}
         </div>
 

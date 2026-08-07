@@ -76,7 +76,7 @@ export function ManageSubscriptionActions() {
         </div>
       )}
       <p className="text-xs text-slate-500">
-        Assinou há menos de 7 dias? Você tem direito a arrependimento com devolução integral —
+        Assinou há menos de 7 dias? Você tem direito a arrependimento com devolução integral.
         use &quot;Solicitar reembolso&quot;.
       </p>
     </div>

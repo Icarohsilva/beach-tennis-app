@@ -43,7 +43,7 @@ export function DebtReceiptUpload({ paymentId, userId, hasReceipt, pixKey, pixKe
   if (uploaded) {
     return (
       <p className="text-xs text-yellow-400">
-        ✓ Comprovante enviado — aguardando a academia conferir. Você continua bloqueado até a confirmação.
+        ✓ Comprovante enviado. Aguardando a academia conferir. Você continua bloqueado até a confirmação.
       </p>
     )
   }

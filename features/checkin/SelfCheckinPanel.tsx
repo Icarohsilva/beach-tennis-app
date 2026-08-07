@@ -165,7 +165,7 @@ export function SelfCheckinPanel({
                 kind: 'ok',
                 text:
                   result.distanceM != null
-                    ? `Você está a ${formatDistance(result.distanceM)} da academia — o professor vai validar.`
+                    ? `Você está a ${formatDistance(result.distanceM)} da academia. O professor vai validar.`
                     : 'Presença enviada. O professor vai validar na chamada.',
               },
         )

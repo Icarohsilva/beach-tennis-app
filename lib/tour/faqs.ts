@@ -24,7 +24,7 @@ const ALUNO_FAQS: Faq[] = [
   },
   {
     q: 'Como funciona o check-in via Wellhub/TotalPass?',
-    a: 'Se você usa Wellhub ou TotalPass, o check-in é registrado automaticamente pelo parceiro — você não precisa fazer nada manual no app.',
+    a: 'Se você usa Wellhub ou TotalPass, o check-in é registrado automaticamente pelo parceiro. Você não precisa fazer nada manual no app.',
   },
 ]
 
@@ -35,7 +35,7 @@ const ADMIN_FAQS: Faq[] = [
   },
   {
     q: 'Como criar uma turma na grade?',
-    a: 'Vá em Grade de Aulas e use "Nova turma". Defina dia, horário, nível e capacidade — as sessões datadas são geradas a partir desse modelo.',
+    a: 'Vá em Grade de Aulas e use "Nova turma". Defina dia, horário, nível e capacidade. As sessões datadas são geradas a partir desse modelo.',
   },
   {
     q: 'Como criar um torneio?',

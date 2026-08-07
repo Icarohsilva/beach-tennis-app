@@ -222,7 +222,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       <section>
         <h2 className="text-lg font-semibold text-white mb-3">
           {maxPlayers
-            ? `Inscrições — ${confirmedEntries.length + offeredEntries.length} / ${maxPlayers} vagas`
+            ? `Inscrições: ${confirmedEntries.length + offeredEntries.length} / ${maxPlayers} vagas`
             : `Inscrições (${confirmedEntries.length} confirmados)`}
         </h2>
 
@@ -329,7 +329,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                         <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
                         {expired ? (
                           <span className="text-xs text-slate-400 bg-slate-800 rounded px-1.5 py-0.5 mt-1 inline-block">
-                            Expirada — será reprocessada na próxima ação
+                            Expirada, será reprocessada na próxima ação
                           </span>
                         ) : (
                           <span className="text-xs text-yellow-400 bg-yellow-900/30 rounded px-1.5 py-0.5 mt-1 inline-block">

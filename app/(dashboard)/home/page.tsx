@@ -530,7 +530,7 @@ export default async function HomePage() {
                 ? ` (${BRL.format(missedCheckins.openAmount)})`
                 : ''}
               {missedCheckins.untilBlock !== null && missedCheckins.untilBlock > 0
-                ? ` — mais ${missedCheckins.untilBlock} e seu agendamento é bloqueado.`
+                ? `. Mais ${missedCheckins.untilBlock} e seu agendamento é bloqueado.`
                 : '.'}{' '}
               Resolver →
             </Link>

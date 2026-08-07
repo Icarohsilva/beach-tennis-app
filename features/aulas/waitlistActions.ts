@@ -48,7 +48,7 @@ export async function notifyWaitlistSpotOpen(sessionId: string): Promise<void> {
   const title = 'Vaga disponível!'
   const body =
     `Abriu uma vaga em ${className} (${session?.session_date}). ` +
-    'A vaga é de quem entrar primeiro — abra o app e garanta a sua.'
+    'A vaga é de quem entrar primeiro. Abra o app e garanta a sua.'
 
   const studentIds = entries.map((e) => e.student_id)
 
@@ -262,7 +262,7 @@ export async function joinWaitlist(
       title: 'Você entrou na lista de espera',
       body:
         `Você é o ${position}º da fila em ${className} (${sessionInfo?.session_date}). ` +
-        'Se abrir uma vaga, avisamos todo mundo da fila — a vaga fica com quem entrar primeiro.',
+        'Se abrir uma vaga, avisamos todo mundo da fila. A vaga fica com quem entrar primeiro.',
       channels: ['inapp', 'push'],
     })
   } catch (err) {

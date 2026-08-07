@@ -89,7 +89,7 @@ export function IntegracoesClient({ wellhub, pending, students, webhookUrl }: Pr
             onChange={(e) => setSecret(e.target.value)}
           />
           <Input
-            label="API key (Access Control — valida e gera pagamento)"
+            label="API key (Access Control: valida e gera pagamento)"
             type="password"
             placeholder={wellhub?.has_api_key ? '••••••• (preencha para alterar)' : ''}
             value={apiKey}

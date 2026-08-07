@@ -129,7 +129,7 @@ export function SelfCheckinModal({ candidates }: { candidates: SelfCheckinCandid
             </h2>
             <p className="mt-0.5 text-xs text-slate-400">
               {eligible.length > 1
-                ? `Você tem ${eligible.length} aulas agora — diga se vai em cada uma.`
+                ? `Você tem ${eligible.length} aulas agora. Diga se vai em cada uma.`
                 : 'Sua aula está começando.'}
             </p>
           </div>

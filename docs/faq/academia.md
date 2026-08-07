@@ -1,4 +1,4 @@
-# Manual da Academia — ArenaHub
+# Manual da Academia | ArenaHub
 
 > Guia completo para arenas e academias que estão conhecendo o **ArenaHub** agora.
 > Cobre do zero: **cadastro da academia → configuração → integrações (Mercado Pago e Wellhub) → cadastro de alunos → gestão do dia a dia.**
@@ -18,18 +18,18 @@
 
 1. [O que é o ArenaHub](#1-o-que-é-o-arenahub)
 2. [Cadastro da academia](#2-cadastro-da-academia)
-3. [Onboarding — endereço, esportes e marca](#3-onboarding--endereço-esportes-e-marca)
+3. [Onboarding: endereço, esportes e marca](#3-onboarding-endereço-esportes-e-marca)
 4. [Painel administrativo (Dashboard)](#4-painel-administrativo-dashboard)
-5. [Alunos — cadastrar e gerenciar](#5-alunos--cadastrar-e-gerenciar)
+5. [Alunos: cadastrar e gerenciar](#5-alunos-cadastrar-e-gerenciar)
 6. [Grade de aulas e turmas](#6-grade-de-aulas-e-turmas)
-7. [Financeiro — planos, avulsa e day use](#7-financeiro--planos-avulsa-e-day-use)
+7. [Financeiro: planos, avulsa e day use](#7-financeiro-planos-avulsa-e-day-use)
 8. [Integração com o banco (Mercado Pago)](#8-integração-com-o-banco-mercado-pago)
-9. [Integração Wellhub (Gympass) / TotalPass](#9-integração-wellhub-gympass--totalpass)
+9. [Integração Wellhub (Gympass) / TotalPass](#9-integração-wellhub-gympass-totalpass)
 10. [Outros gateways de pagamento](#10-outros-gateways-de-pagamento)
 11. [Notificações](#11-notificações)
 12. [Torneios](#12-torneios)
 13. [Configurações](#13-configurações)
-14. [Equipe — convidar alunos e professores](#14-equipe--convidar-alunos-e-professores)
+14. [Equipe: convidar alunos e professores](#14-equipe-convidar-alunos-e-professores)
 15. [Assinatura da plataforma](#15-assinatura-da-plataforma)
 
 ---
@@ -60,17 +60,17 @@ Depois de instalar, abra o app pela tela de início e toque em **Ativar** na fai
 do topo. Sem essa permissão o celular não te avisa de nada.
 
 Você pode mandar este link direto para seus alunos: **arenahub.website/instalar**
-— é a mesma explicação, numa página só.
+É a mesma explicação, numa página só.
 
 ---
 
 ## 1. O que é o ArenaHub
 
-O ArenaHub é um sistema de **gestão para academias e escolas esportivas** — beach tennis, padel, futevôlei, crossfit, pilates, futebol, luta e qualquer outra modalidade que dá aulas e tem alunos. Ele resolve o "fim do caderninho e do grupo de WhatsApp lotado": agenda de aulas, controle de presença, cobrança de mensalidades/avulsas, comunidade, torneios e notificações — tudo em um só lugar.
+O ArenaHub é um sistema de **gestão para academias e escolas esportivas**: beach tennis, padel, futevôlei, crossfit, pilates, futebol, luta e qualquer outra modalidade que dá aulas e tem alunos. Ele resolve o "fim do caderninho e do grupo de WhatsApp lotado": agenda de aulas, controle de presença, cobrança de mensalidades/avulsas, comunidade, torneios e notificações, tudo em um só lugar.
 
 ![Landing page do ArenaHub](images/landing.png)
 
-O sistema é **multi-inquilino (multi-tenant)**: cada academia é uma organização isolada. Dono, professores e alunos são vinculados à academia por uma **membership** (vínculo com papel). A mesma pessoa pode ser aluno de uma academia e dono de outra — os papéis são por academia, não globais.
+O sistema é **multi-inquilino (multi-tenant)**: cada academia é uma organização isolada. Dono, professores e alunos são vinculados à academia por uma **membership** (vínculo com papel). A mesma pessoa pode ser aluno de uma academia e dono de outra. Os papéis são por academia, não globais.
 
 > **🔧 Nos bastidores**
 > - Cada academia = 1 registro em `organizations`.
@@ -92,14 +92,14 @@ O cadastro começa em **`/criar-academia`**. É aqui que o **dono** cria a conta
 | **Nome da academia** | Nome público da arena (aparece no painel e na vitrine). |
 | **Seu nome** | Nome do dono/responsável. |
 | **Email** | Vira o login do dono. |
-| **CPF ou CNPJ** | Documento do responsável/empresa. Validado (dígito verificador) e **único** — não é possível cadastrar dois donos com o mesmo documento. |
+| **CPF ou CNPJ** | Documento do responsável/empresa. Validado (dígito verificador) e **único**: não é possível cadastrar dois donos com o mesmo documento. |
 | **Telefone** | Contato do responsável. |
 | **Senha** | Mínimo de 6 caracteres. |
 
 Ao clicar em **Criar academia**, o sistema cria tudo de uma vez e já faz o login automático, levando o dono direto para o **onboarding**.
 
 > **🔧 Nos bastidores** (`features/organizations/actions.ts → createAcademy`)
-> 1. Cria o usuário no Supabase Auth (`admin.createUser`, com `email_confirm: true` — hoje o e-mail **não** precisa ser validado para entrar).
+> 1. Cria o usuário no Supabase Auth (`admin.createUser`, com `email_confirm: true`; hoje o e-mail **não** precisa ser validado para entrar).
 > 2. Cria a `organizations` com `owner_id`, `owner_document` (único) e `onboarding_completed = false`.
 > 3. Cria a assinatura da plataforma em `platform_subscriptions` com status `trialing` e **30 dias grátis**.
 > 4. Cria/promove a `memberships` do dono para `role = 'admin'`.
@@ -107,7 +107,7 @@ Ao clicar em **Criar academia**, o sistema cria tudo de uma vez e já faz o logi
 
 ---
 
-## 3. Onboarding — endereço, esportes e marca
+## 3. Onboarding: endereço, esportes e marca
 
 Logo após criar a conta, o dono cai na tela de onboarding (**`/onboarding`**). Ela define **onde** fica a arena, **quais esportes** ela oferece e a **identidade visual**.
 
@@ -115,12 +115,12 @@ Logo após criar a conta, o dono cai na tela de onboarding (**`/onboarding`**). 
 
 **Passo a passo:**
 
-1. **CEP** — ao digitar, o sistema busca o endereço automaticamente (via ViaCEP) e preenche Estado, Cidade, Bairro e Rua.
+1. **CEP**: ao digitar, o sistema busca o endereço automaticamente (via ViaCEP) e preenche Estado, Cidade, Bairro e Rua.
 2. **Número** (ou marque **Sem número**).
-3. **Esportes oferecidos** — clique nas modalidades da lista (Beach Tennis, Padel, CrossFit, Pilates, Futebol e várias outras) ou use **Outro** para digitar uma modalidade que não está na lista. Isso define o que aparece na vitrine pública da academia.
-4. **WhatsApp** — contato público.
-5. **Aparecer no diretório público de arenas** — se marcado, a academia entra na vitrine pública para captar novos alunos.
-6. **Personalização (opcional)** — descrição e **Cor da marca** (o app inteiro do aluno e o painel adotam essa cor).
+3. **Esportes oferecidos**: clique nas modalidades da lista (Beach Tennis, Padel, CrossFit, Pilates, Futebol e várias outras) ou use **Outro** para digitar uma modalidade que não está na lista. Isso define o que aparece na vitrine pública da academia.
+4. **WhatsApp**: contato público.
+5. **Aparecer no diretório público de arenas**: se marcado, a academia entra na vitrine pública para captar novos alunos.
+6. **Personalização (opcional)**: descrição e **Cor da marca** (o app inteiro do aluno e o painel adotam essa cor).
 
 Clique em **Concluir e ir para o painel**.
 
@@ -128,7 +128,7 @@ Clique em **Concluir e ir para o painel**.
 > - Grava endereço, esportes (`sports[]`), WhatsApp, flag de diretório, descrição e `brand_color` na `organizations`.
 > - Marca `onboarding_completed = true`.
 > - **Gate de acesso:** enquanto o onboarding não estiver concluído, o dono é sempre redirecionado de volta para `/onboarding` ao tentar abrir o painel.
-> - A `brand_color` é aplicada como CSS custom properties (`accentVars`) — por isso a arena consegue "colorir" a interface sem deploy.
+> - A `brand_color` é aplicada como CSS custom properties (`accentVars`). Por isso a arena consegue "colorir" a interface sem deploy.
 
 ---
 
@@ -143,7 +143,7 @@ Concluído o onboarding, o dono chega ao **painel admin** (`/admin/dashboard`). 
 - **Faixa de abertura:** saudação, data e o pulso do dia ("5 aulas hoje · 22 alunos esperados"), com atalhos para a grade e para criar turma.
 - **Cartões de resumo:** Alunos ativos, Aulas hoje, Matrículas ativas, Day use hoje.
 - **Agenda de hoje:** as aulas do dia em linha do tempo, com um marcador de **agora** que corre com o relógio. Cada aula mostra a barra de ocupação (quantos dos lugares já estão preenchidos) e leva direto para a **chamada**. Aula que já passou fica apagada; a que está rolando ganha destaque.
-- **Resumo:** anel com a **ocupação do dia** (lugares preenchidos sobre o total) e as turmas mais cheia e mais vazia — útil para saber onde ainda dá para encaixar aluno.
+- **Resumo:** anel com a **ocupação do dia** (lugares preenchidos sobre o total) e as turmas mais cheia e mais vazia. Útil para saber onde ainda dá para encaixar aluno.
 - **Ações rápidas:** Nova turma, Day Use, Alunos, Financeiro, Notificação, Torneios.
 - **Banner do mês grátis** (topo): mostra quantos dias faltam do período de teste e leva para a assinatura.
 
@@ -155,12 +155,12 @@ O menu lateral segue esta ordem: **Dashboard · Alunos · Grade de Aulas · Fina
 
 ---
 
-## 5. Alunos — cadastrar e gerenciar
+## 5. Alunos: cadastrar e gerenciar
 
 Em **Alunos** o dono vê a lista de alunos da academia e cadastra novos. Há **duas formas** de um aluno entrar na academia:
 
-- **A) A academia cadastra o aluno** (gestão completa — descrita aqui).
-- **B) O aluno se cadastra pelo link de convite** (veja a seção [Equipe](#14-equipe--convidar-alunos-e-professores) e o **Manual do Aluno**).
+- **A) A academia cadastra o aluno** (gestão completa, descrita aqui).
+- **B) O aluno se cadastra pelo link de convite** (veja a seção [Equipe](#14-equipe-convidar-alunos-e-professores) e o **Manual do Aluno**).
 
 ### 5.1 Cadastrar um aluno pela plataforma
 
@@ -168,7 +168,7 @@ Clique em **Criar aluno**. Um modal pede **Nome completo** e **E-mail**.
 
 ![Modal de criação de aluno](images/admin-criar-aluno-modal.png)
 
-Ao confirmar, o sistema gera uma **senha temporária** e a exibe **uma única vez**. Copie e repasse ao aluno — no primeiro login ele será obrigado a trocá-la.
+Ao confirmar, o sistema gera uma **senha temporária** e a exibe **uma única vez**. Copie e repasse ao aluno. No primeiro login ele será obrigado a trocá-la.
 
 ![Senha temporária gerada](images/admin-criar-aluno-senha.png)
 
@@ -176,17 +176,17 @@ Depois disso o aluno aparece na lista, com tipo de plano:
 
 ![Lista de alunos](images/admin-alunos-lista.png)
 
-Na lista você tem busca por nome e filtro por **nível** (Iniciante, D, C, B, A) — útil para academias que usam nível como uma categoria interna do aluno. Cada cartão mostra o **plano** (Mensalista, Avulso, Wellhub, TotalPass) e a quantidade de **turmas fixas**.
+Na lista você tem busca por nome e filtro por **nível** (Iniciante, D, C, B, A). Útil para academias que usam nível como uma categoria interna do aluno. Cada cartão mostra o **plano** (Mensalista, Avulso, Wellhub, TotalPass) e a quantidade de **turmas fixas**.
 
 > **🔧 Nos bastidores** (`createStudent`)
 > - Cria o usuário no Auth com senha aleatória e `must_change_password: true` nos metadados.
 > - Cria a `memberships` com `role = 'student'` vinculada à academia ativa.
-> - A senha temporária é retornada **apenas na resposta da action** e mostrada no modal — não fica salva em texto puro.
+> - A senha temporária é retornada **apenas na resposta da action** e mostrada no modal, não fica salva em texto puro.
 > - No primeiro login, o gate `must_change_password` força o aluno a passar por `/definir-senha` antes de acessar qualquer coisa.
 
 ### 5.2 Nível do aluno
 
-O **nível** (Iniciante, D, C, B, A) é uma categoria informativa que a academia pode usar para buscar/filtrar alunos — ele **não bloqueia** o acesso a turmas. Todo aluno vê e pode se inscrever em qualquer turma da academia, com uma única exceção: turmas do tipo **Kids** só ficam visíveis para quem tem um **dependente** cadastrado.
+O **nível** (Iniciante, D, C, B, A) é uma categoria informativa que a academia pode usar para buscar/filtrar alunos. Ele **não bloqueia** o acesso a turmas. Todo aluno vê e pode se inscrever em qualquer turma da academia, com uma única exceção: turmas do tipo **Kids** só ficam visíveis para quem tem um **dependente** cadastrado.
 
 ---
 
@@ -206,7 +206,7 @@ A tela tem duas partes: **HOJE** (sessões do dia) e **GRADE SEMANAL** (turmas f
 
 | Campo | Função |
 |---|---|
-| **Nome da turma** | Ex.: "Terça 18h — Intermediário". |
+| **Nome da turma** | Ex.: "Terça 18h · Intermediário". |
 | **Descrição** | Observações (opcional). |
 | **Tipo** | Adulto / Kids etc. |
 | **Dia da semana** | A turma se repete toda semana nesse dia. |
@@ -238,30 +238,30 @@ Em **Relatórios** você vê quem está vindo às aulas, por **semana** (padrão
 
 - **Números do período:** aulas realizadas, presenças, faltas e o comparecimento geral da academia.
 - **Por aluno:** presenças, faltas, avisos e o **aproveitamento** (presenças ÷ aulas previstas). Dá para ordenar por qualquer coluna; a ordem padrão é por aproveitamento, porque ordenar por presenças absolutas favoreceria quem simplesmente tem mais aulas na semana.
-- **Aulas sem chamada:** nessas, todo mundo entrou como presente. É o ponto onde você corrige — e também o que revela uma aula que não aconteceu.
+- **Aulas sem chamada:** nessas, todo mundo entrou como presente. É o ponto onde você corrige, e também o que revela uma aula que não aconteceu.
 
 > **🔧 Nos bastidores**
 > - A presença é **presumida**: quem estava previsto numa aula que já passou conta como presente até você marcar a falta na chamada. Sem isso o relatório nasceria vazio, porque a chamada quase nunca era feita.
 > - Quem **avisou** que não vem (saiu da aula pelo app antes de ela começar) conta numa categoria própria, separada de quem simplesmente não apareceu. O aviso entra no total de aulas previstas, então também pesa no aproveitamento.
 > - Marcar a chamada **vence** a presunção: a linha gravada é a verdade.
-> - A contagem começa na data em que a frequência passou a ser rastreada. Aulas anteriores ficam de fora — nada é afirmado sobre aula que ninguém conferiu.
+> - A contagem começa na data em que a frequência passou a ser rastreada. Aulas anteriores ficam de fora. Nada é afirmado sobre aula que ninguém conferiu.
 > - A lista da chamada passou a incluir também o **aluno fixo sem reserva gerada**. Antes ele não aparecia, e por isso a falta dele nunca era registrada.
 
 ---
 
-## 7. Financeiro — planos, avulsa e day use
+## 7. Financeiro: planos, avulsa e day use
 
 A área **Financeiro** tem três abas: **Visão geral**, **Planos e preços** e **Integrações**.
 
 ### 7.1 Visão geral
 
-![Financeiro — visão geral](images/admin-financeiro.png)
+![Financeiro: visão geral](images/admin-financeiro.png)
 
 Mostra **Receita do mês**, **Inadimplentes** (assinaturas vencidas ou com último pagamento falho) e **Pagamentos pendentes**. Abaixo, o atalho para conectar o **Mercado Pago** e a seção **Parceiros (Wellhub/TotalPass)**, onde a academia define o **valor por check-in** de cada parceiro e vê o quanto tem **a receber no mês seguinte**.
 
 ### 7.2 Planos e preços
 
-![Financeiro — planos e preços](images/admin-financeiro-planos.png)
+![Financeiro: planos e preços](images/admin-financeiro-planos.png)
 
 Aqui a academia cria os **planos** (mensalidades por periodicidade) e configura a **venda avulsa**:
 
@@ -273,7 +273,7 @@ Aqui a academia cria os **planos** (mensalidades por periodicidade) e configura 
 
 ### 7.3 Integrações (financeiro)
 
-A aba **Integrações** conecta o **gateway de pagamento** — detalhado nas próximas duas seções.
+A aba **Integrações** conecta o **gateway de pagamento**, detalhado nas próximas duas seções.
 
 ---
 
@@ -281,7 +281,7 @@ A aba **Integrações** conecta o **gateway de pagamento** — detalhado nas pr�
 
 O ArenaHub recebe pagamentos de alunos (planos, aula avulsa, day use) **direto na conta Mercado Pago da própria academia**, via marketplace/OAuth. Ou seja: o dinheiro cai na conta da arena, não numa conta intermediária.
 
-![Financeiro — integrações (Mercado Pago)](images/admin-financeiro-integracoes.png)
+![Financeiro: integrações (Mercado Pago)](images/admin-financeiro-integracoes.png)
 
 ### 8.1 O que você precisa
 
@@ -300,7 +300,7 @@ Enquanto não está conectado, o cartão exibe o status **"Não conectado"**.
 > **🔧 Nos bastidores** (`features/financeiro/gatewayActions.ts`, `lib/billing/mpClient.ts`)
 > - O botão chama `getMercadoPagoAuthUrl`, que monta a URL de autorização:
 >   `https://auth.mercadopago.com/authorization?client_id={MP_APP_ID}&response_type=code&platform_id=mp&state={assinado}&redirect_uri={SITE}/api/integrations/mercadopago/callback`.
-> - O **`state`** é assinado com o segredo da aplicação (`MP_APP_SECRET`) e carrega `orgId`/`userId` — protege contra CSRF e identifica de qual academia veio a conexão.
+> - O **`state`** é assinado com o segredo da aplicação (`MP_APP_SECRET`) e carrega `orgId`/`userId`: protege contra CSRF e identifica de qual academia veio a conexão.
 > - No callback, o `code` é trocado por tokens (`mpExchangeOAuthCode`) e salvo em **`org_gateway_accounts`** (`gateway = 'mercadopago'`, `status`, `mp_user_id`, `token_expires_at` + tokens). O token é renovado automaticamente (`mpRefreshOAuthToken`).
 > - **Credenciais da plataforma** (definidas pela ArenaHub, não pela academia): variáveis de ambiente `MP_APP_ID` e `MP_APP_SECRET`. Se ausentes, o botão retorna "Integração indisponível no momento".
 > - Cobranças usam: **preapproval** (assinaturas/mensalidades recorrentes) e **Checkout Pro** (aula avulsa e day use). Os pagamentos confirmam via **webhook** do Mercado Pago.
@@ -315,7 +315,7 @@ Ao desconectar, **novos** checkouts ficam bloqueados, mas **assinaturas já ativ
 
 A integração com a **Wellhub** (ex-Gympass) permite que alunos façam **check-in** pela Wellhub e a academia receba por check-in. A conexão fica em **Integrações** (menu lateral).
 
-![Integrações — Wellhub](images/admin-integracoes.png)
+![Integrações: Wellhub](images/admin-integracoes.png)
 
 ### 9.1 O que você precisa (credenciais)
 
@@ -323,7 +323,7 @@ Ao fechar o contrato com a Wellhub, a academia recebe as credenciais da **Access
 
 | Campo | O que é / onde consegue |
 |---|---|
-| **URL de webhook** | Gerada pelo ArenaHub: `/api/webhooks/wellhub`. **Copie e cadastre na Wellhub** — é para lá que a Wellhub envia os check-ins. |
+| **URL de webhook** | Gerada pelo ArenaHub: `/api/webhooks/wellhub`. **Copie e cadastre na Wellhub**: é para lá que a Wellhub envia os check-ins. |
 | **Gym ID (Wellhub)** | Identificador da sua unidade na Wellhub. |
 | **Webhook secret** | Segredo compartilhado usado para **validar a assinatura** dos webhooks. |
 | **API key (Access Control)** | Chave que **valida** o acesso do aluno na hora do check-in e **gera o pagamento** para a academia. |
@@ -342,9 +342,9 @@ Clique em **Conectar**. O status muda de **"Desconectado"** para conectado.
 
 Quando um check-in chega mas o sistema **não consegue casar** o ID Wellhub com um aluno cadastrado, ele aparece na seção **Check-ins pendentes**, e o dono pode **vincular manualmente** o check-in ao aluno correto.
 
-Cada pendência mostra o **nome de quem fez o check-in** (a Wellhub envia nome e sobrenome junto do evento), além do ID, da data e do selo **Validado**. Use o nome para escolher o aluno na lista e clicar em **Vincular**. Se a Wellhub não mandar o nome no evento, aparece *"Nome não informado pelo parceiro"* — nesse caso, o ID é a única pista.
+Cada pendência mostra o **nome de quem fez o check-in** (a Wellhub envia nome e sobrenome junto do evento), além do ID, da data e do selo **Validado**. Use o nome para escolher o aluno na lista e clicar em **Vincular**. Se a Wellhub não mandar o nome no evento, aparece *"Nome não informado pelo parceiro"*. Nesse caso, o ID é a única pista.
 
-Ao vincular, o ID do parceiro é gravado no aluno — os próximos check-ins dele passam a casar sozinhos.
+Ao vincular, o ID do parceiro é gravado no aluno: os próximos check-ins dele passam a casar sozinhos.
 
 > **⚠️ IDs com espaço**
 > O portal da Wellhub exibe o ID agrupado (`3603 3181 0803 2`), mas o check-in chega sem espaços (`3603318108032`). O sistema **remove os espaços automaticamente** ao salvar, então pode colar o ID direto do portal.
@@ -352,8 +352,8 @@ Ao vincular, o ID do parceiro é gravado no aluno — os próximos check-ins del
 > **🔧 Nos bastidores** (`app/api/webhooks/wellhub/route.ts`, `lib/checkin/*`, `features/checkin/actions.ts`)
 > - O webhook roda em runtime Node.js e recebe o header `x-gympass-signature`.
 > - `parseWellhubEvent` lê eventos cujo tipo começa com `checkin`, extrai `gym.id`, o `unique_token` (gympass_id de 13 dígitos) e o timestamp (epoch → data local BRT).
-> - `wellhubMemberName` lê `event_data.user.first_name`/`last_name` do **payload cru** guardado em `pending_checkins.payload` — por isso o nome aparece até nas pendências antigas, sem coluna nova.
-> - `normalizePartnerId` (`lib/checkin/partnerId.ts`) remove **todo** espaço em branco do ID — inclusive os **internos** do copy/paste do portal, que o `.trim()` não pegava e que faziam todo check-in do aluno cair em pendentes.
+> - `wellhubMemberName` lê `event_data.user.first_name`/`last_name` do **payload cru** guardado em `pending_checkins.payload`: por isso o nome aparece até nas pendências antigas, sem coluna nova.
+> - `normalizePartnerId` (`lib/checkin/partnerId.ts`) remove **todo** espaço em branco do ID, inclusive os **internos** do copy/paste do portal, que o `.trim()` não pegava e que faziam todo check-in do aluno cair em pendentes.
 > - `verifyWellhubSignature` recalcula um **HMAC-SHA1** (hex maiúsculo) com o `webhook_secret` e compara com `timingSafeEqual` (à prova de timing attack).
 > - `connectIntegration('wellhub', …)` faz *upsert* em **`org_integrations`** (chave `organization_id, partner`) com `gym_id`, `webhook_secret`, `api_key`, `environment`, `status`.
 > - `wellhubValidate` chama `POST {base}/access/v1/validate` com header `X-Gym-Id` + `Bearer api_key`. Base **sandbox** = `apitesting.partners.gympass.com`; **produção** = `api.partners.gympass.com`. Sucesso = `metadata.errors == 0`.
@@ -373,7 +373,7 @@ Se a academia usa outro banco/gateway (Pagar.me, Asaas, Stripe, PagSeguro…), h
 Preencha **Banco/gateway** e **Observações** e clique em **Enviar solicitação**.
 
 > **🔧 Nos bastidores** (`requestGatewayIntegration`)
-> - Grava a solicitação em **`gateway_integration_requests`** (`organization_id`, `requested_by`, `gateway_name`, `notes`). É uma fila de pedidos que a equipe ArenaHub avalia — não conecta automaticamente.
+> - Grava a solicitação em **`gateway_integration_requests`** (`organization_id`, `requested_by`, `gateway_name`, `notes`). É uma fila de pedidos que a equipe ArenaHub avalia, não conecta automaticamente.
 
 ---
 
@@ -387,7 +387,7 @@ Em **Notificações** a academia envia comunicados segmentados para os alunos.
 
 1. **Tipo:** Anúncio, Evento, Lembrete ou Alerta.
 2. **Título** e **Mensagem**.
-3. **Canais:** Push (PWA — notificação no dispositivo), E-mail (via Resend), WhatsApp (via gateway).
+3. **Canais:** Push (PWA: notificação no dispositivo), E-mail (via Resend), WhatsApp (via gateway).
 4. **Destinatários:** Todos os alunos ativos, Por nível, Por tipo de plano, ou Somente alunos com PWA instalado.
 5. **Enviar notificação**.
 
@@ -403,7 +403,7 @@ Em **Torneios** a academia cria e divulga torneios (com inscrição paga opciona
 
 ![Torneios](images/admin-torneios.png)
 
-**Campos do novo torneio:** Nome, Data, Esporte, Categoria, Participação (ex.: Dupla Revezando/Americano), Formato (ex.: Americano Super N), Games por set, **Valor da inscrição** (0 = gratuito), **Chave PIX** (para cobrança — CPF, e-mail, telefone ou chave aleatória), Limite de vagas e Imagem de capa.
+**Campos do novo torneio:** Nome, Data, Esporte, Categoria, Participação (ex.: Dupla Revezando/Americano), Formato (ex.: Americano Super N), Games por set, **Valor da inscrição** (0 = gratuito), **Chave PIX** (para cobrança: CPF, e-mail, telefone ou chave aleatória), Limite de vagas e Imagem de capa.
 
 > **Cobrança:** para inscrição paga, **valor e chave PIX precisam estar preenchidos**. O torneio gera um link compartilhável com a imagem de capa.
 
@@ -417,7 +417,7 @@ Em **Configurações** ficam os parâmetros globais da academia.
 
 Principais blocos:
 
-- **Regras de crédito/reposição:** validade dos créditos de reposição (dias), janela de cancelamento com reposição (horas — padrão 5h), meta mensal de check-ins de parceiro.
+- **Regras de crédito/reposição:** validade dos créditos de reposição (dias), janela de cancelamento com reposição (horas, padrão 5h), meta mensal de check-ins de parceiro.
 - **Personalização:** logo da academia, cor da marca e **prévia** (com botão de **Agendar aula** para simular a marca).
 - **Vitrine pública:** dados que aparecem no diretório público (CEP, endereço, WhatsApp, esportes oferecidos, flag "aparecer no diretório").
 - **Torneios:** descontos progressivos para inscrições múltiplas na mesma semana (2º e 3º torneio).
@@ -426,15 +426,15 @@ Principais blocos:
 > **🔧 Nos bastidores**
 > - A janela de cancelamento (padrão **5h**) alimenta `canCancelWithRefund()` em `lib/utils/creditRules.ts`: cancelou dentro da janela → recebe crédito de reposição; fora dela → perde o crédito.
 > - A validade do crédito de reposição alimenta `getMakeupCreditExpiry()`.
-> - A URL de vídeos fica em `system_settings` (chave `video_feed_url`), uma por academia — o app do aluno só monta um `<iframe>` com ela, sem integração de login entre os sistemas.
+> - A URL de vídeos fica em `system_settings` (chave `video_feed_url`), uma por academia. O app do aluno só monta um `<iframe>` com ela, sem integração de login entre os sistemas.
 
 ---
 
-## 14. Equipe — convidar alunos e professores
+## 14. Equipe: convidar alunos e professores
 
 Em **Equipe** a academia convida alunos em massa (via link/QR) e adiciona professores.
 
-![Equipe — convite e professores](images/admin-equipe.png)
+![Equipe: convite e professores](images/admin-equipe.png)
 
 ### 14.1 Convidar alunos
 
@@ -452,7 +452,7 @@ No bloco **Adicionar professor**, informe **Nome, Email, Telefone** e uma **Senh
 
 > **🔧 Nos bastidores**
 > - O `invite_code` é um código curto salvo na `organizations`. O aluno que se cadastra com `?convite=CODE` tem esse código lido pelos metadados do signup e é vinculado à academia (`resolveInviteCode` / `joinAcademy`).
-> - O professor é criado por `createProfessor` com `role = 'admin'` na membership, mas o menu é filtrado por `canAccessArea` — por isso ele vê menos itens que o dono (`isOwner`).
+> - O professor é criado por `createProfessor` com `role = 'admin'` na membership, mas o menu é filtrado por `canAccessArea`: por isso ele vê menos itens que o dono (`isOwner`).
 
 ---
 

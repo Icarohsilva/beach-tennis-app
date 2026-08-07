@@ -11,7 +11,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://arenahub.website'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: 'ArenaHub — Gestão para arenas e academias de esporte',
+  title: 'ArenaHub | Gestão para arenas e academias de esporte',
   description:
     'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
   manifest: '/manifest.json',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     title: 'ArenaHub',
   },
   openGraph: {
-    title: 'ArenaHub — Gestão para arenas e academias de esporte',
+    title: 'ArenaHub | Gestão para arenas e academias de esporte',
     description:
       'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
     url: SITE_URL,
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   // Card grande no X/Twitter — usado em campanhas e ao colar o link na rede.
   twitter: {
     card: 'summary_large_image',
-    title: 'ArenaHub — Gestão para arenas e academias de esporte',
+    title: 'ArenaHub | Gestão para arenas e academias de esporte',
     description:
       'Aulas, turmas, créditos, check-in e pagamentos para academias, escolas esportivas e estúdios. 1º mês grátis.',
     images: ['/og.png'],

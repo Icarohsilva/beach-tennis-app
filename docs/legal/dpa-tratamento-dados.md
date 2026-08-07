@@ -1,6 +1,6 @@
-# Acordo de Tratamento de Dados (DPA) — ArenaHub
+# Acordo de Tratamento de Dados (DPA) | ArenaHub
 
-**Versão 1 — vigente desde 24/07/2026**
+**Versão 1, vigente desde 24/07/2026**
 
 Este Acordo de Tratamento de Dados ("DPA") complementa o Contrato de Assinatura SaaS e regula o tratamento de dados pessoais dos Alunos da Academia pelo ArenaHub, em conformidade com a LGPD (Lei 13.709/2018).
 
@@ -35,7 +35,7 @@ Solicitações de Alunos relativas a seus dados pessoais (acesso, correção, el
 
 ## 8. Transferência internacional
 
-Ver seção correspondente na Política de Privacidade — os mesmos suboperadores e salvaguardas aplicam-se aos dados tratados sob este DPA.
+Ver seção correspondente na Política de Privacidade. Os mesmos suboperadores e salvaguardas aplicam-se aos dados tratados sob este DPA.
 
 ## 9. Vigência e efeitos da rescisão
 

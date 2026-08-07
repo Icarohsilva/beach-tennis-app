@@ -273,7 +273,7 @@ export function AgendarClient({
             {sessionWaitlistCount > 0
               ? `${sessionWaitlistCount} ${sessionWaitlistCount === 1 ? 'pessoa' : 'pessoas'} na fila. `
               : 'Ninguém na fila ainda. '}
-            Se alguém cancelar, avisamos a fila toda — a vaga fica com quem
+            Se alguém cancelar, avisamos a fila toda. A vaga fica com quem
             entrar primeiro.
           </p>
         </div>

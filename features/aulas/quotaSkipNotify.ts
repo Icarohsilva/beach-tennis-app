@@ -34,7 +34,7 @@ export async function notifyQuotaSkips(skips: QuotaSkip[], client?: AdminClient)
           recipients: [{ userId: s.studentId }],
           type: 'fixa_sem_cota',
           title: 'Sem cota disponível',
-          body: `Você não foi vinculado à aula de ${s.className} esta semana — sua cota mensal já foi usada.`,
+          body: `Você não foi vinculado à aula de ${s.className} esta semana. Sua cota mensal já foi usada.`,
           channels: ['push', 'inapp'],
         })
       }

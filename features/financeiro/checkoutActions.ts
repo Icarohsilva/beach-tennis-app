@@ -122,7 +122,7 @@ export async function subscribeToPlanCheckout(
 
   try {
     const pre = await mpCreatePreapproval(token, {
-      reason: `${plan.name} — ${PERIODICITY_LABELS[periodicity]}`,
+      reason: `${plan.name} · ${PERIODICITY_LABELS[periodicity]}`,
       auto_recurring: {
         frequency: PERIODICITY_MONTHS[periodicity],
         frequency_type: 'months',

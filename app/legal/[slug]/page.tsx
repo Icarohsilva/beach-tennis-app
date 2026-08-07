@@ -15,7 +15,7 @@ export function generateStaticParams() {
 
 export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
   const doc = LEGAL_DOCUMENTS[params.slug as LegalSlug]
-  return { title: doc ? `${doc.title} — ArenaHub` : 'Documento legal — ArenaHub' }
+  return { title: doc ? `${doc.title} | ArenaHub` : 'Documento legal | ArenaHub' }
 }
 
 function loadContent(file: string): string {
@@ -50,7 +50,7 @@ export default function LegalDocPage({ params }: { params: { slug: string } }) {
       </header>
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <p className="mb-4 text-xs text-slate-500">
-          Versão {doc.version} — vigente desde {formatDateBR(doc.effectiveDate)}
+          Versão {doc.version}, vigente desde {formatDateBR(doc.effectiveDate)}
         </p>
         <MarkdownDoc content={content} />
       </main>

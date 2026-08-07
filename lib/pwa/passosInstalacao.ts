@@ -23,7 +23,7 @@ export const SCENE_MS = 2200
 // e para leitores de tela.
 export const PASSOS_TEXTO = [
   'Abra o ArenaHub no Safari (não funciona pelo Instagram nem pelo Chrome).',
-  'Toque no botão Compartilhar — o quadradinho com a seta pra cima, na barra de baixo.',
+  'Toque no botão Compartilhar, o quadradinho com a seta pra cima, na barra de baixo.',
   'Role o menu e toque em "Adicionar à Tela de Início".',
   'Toque em "Adicionar" no canto superior direito. O ícone aparece na sua tela.',
 ] as const

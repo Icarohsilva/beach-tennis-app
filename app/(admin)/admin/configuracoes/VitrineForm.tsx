@@ -115,7 +115,7 @@ export function VitrineForm({ listing }: VitrineFormProps) {
         <div>
           <Input label="CEP" placeholder="00000-000" value={cep} onChange={(e) => handleCepChange(e.target.value)} inputMode="numeric" />
           {cepStatus === 'loading' && <p className="text-xs text-slate-400 mt-1">Buscando endereço…</p>}
-          {cepStatus === 'notfound' && <p className="text-xs text-yellow-400 mt-1">CEP não encontrado — preencha manualmente.</p>}
+          {cepStatus === 'notfound' && <p className="text-xs text-yellow-400 mt-1">CEP não encontrado. Preencha manualmente.</p>}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

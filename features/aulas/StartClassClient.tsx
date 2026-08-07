@@ -66,7 +66,7 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
     const presentCount = presentIds.size
     return (
       <div className="rounded-lg bg-green-900/30 border border-green-700 p-4 text-green-300 text-sm">
-        Chamada confirmada — {presentCount} aluno{presentCount !== 1 ? 's' : ''} presente{presentCount !== 1 ? 's' : ''}.
+        Chamada confirmada: {presentCount} aluno{presentCount !== 1 ? 's' : ''} presente{presentCount !== 1 ? 's' : ''}.
       </div>
     )
   }
@@ -103,7 +103,7 @@ export function StartClassClient({ sessionId, students, isCompleted }: Props) {
               <span className="min-w-0">
                 {student.full_name}
                 {wouldOweDebt && (
-                  <span title="Sem plano/crédito — marcar presença vai gerar dívida"> ⚠️</span>
+                  <span title="Sem plano/crédito: marcar presença vai gerar dívida"> ⚠️</span>
                 )}
                 {/* Confirmar a chamada com um parceiro ausente cria pendência pra
                     ele — o professor precisa ver quem é parceiro antes de confirmar. */}
