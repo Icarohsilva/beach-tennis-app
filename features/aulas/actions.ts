@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
-import { offerWaitlistSpot } from './waitlistActions'
+import { notifyWaitlistSpotOpen, clearWaitlistEntry } from './waitlistActions'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { resolveClassAccess } from '@/lib/utils/accessRules'
@@ -295,7 +295,24 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
   })
 
   if (bookErr) {
-    if (bookErr.message.includes('SESSION_FULL')) return { error: 'Esta turma está lotada.' }
+    if (bookErr.message.includes('SESSION_FULL')) {
+      // Corrida da fila de espera: todo mundo é avisado quando abre vaga, então
+      // quem chega depois do último lugar precisa saber que continua na fila —
+      // e não que perdeu o lugar.
+      const { count: onWaitlist } = await adminClient
+        .from('waitlists')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', sessionId)
+        .eq('student_id', user.id)
+        .in('status', ['waiting', 'offered'])
+
+      return {
+        error:
+          (onWaitlist ?? 0) > 0
+            ? 'Alguém entrou primeiro e a vaga foi preenchida. Você continua na fila.'
+            : 'Esta turma está lotada.',
+      }
+    }
     if (bookErr.message.includes('ALREADY_BOOKED')) return { error: 'Você já possui um agendamento confirmado nesta sessão.' }
     return { error: 'Erro ao criar agendamento. Tente novamente.' }
   }
@@ -334,6 +351,10 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     // Aviso de credito baixo (best-effort; a funcao nunca lança).
     await checkLowCreditThreshold(adminClient, user.id, orgId, -1)
   }
+
+  // Entrou na aula: sai da fila de espera. Vale para qualquer porta de entrada —
+  // o botão da fila e o agendamento normal passam os dois por aqui.
+  await clearWaitlistEntry(sessionId, user.id)
 
   revalidatePath('/home')
   revalidatePath('/agendar')
@@ -395,7 +416,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
   }
 
   // Open spot for next person on waitlist
-  await offerWaitlistSpot(booking.session_id)
+  await notifyWaitlistSpotOpen(booking.session_id)
 
   revalidatePath('/home')
   revalidatePath('/agendar')
@@ -685,7 +706,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   }
 
   // Notify next person on waitlist if any
-  await offerWaitlistSpot(booking.session_id)
+  await notifyWaitlistSpotOpen(booking.session_id)
 
   revalidatePath('/home')
   revalidatePath('/agendar')

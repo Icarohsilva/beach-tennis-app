@@ -9,6 +9,7 @@ import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
+import { joinWaitlist } from '@/features/aulas/waitlistActions'
 import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
 import type { AgendaSession } from './WeekAgenda'
 
@@ -67,6 +68,24 @@ export function SessionModal({
 
   function handleJoin() {
     run(() => bookSession(session.id), 'Presença confirmada!')
+  }
+
+  // Turma lotada: entra na fila daqui mesmo. Antes a ficha só dizia "entre pela
+  // tela de agendar" e o aluno tinha que sair da home para conseguir. Toda a
+  // validação (turma realmente cheia, já reservado, já na fila) é do servidor.
+  function handleJoinWaitlist() {
+    setFeedback(null)
+    startTransition(async () => {
+      const result = await joinWaitlist(session.id)
+      if (result.error) {
+        setFeedback({ kind: 'erro', text: result.error })
+        return
+      }
+      setFeedback({
+        kind: 'ok',
+        text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Avisamos se abrir vaga — quem entrar primeiro fica com ela.`,
+      })
+    })
   }
 
   function handleLeave() {
@@ -218,9 +237,21 @@ export function SessionModal({
               </button>
             </div>
           ) : isFull ? (
-            <p className="text-center text-sm text-slate-400">
-              Turma lotada. Entre na fila de espera pela tela de agendar.
-            </p>
+            <div className="space-y-2">
+              <Button
+                variant="secondary"
+                loading={isPending}
+                disabled={isPending}
+                onClick={handleJoinWaitlist}
+                className="w-full"
+              >
+                Entrar na fila de espera
+              </Button>
+              <p className="text-center text-xs text-slate-400">
+                Turma lotada. Se alguém cancelar, avisamos todo mundo da fila — a
+                vaga fica com quem entrar primeiro.
+              </p>
+            </div>
           ) : (
             <Button
               variant="primary"

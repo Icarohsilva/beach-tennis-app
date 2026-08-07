@@ -1,4 +1,7 @@
 // app/(dashboard)/agendar/page.tsx
+// force-dynamic: ver nota em home/page.tsx (puxar-para-atualizar).
+export const dynamic = 'force-dynamic'
+
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CalendarX } from 'lucide-react'
@@ -271,18 +274,29 @@ export default async function AgendarPage({
     waitlistBySession[w.session_id] = w
   }
 
-  // Waitlist counts per next session
+  // Waitlist counts per next session. Traz student_id/joined_at para derivar
+  // também a posição REAL do aluno na fila: a coluna `position` é gravada na
+  // entrada e nunca recalculada, então fica defasada assim que alguém sai.
+  // notifyWaitlistSpotOpen ordena por joined_at — a mesma fonte usada aqui.
   const { data: waitlistCountsRaw } = nextSessionIds.length > 0
     ? await adminClient
         .from('waitlists')
-        .select('session_id')
+        .select('session_id, student_id, joined_at')
         .in('session_id', nextSessionIds)
         .in('status', ['waiting', 'offered'])
+        .order('joined_at', { ascending: true })
     : { data: [] }
 
   const waitlistCountBySession = new Map<string, number>()
-  for (const w of (waitlistCountsRaw ?? []) as { session_id: string }[]) {
-    waitlistCountBySession.set(w.session_id, (waitlistCountBySession.get(w.session_id) ?? 0) + 1)
+  const waitlistPositionBySession = new Map<string, number>()
+  for (const w of (waitlistCountsRaw ?? []) as {
+    session_id: string
+    student_id: string
+    joined_at: string
+  }[]) {
+    const seenSoFar = (waitlistCountBySession.get(w.session_id) ?? 0) + 1
+    waitlistCountBySession.set(w.session_id, seenSoFar)
+    if (w.student_id === user.id) waitlistPositionBySession.set(w.session_id, seenSoFar)
   }
 
   // Student's daily booking counts (for 2/day limit check)
@@ -391,6 +405,7 @@ export default async function AgendarPage({
           const hasBooking = !!bookingId
           const sessionBookedCount = nextId ? (bookedCountBySession.get(nextId) ?? 0) : 0
           const sessionWaitlistCount = nextId ? (waitlistCountBySession.get(nextId) ?? 0) : 0
+          const waitlistPosition = nextId ? (waitlistPositionBySession.get(nextId) ?? null) : null
           const waitlistEntry = nextId ? (waitlistBySession[nextId] ?? null) : null
 
           const attendees = mergeSessionAttendees({
@@ -414,6 +429,7 @@ export default async function AgendarPage({
                 bookingId={bookingId}
                 sessionBookedCount={sessionBookedCount}
                 sessionWaitlistCount={sessionWaitlistCount}
+                waitlistPosition={waitlistPosition}
                 waitlistEntry={waitlistEntry}
                 attendees={attendees}
                 dailyBookingCount={dailyBookingCount}

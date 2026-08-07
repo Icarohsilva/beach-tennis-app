@@ -3,7 +3,7 @@
 
 import { useState, useTransition } from 'react'
 import { bookNextSession, cancelBooking, skipEnrollmentSession, skipEnrollmentNoBooking } from './actions'
-import { joinWaitlist, leaveWaitlist, acceptWaitlistSpot } from './waitlistActions'
+import { joinWaitlist, leaveWaitlist } from './waitlistActions'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate } from '@/lib/utils/dateHelpers'
@@ -21,6 +21,8 @@ interface AgendarClientProps {
   bookingId?: string
   sessionBookedCount: number
   sessionWaitlistCount: number
+  /** Posição do aluno na fila (1 = próximo), derivada da ordem de chegada. */
+  waitlistPosition?: number | null
   waitlistEntry?: WaitlistEntry | null
   attendees: string[]
   dailyBookingCount: number
@@ -34,6 +36,7 @@ export function AgendarClient({
   bookingId,
   sessionBookedCount,
   sessionWaitlistCount,
+  waitlistPosition,
   waitlistEntry,
   attendees,
   dailyBookingCount,
@@ -96,7 +99,12 @@ export function AgendarClient({
     startTransition(async () => {
       const result = await joinWaitlist(nextSession.id)
       if (result.error) setError(result.error)
-      else setSuccess('Você entrou na lista de espera.')
+      else
+        setSuccess(
+          result.position
+            ? `Você é o ${result.position}º da fila. Avisamos se abrir vaga.`
+            : 'Você entrou na lista de espera.',
+        )
     })
   }
 
@@ -111,14 +119,15 @@ export function AgendarClient({
     })
   }
 
-  function handleAccept() {
-    if (!waitlistEntry) return
+  // Quem está na fila entra pelo agendamento normal: a corrida é resolvida lá,
+  // de forma atômica, e ganhar a vaga já tira a pessoa da fila.
+  function handleClaim() {
     setError('')
     setSuccess('')
     startTransition(async () => {
-      const result = await acceptWaitlistSpot(waitlistEntry.id)
+      const result = await bookNextSession(c.id)
       if (result.error) setError(result.error)
-      else setSuccess('Presença confirmada!')
+      else setSuccess('Vaga garantida! Você saiu da fila de espera.')
     })
   }
 
@@ -187,34 +196,52 @@ export function AgendarClient({
             Sair desta aula
           </button>
         </div>
-      ) : waitlistEntry?.status === 'offered' ? (
+      ) : waitlistEntry && !isFull && nextSession ? (
+        // Na fila E existe vaga agora: a corrida está aberta para todo mundo da
+        // fila, então o destaque é entrar, não a posição.
         <div className="bg-brand-600/20 border border-brand-500/50 rounded-xl px-3 py-2 space-y-2">
-          <p className="text-xs text-brand-400 font-semibold">
-            🔔 Vaga disponível! Confirme até{' '}
-            {waitlistEntry.notified_at
-              ? new Date(
-                  new Date(waitlistEntry.notified_at).getTime() + 60 * 60 * 1000,
-                ).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-              : '--:--'}
+          <p className="text-xs font-semibold text-brand-400">
+            🔔 Vaga disponível! A vaga é de quem entrar primeiro.
           </p>
-          <Button variant="primary" size="sm" loading={isPending} onClick={handleAccept}>
-            Confirmar presença
-          </Button>
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="primary" size="sm" loading={isPending} onClick={handleClaim}>
+              Entrar na aula
+            </Button>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={handleLeave}
+              className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            >
+              Sair da fila
+            </button>
+          </div>
         </div>
-      ) : waitlistEntry?.status === 'waiting' ? (
-        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-          <p className="text-xs text-slate-400">
-            Na lista de espera ({sessionWaitlistCount}{' '}
-            {sessionWaitlistCount === 1 ? 'pessoa' : 'pessoas'})
+      ) : waitlistEntry ? (
+        <div className="px-3 py-2 bg-surface-card border border-surface-border rounded-xl space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-white">
+              {waitlistPosition
+                ? `${waitlistPosition}º na fila de espera`
+                : 'Na fila de espera'}
+              <span className="font-normal text-slate-400">
+                {' '}
+                de {sessionWaitlistCount}
+              </span>
+            </p>
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={handleLeave}
+              className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            >
+              Sair da fila
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Se abrir vaga, avisamos todo mundo da fila por notificação. A vaga
+            fica com quem entrar primeiro.
           </p>
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={handleLeave}
-            className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
-          >
-            Sair da fila
-          </button>
         </div>
       ) : hasBooking ? (
         <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border border-l-[3px] border-l-brand-500 rounded-xl">
@@ -229,17 +256,26 @@ export function AgendarClient({
           </button>
         </div>
       ) : isFull && nextSession ? (
-        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-          <Badge variant="danger">LOTADA</Badge>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={isPending}
-            disabled={isPending}
-            onClick={handleJoin}
-          >
-            Fila de espera ({sessionWaitlistCount})
-          </Button>
+        <div className="px-3 py-2 bg-surface-card border border-surface-border rounded-xl space-y-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <Badge variant="danger">LOTADA</Badge>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isPending}
+              disabled={isPending}
+              onClick={handleJoin}
+            >
+              Entrar na fila
+            </Button>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            {sessionWaitlistCount > 0
+              ? `${sessionWaitlistCount} ${sessionWaitlistCount === 1 ? 'pessoa' : 'pessoas'} na fila. `
+              : 'Ninguém na fila ainda. '}
+            Se alguém cancelar, avisamos a fila toda — a vaga fica com quem
+            entrar primeiro.
+          </p>
         </div>
       ) : (
         <Button

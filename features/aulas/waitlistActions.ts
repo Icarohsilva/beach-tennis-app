@@ -6,40 +6,36 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
-import {
-  countOpenMissedCheckins,
-  getMissedCheckinSettings,
-} from '@/features/checkin/missedCheckinSettings'
-import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 
 // ---------------------------------------------------------------------------
-// offerWaitlistSpot — called when a spot opens (cancellation or cron)
+// notifyWaitlistSpotOpen — avisa a fila inteira quando uma vaga abre
 // ---------------------------------------------------------------------------
 
-export async function offerWaitlistSpot(sessionId: string): Promise<void> {
+/**
+ * Avisa TODA a fila de espera de que uma vaga abriu. A vaga fica com quem
+ * entrar primeiro — não há oferta individual nem reserva temporária.
+ *
+ * O modelo anterior oferecia a vaga a uma pessoa por vez, com 1h para aceitar,
+ * e dependia de um cron para expirar a oferta e passar para a próxima. Como o
+ * plano Hobby da Vercel só permite cron 1x/dia, uma oferta não aceita segurava
+ * a fila por até ~24h e a vaga morria sem ninguém usar. Notificando todo mundo
+ * de uma vez a fila não trava: a corrida é resolvida no próprio agendamento,
+ * que é atômico (book_session_atomic + advisory lock), então quem chega depois
+ * do último lugar recebe SESSION_FULL e continua na fila para a próxima vaga.
+ */
+export async function notifyWaitlistSpotOpen(sessionId: string): Promise<void> {
   const adminClient = createAdminClient()
 
-  // Find next 'waiting' entry (earliest joined_at is source of truth for queue order)
-  const { data: next } = await adminClient
+  const { data: waiting } = await adminClient
     .from('waitlists')
-    .select('id, student_id, session_id')
+    .select('id, student_id')
     .eq('session_id', sessionId)
     .eq('status', 'waiting')
     .order('joined_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
 
-  if (!next) return // No one waiting
+  const entries = (waiting ?? []) as { id: string; student_id: string }[]
+  if (entries.length === 0) return
 
-  const now = new Date().toISOString()
-
-  // Offer the spot
-  await adminClient
-    .from('waitlists')
-    .update({ status: 'offered' as WaitlistStatus, notified_at: now })
-    .eq('id', next.id)
-
-  // Fetch session info for notification body (org vem da própria sessão)
   const { data: session } = await adminClient
     .from('class_sessions')
     .select('organization_id, session_date, class:classes(name)')
@@ -49,46 +45,87 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
   const classRaw = Array.isArray(session?.class) ? session!.class[0] : session?.class
   const className = (classRaw as { name: string } | null)?.name ?? 'sua aula'
 
-  const deadline = new Date(Date.now() + 60 * 60 * 1000)
-  const deadlineStr = deadline.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-
   const title = 'Vaga disponível!'
-  const body = `Uma vaga abriu em ${className} (${session?.session_date}). Confirme sua presença até ${deadlineStr}.`
+  const body =
+    `Abriu uma vaga em ${className} (${session?.session_date}). ` +
+    'A vaga é de quem entrar primeiro — abra o app e garanta a sua.'
 
-  // Best-effort: uma falha de notificacao nao pode derrubar o avanço da fila
-  // (offerWaitlistSpot é chamado fire-and-forget por leaveWaitlist/acceptWaitlistSpot).
+  const studentIds = entries.map((e) => e.student_id)
+
+  // Best-effort: falha de notificação não pode derrubar o cancelamento que a
+  // originou (chamada fire-and-forget por cancelBooking/skipEnrollmentSession).
   try {
-    const { data: profile } = await adminClient
+    const { data: profiles } = await adminClient
       .from('profiles')
-      .select('phone')
-      .eq('id', next.student_id)
-      .single()
-    const { data: emailRow } = await adminClient
+      .select('id, phone')
+      .in('id', studentIds)
+    const { data: emailRows } = await adminClient
       .from('user_emails')
-      .select('email')
-      .eq('id', next.student_id)
-      .maybeSingle()
+      .select('id, email')
+      .in('id', studentIds)
+
+    const phoneById = new Map(
+      ((profiles ?? []) as { id: string; phone: string | null }[]).map((p) => [p.id, p.phone]),
+    )
+    const emailById = new Map(
+      ((emailRows ?? []) as { id: string; email: string }[]).map((e) => [e.id, e.email]),
+    )
 
     await notifyUsers(adminClient, {
       orgId: session?.organization_id as string,
-      recipients: [{
-        userId: next.student_id,
-        email: (emailRow as { email: string } | null)?.email ?? null,
-        phone: (profile as { phone: string | null } | null)?.phone ?? null,
-      }],
+      recipients: studentIds.map((id) => ({
+        userId: id,
+        email: emailById.get(id) ?? null,
+        phone: phoneById.get(id) ?? null,
+      })),
       type: 'waitlist_offer',
       title,
       body,
       channels: ['inapp', 'email', 'whatsapp', 'push'],
     })
+
+    // Marca d'água de quando a fila foi avisada — o painel do professor usa
+    // para mostrar que todo mundo já foi chamado para esta vaga.
+    await adminClient
+      .from('waitlists')
+      .update({ notified_at: new Date().toISOString() })
+      .in('id', entries.map((e) => e.id))
   } catch (err) {
-    console.error('[offerWaitlistSpot] notifyUsers falhou', {
-      sessionId, studentId: next.student_id,
+    console.error('[notifyWaitlistSpotOpen] notifyUsers falhou', {
+      sessionId,
+      recipients: studentIds.length,
       error: err instanceof Error ? err.message : String(err),
     })
     Sentry.captureException(err, {
       tags: { channel: 'dispatch', notificationType: 'waitlist_offer' },
-      extra: { sessionId, studentId: next.student_id },
+      extra: { sessionId, recipients: studentIds.length },
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
+// clearWaitlistEntry — tira o aluno da fila quando ele consegue entrar na aula
+// ---------------------------------------------------------------------------
+
+/**
+ * Encerra a entrada ativa do aluno na fila daquela sessão. Chamado depois de um
+ * agendamento bem-sucedido: entrar na aula sai da fila, por qualquer porta
+ * (botão da fila ou agendamento normal). Nunca lança — a reserva já está feita
+ * e não pode ser desfeita por causa da limpeza da fila.
+ */
+export async function clearWaitlistEntry(sessionId: string, studentId: string): Promise<void> {
+  try {
+    const adminClient = createAdminClient()
+    await adminClient
+      .from('waitlists')
+      .update({ status: 'accepted' as WaitlistStatus })
+      .eq('session_id', sessionId)
+      .eq('student_id', studentId)
+      .in('status', ['waiting', 'offered'])
+  } catch (err) {
+    console.error('[clearWaitlistEntry] falhou', {
+      sessionId, studentId,
+      error: err instanceof Error ? err.message : String(err),
     })
   }
 }
@@ -97,7 +134,9 @@ export async function offerWaitlistSpot(sessionId: string): Promise<void> {
 // joinWaitlist — student joins the waitlist for a full session
 // ---------------------------------------------------------------------------
 
-export async function joinWaitlist(sessionId: string): Promise<{ error?: string }> {
+export async function joinWaitlist(
+  sessionId: string,
+): Promise<{ error?: string; position?: number }> {
   const supabase = createClient()
   const {
     data: { user },
@@ -171,6 +210,16 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
     return { error: 'Você já está na lista de espera desta sessão.' }
   }
 
+  // Entradas mortas (saiu da fila / perdeu o prazo) de tentativas anteriores.
+  // A unicidade hoje é parcial (só status ativos), mas limpar mantém o histórico
+  // da sessão enxuto e evita depender da versão do índice em cada ambiente.
+  await adminClient
+    .from('waitlists')
+    .delete()
+    .eq('session_id', sessionId)
+    .eq('student_id', user.id)
+    .in('status', ['cancelled', 'expired'])
+
   // Calculate position (count of active waitlist entries + 1)
   const { count: activeCount } = await adminClient
     .from('waitlists')
@@ -194,9 +243,42 @@ export async function joinWaitlist(sessionId: string): Promise<{ error?: string 
 
   if (insertErr) return { error: 'Erro ao entrar na lista de espera. Tente novamente.' }
 
+  // Confirmação de entrada na fila: sem isto o aluno só recebe notificação se e
+  // quando uma vaga abrir, e fica sem saber se a entrada valeu nem que lugar pegou.
+  // Best-effort — a fila já está gravada, notificação não pode derrubar a ação.
+  try {
+    const { data: sessionInfo } = await adminClient
+      .from('class_sessions')
+      .select('session_date, class:classes(name)')
+      .eq('id', sessionId)
+      .single()
+    const clsRaw = Array.isArray(sessionInfo?.class) ? sessionInfo!.class[0] : sessionInfo?.class
+    const className = (clsRaw as { name: string } | null)?.name ?? 'sua aula'
+
+    await notifyUsers(adminClient, {
+      orgId,
+      recipients: [{ userId: user.id }],
+      type: 'waitlist_joined',
+      title: 'Você entrou na lista de espera',
+      body:
+        `Você é o ${position}º da fila em ${className} (${sessionInfo?.session_date}). ` +
+        'Se abrir uma vaga, avisamos todo mundo da fila — a vaga fica com quem entrar primeiro.',
+      channels: ['inapp', 'push'],
+    })
+  } catch (err) {
+    console.error('[joinWaitlist] notifyUsers falhou', {
+      sessionId, studentId: user.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { channel: 'dispatch', notificationType: 'waitlist_joined' },
+      extra: { sessionId, studentId: user.id },
+    })
+  }
+
   revalidatePath('/home')
   revalidatePath('/agendar')
-  return {}
+  return { position }
 }
 
 // ---------------------------------------------------------------------------
@@ -229,145 +311,12 @@ export async function leaveWaitlist(waitlistId: string): Promise<{ error?: strin
     .update({ status: 'cancelled' as WaitlistStatus })
     .eq('id', waitlistId)
 
-  // If they had an offered spot, advance queue to next person
-  if (entry.status === 'offered') {
-    await offerWaitlistSpot(entry.session_id)
-  }
+  // Sem avanço de fila aqui: a vaga não fica reservada para ninguém, então sair
+  // da fila não libera nada para o próximo — quem continua na fila já foi (ou
+  // será) avisado quando houver vaga de verdade.
 
   revalidatePath('/home')
   revalidatePath('/agendar')
   return {}
 }
 
-// ---------------------------------------------------------------------------
-// acceptWaitlistSpot — student confirms the offered spot
-// ---------------------------------------------------------------------------
-
-export async function acceptWaitlistSpot(waitlistId: string): Promise<{ error?: string }> {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: 'Não autenticado.' }
-
-  const adminClient = createAdminClient()
-  const orgId = await getActiveOrgId()
-  if (!orgId) return { error: 'Academia ativa não encontrada.' }
-
-  // Fetch waitlist entry
-  const { data: entry } = await adminClient
-    .from('waitlists')
-    .select('id, session_id, student_id, status, notified_at')
-    .eq('id', waitlistId)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (!entry) return { error: 'Entrada não encontrada.' }
-  if (entry.student_id !== user.id) return { error: 'Sem permissão.' }
-  if (entry.status !== 'offered') return { error: 'Esta vaga não está mais disponível.' }
-
-  // Check 1-hour acceptance window
-  if (!entry.notified_at) return { error: 'Erro interno: notified_at ausente.' }
-  const notifiedAt = new Date(entry.notified_at)
-  const deadline = new Date(notifiedAt.getTime() + 60 * 60 * 1000)
-  if (new Date() > deadline) {
-    return { error: 'O prazo para confirmar a vaga expirou.' }
-  }
-
-  // Verify session still has capacity
-  const { data: session } = await adminClient
-    .from('class_sessions')
-    .select('id, status, class:classes(max_students)')
-    .eq('id', entry.session_id)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (!session || session.status !== 'scheduled') {
-    return { error: 'Esta sessão não está mais disponível.' }
-  }
-
-  const classRaw = Array.isArray(session.class) ? session.class[0] : session.class
-  const maxStudents = (classRaw as { max_students: number } | null)?.max_students ?? 0
-
-  // Limite diário: máx 2 aulas confirmadas na data da sessão
-  const { data: sessionDateRow } = await adminClient
-    .from('class_sessions')
-    .select('session_date')
-    .eq('id', entry.session_id)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (sessionDateRow) {
-    const { data: sameDaySessions } = await adminClient
-      .from('class_sessions')
-      .select('id')
-      .eq('session_date', sessionDateRow.session_date)
-      .eq('organization_id', orgId)
-
-    const sameDayIds = (sameDaySessions ?? []).map((s: { id: string }) => s.id)
-    const { count: dailyCount } = await adminClient
-      .from('session_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', user.id)
-      .eq('status', 'confirmed')
-      .in('session_id', sameDayIds)
-
-    if ((dailyCount ?? 0) >= 2) {
-      return { error: 'Você já atingiu o limite de 2 aulas nessa data.' }
-    }
-  }
-
-  // Pendência de check-in. A fila de espera é a única porta de reserva que não passa
-  // por resolveClassAccess, então a checagem é feita aqui na mão — sem isto, aceitar
-  // uma vaga da fila seria o furo do bloqueio.
-  const { data: mem } = await adminClient
-    .from('memberships')
-    .select('partner')
-    .eq('user_id', user.id)
-    .eq('organization_id', orgId)
-    .maybeSingle()
-
-  if ((mem as { partner: string | null } | null)?.partner) {
-    const { blockLimit } = await getMissedCheckinSettings(adminClient, orgId)
-    if (blockLimit > 0) {
-      const abertas = await countOpenMissedCheckins(adminClient, user.id, orgId)
-      if (isMissedCheckinBlocked(abertas, blockLimit)) {
-        return {
-          error: `Você tem ${abertas} check-in(s) do parceiro em aberto. Regularize em Financeiro para voltar a agendar.`,
-        }
-      }
-    }
-  }
-
-  // Insert atômico — se outro booking entrou antes, expira e avança a fila
-  const { error: bookingErr } = await adminClient.rpc('book_session_atomic', {
-    p_student_id: user.id,
-    p_session_id: entry.session_id,
-    p_max_students: maxStudents,
-  })
-
-  if (bookingErr) {
-    if (bookingErr.message.includes('SESSION_FULL')) {
-      await adminClient
-        .from('waitlists')
-        .update({ status: 'expired' as WaitlistStatus })
-        .eq('id', waitlistId)
-      await offerWaitlistSpot(entry.session_id)
-      return { error: 'A vaga foi preenchida. O próximo da fila será notificado.' }
-    }
-    if (bookingErr.message.includes('ALREADY_BOOKED')) {
-      return { error: 'Você já tem um agendamento nesta sessão.' }
-    }
-    return { error: 'Erro ao criar agendamento. Tente novamente.' }
-  }
-
-  // Mark waitlist entry as accepted
-  await adminClient
-    .from('waitlists')
-    .update({ status: 'accepted' as WaitlistStatus })
-    .eq('id', waitlistId)
-
-  revalidatePath('/home')
-  revalidatePath('/agendar')
-  return {}
-}

@@ -1,4 +1,9 @@
 // app/(dashboard)/home/page.tsx
+// force-dynamic explícito: o puxar-para-atualizar do app (PullToRefresh) chama
+// router.refresh() e precisa que este RSC seja sempre rebuscado, nunca servido
+// de cache — senão o gesto anima mas devolve os mesmos dados.
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
