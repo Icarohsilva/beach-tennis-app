@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
 
     let studentsTouched = 0
     let bonusesAwarded = 0
+    let medalsGranted = 0
     let failed = 0
 
     for (const orgId of orgIds) {
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
         const result = await syncLigaStreaks(admin, orgId, now)
         studentsTouched += result.studentsTouched
         bonusesAwarded += result.bonusesAwarded
+        medalsGranted += result.medalsGranted
       } catch (err) {
         failed++
         console.error('[cron/liga-streak] falhou para uma academia', {
@@ -44,7 +46,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ orgs: orgIds.length, studentsTouched, bonusesAwarded, failed })
+    return NextResponse.json({
+      orgs: orgIds.length,
+      studentsTouched,
+      bonusesAwarded,
+      medalsGranted,
+      failed,
+    })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'liga-streak' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })

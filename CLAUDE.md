@@ -47,7 +47,7 @@ Never import `@supabase/supabase-js` directly — always use the wrappers above.
 | [lib/utils/dateHelpers.ts](lib/utils/dateHelpers.ts) | `getDatesForDayOfWeekInMonth()`, `formatDate()`, `formatTime()` (pt-BR locale via date-fns) |
 | [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |
 | [lib/checkin/selfCheckin.ts](lib/checkin/selfCheckin.ts) | `resolveSelfCheckinStatus()`, `selfCheckinWindow()`, `haversineMeters()` — geofence e janela (1h antes do início → 1h depois do fim) da confirmação de presença pelo aluno |
-| [lib/liga/](lib/liga/) | `divisions.ts` (promoção/rebaixamento), `streak.ts` (semanas seguidas), `points.ts` (pesos) e `sportForPoints.ts` (qual esporte a presença credita) — regras puras da Liga |
+| [lib/liga/](lib/liga/) | `divisions.ts` (promoção/rebaixamento), `streak.ts` (semanas seguidas), `points.ts` (pesos), `sportForPoints.ts` (qual esporte a presença credita) e `medals.ts` (catálogo de medalhas) — regras puras da Liga |
 
 These have Vitest unit tests co-located (`.test.ts` files).
 
@@ -83,4 +83,6 @@ UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge
 
 The `features/` directory (aulas, financeiro, torneios) and most dashboard pages are planned for Plan 2+. Most `app/(dashboard)/` pages currently show placeholder text. The spec is at [docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md](docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md). Comunidade (`features/comunidade/`) já está implementada (feed social), mas saiu do menu do aluno — ver [docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md](docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md).
 
-A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. A Fase 1 (motor de pontos, divisões, temporada mensal e telas) está implementada; medalhas, elogios e mural de fotos são as Fases 2 a 4 de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md). A Liga nasce desligada por academia (`system_settings.liga_enabled`).
+A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. As Fases 1 (motor de pontos, divisões, temporada mensal e telas) e 2 (medalhas e comemoração) estão implementadas; elogios e mural de fotos são as Fases 3 e 4 de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md). A Liga nasce desligada por academia (`system_settings.liga_enabled`).
+
+Medalha (`liga_medals`) **não dá ponto** e o catálogo vive em código (`lib/liga/medals.ts`), não em tabela: acrescentar medalha é deploy, e a passada diária do cron `liga-streak` concede retroativamente a quem já cumpre o critério.

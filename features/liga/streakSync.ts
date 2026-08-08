@@ -10,6 +10,7 @@ import { getOrgSports } from '@/lib/arenas/orgSports'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason } from './season'
 import { awardLigaPoints } from './awardPoints'
+import { syncLigaMedals } from './medals'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -65,6 +66,7 @@ async function loadRecentAttendance(
 export interface StreakSyncResult {
   studentsTouched: number
   bonusesAwarded: number
+  medalsGranted: number
 }
 
 /**
@@ -79,11 +81,13 @@ export async function syncLigaStreaks(
   orgId: string,
   now: Date = new Date(),
 ): Promise<StreakSyncResult> {
+  const empty: StreakSyncResult = { studentsTouched: 0, bonusesAwarded: 0, medalsGranted: 0 }
+
   const settings = await getLigaSettings(orgId)
-  if (!settings.enabled) return { studentsTouched: 0, bonusesAwarded: 0 }
+  if (!settings.enabled) return empty
 
   const season = await getOrCreateActiveSeason(orgId, now)
-  if (!season) return { studentsTouched: 0, bonusesAwarded: 0 }
+  if (!season) return empty
 
   const orgSports = await getOrgSports(orgId)
   // 30 semanas cobre qualquer sequência que o bônus consiga distinguir (teto de 4x).
@@ -133,5 +137,17 @@ export async function syncLigaStreaks(
     bonusesAwarded++
   }
 
-  return { studentsTouched, bonusesAwarded }
+  // Passada de medalhas. É aqui que entram as que nenhum evento dispara — tempo de
+  // casa, sequência longa, divisão alcançada no fechamento — e é aqui que uma medalha
+  // recém-adicionada ao catálogo alcança quem já cumpria o critério.
+  let medalsGranted = 0
+  const students = new Set(
+    Array.from(byStudentSport.keys()).map((key) => key.split('::')[0]),
+  )
+  for (const studentId of Array.from(students)) {
+    const granted = await syncLigaMedals(admin, orgId, studentId, now)
+    medalsGranted += granted.length
+  }
+
+  return { studentsTouched, bonusesAwarded, medalsGranted }
 }

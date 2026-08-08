@@ -1,7 +1,7 @@
 // features/liga/queries.ts
 // Leituras da Liga para a tela do aluno. Tudo escopado por organization_id.
 import { createAdminClient } from '@/lib/supabase/server'
-import type { LigaDivision, LigaPointEntry, LigaSeason } from '@/types'
+import type { LigaDivision, LigaMedal, LigaPointEntry, LigaSeason } from '@/types'
 
 export interface RankingEntry {
   studentId: string
@@ -163,4 +163,25 @@ export async function getLigaView(
     ranking,
     ledger: (ledgerRows ?? []) as LigaPointEntry[],
   }
+}
+
+/**
+ * Medalhas do aluno naquela academia, das mais recentes para as mais antigas.
+ *
+ * Não filtra por temporada: medalha é permanente, ao contrário do ponto, que zera todo
+ * dia 1º. E não filtra por esporte porque a tela mostra as globais junto com as da
+ * modalidade escolhida.
+ */
+export async function getStudentMedals(
+  orgId: string,
+  studentId: string,
+): Promise<LigaMedal[]> {
+  const { data } = await createAdminClient()
+    .from('liga_medals')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('student_id', studentId)
+    .order('earned_at', { ascending: false })
+
+  return (data ?? []) as LigaMedal[]
 }

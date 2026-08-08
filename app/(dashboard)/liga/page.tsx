@@ -8,7 +8,11 @@ import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getLigaSettings } from '@/features/liga/settings'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
-import { getLigaView, getStudentLigaSports } from '@/features/liga/queries'
+import { getLigaView, getStudentLigaSports, getStudentMedals } from '@/features/liga/queries'
+import { MedalsCard } from '@/features/liga/MedalsCard'
+import { MedalCelebration, type CelebratedMedal } from '@/features/liga/MedalCelebration'
+import { MEDAL_BY_KEY } from '@/lib/liga/medals'
+import { sportLabel } from '@/lib/arenas/sports'
 import { SeasonCard } from '@/features/liga/SeasonCard'
 import { StreakCard } from '@/features/liga/StreakCard'
 import { DivisionRanking } from '@/features/liga/DivisionRanking'
@@ -106,7 +110,30 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const view = await getLigaView(orgId, user.id, season, activeSport, settings.promoteCount)
+  const [view, medals] = await Promise.all([
+    getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
+    getStudentMedals(orgId, user.id),
+  ])
+
+  // A comemoração é de TODAS as não vistas, não só as da modalidade aberta: a medalha
+  // foi conquistada, e escondê-la porque o aluno abriu a outra aba seria perder o
+  // único momento em que ela aparece.
+  const unseen: CelebratedMedal[] = medals
+    .filter((m) => !m.seen_at)
+    .map((m) => {
+      const def = MEDAL_BY_KEY.get(m.medal_key)
+      return def
+        ? {
+            id: m.id,
+            label: def.label,
+            description: def.description,
+            icon: def.icon,
+            sportLabel: m.sport ? sportLabel(m.sport) : null,
+          }
+        : null
+    })
+    // Medalha cujo catálogo sumiu (chave renomeada num deploy) não tem o que comemorar.
+    .filter((m): m is CelebratedMedal => m !== null)
 
   return (
     <div className="relative min-h-full pb-24">
@@ -125,12 +152,14 @@ export default async function LigaPage({
               endsOn={season.ends_on}
             />
             <StreakCard streakWeeks={view.streakWeeks} />
+            <MedalsCard medals={medals} sport={activeSport} />
             <DivisionRanking entries={view.ranking} />
             <PointsLedger entries={view.ledger} />
           </>
         )}
         <VideoBlock videoFeedUrl={videoFeedUrl} />
       </div>
+      <MedalCelebration medals={unseen} />
     </div>
   )
 }

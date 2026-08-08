@@ -14,6 +14,7 @@ import { pointsForTournamentResult } from '@/lib/liga/points'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason } from './season'
 import { awardLigaPoints, revokeLigaPoints } from './awardPoints'
+import { syncLigaMedals } from './medals'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -137,6 +138,13 @@ export async function syncTournamentResultPoints(
           note: `${place}º lugar`,
         })
       }
+    }
+
+    // Medalha de estreia e de campeão: avalia quem está no pódio agora. Quem saiu de
+    // um pódio corrigido perde o ponto (revogado acima) mas mantém a medalha, mesma
+    // decisão do "desmarcar presença não tira medalha".
+    for (const studentId of Array.from(new Set(podium.flatMap((p) => p.studentIds)))) {
+      await syncLigaMedals(admin, orgId, studentId)
     }
   } catch (err) {
     console.error('[liga] syncTournamentResultPoints falhou', {

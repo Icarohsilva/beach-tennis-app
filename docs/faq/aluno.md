@@ -230,6 +230,23 @@ Bronze no futevôlei.
 
 **Pratica mais de uma modalidade?** Aparecem abas no topo para alternar entre os rankings.
 
+**Medalhas.** Abaixo da sequência fica sua vitrine. As medalhas coloridas você já
+conquistou; as apagadas mostram o que falta para a próxima, então vale olhar de vez em quando.
+
+| Grupo | Medalhas |
+|---|---|
+| Aulas | 10, 50, 100 e 250 aulas naquela modalidade |
+| Sequência | 4, 8, 12 e 24 semanas seguidas treinando |
+| Torneio | Primeira participação e primeira vitória |
+| Divisão | Chegou ao Ouro, chegou ao Diamante |
+| Hábito | Madrugador: 10 aulas que começam antes das 07:00 |
+| Academia | 6, 12 e 24 meses de casa |
+
+Medalha **não dá ponto** e **não expira**: quando a temporada vira e os pontos zeram, elas
+continuam na sua vitrine. Ao ganhar uma, ela aparece com destaque na próxima vez que você abrir
+a Liga. Se você já treina há tempos e a academia acabou de ligar a Liga, é normal ganhar várias
+de uma vez, porque contam desde sempre.
+
 **De onde vieram meus pontos.** O extrato no fim da tela mostra cada lançamento, com data e
 motivo. Se algum ponto parecer errado, fale com a academia.
 
@@ -245,6 +262,8 @@ não aparecer nada, a academia ainda não cadastrou a URL.
 > - O extrato (`liga_points`) é a fonte da verdade; a posição (`liga_standings`) é cache,
 >   mesmo padrão de `credit_transactions` → `memberships.credits_balance`.
 > - Aula sem modalidade cadastrada não pontua, a menos que a academia ofereça uma modalidade só.
+> - O catálogo de medalhas vive em código (`lib/liga/medals.ts`), não no banco: medalha nova
+>   alcança retroativamente quem já cumpria o critério, sem precisar de migração.
 > - A URL do vídeo fica em `system_settings` (chave `video_feed_url`), uma por academia. O app
 >   monta um `<iframe>` apontando pra ela; não há integração de login entre os dois sistemas.
 
