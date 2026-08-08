@@ -19,11 +19,13 @@ interface PostFeedProps {
   initialPosts: PostWithAuthor[]
   localPosts: PostWithAuthor[]
   initialLikedPostIds: string[]
+  /** Admin da academia: mostra o botão de fixar em cada post. */
+  canPin?: boolean
 }
 
 const PAGE_SIZE = 20
 
-export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts, initialLikedPostIds }: PostFeedProps) {
+export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts, initialLikedPostIds, canPin = false }: PostFeedProps) {
   const [serverPosts, setServerPosts] = useState<PostWithAuthor[]>(initialPosts)
   const [likedPostIds] = useState<Set<string>>(new Set(initialLikedPostIds))
   const [page, setPage] = useState(1)
@@ -49,7 +51,7 @@ export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts,
           if (payload.new.organization_id !== activeOrgId) return
           const { data } = await supabase
             .from('posts')
-            .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+            .select('id, organization_id, author_id, content, image_urls, likes_count, is_pinned, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
             .eq('id', payload.new.id)
             .single()
 
@@ -64,6 +66,7 @@ export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts,
               content: data.content,
               image_urls: data.image_urls ?? [],
               likes_count: data.likes_count ?? 0,
+              is_pinned: data.is_pinned ?? false,
               session_id: data.session_id,
               tournament_id: data.tournament_id,
               created_at: data.created_at,
@@ -93,8 +96,11 @@ export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts,
     const supabase = createClient()
     const { data } = await supabase
       .from('posts')
-      .select('id, organization_id, author_id, content, image_urls, likes_count, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
+      .select('id, organization_id, author_id, content, image_urls, likes_count, is_pinned, session_id, tournament_id, created_at, author:profiles(id, full_name, avatar_url)')
       .eq('organization_id', activeOrgId)
+      // Mesma ordenação da carga inicial (features/comunidade/feed.ts): com ordens
+      // diferentes, a segunda página repetiria e puliria posts.
+      .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -123,6 +129,7 @@ export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts,
           content: d.content,
           image_urls: d.image_urls ?? [],
           likes_count: d.likes_count ?? 0,
+          is_pinned: d.is_pinned ?? false,
           session_id: d.session_id,
           tournament_id: d.tournament_id,
           created_at: d.created_at,
@@ -162,6 +169,7 @@ export function PostFeed({ currentUserId, activeOrgId, initialPosts, localPosts,
           post={post}
           currentUserId={currentUserId}
           initialLiked={likedPostIds.has(post.id)}
+          canPin={canPin}
         />
       ))}
 

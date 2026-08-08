@@ -21,7 +21,7 @@ export async function createPost(params: {
   imageUrls: string[]
   sessionId?: string
   tournamentId?: string
-}): Promise<{ error?: string; post?: { id: string; organization_id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } } }> {
+}): Promise<{ error?: string; post?: { id: string; organization_id: string; author_id: string; content: string; image_urls: string[]; likes_count: number; is_pinned: boolean; session_id: string | null; tournament_id: string | null; created_at: string; author: { id: string; full_name: string; avatar_url: string | null } } }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -52,6 +52,7 @@ export async function createPost(params: {
       content: content.trim(),
       image_urls: imageUrls,
       likes_count: 0,
+      is_pinned: false,
       session_id: sessionId ?? null,
       tournament_id: tournamentId ?? null,
     })
@@ -61,6 +62,7 @@ export async function createPost(params: {
   if (insertErr || !post) return { error: 'Erro ao criar post. Tente novamente.' }
 
   revalidatePath('/comunidade')
+  revalidatePath('/liga')
 
   const p = post as { id: string; created_at: string }
   return {
@@ -71,6 +73,7 @@ export async function createPost(params: {
       content: content.trim(),
       image_urls: imageUrls,
       likes_count: 0,
+      is_pinned: false,
       session_id: sessionId ?? null,
       tournament_id: tournamentId ?? null,
       created_at: p.created_at,
@@ -126,6 +129,7 @@ export async function toggleLike(
     await adminClient.rpc('decrement_likes_count', { post_id: postId })
 
     revalidatePath('/comunidade')
+  revalidatePath('/liga')
     return { liked: false }
   } else {
     // Like: upsert with ON CONFLICT DO NOTHING for idempotency
@@ -142,6 +146,7 @@ export async function toggleLike(
     await adminClient.rpc('increment_likes_count', { post_id: postId })
 
     revalidatePath('/comunidade')
+  revalidatePath('/liga')
     return { liked: true }
   }
 }
@@ -182,6 +187,7 @@ export async function addComment(
   if (insertErr || !comment) return { error: 'Erro ao adicionar comentário.' }
 
   revalidatePath('/comunidade')
+  revalidatePath('/liga')
   return { commentId: comment.id }
 }
 
@@ -304,4 +310,55 @@ export async function sendNotification(params: {
   }
 
   return { sentCount: recipients.length }
+}
+
+// ---------------------------------------------------------------------------
+// togglePinPost (admin only) — mural de comunicados
+// ---------------------------------------------------------------------------
+
+/**
+ * Fixa ou desafixa um post no topo do feed. Só admin da academia ativa.
+ *
+ * É o que transforma o feed em canal oficial e não só em conversa: o comunicado da
+ * academia para de se perder embaixo das fotos do fim de semana.
+ */
+export async function togglePinPost(postId: string): Promise<{ error?: string; pinned?: boolean }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: callerMembership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .single()
+  if (callerMembership?.role !== 'admin') return { error: 'Sem permissão.' }
+
+  // O post precisa ser da academia ativa: sem este filtro, um admin fixaria post de
+  // outra arena passando o id na mão.
+  const { data: post } = await adminClient
+    .from('posts')
+    .select('id, is_pinned')
+    .eq('id', postId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!post) return { error: 'Post não encontrado.' }
+
+  const next = !(post as { is_pinned: boolean }).is_pinned
+  const { error } = await adminClient
+    .from('posts')
+    .update({ is_pinned: next })
+    .eq('id', postId)
+    .eq('organization_id', orgId)
+
+  if (error) return { error: 'Erro ao fixar o post.' }
+
+  revalidatePath('/liga')
+  revalidatePath('/comunidade')
+  return { pinned: next }
 }
