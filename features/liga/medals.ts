@@ -90,7 +90,16 @@ export async function computeStudentMedalStats(
   studentId: string,
   now: Date = new Date(),
 ): Promise<StudentMedalStats> {
-  const [orgSports, attendance, membershipRes, entriesRes, winsRes, season] = await Promise.all([
+  const [
+    orgSports,
+    attendance,
+    membershipRes,
+    entriesRes,
+    winsRes,
+    kudosGivenRes,
+    kudosReceivedRes,
+    season,
+  ] = await Promise.all([
     getOrgSports(orgId),
     loadStudentAttendance(admin, orgId, studentId),
     admin
@@ -111,6 +120,18 @@ export async function computeStudentMedalStats(
       .eq('organization_id', orgId)
       .eq('status', 'finished')
       .or(`winner1_id.eq.${studentId},winner1_partner_id.eq.${studentId}`),
+    // Elogios contam sempre, inclusive os que não pontuaram por causa do teto: a
+    // medalha reconhece a convivência, não a economia de pontos.
+    admin
+      .from('liga_kudos')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('from_student_id', studentId),
+    admin
+      .from('liga_kudos')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('to_student_id', studentId),
     getOrCreateActiveSeason(orgId, now),
   ])
 
@@ -141,6 +162,10 @@ export async function computeStudentMedalStats(
         division: (standing?.division ?? 'bronze') as LigaDivision,
         monthsSinceJoined: 0,
         earlyClassCount: 0,
+        // Elogio não tem modalidade no recorte da medalha: ele é global, e as
+        // medalhas de convivência vivem no escopo global.
+        kudosGiven: 0,
+        kudosReceived: 0,
       }
       bySport.set(sport, row)
     }
@@ -184,6 +209,8 @@ export async function computeStudentMedalStats(
       division: 'bronze',
       monthsSinceJoined,
       earlyClassCount: 0,
+      kudosGiven: kudosGivenRes.count ?? 0,
+      kudosReceived: kudosReceivedRes.count ?? 0,
     },
   }
 }

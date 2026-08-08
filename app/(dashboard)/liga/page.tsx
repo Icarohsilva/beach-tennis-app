@@ -9,7 +9,14 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getLigaSettings } from '@/features/liga/settings'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
-import { getLigaView, getStudentLigaSports, getStudentMedals } from '@/features/liga/queries'
+import {
+  getLigaView,
+  getStudentLigaSports,
+  getStudentMedals,
+  getRecentKudos,
+  getKudosPeers,
+} from '@/features/liga/queries'
+import { KudosCard } from '@/features/liga/KudosCard'
 import { MedalsCard } from '@/features/liga/MedalsCard'
 import { MedalCelebration, type CelebratedMedal } from '@/features/liga/MedalCelebration'
 import { MEDAL_BY_KEY } from '@/lib/liga/medals'
@@ -116,9 +123,11 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const [view, medals] = await Promise.all([
+  const [view, medals, kudos, peers] = await Promise.all([
     getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
     getStudentMedals(orgId, user.id),
+    getRecentKudos(orgId, user.id),
+    getKudosPeers(season.id, activeSport, user.id),
   ])
 
   // A comemoração é de TODAS as não vistas, não só as da modalidade aberta: a medalha
@@ -177,11 +186,19 @@ export default async function LigaPage({
               <MedalsCard medals={medals} sport={activeSport} />
             </Reveal>
             <Reveal step={4}>
+              <KudosCard
+                peers={peers}
+                recent={kudos}
+                sport={activeSport}
+                weeklyCap={settings.kudosWeeklyCap}
+              />
+            </Reveal>
+            <Reveal step={5}>
               <PointsLedger entries={view.ledger} />
             </Reveal>
           </>
         )}
-        <Reveal step={5}>
+        <Reveal step={6}>
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </Reveal>
       </div>

@@ -15,6 +15,9 @@ interface Props {
     liga_points_tournament_win: number
     liga_promote_count: number
     liga_demote_count: number
+    liga_kudos_weekly_cap: number
+    liga_points_kudos_given: number
+    liga_points_kudos_received: number
   }
 }
 
@@ -25,6 +28,9 @@ const FIELD_LABEL: Record<string, string> = {
   win: 'Vitória em torneio',
   promote: 'Sobem de divisão',
   demote: 'Descem de divisão',
+  kudosCap: 'Elogios que pontuam por semana',
+  kudosGiven: 'Pontos por elogiar',
+  kudosReceived: 'Pontos por ser elogiado',
 }
 
 export function LigaSettingsForm({ settings }: Props) {
@@ -35,6 +41,9 @@ export function LigaSettingsForm({ settings }: Props) {
   const [win, setWin] = useState(String(settings.liga_points_tournament_win))
   const [promote, setPromote] = useState(String(settings.liga_promote_count))
   const [demote, setDemote] = useState(String(settings.liga_demote_count))
+  const [kudosCap, setKudosCap] = useState(String(settings.liga_kudos_weekly_cap))
+  const [kudosGiven, setKudosGiven] = useState(String(settings.liga_points_kudos_given))
+  const [kudosReceived, setKudosReceived] = useState(String(settings.liga_points_kudos_received))
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -44,7 +53,7 @@ export function LigaSettingsForm({ settings }: Props) {
     setError(null)
     setSuccess(null)
 
-    const nums = { attendance, streak, entry, win, promote, demote }
+    const nums = { attendance, streak, entry, win, promote, demote, kudosCap, kudosGiven, kudosReceived }
     for (const [key, raw] of Object.entries(nums)) {
       const n = parseInt(raw, 10)
       if (isNaN(n) || n < 0) {
@@ -62,6 +71,9 @@ export function LigaSettingsForm({ settings }: Props) {
         liga_points_tournament_win: parseInt(win, 10),
         liga_promote_count: parseInt(promote, 10),
         liga_demote_count: parseInt(demote, 10),
+        liga_kudos_weekly_cap: parseInt(kudosCap, 10),
+        liga_points_kudos_given: parseInt(kudosGiven, 10),
+        liga_points_kudos_received: parseInt(kudosReceived, 10),
       })
       if (result.error) setError(result.error)
       else setSuccess('Configuração da Liga salva.')
@@ -148,6 +160,29 @@ export function LigaSettingsForm({ settings }: Props) {
           O bônus de sequência cresce até 4x e estabiliza, para que quem começou agora ainda tenha
           chance na temporada.
         </p>
+
+        <div className="border-t border-surface-border pt-4">
+          <p className="text-sm font-medium text-slate-300">Elogios entre alunos</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Receber vale mais que dar de propósito: o incentivo tem que ser <em>ser elogiável</em>,
+            não distribuir elogio. O teto semanal limita quantos elogios seus ainda pontuam por
+            semana; acima dele o elogio continua aparecendo, só não vale ponto.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-300">{FIELD_LABEL.kudosCap}</label>
+              <Input type="number" min="0" value={kudosCap} onChange={(e) => setKudosCap(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-300">{FIELD_LABEL.kudosGiven}</label>
+              <Input type="number" min="0" value={kudosGiven} onChange={(e) => setKudosGiven(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-300">{FIELD_LABEL.kudosReceived}</label>
+              <Input type="number" min="0" value={kudosReceived} onChange={(e) => setKudosReceived(e.target.value)} />
+            </div>
+          </div>
+        </div>
 
         <Button type="submit" variant="primary" loading={pending}>
           Salvar Liga

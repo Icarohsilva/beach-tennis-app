@@ -5,9 +5,9 @@
 // ícone como string, e um import dinâmico arrastaria a biblioteca inteira para o
 // bundle do cliente. Serve tanto no Server Component da vitrine quanto no Client
 // Component da comemoração.
-import { Medal, Award, Flame, Trophy, Shield, Gem, Sunrise, Star } from 'lucide-react'
+import { Medal, Award, Flame, Trophy, Shield, Gem, Sunrise, Star, Heart, HandHeart } from 'lucide-react'
 
-const ICONS = { Medal, Award, Flame, Trophy, Shield, Gem, Sunrise, Star } as const
+const ICONS = { Medal, Award, Flame, Trophy, Shield, Gem, Sunrise, Star, Heart, HandHeart } as const
 
 interface Props {
   name: string

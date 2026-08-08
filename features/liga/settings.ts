@@ -9,6 +9,10 @@ export interface LigaSettings {
   weights: LigaWeights
   promoteCount: number
   demoteCount: number
+  /** Quantos elogios por semana ainda pontuam para quem envia (trava anti-farming). */
+  kudosWeeklyCap: number
+  kudosPointsGiven: number
+  kudosPointsReceived: number
 }
 
 export const DEFAULT_LIGA_SETTINGS: LigaSettings = {
@@ -18,6 +22,11 @@ export const DEFAULT_LIGA_SETTINGS: LigaSettings = {
   weights: DEFAULT_LIGA_WEIGHTS,
   promoteCount: 5,
   demoteCount: 3,
+  kudosWeeklyCap: 3,
+  // Receber vale mais que dar, de propósito: é a trava mais importante das quatro,
+  // porque alinha o incentivo com SER elogiável em vez de distribuir elogio.
+  kudosPointsGiven: 5,
+  kudosPointsReceived: 15,
 }
 
 function intOr(value: string | undefined, fallback: number): number {
@@ -48,5 +57,8 @@ export async function getLigaSettings(orgId: string | null | undefined): Promise
     },
     promoteCount: intOr(map.get('liga_promote_count'), d.promoteCount),
     demoteCount: intOr(map.get('liga_demote_count'), d.demoteCount),
+    kudosWeeklyCap: intOr(map.get('liga_kudos_weekly_cap'), d.kudosWeeklyCap),
+    kudosPointsGiven: intOr(map.get('liga_points_kudos_given'), d.kudosPointsGiven),
+    kudosPointsReceived: intOr(map.get('liga_points_kudos_received'), d.kudosPointsReceived),
   }
 }
