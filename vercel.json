@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/weekly-grid-generation",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/liga-streak",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/liga-season-close",
+      "schedule": "0 5 1 * *"
     }
   ]
 }

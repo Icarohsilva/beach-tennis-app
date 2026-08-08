@@ -436,6 +436,13 @@ export async function updateSystemSettings(settings: {
   quota_enforcement_enabled?: boolean
   max_classes_per_day?: number
   video_feed_url?: string
+  liga_enabled?: boolean
+  liga_points_attendance?: number
+  liga_points_streak_week?: number
+  liga_points_tournament_entry?: number
+  liga_points_tournament_win?: number
+  liga_promote_count?: number
+  liga_demote_count?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -496,6 +503,22 @@ export async function updateSystemSettings(settings: {
     !/^https?:\/\//i.test(settings.video_feed_url)
   ) {
     return { error: 'URL do site de vídeos deve começar com http:// ou https://.' }
+  }
+
+  // Pesos da Liga: inteiros não-negativos. Zero é válido e desliga a fonte de ponto
+  // sem precisar de uma flag por fonte.
+  const ligaInts: [string, number | undefined][] = [
+    ['Pontos por presença', settings.liga_points_attendance],
+    ['Bônus de sequência', settings.liga_points_streak_week],
+    ['Pontos por inscrição em torneio', settings.liga_points_tournament_entry],
+    ['Pontos por vitória em torneio', settings.liga_points_tournament_win],
+    ['Quantos sobem de divisão', settings.liga_promote_count],
+    ['Quantos descem de divisão', settings.liga_demote_count],
+  ]
+  for (const [label, value] of ligaInts) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      return { error: `${label} deve ser um número inteiro não-negativo.` }
+    }
   }
 
   // system_settings é key/value por academia: uma linha por chave, PK (organization_id, key).

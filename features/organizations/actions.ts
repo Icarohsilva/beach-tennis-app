@@ -517,3 +517,32 @@ export async function selfSetGender(
   revalidatePath('/perfil')
   return {}
 }
+
+/**
+ * O aluno se oculta do ranking da Liga. Continua acumulando pontos e medalhas —
+ * só não aparece para os outros.
+ *
+ * Existe porque forçar competição em quem não quer gera abandono; a válvula de escape
+ * é barata e evita perder o aluno que se sente exposto.
+ */
+export async function selfSetLigaOptOut(optedOut: boolean): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { error: 'Academia não encontrada.' }
+
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('memberships')
+    .update({ liga_opted_out: optedOut })
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+
+  if (error) return { error: 'Erro ao salvar preferência.' }
+
+  revalidatePath('/perfil')
+  revalidatePath('/liga')
+  return {}
+}

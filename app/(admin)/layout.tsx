@@ -88,6 +88,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { href: '/admin/financeiro', label: 'Financeiro', area: 'financeiro' },
     { href: '/admin/notificacoes', label: 'Notificações', area: 'notificacoes' },
     { href: '/admin/torneios', label: 'Torneios', area: 'torneios' },
+    { href: '/admin/liga', label: 'Liga', area: 'liga' },
     { href: '/admin/integracoes', label: 'Integrações', area: 'integracoes' },
     { href: '/admin/configuracoes', label: 'Configurações', area: 'configuracoes' },
     { href: '/admin/equipe', label: 'Equipe', area: 'equipe' },
