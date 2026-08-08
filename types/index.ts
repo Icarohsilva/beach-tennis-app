@@ -167,6 +167,7 @@ export interface Membership {
   wellhub_id: string | null
   totalpass_id: string | null
   sports: string[] // esportes que a pessoa pratica NESTA academia; slugs de lib/arenas/sports.ts
+  liga_opted_out: boolean // aluno escolheu não aparecer no ranking da Liga; continua pontuando
   created_at: string
 }
 

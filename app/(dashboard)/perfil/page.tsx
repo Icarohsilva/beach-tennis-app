@@ -7,6 +7,7 @@ import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { MedicalForm } from '@/features/perfil/MedicalForm'
 import { GenderForm } from '@/features/perfil/GenderForm'
 import { SportsForm } from '@/features/perfil/SportsForm'
+import { LigaOptOutForm } from '@/features/perfil/LigaOptOutForm'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { PersonalDataForm } from '@/features/perfil/PersonalDataForm'
 import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
@@ -335,6 +336,12 @@ export default async function PerfilPage() {
           </p>
           <SportsForm current={membership?.sports ?? []} orgSports={orgSports} />
         </div>
+      </section>
+
+      {/* Privacidade no ranking da Liga */}
+      <section>
+        <SectionHeader title="Liga" />
+        <LigaOptOutForm optedOut={membership?.liga_opted_out ?? false} />
       </section>
 
       {/* Gênero (identidade) — usado em torneios por categoria */}
