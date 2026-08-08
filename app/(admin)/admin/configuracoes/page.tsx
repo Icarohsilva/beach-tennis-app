@@ -6,6 +6,8 @@ import { VitrineForm } from './VitrineForm'
 import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
 import { VideoFeedUrlForm } from './VideoFeedUrlForm'
+import { LigaSettingsForm } from './LigaSettingsForm'
+import { DEFAULT_LIGA_SETTINGS } from '@/features/liga/settings'
 import { SelfCheckinForm } from './SelfCheckinForm'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
@@ -55,6 +57,21 @@ export default async function ConfiguracoesPage() {
   }
 
   const videoFeedUrl = map.get('video_feed_url') ?? ''
+
+  const d = DEFAULT_LIGA_SETTINGS
+  const liga = {
+    liga_enabled: map.get('liga_enabled') === 'true',
+    liga_points_attendance: Number(map.get('liga_points_attendance') ?? d.weights.attendance),
+    liga_points_streak_week: Number(map.get('liga_points_streak_week') ?? d.weights.streakWeek),
+    liga_points_tournament_entry: Number(
+      map.get('liga_points_tournament_entry') ?? d.weights.tournamentEntry,
+    ),
+    liga_points_tournament_win: Number(
+      map.get('liga_points_tournament_win') ?? d.weights.tournamentWin,
+    ),
+    liga_promote_count: Number(map.get('liga_promote_count') ?? d.promoteCount),
+    liga_demote_count: Number(map.get('liga_demote_count') ?? d.demoteCount),
+  }
 
   const { data: orgRow } = await adminClient
     .from('organizations')
@@ -140,10 +157,18 @@ export default async function ConfiguracoesPage() {
       <div>
         <h2 className="text-lg font-bold text-white">Vídeo das quadras</h2>
         <p className="text-slate-400 text-sm mt-1">
-          URL do site de câmeras/gravações que os alunos acessam pela aba Vídeo.
+          URL do site de câmeras/gravações que os alunos acessam dentro da aba Liga.
         </p>
       </div>
       <VideoFeedUrlForm videoFeedUrl={videoFeedUrl} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Liga</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Ranking de temporada por modalidade: quanto vale cada coisa e quantos sobem de divisão.
+        </p>
+      </div>
+      <LigaSettingsForm settings={liga} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Personalização</h2>
