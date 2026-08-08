@@ -9,6 +9,7 @@
 
 import { revalidatePath } from 'next/cache'
 import * as Sentry from '@sentry/nextjs'
+import { awardLigaExtra } from '@/features/liga/extraPoints'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { isStudentExpectedInSession } from '@/features/aulas/sessionUtils'
@@ -307,6 +308,15 @@ export async function confirmSelfAttendance(
       })
       return { error: 'Não foi possível registrar sua presença. Tente de novo.' }
     }
+
+    // Liga: bônus por confirmar sozinho. Só a validada: a pendente ainda depende do
+    // professor, e premiar antes da aprovação seria pagar por um GPS fora do raio.
+    await awardLigaExtra(adminClient, {
+      orgId,
+      studentId: user.id,
+      reason: 'self_checkin',
+      sourceId: session.id,
+    })
   }
 
   revalidatePath('/home')

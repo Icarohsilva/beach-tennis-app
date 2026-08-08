@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { awardLigaExtra } from '@/features/liga/extraPoints'
 import { createAdminClient, createClient, getActiveOrgId } from '@/lib/supabase/server'
 import { validateDayUseSlot } from './validation'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
@@ -103,6 +104,16 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   }
 
   if (!isPaid) {
+    // Liga: só o caminho gratuito credita aqui. No caminho pago a reserva nasce
+    // pending_payment e ainda pode não virar nada — quem credita é o webhook, ao
+    // confirmar o pagamento.
+    await awardLigaExtra(adminClient, {
+      orgId,
+      studentId: user.id,
+      reason: 'dayuse',
+      sourceId: bookingId as string,
+    })
+
     revalidatePath('/agendar/dayuse')
     revalidatePath('/home')
     return {}

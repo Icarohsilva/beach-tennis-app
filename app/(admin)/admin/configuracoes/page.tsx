@@ -76,6 +76,20 @@ export default async function ConfiguracoesPage() {
     liga_points_kudos_received: Number(
       map.get('liga_points_kudos_received') ?? d.kudosPointsReceived,
     ),
+    liga_points_self_checkin: Number(map.get('liga_points_self_checkin') ?? d.weights.selfCheckin),
+    liga_points_cancel_in_time: Number(
+      map.get('liga_points_cancel_in_time') ?? d.weights.cancelInTime,
+    ),
+    liga_points_waitlist_accept: Number(
+      map.get('liga_points_waitlist_accept') ?? d.weights.waitlistAccept,
+    ),
+    liga_points_early_booking: Number(
+      map.get('liga_points_early_booking') ?? d.weights.earlyBooking,
+    ),
+    liga_points_profile_complete: Number(
+      map.get('liga_points_profile_complete') ?? d.weights.profileComplete,
+    ),
+    liga_points_dayuse: Number(map.get('liga_points_dayuse') ?? d.weights.dayUse),
   }
 
   const { data: orgRow } = await adminClient

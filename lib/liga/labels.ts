@@ -18,4 +18,10 @@ export const POINT_REASON_LABEL: Record<string, string> = {
   manual: 'Bônus da academia',
   kudos_given: 'Elogio enviado',
   kudos_received: 'Elogio recebido',
+  self_checkin: 'Presença confirmada pelo app',
+  cancel_in_time: 'Cancelou a tempo e liberou a vaga',
+  waitlist_accept: 'Pegou vaga da fila de espera',
+  early_booking: 'Agendou com antecedência',
+  profile_complete: 'Cadastro completo',
+  dayuse: 'Reserva de day use',
 }

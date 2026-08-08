@@ -446,6 +446,12 @@ export async function updateSystemSettings(settings: {
   liga_kudos_weekly_cap?: number
   liga_points_kudos_given?: number
   liga_points_kudos_received?: number
+  liga_points_self_checkin?: number
+  liga_points_cancel_in_time?: number
+  liga_points_waitlist_accept?: number
+  liga_points_early_booking?: number
+  liga_points_profile_complete?: number
+  liga_points_dayuse?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -520,6 +526,12 @@ export async function updateSystemSettings(settings: {
     ['Teto semanal de elogios', settings.liga_kudos_weekly_cap],
     ['Pontos por elogio enviado', settings.liga_points_kudos_given],
     ['Pontos por elogio recebido', settings.liga_points_kudos_received],
+    ['Pontos por confirmar presença no app', settings.liga_points_self_checkin],
+    ['Pontos por cancelar a tempo', settings.liga_points_cancel_in_time],
+    ['Pontos por pegar vaga da fila', settings.liga_points_waitlist_accept],
+    ['Pontos por agendar com antecedência', settings.liga_points_early_booking],
+    ['Pontos por cadastro completo', settings.liga_points_profile_complete],
+    ['Pontos por day use', settings.liga_points_dayuse],
   ]
   for (const [label, value] of ligaInts) {
     if (value !== undefined && (!Number.isInteger(value) || value < 0)) {

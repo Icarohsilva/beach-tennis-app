@@ -553,6 +553,13 @@ export type LigaPointReason =
   | 'manual'
   | 'kudos_given'
   | 'kudos_received'
+  // Fontes extras: comportamento que ajuda a academia (features/liga/extraPoints.ts).
+  | 'self_checkin'
+  | 'cancel_in_time'
+  | 'waitlist_accept'
+  | 'early_booking'
+  | 'profile_complete'
+  | 'dayuse'
 
 export interface LigaSeason {
   id: string

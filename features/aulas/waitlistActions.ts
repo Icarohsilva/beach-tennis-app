@@ -112,21 +112,30 @@ export async function notifyWaitlistSpotOpen(sessionId: string): Promise<void> {
  * agendamento bem-sucedido: entrar na aula sai da fila, por qualquer porta
  * (botão da fila ou agendamento normal). Nunca lança — a reserva já está feita
  * e não pode ser desfeita por causa da limpeza da fila.
+ *
+ * Devolve `true` quando o aluno REALMENTE estava na fila. É o que distingue, na
+ * Liga, quem pegou uma vaga que abriu de quem agendou uma aula que estava vazia.
  */
-export async function clearWaitlistEntry(sessionId: string, studentId: string): Promise<void> {
+export async function clearWaitlistEntry(
+  sessionId: string,
+  studentId: string,
+): Promise<boolean> {
   try {
     const adminClient = createAdminClient()
-    await adminClient
+    const { data } = await adminClient
       .from('waitlists')
       .update({ status: 'accepted' as WaitlistStatus })
       .eq('session_id', sessionId)
       .eq('student_id', studentId)
       .in('status', ['waiting', 'offered'])
+      .select('id')
+    return (data ?? []).length > 0
   } catch (err) {
     console.error('[clearWaitlistEntry] falhou', {
       sessionId, studentId,
       error: err instanceof Error ? err.message : String(err),
     })
+    return false
   }
 }
 
