@@ -7,7 +7,8 @@
 // ele mostra a tela para o amigo do lado.
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
-import { markLigaMedalsSeen } from './actions'
+import { Share2 } from 'lucide-react'
+import { markLigaMedalsSeen, shareLigaMedals } from './actions'
 import { MedalIcon } from './MedalIcon'
 
 export interface CelebratedMedal {
@@ -25,6 +26,7 @@ interface Props {
 export function MedalCelebration({ medals }: Props) {
   const [dismissed, setDismissed] = useState(false)
   const [pending, startTransition] = useTransition()
+  const [sharing, setSharing] = useState(false)
 
   if (medals.length === 0 || dismissed) return null
 
@@ -34,6 +36,15 @@ export function MedalCelebration({ medals }: Props) {
     setDismissed(true)
     startTransition(async () => {
       await markLigaMedalsSeen(medals.map((m) => m.id))
+    })
+  }
+
+  function handleShare() {
+    // Compartilhar já conta como visto: quem publicou a conquista viu a conquista.
+    setSharing(true)
+    startTransition(async () => {
+      await shareLigaMedals(medals.map((m) => m.id))
+      setDismissed(true)
     })
   }
 
@@ -64,9 +75,25 @@ export function MedalCelebration({ medals }: Props) {
           ))}
         </ul>
 
-        <Button variant="primary" className="w-full" onClick={handleDismiss} disabled={pending}>
-          Boa!
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            onClick={handleDismiss}
+            disabled={pending}
+          >
+            Boa!
+          </Button>
+          <Button
+            variant="primary"
+            className="flex-1"
+            onClick={handleShare}
+            loading={sharing && pending}
+          >
+            <Share2 className="mr-1.5 h-4 w-4" />
+            Compartilhar
+          </Button>
+        </div>
       </div>
     </div>
   )
