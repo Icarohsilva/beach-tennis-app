@@ -7,6 +7,7 @@ import {
   type Division,
   type StandingRow,
 } from '@/lib/liga/divisions'
+import { awardSeasonPrizes, type PromotionMove } from './prizes'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason, monthBounds } from './season'
 import type { LigaSeason } from '@/types'
@@ -26,6 +27,8 @@ export interface SeasonCloseResult {
   promoted: number
   demoted: number
   carried: number
+  /** Prêmios apurados para a temporada que fechou. */
+  prizes: number
 }
 
 /**
@@ -42,7 +45,13 @@ export async function closeLigaSeason(
   orgId: string,
   now: Date = new Date(),
 ): Promise<SeasonCloseResult> {
-  const empty: SeasonCloseResult = { closed: false, promoted: 0, demoted: 0, carried: 0 }
+  const empty: SeasonCloseResult = {
+    closed: false,
+    promoted: 0,
+    demoted: 0,
+    carried: 0,
+    prizes: 0,
+  }
 
   const settings = await getLigaSettings(orgId)
   if (!settings.enabled) return empty
@@ -92,6 +101,7 @@ export async function closeLigaSeason(
   }
 
   const nextDivision = new Map<string, Division>() // `${studentId}::${sport}` → divisão
+  const promotions: PromotionMove[] = []
   let promoted = 0
   let demoted = 0
 
@@ -108,15 +118,31 @@ export async function closeLigaSeason(
       // Comparar pelo índice da escada, não pelas strings: a ordem alfabética de
       // Division não reflete a hierarquia ('bronze' < 'diamante' < 'ouro' < 'prata').
       const upward = DIVISION_ORDER.indexOf(move.to) > DIVISION_ORDER.indexOf(move.from)
-      if (upward) promoted++
-      else demoted++
+      if (upward) {
+        promoted++
+        promotions.push({ studentId: move.studentId, sport, from: move.from, to: move.to })
+      } else demoted++
     }
   }
+
+  // Prêmios ANTES de virar a temporada: a apuração depende dos standings finais
+  // dela e da lista de promovidos que acabou de ser calculada.
+  const prizeResult = await awardSeasonPrizes(admin, {
+    orgId,
+    seasonId: previous.id,
+    standings: standings.map((s) => ({
+      student_id: s.student_id,
+      sport: s.sport,
+      division: s.division,
+      points: s.points,
+    })),
+    promotions,
+  })
 
   await admin.from('liga_seasons').update({ status: 'closed' }).eq('id', previous.id)
 
   const season = await getOrCreateActiveSeason(orgId, now)
-  if (!season) return { closed: true, promoted, demoted, carried: 0 }
+  if (!season) return { closed: true, promoted, demoted, carried: 0, prizes: prizeResult.awarded }
 
   const carriedRows = standings.map((r) => ({
     organization_id: orgId,
@@ -134,5 +160,11 @@ export async function closeLigaSeason(
       .upsert(carriedRows, { onConflict: 'season_id,student_id,sport' })
   }
 
-  return { closed: true, promoted, demoted, carried: carriedRows.length }
+  return {
+    closed: true,
+    promoted,
+    demoted,
+    carried: carriedRows.length,
+    prizes: prizeResult.awarded,
+  }
 }

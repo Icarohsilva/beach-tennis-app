@@ -1,7 +1,14 @@
 // features/liga/queries.ts
 // Leituras da Liga para a tela do aluno. Tudo escopado por organization_id.
 import { createAdminClient } from '@/lib/supabase/server'
-import type { LigaDivision, LigaMedal, LigaPointEntry, LigaSeason } from '@/types'
+import type {
+  LigaDivision,
+  LigaMedal,
+  LigaPointEntry,
+  LigaPrize,
+  LigaPrizeAward,
+  LigaSeason,
+} from '@/types'
 
 export interface RankingEntry {
   studentId: string
@@ -267,4 +274,38 @@ export async function getKudosPeers(
   return ((profiles ?? []) as { id: string; full_name: string }[])
     .map((p) => ({ id: p.id, name: p.full_name }))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+}
+
+/** O que está valendo na temporada e o que este aluno já ganhou (e ainda não recebeu). */
+export async function getLigaPrizeView(
+  orgId: string,
+  studentId: string,
+  seasonId: string,
+): Promise<{ prizes: LigaPrize[]; myAwards: LigaPrizeAward[] }> {
+  const admin = createAdminClient()
+
+  const [{ data: prizes }, { data: awards }] = await Promise.all([
+    admin
+      .from('liga_prizes')
+      .select('*')
+      .eq('season_id', seasonId)
+      .order('kind')
+      .order('position', { nullsFirst: false }),
+    // Prêmios de QUALQUER temporada ainda não entregues: o fechamento vira a
+    // temporada, então o prêmio ganho é sempre da anterior — filtrar pela corrente
+    // esconderia justamente o que o aluno acabou de ganhar.
+    admin
+      .from('liga_prize_awards')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('student_id', studentId)
+      .eq('delivered', false)
+      .order('created_at', { ascending: false })
+      .limit(5),
+  ])
+
+  return {
+    prizes: (prizes ?? []) as LigaPrize[],
+    myAwards: (awards ?? []) as LigaPrizeAward[],
+  }
 }

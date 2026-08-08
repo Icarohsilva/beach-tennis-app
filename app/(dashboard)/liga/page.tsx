@@ -15,7 +15,9 @@ import {
   getStudentMedals,
   getRecentKudos,
   getKudosPeers,
+  getLigaPrizeView,
 } from '@/features/liga/queries'
+import { PrizeBanner } from '@/features/liga/PrizeBanner'
 import { KudosCard } from '@/features/liga/KudosCard'
 import { ComunidadeSection } from '@/features/comunidade/ComunidadeSection'
 import { PhotoGallery } from '@/features/torneios/PhotoGallery'
@@ -127,13 +129,14 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const [view, medals, kudos, peers, feed, photos, membershipRow] = await Promise.all([
+  const [view, medals, kudos, peers, feed, photos, prizeView, membershipRow] = await Promise.all([
     getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
     getStudentMedals(orgId, user.id),
     getRecentKudos(orgId, user.id),
     getKudosPeers(season.id, activeSport, user.id),
     getFeedData(orgId, user.id),
     getRecentOrgPhotos(orgId),
+    getLigaPrizeView(orgId, user.id, season.id),
     createAdminClient()
       .from('memberships')
       .select('role')
@@ -186,9 +189,12 @@ export default async function LigaPage({
               />
             </Reveal>
             <Reveal step={1}>
-              <StreakCard streakWeeks={view.streakWeeks} />
+              <PrizeBanner prizes={prizeView.prizes} myAwards={prizeView.myAwards} />
             </Reveal>
             <Reveal step={2}>
+              <StreakCard streakWeeks={view.streakWeeks} />
+            </Reveal>
+            <Reveal step={3}>
               <DivisionRanking
                 entries={view.ranking}
                 division={view.division}
@@ -197,10 +203,10 @@ export default async function LigaPage({
                 demoteCount={settings.demoteCount}
               />
             </Reveal>
-            <Reveal step={3}>
+            <Reveal step={4}>
               <MedalsCard medals={medals} sport={activeSport} />
             </Reveal>
-            <Reveal step={4}>
+            <Reveal step={5}>
               <KudosCard
                 peers={peers}
                 recent={kudos}
@@ -208,13 +214,13 @@ export default async function LigaPage({
                 weeklyCap={settings.kudosWeeklyCap}
               />
             </Reveal>
-            <Reveal step={5}>
+            <Reveal step={6}>
               <PhotoGallery photos={photos} title="FOTOS DOS TORNEIOS" />
             </Reveal>
-            <Reveal step={6}>
+            <Reveal step={7}>
               <PointsLedger entries={view.ledger} />
             </Reveal>
-            <Reveal step={7}>
+            <Reveal step={8}>
               <ComunidadeSection
                 currentUserId={user.id}
                 activeOrgId={orgId}
@@ -225,7 +231,7 @@ export default async function LigaPage({
             </Reveal>
           </>
         )}
-        <Reveal step={8}>
+        <Reveal step={9}>
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </Reveal>
       </div>

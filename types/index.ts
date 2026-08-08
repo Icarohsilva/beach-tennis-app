@@ -584,6 +584,33 @@ export interface LigaPointEntry {
   created_at: string
 }
 
+export interface LigaPrize {
+  id: string
+  organization_id: string
+  season_id: string
+  kind: 'leader' | 'promoted'
+  position: number | null // só para kind 'leader'
+  description: string
+  credit_classes: number // 0 = só o prêmio em texto
+  created_at: string
+}
+
+export interface LigaPrizeAward {
+  id: string
+  organization_id: string
+  season_id: string
+  student_id: string
+  sport: string
+  kind: 'leader' | 'promoted'
+  position: number | null
+  // Cópia congelada no fechamento: mudar o prêmio depois não reescreve o que foi dado.
+  description: string
+  credit_classes: number
+  delivered: boolean
+  delivered_at: string | null
+  created_at: string
+}
+
 export interface LigaStanding {
   organization_id: string
   season_id: string

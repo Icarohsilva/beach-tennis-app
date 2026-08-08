@@ -13,6 +13,10 @@ import { getOrCreateActiveSeason } from '@/features/liga/season'
 import { DIVISION_LABEL } from '@/lib/liga/labels'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { LigaBonusForm } from './LigaBonusForm'
+import { PrizesCard } from './PrizesCard'
+import { OverviewCards } from './OverviewCards'
+import { getSeasonPrizes, getSeasonAwards } from '@/features/liga/prizes'
+import { getOrgLigaOverview } from '@/features/liga/orgOverview'
 import type { LigaDivision } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -72,6 +76,14 @@ export default async function AdminLigaPage() {
 
   const standings = (standingsRaw ?? []) as StandingRow[]
 
+  const [prizes, awards, overview, orgRow] = await Promise.all([
+    season ? getSeasonPrizes(admin, season.id) : Promise.resolve([]),
+    season ? getSeasonAwards(admin, season.id) : Promise.resolve([]),
+    getOrgLigaOverview(admin, orgId, season?.id ?? null),
+    admin.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+  ])
+  const orgName = (orgRow.data as { name: string } | null)?.name ?? 'academia'
+
   const { data: membersRaw } = await admin
     .from('memberships')
     .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
@@ -121,6 +133,10 @@ export default async function AdminLigaPage() {
           </p>
         </Card>
       )}
+
+      <OverviewCards overview={overview} orgName={orgName} />
+
+      <PrizesCard prizes={prizes} awards={awards} />
 
       <div>
         <h2 className="text-lg font-bold text-white">Dar bônus</h2>

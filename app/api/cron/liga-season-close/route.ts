@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     let closed = 0
     let promoted = 0
     let demoted = 0
+    let prizes = 0
     let failed = 0
 
     for (const orgId of orgIds) {
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
         if (result.closed) closed++
         promoted += result.promoted
         demoted += result.demoted
+        prizes += result.prizes
       } catch (err) {
         // Uma academia com problema não pode impedir o fechamento das outras.
         failed++
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ orgs: orgIds.length, closed, promoted, demoted, failed })
+    return NextResponse.json({ orgs: orgIds.length, closed, promoted, demoted, prizes, failed })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'liga-season-close' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })
