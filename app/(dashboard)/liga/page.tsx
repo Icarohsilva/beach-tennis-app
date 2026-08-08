@@ -18,6 +18,8 @@ import {
 } from '@/features/liga/queries'
 import { KudosCard } from '@/features/liga/KudosCard'
 import { ComunidadeSection } from '@/features/comunidade/ComunidadeSection'
+import { PhotoGallery } from '@/features/torneios/PhotoGallery'
+import { getRecentOrgPhotos } from '@/features/torneios/photoQueries'
 import { getFeedData } from '@/features/comunidade/feed'
 import { MedalsCard } from '@/features/liga/MedalsCard'
 import { MedalCelebration, type CelebratedMedal } from '@/features/liga/MedalCelebration'
@@ -125,12 +127,13 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const [view, medals, kudos, peers, feed, membershipRow] = await Promise.all([
+  const [view, medals, kudos, peers, feed, photos, membershipRow] = await Promise.all([
     getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
     getStudentMedals(orgId, user.id),
     getRecentKudos(orgId, user.id),
     getKudosPeers(season.id, activeSport, user.id),
     getFeedData(orgId, user.id),
+    getRecentOrgPhotos(orgId),
     createAdminClient()
       .from('memberships')
       .select('role')
@@ -206,9 +209,12 @@ export default async function LigaPage({
               />
             </Reveal>
             <Reveal step={5}>
-              <PointsLedger entries={view.ledger} />
+              <PhotoGallery photos={photos} title="FOTOS DOS TORNEIOS" />
             </Reveal>
             <Reveal step={6}>
+              <PointsLedger entries={view.ledger} />
+            </Reveal>
+            <Reveal step={7}>
               <ComunidadeSection
                 currentUserId={user.id}
                 activeOrgId={orgId}
@@ -219,7 +225,7 @@ export default async function LigaPage({
             </Reveal>
           </>
         )}
-        <Reveal step={7}>
+        <Reveal step={8}>
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </Reveal>
       </div>

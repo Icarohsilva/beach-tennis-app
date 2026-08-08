@@ -2,6 +2,8 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
+import { getTournamentPhotos } from '@/features/torneios/photoQueries'
+import { PhotoGallery } from '@/features/torneios/PhotoGallery'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
@@ -153,6 +155,8 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     t.category ? t.category.charAt(0).toUpperCase() + t.category.slice(1) : null,
   ].filter(Boolean) as string[]
 
+  const photos = await getTournamentPhotos(orgId, params.id)
+
   return (
     <div className="p-4 space-y-5">
       {/* Hero */}
@@ -267,6 +271,8 @@ export default async function TorneioDetailPage({ params }: PageProps) {
           </div>
         </section>
       )}
+
+      <PhotoGallery photos={photos} title="MURAL DO TORNEIO" />
     </div>
   )
 }

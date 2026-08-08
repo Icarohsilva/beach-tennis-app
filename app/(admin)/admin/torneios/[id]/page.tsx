@@ -9,6 +9,8 @@ import { GenerateBracketButton } from './GenerateBracketButton'
 import { CoverImageCard } from './CoverImageCard'
 import { CloseTournamentButton } from './CloseTournamentButton'
 import { WinnersCard } from './WinnersCard'
+import { PhotosCard } from './PhotosCard'
+import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { ConfirmPaymentButton } from './ConfirmPaymentButton'
 import { CancelForNonPaymentButton } from './CancelForNonPaymentButton'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
@@ -139,6 +141,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const shareUrl = `${baseUrl}/t/${t.id}`
   const isFinished = t.status === 'finished'
 
+  const photos = await getTournamentPhotos(orgId, params.id)
+
   // Lista de jogadores para o WinnersCard
   const allPlayers = entries
     .map((e) => normalizeProf(e.player))
@@ -217,6 +221,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
           />
         </div>
       </div>
+
+      <PhotosCard tournamentId={t.id} photos={photos} />
 
       {/* Inscrições */}
       <section>
