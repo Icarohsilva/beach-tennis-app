@@ -22,6 +22,10 @@ export interface MedalStats {
   monthsSinceJoined: number
   /** Aulas que começam antes das 07:00. */
   earlyClassCount: number
+  /** Elogios enviados a colegas (Fase 3). */
+  kudosGiven: number
+  /** Elogios recebidos de colegas (Fase 3). */
+  kudosReceived: number
 }
 
 export type MedalScope = 'sport' | 'global'
@@ -41,13 +45,7 @@ function atLeastDivision(division: Division, floor: Division): boolean {
   return DIVISION_ORDER.indexOf(division) >= DIVISION_ORDER.indexOf(floor)
 }
 
-/**
- * Catálogo inicial. Só usa dado que já existe hoje.
- *
- * As medalhas de elogio (10 e 50 dados/recebidos) previstas na spec entram na Fase 3,
- * junto com os elogios em si: exibir "elogie 10 colegas" antes de existir botão de
- * elogiar seria uma meta que ninguém consegue cumprir.
- */
+/** Catálogo. Cada medalha só olha dado que já existe. */
 export const MEDALS: MedalDef[] = [
   // --- Frequência (por esporte) ---------------------------------------------
   {
@@ -187,6 +185,42 @@ export const MEDALS: MedalDef[] = [
     icon: 'Star',
     scope: 'global',
     check: (s) => s.monthsSinceJoined >= 24,
+  },
+
+  // --- Convivência (global) -------------------------------------------------
+  // Recebidos antes de dados na ordem do catálogo: a vitrine mostra as primeiras
+  // como "próximas", e o objetivo que queremos plantar é SER elogiável.
+  {
+    key: 'elogios_recebidos_10',
+    label: 'Reconhecido',
+    description: '10 elogios recebidos dos colegas',
+    icon: 'Heart',
+    scope: 'global',
+    check: (s) => s.kudosReceived >= 10,
+  },
+  {
+    key: 'elogios_recebidos_50',
+    label: 'Querido da quadra',
+    description: '50 elogios recebidos dos colegas',
+    icon: 'Heart',
+    scope: 'global',
+    check: (s) => s.kudosReceived >= 50,
+  },
+  {
+    key: 'elogios_dados_10',
+    label: 'Bom de time',
+    description: '10 elogios enviados a colegas',
+    icon: 'HandHeart',
+    scope: 'global',
+    check: (s) => s.kudosGiven >= 10,
+  },
+  {
+    key: 'elogios_dados_50',
+    label: 'Torcida oficial',
+    description: '50 elogios enviados a colegas',
+    icon: 'HandHeart',
+    scope: 'global',
+    check: (s) => s.kudosGiven >= 50,
   },
 ]
 

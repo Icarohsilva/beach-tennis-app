@@ -443,6 +443,9 @@ export async function updateSystemSettings(settings: {
   liga_points_tournament_win?: number
   liga_promote_count?: number
   liga_demote_count?: number
+  liga_kudos_weekly_cap?: number
+  liga_points_kudos_given?: number
+  liga_points_kudos_received?: number
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -514,6 +517,9 @@ export async function updateSystemSettings(settings: {
     ['Pontos por vitória em torneio', settings.liga_points_tournament_win],
     ['Quantos sobem de divisão', settings.liga_promote_count],
     ['Quantos descem de divisão', settings.liga_demote_count],
+    ['Teto semanal de elogios', settings.liga_kudos_weekly_cap],
+    ['Pontos por elogio enviado', settings.liga_points_kudos_given],
+    ['Pontos por elogio recebido', settings.liga_points_kudos_received],
   ]
   for (const [label, value] of ligaInts) {
     if (value !== undefined && (!Number.isInteger(value) || value < 0)) {

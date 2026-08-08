@@ -185,3 +185,86 @@ export async function getStudentMedals(
 
   return (data ?? []) as LigaMedal[]
 }
+
+export interface KudosView {
+  id: string
+  fromName: string
+  toName: string
+  category: string
+  message: string
+  createdAt: string
+  fromMe: boolean
+  toMe: boolean
+}
+
+/** Últimos elogios da academia, com os nomes já resolvidos. */
+export async function getRecentKudos(
+  orgId: string,
+  viewerId: string,
+  limit = 12,
+): Promise<KudosView[]> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('liga_kudos')
+    .select('id, from_student_id, to_student_id, category, message, created_at')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  const rows = (data ?? []) as {
+    id: string
+    from_student_id: string
+    to_student_id: string
+    category: string
+    message: string
+    created_at: string
+  }[]
+  if (rows.length === 0) return []
+
+  const ids = Array.from(new Set(rows.flatMap((r) => [r.from_student_id, r.to_student_id])))
+  const { data: profiles } = await admin.from('profiles').select('id, full_name').in('id', ids)
+  const nameById = new Map(
+    ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+  )
+
+  return rows.map((r) => ({
+    id: r.id,
+    fromName: nameById.get(r.from_student_id) ?? 'Aluno',
+    toName: nameById.get(r.to_student_id) ?? 'Aluno',
+    category: r.category,
+    message: r.message,
+    createdAt: r.created_at,
+    fromMe: r.from_student_id === viewerId,
+    toMe: r.to_student_id === viewerId,
+  }))
+}
+
+/**
+ * Colegas que o aluno pode elogiar: quem pontuou na mesma modalidade nesta temporada.
+ *
+ * Sai de `liga_standings` e não da lista de alunos da academia porque elogio é entre
+ * quem divide a quadra. Numa academia de 300 alunos, um seletor com todo mundo seria
+ * inútil — e convidaria justamente ao elogio aleatório que as travas tentam conter.
+ */
+export async function getKudosPeers(
+  seasonId: string,
+  sport: string,
+  viewerId: string,
+): Promise<{ id: string; name: string }[]> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('liga_standings')
+    .select('student_id')
+    .eq('season_id', seasonId)
+    .eq('sport', sport)
+
+  const ids = ((data ?? []) as { student_id: string }[])
+    .map((r) => r.student_id)
+    .filter((id) => id !== viewerId)
+  if (ids.length === 0) return []
+
+  const { data: profiles } = await admin.from('profiles').select('id, full_name').in('id', ids)
+  return ((profiles ?? []) as { id: string; full_name: string }[])
+    .map((p) => ({ id: p.id, name: p.full_name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+}

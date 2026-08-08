@@ -3,10 +3,10 @@
 
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
-import { Heart, MessageCircle, X } from 'lucide-react'
+import { Heart, MessageCircle, X, Pin, PinOff } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import type { Post, Profile } from '@/types'
-import { toggleLike } from './actions'
+import { toggleLike, togglePinPost } from './actions'
 import { CommentList } from './CommentList'
 
 type PostWithCount = Post & {
@@ -18,15 +18,27 @@ interface PostCardProps {
   post: PostWithCount
   currentUserId: string
   initialLiked: boolean
+  /** Admin da academia: pode fixar o post no topo do feed. */
+  canPin?: boolean
 }
 
-export function PostCard({ post, currentUserId, initialLiked }: PostCardProps) {
+export function PostCard({ post, currentUserId, initialLiked, canPin = false }: PostCardProps) {
+  const [pinned, setPinned] = useState(post.is_pinned)
   const [liked, setLiked] = useState(initialLiked)
   const [likesCount, setLikesCount] = useState(post.likes_count)
   const [commentCount, setCommentCount] = useState(post.comment_count)
   const [showComments, setShowComments] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  function handleTogglePin() {
+    const wasPinned = pinned
+    setPinned(!wasPinned)
+    startTransition(async () => {
+      const result = await togglePinPost(post.id)
+      if (result?.error) setPinned(wasPinned)
+    })
+  }
 
   function handleToggleLike() {
     const wasLiked = liked
@@ -75,10 +87,28 @@ export function PostCard({ post, currentUserId, initialLiked }: PostCardProps) {
               {initials}
             </div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-white font-semibold text-sm truncate">{post.author.full_name}</p>
             <p className="text-slate-400 text-xs">{formattedDate}</p>
           </div>
+
+          {pinned && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-brand-500/40 bg-brand-500/10 px-2 py-0.5 text-[10px] font-semibold text-brand-500">
+              <Pin className="h-3 w-3" />
+              Fixado
+            </span>
+          )}
+
+          {canPin && (
+            <button
+              onClick={handleTogglePin}
+              disabled={isPending}
+              title={pinned ? 'Desafixar do topo' : 'Fixar no topo do feed'}
+              className="shrink-0 rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-surface-border hover:text-slate-200"
+            >
+              {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
         {/* Text content */}

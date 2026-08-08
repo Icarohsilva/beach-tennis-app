@@ -507,6 +507,29 @@ aluno e atravessa temporadas, senão a virada puniria justamente quem nunca falt
 ficam em Configurações, que é do dono. O aluno pode se ocultar do ranking pelo perfil dele:
 continua pontuando, só não aparece para os colegas.
 
+**Elogios entre alunos.** Um aluno elogia o outro pela Liga, escolhendo o tipo e escrevendo um
+recado que fica visível para a academia. Você controla três números em Configurações: quantos
+elogios por semana ainda pontuam, quanto vale elogiar e quanto vale ser elogiado.
+
+> **Receber vale mais que dar, e isso não é detalhe.** É a trava que faz o incentivo ser *ser
+> elogiável* em vez de *distribuir elogio*. Junto com o limite de um elogio por colega por
+> semana e com a regra de que elogio recíproco na mesma semana não pontua, é o que impede a
+> turma de combinar elogios em massa e detonar o ranking em duas semanas. Elogio barrado por
+> essas travas continua aparecendo no mural, só não vale ponto.
+
+**Comunidade e mural.** O feed saiu de aba própria e virou seção da Liga. Como admin, você pode
+**fixar** um post no topo (ícone de alfinete): é o mural de comunicados, para o aviso da semana
+não se perder embaixo das fotos.
+
+**Fotos do torneio.** Na página do torneio, no painel, há o bloco *Mural de fotos*. **Só a
+academia sobe foto** — não existe fila de moderação, e com upload aberto ao aluno alguém teria
+que revisar o que sobe. As fotos ficam num bucket privado e são servidas por link temporário: o
+aluno vê na página do torneio e na aba Liga, e não vira URL pública compartilhável.
+
+**Aviso da reta final.** Faltando 2 dias para a temporada acabar, quem está perto de subir de
+divisão ou na zona de rebaixamento recebe uma notificação. É o único aviso automático da Liga;
+notificar cada ultrapassagem viraria ruído e faria o aluno desligar as notificações.
+
 **Medalhas.** Rodam sozinhas, sem nada para configurar: aulas (10/50/100/250), sequência
 (4/8/12/24 semanas), primeiro torneio, primeira vitória, chegou ao Ouro, chegou ao Diamante,
 Madrugador (10 aulas antes das 07:00) e tempo de casa (6/12/24 meses). **Medalha não dá ponto** —
@@ -526,6 +549,10 @@ reconhecimento de quem já estava lá.
 >   próxima).
 > - O catálogo de medalhas mora em `lib/liga/medals.ts` (código, não banco). Acrescentar uma
 >   medalha é deploy: a passada seguinte do cron concede a quem já cumpria o critério.
+> - As travas de elogio são do banco, não da tela: `unique (organização, quem elogia, quem é
+>   elogiado, semana ISO)`. A checagem só na UI cairia com duas abas abertas.
+> - Três crons da Liga: `liga-streak` (diário), `liga-season-close` (dia 1º) e
+>   `liga-season-alert` (diário, mas só dispara a 2 dias do fim).
 
 ---
 

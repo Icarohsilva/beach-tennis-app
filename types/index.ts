@@ -471,6 +471,7 @@ export interface Post {
   content: string
   image_urls: string[]
   likes_count: number
+  is_pinned: boolean // mural de comunicados: fixado no topo do feed pela academia
   session_id: string | null
   tournament_id: string | null
   created_at: string

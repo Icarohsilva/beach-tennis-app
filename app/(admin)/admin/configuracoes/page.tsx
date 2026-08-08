@@ -71,6 +71,11 @@ export default async function ConfiguracoesPage() {
     ),
     liga_promote_count: Number(map.get('liga_promote_count') ?? d.promoteCount),
     liga_demote_count: Number(map.get('liga_demote_count') ?? d.demoteCount),
+    liga_kudos_weekly_cap: Number(map.get('liga_kudos_weekly_cap') ?? d.kudosWeeklyCap),
+    liga_points_kudos_given: Number(map.get('liga_points_kudos_given') ?? d.kudosPointsGiven),
+    liga_points_kudos_received: Number(
+      map.get('liga_points_kudos_received') ?? d.kudosPointsReceived,
+    ),
   }
 
   const { data: orgRow } = await adminClient

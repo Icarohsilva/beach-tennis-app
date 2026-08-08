@@ -241,14 +241,34 @@ conquistou; as apagadas mostram o que falta para a próxima, então vale olhar d
 | Divisão | Chegou ao Ouro, chegou ao Diamante |
 | Hábito | Madrugador: 10 aulas que começam antes das 07:00 |
 | Academia | 6, 12 e 24 meses de casa |
+| Convivência | 10 e 50 elogios recebidos · 10 e 50 elogios enviados |
 
 Medalha **não dá ponto** e **não expira**: quando a temporada vira e os pontos zeram, elas
 continuam na sua vitrine. Ao ganhar uma, ela aparece com destaque na próxima vez que você abrir
-a Liga. Se você já treina há tempos e a academia acabou de ligar a Liga, é normal ganhar várias
+a Liga, com a opção de publicar a conquista no feed. Se você já treina há tempos e a academia acabou de ligar a Liga, é normal ganhar várias
 de uma vez, porque contam desde sempre.
 
 **De onde vieram meus pontos.** O extrato no fim da tela mostra cada lançamento, com data e
 motivo. Se algum ponto parecer errado, fale com a academia.
+
+**Elogios.** Você pode elogiar um colega pela Liga: escolhe a pessoa, o tipo (evoluiu muito,
+grande parceiro, incentiva todo mundo, não falta uma) e escreve um recado, que aparece para a
+academia. Quem **recebe ganha mais ponto que quem dá**, de propósito. Existem travas para o
+elogio não virar troca de favores:
+
+- só um elogio por colega **por semana**;
+- só os primeiros elogios da semana pontuam (a academia define quantos);
+- se vocês se elogiarem na mesma semana, o segundo não vale ponto.
+
+Nos três casos o elogio é publicado do mesmo jeito, só não conta ponto.
+
+**Comunidade e fotos.** O feed da academia agora fica dentro da Liga, no fim da página. Post da
+academia com o aviso do mês aparece **fixado no topo**. Logo acima ficam as fotos dos torneios,
+que só a academia publica.
+
+**Reta final.** Quando faltarem 2 dias para a temporada acabar e você estiver perto de subir de
+divisão (ou dentro da zona de rebaixamento), o app te avisa. É o único aviso automático da
+Liga: ninguém recebe notificação a cada mudança de posição.
 
 **Não quer aparecer?** Em Perfil → Liga, marque *"Não aparecer no ranking"*. Você continua
 ganhando pontos normalmente; só os outros alunos não veem sua posição.

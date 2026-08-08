@@ -9,7 +9,18 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getLigaSettings } from '@/features/liga/settings'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
-import { getLigaView, getStudentLigaSports, getStudentMedals } from '@/features/liga/queries'
+import {
+  getLigaView,
+  getStudentLigaSports,
+  getStudentMedals,
+  getRecentKudos,
+  getKudosPeers,
+} from '@/features/liga/queries'
+import { KudosCard } from '@/features/liga/KudosCard'
+import { ComunidadeSection } from '@/features/comunidade/ComunidadeSection'
+import { PhotoGallery } from '@/features/torneios/PhotoGallery'
+import { getRecentOrgPhotos } from '@/features/torneios/photoQueries'
+import { getFeedData } from '@/features/comunidade/feed'
 import { MedalsCard } from '@/features/liga/MedalsCard'
 import { MedalCelebration, type CelebratedMedal } from '@/features/liga/MedalCelebration'
 import { MEDAL_BY_KEY } from '@/lib/liga/medals'
@@ -116,10 +127,23 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const [view, medals] = await Promise.all([
+  const [view, medals, kudos, peers, feed, photos, membershipRow] = await Promise.all([
     getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
     getStudentMedals(orgId, user.id),
+    getRecentKudos(orgId, user.id),
+    getKudosPeers(season.id, activeSport, user.id),
+    getFeedData(orgId, user.id),
+    getRecentOrgPhotos(orgId),
+    createAdminClient()
+      .from('memberships')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('organization_id', orgId)
+      .maybeSingle(),
   ])
+
+  // Só admin fixa post no mural. O papel é por-academia, então vem da membership.
+  const isAdmin = (membershipRow.data as { role: string } | null)?.role === 'admin'
 
   // A comemoração é de TODAS as não vistas, não só as da modalidade aberta: a medalha
   // foi conquistada, e escondê-la porque o aluno abriu a outra aba seria perder o
@@ -177,11 +201,31 @@ export default async function LigaPage({
               <MedalsCard medals={medals} sport={activeSport} />
             </Reveal>
             <Reveal step={4}>
+              <KudosCard
+                peers={peers}
+                recent={kudos}
+                sport={activeSport}
+                weeklyCap={settings.kudosWeeklyCap}
+              />
+            </Reveal>
+            <Reveal step={5}>
+              <PhotoGallery photos={photos} title="FOTOS DOS TORNEIOS" />
+            </Reveal>
+            <Reveal step={6}>
               <PointsLedger entries={view.ledger} />
+            </Reveal>
+            <Reveal step={7}>
+              <ComunidadeSection
+                currentUserId={user.id}
+                activeOrgId={orgId}
+                initialPosts={feed.posts}
+                initialLikedPostIds={feed.likedPostIds}
+                canPin={isAdmin}
+              />
             </Reveal>
           </>
         )}
-        <Reveal step={5}>
+        <Reveal step={8}>
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </Reveal>
       </div>

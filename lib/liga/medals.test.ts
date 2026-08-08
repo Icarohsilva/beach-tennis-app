@@ -10,6 +10,8 @@ function stats(partial: Partial<MedalStats> = {}): MedalStats {
     division: 'bronze',
     monthsSinceJoined: 0,
     earlyClassCount: 0,
+    kudosGiven: 0,
+    kudosReceived: 0,
     ...partial,
   }
 }
@@ -99,6 +101,19 @@ describe('madrugador e tempo de casa', () => {
   it('9 aulas cedo não ganha; 10 ganha', () => {
     expect(evaluateMedals(stats({ earlyClassCount: 9 }), 'sport')).toEqual([])
     expect(evaluateMedals(stats({ earlyClassCount: 10 }), 'sport')).toEqual(['madrugador'])
+  })
+
+  it('elogios recebidos e dados têm escadas separadas', () => {
+    expect(evaluateMedals(stats({ kudosReceived: 9 }), 'global')).toEqual([])
+    expect(evaluateMedals(stats({ kudosReceived: 10 }), 'global')).toEqual([
+      'elogios_recebidos_10',
+    ])
+    expect(evaluateMedals(stats({ kudosGiven: 50, kudosReceived: 50 }), 'global')).toEqual([
+      'elogios_recebidos_10',
+      'elogios_recebidos_50',
+      'elogios_dados_10',
+      'elogios_dados_50',
+    ])
   })
 
   it('tempo de casa é escada e acumula', () => {
