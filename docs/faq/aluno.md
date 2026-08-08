@@ -1,12 +1,12 @@
 # Manual do Aluno | ArenaHub
 
 > Guia completo para o **aluno** que vai usar o ArenaHub no dia a dia.
-> Cobre do zero: **cadastro pelo link da academia (ou senha temporária) → primeiro acesso → agendar aulas, day use, financeiro, vídeos das quadras, torneios e perfil.**
+> Cobre do zero: **cadastro pelo link da academia (ou senha temporária) → primeiro acesso → agendar aulas, day use, financeiro, Liga (ranking) com os vídeos das quadras, torneios e perfil.**
 >
 > Cada seção traz o passo a passo, a tela real do app e um bloco **🔧 Nos bastidores** explicando o que o sistema faz por baixo dos panos.
 
 **Produção:** <https://www.arenahub.website>
-**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Arena · (+) · Vídeo · Perfil.
+**Onde usar:** o app do aluno é feito para o **celular** (PWA instalável). A navegação fica na **barra inferior**: Home · Arena · (+) · Liga · Perfil.
 
 > 💡 Este manual também fica disponível **dentro do app**: toque no botão de ajuda **(?)** → **Documentação**.
 
@@ -24,7 +24,7 @@
 4. [Day use](#4-day-use)
 5. [Arena: torneios e Day Use](#5-arena-torneios-e-day-use)
 6. [Financeiro: plano e pagamentos](#6-financeiro-plano-e-pagamentos)
-7. [Vídeo](#7-vídeo)
+7. [Liga](#7-liga)
 8. [Torneios: inscrição](#8-torneios-inscrição)
 9. [Perfil: dados, créditos e ficha](#9-perfil-dados-créditos-e-ficha)
 
@@ -132,7 +132,7 @@ A **Home** é o seu resumo: quanto falta para a próxima aula, sua agenda da sem
 - **Assine um plano**: atalho para contratar mensalidade e ter aulas incluídas todo mês.
 - **Sua frequência**: presenças, faltas e aproveitamento do mês. O detalhe por mês e por ano fica no **Perfil**.
 - **Minhas próximas aulas**: se não houver, aparece **Agendar agora**.
-- **Barra inferior:** Home · Arena · **(+)** · Vídeo · Perfil. O botão **(+)** central é o atalho para agendar.
+- **Barra inferior:** Home · Arena · **(+)** · Liga · Perfil. O botão **(+)** central é o atalho para agendar.
 
 > **🔧 Nos bastidores**
 > - **Créditos** vêm de `profiles.credits_balance`, que é um valor **em cache**: a fonte da verdade é a tabela `credit_transactions` (cada aula agendada, cancelamento ou reposição é um lançamento).
@@ -201,21 +201,52 @@ Na tela **Financeiro** você vê seu plano atual, os planos disponíveis para co
 
 ---
 
-## 7. Vídeo
+## 7. Liga
 
-A aba **Vídeo** abre as gravações das câmeras das quadras da sua academia, direto na tela de
-login do site de vídeos configurado pela academia.
+A aba **Liga** é o ranking da sua academia. Você ganha pontos por aparecer e competir, e
+disputa a temporada com gente do seu nível de ritmo.
 
-![Vídeo](images/aluno-video.png)
+![Liga](images/aluno-liga.png)
 
-Faça login com as credenciais do próprio site de vídeos (o ArenaHub só exibe a página, não
-guarda essa senha). Se aparecer o aviso **"Vídeos ainda não configurados"**, é porque a
-academia ainda não cadastrou a URL em Configurações. Fale com ela. Se a página não carregar
-dentro do app, use o botão **Abrir em nova aba**.
+**Como se ganha ponto**
+
+| O que você faz | O que acontece |
+|---|---|
+| Presença numa aula | Pontos na modalidade daquela turma |
+| Semanas seguidas treinando | Bônus de sequência, que cresce até certo ponto |
+| Se inscrever num torneio | Pontos por participar |
+| Terminar no pódio | Bônus de campeão, vice ou terceiro |
+| Bônus do professor | Pontos na mão, com o motivo escrito ("Destaque da aula de quinta") |
+
+Cada academia escolhe quanto vale cada coisa, então os números podem mudar de uma para outra.
+
+**Divisões.** Você compete dentro de uma divisão (Bronze, Prata, Ouro, Diamante) contra quem
+está no mesmo ritmo, não contra a academia inteira. No fim da temporada os primeiros sobem de
+divisão e os últimos descem. A divisão é **por modalidade**: dá para ser Ouro no beach tennis e
+Bronze no futevôlei.
+
+**Temporada.** A temporada é mensal e os pontos zeram no dia 1º. Sua sequência de semanas
+**não** zera: ela é sua, atravessa temporadas.
+
+**Pratica mais de uma modalidade?** Aparecem abas no topo para alternar entre os rankings.
+
+**De onde vieram meus pontos.** O extrato no fim da tela mostra cada lançamento, com data e
+motivo. Se algum ponto parecer errado, fale com a academia.
+
+**Não quer aparecer?** Em Perfil → Liga, marque *"Não aparecer no ranking"*. Você continua
+ganhando pontos normalmente; só os outros alunos não veem sua posição.
+
+**Vídeos das quadras.** As gravações das câmeras ficam num bloco dentro da Liga (antes eram uma
+aba própria). Faça login com as credenciais do próprio site de vídeos — o ArenaHub só exibe a
+página e não guarda essa senha. Se ela não carregar dentro do app, use **Abrir em nova aba**. Se
+não aparecer nada, a academia ainda não cadastrou a URL.
 
 > **🔧 Nos bastidores**
-> - A URL fica salva em `system_settings` (chave `video_feed_url`), uma por academia. O app só
->   monta um `<iframe>` apontando pra ela. Não há integração de login entre os dois sistemas.
+> - O extrato (`liga_points`) é a fonte da verdade; a posição (`liga_standings`) é cache,
+>   mesmo padrão de `credit_transactions` → `memberships.credits_balance`.
+> - Aula sem modalidade cadastrada não pontua, a menos que a academia ofereça uma modalidade só.
+> - A URL do vídeo fica em `system_settings` (chave `video_feed_url`), uma por academia. O app
+>   monta um `<iframe>` apontando pra ela; não há integração de login entre os dois sistemas.
 
 ---
 

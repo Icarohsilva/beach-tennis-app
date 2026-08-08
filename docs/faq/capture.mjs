@@ -230,6 +230,7 @@ await safe('admin-equipe', async () => {
 
 // Demais áreas do painel
 await capture(admin, '/admin/torneios', 'admin-torneios')
+await capture(admin, '/admin/liga', 'admin-liga')
 await capture(admin, '/admin/notificacoes', 'admin-notificacoes')
 await capture(admin, '/admin/assinatura', 'admin-assinatura')
 
@@ -302,7 +303,8 @@ await safe('aluno-home', async () => {
 await capture(stu, '/agendar', 'aluno-agendar')
 await capture(stu, '/agendar/dayuse', 'aluno-agendar-dayuse')
 await capture(stu, '/financeiro', 'aluno-financeiro')
-await capture(stu, '/video', 'aluno-video')
+// A aba Vídeo virou a Liga; o vídeo é um bloco dentro dela.
+await capture(stu, '/liga', 'aluno-liga')
 // Aba "Arena": reúne torneios e day use (a antiga aba "Aulas" deixou de existir;
 // a agenda de aulas passou para a Home).
 await capture(stu, '/torneios', 'aluno-arena')

@@ -31,6 +31,7 @@
 13. [Configurações](#13-configurações)
 14. [Equipe: convidar alunos e professores](#14-equipe-convidar-alunos-e-professores)
 15. [Assinatura da plataforma](#15-assinatura-da-plataforma)
+16. [Liga: ranking de temporada](#16-liga-ranking-de-temporada)
 
 ---
 
@@ -421,7 +422,8 @@ Principais blocos:
 - **Personalização:** logo da academia, cor da marca e **prévia** (com botão de **Agendar aula** para simular a marca).
 - **Vitrine pública:** dados que aparecem no diretório público (CEP, endereço, WhatsApp, esportes oferecidos, flag "aparecer no diretório").
 - **Torneios:** descontos progressivos para inscrições múltiplas na mesma semana (2º e 3º torneio).
-- **Vídeo das quadras:** URL do site externo de câmeras/gravações que o aluno acessa pela aba **Vídeo**. Deixe em branco para esconder essa aba do aluno.
+- **Vídeo das quadras:** URL do site externo de câmeras/gravações que o aluno acessa dentro da aba **Liga**. Deixe em branco para esconder esse bloco.
+- **Liga:** liga/desliga o ranking e define quanto vale cada coisa (presença, sequência, inscrição e vitória em torneio) e quantos alunos sobem e descem de divisão por temporada.
 
 > **🔧 Nos bastidores**
 > - A janela de cancelamento (padrão **5h**) alimenta `canCancelWithRefund()` em `lib/utils/creditRules.ts`: cancelou dentro da janela → recebe crédito de reposição; fora dela → perde o crédito.
@@ -472,6 +474,51 @@ A academia usa o ArenaHub via **assinatura mensal**. O **primeiro mês é gráti
 
 ---
 
+## 16. Liga: ranking de temporada
+
+A **Liga** transforma frequência em disputa. O aluno ganha ponto por aparecer e competir, e
+briga por posição dentro de uma divisão do tamanho do ritmo dele, não contra a academia inteira.
+
+**Ligue primeiro em Configurações → Liga.** A Liga nasce **desligada** de propósito: antes de
+ativar, defina a **modalidade das suas turmas** na Grade de Aulas. Turma sem modalidade não
+pontua (a única exceção é a academia que oferece uma modalidade só, onde o sistema deduz).
+
+**De onde vem o ponto**
+
+| Evento | Quando entra |
+|---|---|
+| Presença em aula | Quando o professor marca presença na chamada. Desmarcar devolve o ponto |
+| Sequência de semanas | Passada diária: semanas seguidas treinando naquela modalidade |
+| Inscrição em torneio | Inscrição confirmada |
+| Pódio | Ao encerrar o torneio (campeão, vice e terceiro; corrigir os vencedores recalcula) |
+| Bônus manual | Você lança em **Liga → Dar bônus** |
+
+**O bônus manual é o que faz o ranking ser da sua academia.** É onde entra o que o sistema não
+enxerga: destaque da aula, evolução técnica, quem ajudou a montar a quadra. O **motivo é
+obrigatório** e aparece no extrato do aluno ("+20 · Destaque da aula de quinta"). Pontos
+negativos servem de correção. Teto de 500 pontos por lançamento.
+
+**Divisões e temporada.** Bronze → Prata → Ouro → Diamante, por modalidade. A temporada é
+**mensal**: no dia 1º os pontos zeram, os primeiros de cada divisão sobem e os últimos descem
+(quantos, você define em Configurações). A **sequência de semanas não zera** na virada: ela é do
+aluno e atravessa temporadas, senão a virada puniria justamente quem nunca faltou.
+
+**Quem enxerga o quê.** O professor também acessa a Liga e lança bônus; os pesos da pontuação
+ficam em Configurações, que é do dono. O aluno pode se ocultar do ranking pelo perfil dele:
+continua pontuando, só não aparece para os colegas.
+
+> **🔧 Nos bastidores**
+> - O extrato (`liga_points`) é a fonte da verdade e a posição (`liga_standings`) é cache, mesmo
+>   padrão de `credit_transactions` → `memberships.credits_balance`. A escrita é atômica por RPC
+>   (`liga_award_points` / `liga_revoke_points`), com índice único que impede pontuar duas vezes
+>   o mesmo evento.
+> - Creditar ponto nunca derruba a operação principal: se a Liga falhar ao marcar presença, a
+>   presença é gravada assim mesmo e o erro vai para o Sentry.
+> - Dois crons: `liga-streak` (diário, sequência e bônus semanal) e `liga-season-close`
+>   (dia 1º, fecha a temporada, aplica promoção/rebaixamento e abre a próxima).
+
+---
+
 ## Resumo do fluxo (do zero ao dia a dia)
 
 1. **Criar academia** (`/criar-academia`) → login automático.
@@ -479,7 +526,7 @@ A academia usa o ArenaHub via **assinatura mensal**. O **primeiro mês é gráti
 3. **Configurar planos/preços** e **conectar Mercado Pago** (para receber dos alunos).
 4. *(Opcional)* **Conectar Wellhub/TotalPass** para check-ins de parceiro.
 5. **Montar a grade** (turmas) e **cadastrar/convidar alunos**.
-6. **Operar:** presença, notificações, torneios, financeiro.
+6. **Operar:** presença, notificações, torneios, financeiro e Liga.
 7. **Assinar a plataforma** antes do fim do mês grátis.
 
 > **Manual complementar:** o uso pelo aluno está em [`aluno.md`](aluno.md).

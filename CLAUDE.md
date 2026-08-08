@@ -47,6 +47,7 @@ Never import `@supabase/supabase-js` directly — always use the wrappers above.
 | [lib/utils/dateHelpers.ts](lib/utils/dateHelpers.ts) | `getDatesForDayOfWeekInMonth()`, `formatDate()`, `formatTime()` (pt-BR locale via date-fns) |
 | [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |
 | [lib/checkin/selfCheckin.ts](lib/checkin/selfCheckin.ts) | `resolveSelfCheckinStatus()`, `selfCheckinWindow()`, `haversineMeters()` — geofence e janela (1h antes do início → 1h depois do fim) da confirmação de presença pelo aluno |
+| [lib/liga/](lib/liga/) | `divisions.ts` (promoção/rebaixamento), `streak.ts` (semanas seguidas), `points.ts` (pesos) e `sportForPoints.ts` (qual esporte a presença credita) — regras puras da Liga |
 
 These have Vitest unit tests co-located (`.test.ts` files).
 
@@ -54,7 +55,8 @@ These have Vitest unit tests co-located (`.test.ts` files).
 
 All types are in [types/index.ts](types/index.ts). Key invariants:
 
-- `profiles.credits_balance` is a **cached** value — source of truth is the `credit_transactions` table
+- `memberships.credits_balance` is a **cached** value — source of truth is the `credit_transactions` table (a coluna saiu de `profiles` em `20260624000100_drop_profiles_per_org_columns.sql`: crédito é por-academia)
+- Liga: `liga_points` é o extrato (verdade) e `liga_standings` é cache de posição, mesmo par ledger→cache do crédito. Escrita **só** pelas RPCs `liga_award_points` / `liga_revoke_points` (atômicas, `security definer`), nunca por update direto
 - `classes` = recurring schedule templates; `class_sessions` = specific dated instances of a class
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
@@ -79,4 +81,6 @@ UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge
 
 ### Planned but Not Yet Implemented
 
-The `features/` directory (aulas, financeiro, torneios) and most dashboard pages are planned for Plan 2+. Most `app/(dashboard)/` pages currently show placeholder text. The spec is at [docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md](docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md). Comunidade (`features/comunidade/`) já está implementada (feed social), mas saiu do menu do aluno em favor de "Vídeo" — ver [docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md](docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md).
+The `features/` directory (aulas, financeiro, torneios) and most dashboard pages are planned for Plan 2+. Most `app/(dashboard)/` pages currently show placeholder text. The spec is at [docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md](docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md). Comunidade (`features/comunidade/`) já está implementada (feed social), mas saiu do menu do aluno — ver [docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md](docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md).
+
+A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. A Fase 1 (motor de pontos, divisões, temporada mensal e telas) está implementada; medalhas, elogios e mural de fotos são as Fases 2 a 4 de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md). A Liga nasce desligada por academia (`system_settings.liga_enabled`).
