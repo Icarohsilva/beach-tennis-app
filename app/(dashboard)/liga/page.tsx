@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
-import { Card } from '@/components/ui/Card'
+import { Trophy } from 'lucide-react'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getLigaSettings } from '@/features/liga/settings'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
@@ -13,7 +14,8 @@ import { MedalsCard } from '@/features/liga/MedalsCard'
 import { MedalCelebration, type CelebratedMedal } from '@/features/liga/MedalCelebration'
 import { MEDAL_BY_KEY } from '@/lib/liga/medals'
 import { sportLabel } from '@/lib/arenas/sports'
-import { SeasonCard } from '@/features/liga/SeasonCard'
+import { LigaHero } from '@/features/liga/LigaHero'
+import { Reveal } from '@/components/ui/Reveal'
 import { StreakCard } from '@/features/liga/StreakCard'
 import { DivisionRanking } from '@/features/liga/DivisionRanking'
 import { PointsLedger } from '@/features/liga/PointsLedger'
@@ -62,11 +64,11 @@ export default async function LigaPage({
         <div className="px-4 py-4 space-y-3">
           <VideoBlock videoFeedUrl={videoFeedUrl} />
           {!videoFeedUrl && (
-            <Card>
-              <p className="text-sm text-slate-300">
-                A Liga ainda não foi ativada pela sua academia.
-              </p>
-            </Card>
+            <EmptyState
+              icon={Trophy}
+              title="A Liga ainda não começou"
+              description="Sua academia ainda não ativou o ranking. Quando ativar, suas presenças passam a valer pontos aqui."
+            />
           )}
         </div>
       </div>
@@ -79,9 +81,11 @@ export default async function LigaPage({
       <div className="relative min-h-full pb-24">
         {header}
         <div className="px-4 py-4 space-y-3">
-          <Card>
-            <p className="text-sm text-slate-300">A temporada ainda vai começar.</p>
-          </Card>
+          <EmptyState
+            icon={Trophy}
+            title="A temporada ainda vai começar"
+            description="Assim que a academia abrir a temporada, seus pontos aparecem aqui."
+          />
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </div>
       </div>
@@ -95,11 +99,13 @@ export default async function LigaPage({
       <div className="relative min-h-full pb-24">
         {header}
         <div className="px-4 py-4 space-y-3">
-          <Card>
-            <p className="text-sm text-slate-300">
-              Escolha suas modalidades no perfil para entrar no ranking da academia.
-            </p>
-          </Card>
+          <EmptyState
+            icon={Trophy}
+            title="Escolha suas modalidades"
+            description="A Liga tem um ranking por modalidade. Diga quais você pratica e já entra na disputa desta temporada."
+            ctaHref="/perfil"
+            ctaLabel="Escolher no perfil"
+          />
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </div>
       </div>
@@ -138,26 +144,46 @@ export default async function LigaPage({
   return (
     <div className="relative min-h-full pb-24">
       {header}
-      <div className="px-4 py-4 space-y-3">
+      <div className="space-y-3 px-4 py-4">
         <SportTabs sports={sports} active={activeSport} />
         {view && (
           <>
-            <SeasonCard
-              division={view.division}
-              points={view.points}
-              position={view.position}
-              divisionSize={view.divisionSize}
-              pointsToPromote={view.pointsToPromote}
-              sport={view.sport}
-              endsOn={season.ends_on}
-            />
-            <StreakCard streakWeeks={view.streakWeeks} />
-            <MedalsCard medals={medals} sport={activeSport} />
-            <DivisionRanking entries={view.ranking} />
-            <PointsLedger entries={view.ledger} />
+            <Reveal step={0}>
+              <LigaHero
+                division={view.division}
+                points={view.points}
+                position={view.position}
+                divisionSize={view.divisionSize}
+                pointsToPromote={view.pointsToPromote}
+                streakWeeks={view.streakWeeks}
+                sport={view.sport}
+                endsOn={season.ends_on}
+                promoteCount={settings.promoteCount}
+              />
+            </Reveal>
+            <Reveal step={1}>
+              <StreakCard streakWeeks={view.streakWeeks} />
+            </Reveal>
+            <Reveal step={2}>
+              <DivisionRanking
+                entries={view.ranking}
+                division={view.division}
+                divisionSize={view.divisionSize}
+                promoteCount={settings.promoteCount}
+                demoteCount={settings.demoteCount}
+              />
+            </Reveal>
+            <Reveal step={3}>
+              <MedalsCard medals={medals} sport={activeSport} />
+            </Reveal>
+            <Reveal step={4}>
+              <PointsLedger entries={view.ledger} />
+            </Reveal>
           </>
         )}
-        <VideoBlock videoFeedUrl={videoFeedUrl} />
+        <Reveal step={5}>
+          <VideoBlock videoFeedUrl={videoFeedUrl} />
+        </Reveal>
       </div>
       <MedalCelebration medals={unseen} />
     </div>
