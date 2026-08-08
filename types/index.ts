@@ -585,3 +585,15 @@ export interface LigaStanding {
   points: number
   streak_weeks: number
 }
+
+// Medalha conquistada. O catálogo (o que cada chave exige) mora em lib/liga/medals.ts:
+// medalha é regra, não dado. Não vale ponto.
+export interface LigaMedal {
+  id: string
+  organization_id: string
+  student_id: string
+  medal_key: string
+  sport: string | null // null = medalha global (tempo de casa)
+  earned_at: string
+  seen_at: string | null // null = ainda não comemorada com o aluno
+}

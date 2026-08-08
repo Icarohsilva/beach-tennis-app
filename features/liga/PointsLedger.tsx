@@ -1,11 +1,24 @@
 // features/liga/PointsLedger.tsx
+import { CalendarCheck, Flame, Trophy, Medal, Sparkles, Heart } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { POINT_REASON_LABEL } from '@/lib/liga/labels'
+import { cn } from '@/lib/utils/cn'
 import type { LigaPointEntry } from '@/types'
 
 interface Props {
   entries: LigaPointEntry[]
+}
+
+const REASON_ICON: Record<string, LucideIcon> = {
+  attendance: CalendarCheck,
+  streak: Flame,
+  tournament_entry: Trophy,
+  tournament_result: Medal,
+  manual: Sparkles,
+  kudos_given: Heart,
+  kudos_received: Heart,
 }
 
 /**
@@ -17,20 +30,45 @@ export function PointsLedger({ entries }: Props) {
 
   return (
     <Card>
-      <p className="text-xs text-slate-400 tracking-wide mb-3">DE ONDE VIERAM MEUS PONTOS</p>
-      <ul className="space-y-2">
-        {entries.map((e) => (
-          <li key={e.id} className="flex items-start gap-2 text-sm">
-            <span className="text-brand-500 font-medium shrink-0 w-12">
-              {e.points > 0 ? `+${e.points}` : e.points}
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="text-slate-200">{POINT_REASON_LABEL[e.reason] ?? e.reason}</span>
-              {e.note && <span className="text-slate-400"> — {e.note}</span>}
-            </span>
-            <span className="text-xs text-slate-500 shrink-0">{formatDate(e.created_at)}</span>
-          </li>
-        ))}
+      <p className="mb-3 text-xs tracking-wide text-slate-400">DE ONDE VIERAM MEUS PONTOS</p>
+      <ul className="space-y-2.5">
+        {entries.map((e) => {
+          const Icon = REASON_ICON[e.reason] ?? Sparkles
+          const positivo = e.points > 0
+          return (
+            <li key={e.id} className="flex items-start gap-2.5">
+              <span
+                className={cn(
+                  'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border',
+                  positivo
+                    ? 'border-brand-500/30 bg-brand-500/10'
+                    : 'border-rose-500/30 bg-rose-500/10',
+                )}
+              >
+                <Icon className={cn('h-3.5 w-3.5', positivo ? 'text-brand-500' : 'text-rose-400')} />
+              </span>
+
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm text-slate-200">
+                  {POINT_REASON_LABEL[e.reason] ?? e.reason}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  {e.note ? `${e.note} · ` : ''}
+                  {formatDate(e.created_at)}
+                </span>
+              </span>
+
+              <span
+                className={cn(
+                  'shrink-0 text-sm font-bold tabular-nums',
+                  positivo ? 'text-brand-500' : 'text-rose-400',
+                )}
+              >
+                {positivo ? `+${e.points}` : e.points}
+              </span>
+            </li>
+          )
+        })}
       </ul>
     </Card>
   )

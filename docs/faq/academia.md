@@ -507,6 +507,13 @@ aluno e atravessa temporadas, senão a virada puniria justamente quem nunca falt
 ficam em Configurações, que é do dono. O aluno pode se ocultar do ranking pelo perfil dele:
 continua pontuando, só não aparece para os colegas.
 
+**Medalhas.** Rodam sozinhas, sem nada para configurar: aulas (10/50/100/250), sequência
+(4/8/12/24 semanas), primeiro torneio, primeira vitória, chegou ao Ouro, chegou ao Diamante,
+Madrugador (10 aulas antes das 07:00) e tempo de casa (6/12/24 meses). **Medalha não dá ponto** —
+ela reconhece, não infla o ranking. Elas contam o histórico inteiro do aluno, então ao ligar a
+Liga numa academia antiga muita gente ganha várias de uma vez. Isso é de propósito: é o
+reconhecimento de quem já estava lá.
+
 > **🔧 Nos bastidores**
 > - O extrato (`liga_points`) é a fonte da verdade e a posição (`liga_standings`) é cache, mesmo
 >   padrão de `credit_transactions` → `memberships.credits_balance`. A escrita é atômica por RPC
@@ -514,8 +521,11 @@ continua pontuando, só não aparece para os colegas.
 >   o mesmo evento.
 > - Creditar ponto nunca derruba a operação principal: se a Liga falhar ao marcar presença, a
 >   presença é gravada assim mesmo e o erro vai para o Sentry.
-> - Dois crons: `liga-streak` (diário, sequência e bônus semanal) e `liga-season-close`
->   (dia 1º, fecha a temporada, aplica promoção/rebaixamento e abre a próxima).
+> - Dois crons: `liga-streak` (diário, sequência, bônus semanal e passada de medalhas) e
+>   `liga-season-close` (dia 1º, fecha a temporada, aplica promoção/rebaixamento e abre a
+>   próxima).
+> - O catálogo de medalhas mora em `lib/liga/medals.ts` (código, não banco). Acrescentar uma
+>   medalha é deploy: a passada seguinte do cron concede a quem já cumpria o critério.
 
 ---
 

@@ -16,16 +16,16 @@ export function SportTabs({ sports, active }: Props) {
   if (sports.length <= 1) return null
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1">
+    <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
       {sports.map((sport) => (
         <Link
           key={sport}
           href={`/liga?esporte=${encodeURIComponent(sport)}`}
           className={cn(
-            'shrink-0 rounded-full border px-3 py-1.5 text-xs transition-colors',
+            'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all active:scale-95',
             sport === active
-              ? 'border-brand-500 bg-brand-500/10 text-brand-500'
-              : 'border-surface-border text-slate-400 hover:text-slate-200',
+              ? 'border-transparent bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-md shadow-brand-900/40'
+              : 'border-surface-border text-slate-400 hover:border-brand-600/50 hover:text-slate-200',
           )}
         >
           {sportEmoji(sport)} {sportLabel(sport)}

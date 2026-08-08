@@ -7,6 +7,7 @@ import { pointsForAttendance } from '@/lib/liga/points'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason } from './season'
 import { awardLigaPoints, revokeLigaPoints } from './awardPoints'
+import { syncLigaMedals } from './medals'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -66,6 +67,10 @@ export async function syncLigaAttendancePoints(
         reason: 'attendance',
         sourceId: sessionId,
       })
+      // Medalhas só entram no caminho do "presente": desmarcar presença não tira
+      // medalha. Perder uma conquista por causa de uma correção de chamada seria pior
+      // que a medalha ter sido dada uma aula antes do que devia.
+      await syncLigaMedals(admin, orgId, studentId)
     } else {
       await revokeLigaPoints(admin, {
         seasonId: season.id,
