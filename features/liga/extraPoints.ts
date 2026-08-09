@@ -144,10 +144,14 @@ export async function awardProfileCompleteOnce(
 /**
  * Confere se o cadastro está completo e, se estiver, credita o bônus único.
  *
- * "Completo" é o mínimo que a academia precisa para operar: telefone para chamar,
- * contato de emergência para o caso de acidente na quadra, e ao menos uma modalidade
- * (sem ela o aluno não entra em ranking nenhum). Nada de exigir foto ou endereço, que
- * a academia não usa — a régua tem que ser o que dói na operação.
+ * "Completo" é o mínimo que a academia precisa para operar: telefone para chamar e
+ * contato de emergência para o caso de acidente na quadra. Nada de exigir foto ou
+ * endereço, que a academia não usa — a régua tem que ser o que dói na operação.
+ *
+ * A modalidade é exigida só onde ela é uma escolha de verdade. Numa academia que
+ * oferece uma modalidade só, pedir que o aluno a declare é burocracia: não há o que
+ * escolher, e o ponto ia para esse mesmo esporte de qualquer jeito. Exigir isso fazia
+ * quem preencheu tudo o que a tela pede ficar sem o bônus, sem entender por quê.
  */
 export async function checkProfileComplete(
   admin: AdminClient,
@@ -155,25 +159,33 @@ export async function checkProfileComplete(
   studentId: string,
 ): Promise<void> {
   try {
-    const [{ data: profile }, { data: medical }, { data: membership }] = await Promise.all([
-      admin.from('profiles').select('phone').eq('id', studentId).maybeSingle(),
-      admin
-        .from('medical_profiles')
-        .select('emergency_name, emergency_phone')
-        .eq('profile_id', studentId)
-        .maybeSingle(),
-      admin
-        .from('memberships')
-        .select('sports')
-        .eq('organization_id', orgId)
-        .eq('user_id', studentId)
-        .maybeSingle(),
-    ])
+    const [{ data: profile }, { data: medical }, { data: membership }, orgSports] =
+      await Promise.all([
+        admin.from('profiles').select('phone').eq('id', studentId).maybeSingle(),
+        admin
+          .from('medical_profiles')
+          .select('emergency_name, emergency_phone')
+          .eq('profile_id', studentId)
+          .maybeSingle(),
+        admin
+          .from('memberships')
+          .select('sports')
+          .eq('organization_id', orgId)
+          .eq('user_id', studentId)
+          .maybeSingle(),
+        getOrgSports(orgId),
+      ])
 
     const temTelefone = !!(profile as { phone: string | null } | null)?.phone?.trim()
-    const emergencia = medical as { emergency_name: string | null; emergency_phone: string | null } | null
-    const temEmergencia = !!emergencia?.emergency_name?.trim() && !!emergencia?.emergency_phone?.trim()
-    const temEsporte = (((membership as { sports: string[] } | null)?.sports ?? []).length > 0)
+    const emergencia = medical as {
+      emergency_name: string | null
+      emergency_phone: string | null
+    } | null
+    const temEmergencia =
+      !!emergencia?.emergency_name?.trim() && !!emergencia?.emergency_phone?.trim()
+
+    const declarou = ((membership as { sports: string[] } | null)?.sports ?? []).length > 0
+    const temEsporte = declarou || orgSports.length === 1
 
     if (!temTelefone || !temEmergencia || !temEsporte) return
 
