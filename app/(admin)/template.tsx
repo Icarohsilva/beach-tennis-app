@@ -14,12 +14,11 @@
 // em layout.tsx também (defesa em profundidade barata, cobre o 1º load).
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
-import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
+import { createAdminClient, getStaffContext, getAuthUser } from '@/lib/supabase/server'
 import { getPlatformAccess } from '@/lib/billing/access'
 
 export default async function AdminTemplate({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
   if (user.user_metadata?.must_change_password === true) redirect('/definir-senha')
 

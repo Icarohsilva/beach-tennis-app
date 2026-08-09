@@ -1,7 +1,7 @@
 // app/(dashboard)/torneios/[id]/page.tsx
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { PhotoGallery } from '@/features/torneios/PhotoGallery'
 import { Badge } from '@/components/ui/Badge'
@@ -26,7 +26,7 @@ interface PageProps { params: { id: string } }
 
 export default async function TorneioDetailPage({ params }: PageProps) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const orgId = await getActiveOrgId()

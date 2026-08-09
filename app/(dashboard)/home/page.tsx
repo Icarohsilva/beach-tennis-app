@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
@@ -45,7 +45,7 @@ const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 
 export default async function HomePage() {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const today = new Date().toISOString().slice(0, 10)

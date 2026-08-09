@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Sun } from 'lucide-react'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getAuthUser } from '@/lib/supabase/server'
 import { DayUseBookingCard } from '@/features/dayuse/DayUseBookingCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -15,7 +15,7 @@ export default async function AgendarDayUsePage({
   searchParams?: { retorno?: string }
 }) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const today = new Date().toISOString().slice(0, 10)

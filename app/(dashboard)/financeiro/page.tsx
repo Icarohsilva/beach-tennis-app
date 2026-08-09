@@ -2,7 +2,7 @@
 // Financeiro do aluno: meu plano, vitrine de planos, compra de aula avulsa,
 // histórico, banner de indicação de plano pelo admin.
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
+import { createAdminClient, getActiveOrgId, getActiveMembership, getAuthUser } from '@/lib/supabase/server'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
 import { PaymentHistory } from '@/features/financeiro/PaymentHistory'
 import { PlanStorefront } from '@/features/financeiro/PlanStorefront'
@@ -20,8 +20,7 @@ export default async function FinanceiroAlunoPage({
 }: {
   searchParams: { retorno?: string }
 }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const orgId = await getActiveOrgId()

@@ -4,7 +4,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Sun, Trophy, ArrowRight } from 'lucide-react'
-import { createClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
 import { NextMatchCard } from '@/features/torneios/NextMatchCard'
 import { getStudentTournamentHome } from '@/features/torneios/studentHome'
@@ -31,7 +31,7 @@ interface PageProps {
 
 export default async function ArenaPage({ searchParams }: PageProps) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const orgId = await getActiveOrgId()

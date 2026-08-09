@@ -2,7 +2,7 @@
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { Sparkles, Clock } from 'lucide-react'
-import { createClient, createAdminClient, getStaffContext } from '@/lib/supabase/server'
+import { createAdminClient, getStaffContext, getAuthUser } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { Logo } from '@/components/ui/Logo'
@@ -19,8 +19,7 @@ import { HelpButton } from '@/components/tour/HelpButton'
 import { InstallGate } from '@/components/pwa/InstallGate'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
   if (user.user_metadata?.must_change_password === true) redirect('/definir-senha')
 

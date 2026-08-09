@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
+import { createAdminClient, getCurrentOrgId, getAuthUser } from '@/lib/supabase/server'
 import { Trophy } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -52,10 +52,7 @@ export default async function LigaPage({
 }: {
   searchParams: { esporte?: string }
 }) {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const orgId = await getCurrentOrgId()
