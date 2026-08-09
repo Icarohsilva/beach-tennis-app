@@ -24,10 +24,25 @@ const PARTICIPANT_OPTIONS: { value: ParticipantType; label: string }[] = [
   { value: 'dupla_fixa', label: 'Dupla Fixa' },
   { value: 'individual', label: 'Individual' },
 ]
-const FORMAT_OPTIONS: { value: TournamentFormat; label: string; enabled: boolean }[] = [
-  { value: 'americano', label: 'Americano (Super N)', enabled: true },
-  { value: 'round_robin', label: 'Round-robin (em breve)', enabled: false },
-  { value: 'eliminatoria', label: 'Eliminatória (em breve)', enabled: false },
+// A lista espelha as chaves de lib/torneios/formats.ts: oferecer aqui um
+// formato que o motor não sabe gerar dá "formato não suportado" só na hora de
+// gerar a chave, com o torneio já divulgado e as inscrições abertas.
+const FORMAT_OPTIONS: { value: TournamentFormat; label: string; hint: string }[] = [
+  {
+    value: 'americano',
+    label: 'Americano (Super N)',
+    hint: 'Todos jogam com todos, trocando de parceiro a cada rodada. Classifica por saldo de games.',
+  },
+  {
+    value: 'round_robin',
+    label: 'Todos contra todos',
+    hint: 'A mesma dupla o torneio inteiro, enfrentando cada adversário uma vez.',
+  },
+  {
+    value: 'eliminatoria',
+    label: 'Eliminatória (mata-mata)',
+    hint: 'Quem perde está fora. A chave sai completa, com cabeças-de-chave e bye.',
+  },
 ]
 
 const selectClass =
@@ -160,9 +175,12 @@ export function CreateTournamentForm() {
         <label className="text-sm font-medium text-slate-300">Formato</label>
         <select value={format} onChange={(e) => setFormat(e.target.value as TournamentFormat)} className={selectClass}>
           {FORMAT_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value} disabled={!f.enabled}>{f.label}</option>
+            <option key={f.value} value={f.value}>{f.label}</option>
           ))}
         </select>
+        <p className="text-xs text-slate-400">
+          {FORMAT_OPTIONS.find((f) => f.value === format)?.hint}
+        </p>
       </div>
 
       <div className="flex flex-col gap-1">

@@ -1,14 +1,33 @@
 // lib/torneios/formats.ts
 import type { FormatEngine } from './types'
 import { generateAmericanoSchedule } from './schedule/americano'
+import { generateRoundRobinSchedule } from './schedule/roundRobin'
+import { computeEliminationStandings, generateEliminationBracket } from './schedule/eliminatoria'
 import { computeStandings } from './standings'
 
-// Mapa format -> motor. Formatos futuros (round_robin, eliminatoria, ranking)
-// entram aqui sem tocar nas actions.
+// Mapa format -> motor. As actions não sabem de formato nenhum: pedem o motor
+// por chave e chamam generate/computeStandings.
 export const FORMATS: Record<string, FormatEngine> = {
   americano: {
     label: 'Americano (Super N)',
-    generate: generateAmericanoSchedule,
+    // O americano sorteia parceiro a cada rodada, então só os jogadores importam.
+    generate: (entries) => generateAmericanoSchedule(entries.map((e) => e.playerId)),
     computeStandings,
   },
+  round_robin: {
+    label: 'Todos contra todos',
+    generate: generateRoundRobinSchedule,
+    computeStandings,
+  },
+  eliminatoria: {
+    label: 'Eliminatória (mata-mata)',
+    generate: generateEliminationBracket,
+    // Chave se classifica por fase alcançada, não por saldo de games.
+    computeStandings: computeEliminationStandings,
+  },
+}
+
+/** Formatos que desenham chave de mata-mata (afeta rótulo de fase e avanço). */
+export function isBracketFormat(format: string | null | undefined): boolean {
+  return format === 'eliminatoria'
 }

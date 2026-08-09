@@ -4,7 +4,8 @@
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
-import { FORMATS } from '@/lib/torneios/formats'
+import { FORMATS, isBracketFormat } from '@/lib/torneios/formats'
+import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
@@ -368,17 +369,25 @@ export async function generateBracket(
   const engine = FORMATS[tournament.format]
   if (!engine) return { error: 'Formato ainda não suportado para geração de chave.' }
 
+  // partner_id vem junto: em dupla fixa a dupla é a unidade que entra na chave,
+  // e sem o parceiro o mata-mata montaria confronto de uma pessoa só.
   const { data: entriesRaw } = await adminClient
     .from('tournament_entries')
-    .select('player_id')
+    .select('player_id, partner_id, seed')
     .eq('tournament_id', tournamentId)
     .eq('organization_id', orgId)
     .eq('entry_status', 'confirmed')
-  const playerIds = (entriesRaw ?? []).map((e) => e.player_id as string)
+  type EntryDraw = { player_id: string; partner_id: string | null; seed: number | null }
+  const { seeded, unseeded } = splitBySeed((entriesRaw ?? []) as EntryDraw[])
+  // Cabeças-de-chave na ordem declarada; o resto sorteado.
+  const entries = [...seeded, ...shuffle(unseeded)].map((e) => ({
+    playerId: e.player_id,
+    partnerId: e.partner_id,
+  }))
 
   let plan
   try {
-    plan = engine.generate(shuffle(playerIds))
+    plan = engine.generate(entries)
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Erro ao gerar a chave.' }
   }
@@ -391,7 +400,10 @@ export async function generateBracket(
       organization_id: orgId,
       tournament_id: tournamentId,
       round: rp.round,
-      match_no: i + 1,
+      // Na eliminatória o matchNo é a coordenada da chave, não a ordem de
+      // inserção: uma partida dispensada por bye deixa buraco na numeração de
+      // propósito, e renumerar aqui quebraria o caminho do vencedor.
+      match_no: m.matchNo ?? i + 1,
       player1_id: m.p1,
       partner1_id: m.partner1,
       player2_id: m.p2,
@@ -413,6 +425,76 @@ export async function generateBracket(
   }
 
   return {}
+}
+
+// ---------------------------------------------------------------------------
+// advanceBracketWinner — promove o vencedor para a partida seguinte
+// ---------------------------------------------------------------------------
+
+/**
+ * Sobe quem venceu para o lado que lhe cabe na rodada seguinte.
+ *
+ * Chamado depois de todo resultado CONFIRMADO. É best-effort de propósito: se
+ * o avanço falhar, o placar já está gravado e o admin regenera ou corrige a
+ * chave — derrubar a confirmação por causa disso seria pior, porque o jogo
+ * aconteceu de qualquer jeito.
+ *
+ * Idempotente: gravar o mesmo vencedor duas vezes escreve o mesmo valor, e
+ * corrigir um placar reescreve o slot com o novo vencedor.
+ */
+async function advanceBracketWinner(
+  adminClient: ReturnType<typeof createAdminClient>,
+  matchId: string,
+  orgId: string,
+): Promise<void> {
+  const { data: match } = await adminClient
+    .from('tournament_matches')
+    .select('id, tournament_id, round, match_no, player1_id, partner1_id, player2_id, partner2_id, games1, games2')
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!match || match.match_no === null) return
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('format')
+    .eq('id', match.tournament_id)
+    .maybeSingle()
+  if (!tournament || !isBracketFormat(tournament.format as string)) return
+
+  const games1 = match.games1 as number | null
+  const games2 = match.games2 as number | null
+  if (games1 === null || games2 === null || games1 === games2) return // empate não classifica
+
+  // A última rodada da chave é a final. Vem do próprio torneio em vez de ser
+  // recalculada do número de inscritos, que muda com desistência.
+  const { data: lastRow } = await adminClient
+    .from('tournament_matches')
+    .select('round')
+    .eq('tournament_id', match.tournament_id)
+    .order('round', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const totalRounds = (lastRow?.round as number | undefined) ?? match.round
+  const dest = winnerSlot(match.round as number, match.match_no as number, totalRounds)
+  if (!dest) return // campeão: não há para onde subir
+
+  const winnerIsSide1 = games1 > games2
+  const playerId = winnerIsSide1 ? match.player1_id : match.player2_id
+  const partnerId = winnerIsSide1 ? match.partner1_id : match.partner2_id
+  if (!playerId) return
+
+  const patch =
+    dest.slot === 1
+      ? { player1_id: playerId, partner1_id: partnerId }
+      : { player2_id: playerId, partner2_id: partnerId }
+
+  await adminClient
+    .from('tournament_matches')
+    .update(patch)
+    .eq('tournament_id', match.tournament_id)
+    .eq('round', dest.round)
+    .eq('match_no', dest.matchNo)
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +540,8 @@ export async function recordMatchResult(
     .eq('id', matchId)
     .eq('organization_id', orgId)
   if (updErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
+
+  await advanceBracketWinner(adminClient, matchId, orgId)
   return {}
 }
 
@@ -552,6 +636,8 @@ export async function confirmMatchResult(
     .update({ result_status: 'confirmed', confirmed_by: user.id })
     .eq('id', matchId)
   if (updErr) return { error: 'Erro ao confirmar placar. Tente novamente.' }
+
+  await advanceBracketWinner(adminClient, matchId, orgId)
   return {}
 }
 
