@@ -35,6 +35,9 @@ export function PointsLedger({ entries }: Props) {
         {entries.map((e) => {
           const Icon = REASON_ICON[e.reason] ?? Sparkles
           const positivo = e.points > 0
+          const rotulo = POINT_REASON_LABEL[e.reason] ?? e.reason
+          // Nota igual ao rótulo (caso do 'Cadastro completo') não acrescenta nada.
+          const nota = e.note && e.note !== rotulo ? e.note : null
           return (
             <li key={e.id} className="flex items-start gap-2.5">
               <span
@@ -49,11 +52,9 @@ export function PointsLedger({ entries }: Props) {
               </span>
 
               <span className="min-w-0 flex-1">
-                <span className="block text-sm text-slate-200">
-                  {POINT_REASON_LABEL[e.reason] ?? e.reason}
-                </span>
+                <span className="block text-sm text-slate-200">{rotulo}</span>
                 <span className="block text-xs text-slate-500">
-                  {e.note ? `${e.note} · ` : ''}
+                  {nota ? `${nota} · ` : ''}
                   {formatDate(e.created_at)}
                 </span>
               </span>
