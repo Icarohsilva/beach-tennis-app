@@ -257,7 +257,7 @@ três permissões; Android instalável; Android instalado; Android sem suporte a
 push; cada caso de instalação cruzado com `dismissedAt` dentro e fora da janela
 de 6h.
 
-`lib/pwa/dismissStorage.test.ts` — grava e lê; janela de 24h nas duas bordas;
+`lib/pwa/dismissStorage.test.ts` — grava e lê; janela de 6h nas duas bordas;
 valor corrompido; timestamp futuro; localStorage que lança ao escrever.
 
 `components/pwa/` não recebe testes unitários — a verificação dos componentes é
