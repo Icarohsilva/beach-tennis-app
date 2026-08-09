@@ -23,6 +23,13 @@ import {
   type Limite,
   type CapacitySnapshot,
 } from '@/lib/plataforma/capacity'
+import {
+  projetarEscala,
+  avaliarMaturidade,
+  ALVO_PADRAO,
+  type AlvoEscala,
+} from '@/lib/plataforma/projecaoEscala'
+import { ACHADOS, AUDITORIA_EM, contarPorStatus, type StatusAchado } from '@/lib/plataforma/diagnostico'
 
 const CORES: Record<Limite['severidade'], string> = {
   ok: 'text-emerald-400',
@@ -48,8 +55,44 @@ function textoProjecao(dias: number | null, data: string | null, historico: numb
   return `~${formatarNumero(dias)} dias (por volta de ${new Date(data!).toLocaleDateString('pt-BR')})`
 }
 
-export default async function CapacidadePage() {
+const STATUS_ROTULO: Record<StatusAchado, string> = {
+  corrigido: 'Corrigido',
+  pendente: 'Pendente',
+  monitorar: 'Monitorar',
+}
+
+const STATUS_CLASSE: Record<StatusAchado, string> = {
+  corrigido: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  pendente: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  monitorar: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+}
+
+/** Alvos oferecidos no seletor — o padrão é a pergunta que originou o painel. */
+const PRESETS: AlvoEscala[] = [
+  { arenas: 100, alunosPorArena: 300 },
+  { arenas: 500, alunosPorArena: 300 },
+  { arenas: 1000, alunosPorArena: 300 },
+]
+
+/** Lê o alvo da URL, caindo no padrão quando vier ausente ou sem sentido. */
+function alvoDaUrl(sp: Record<string, string | string[] | undefined>): AlvoEscala {
+  const num = (v: string | string[] | undefined, padrao: number) => {
+    const n = Number(Array.isArray(v) ? v[0] : v)
+    return Number.isFinite(n) && n > 0 && n <= 100_000 ? Math.round(n) : padrao
+  }
+  return {
+    arenas: num(sp.arenas, ALVO_PADRAO.arenas),
+    alunosPorArena: num(sp.alunos, ALVO_PADRAO.alunosPorArena),
+  }
+}
+
+export default async function CapacidadePage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>
+}) {
   const admin = createAdminClient()
+  const alvo = alvoDaUrl(searchParams ?? {})
 
   let historico: CapacitySnapshot[] = []
   let erro: string | null = null
@@ -94,6 +137,20 @@ export default async function CapacidadePage() {
   const m = atual.metrics
   const limites = avaliarLimites(m)
   const maior = maiorTabela(m)
+
+  // Idade da operação: a extrapolação assume o histórico por aluno de hoje, e
+  // numa base nova esse histórico é raso. Sem isso ao lado, o número projetado
+  // seria lido como teto quando na verdade é piso.
+  const { data: primeiraOrg } = await admin
+    .from('organizations')
+    .select('created_at')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  const maturidade = avaliarMaturidade((primeiraOrg?.created_at as string | undefined) ?? null)
+  const escala = projetarEscala(m, alvo)
+  const statusAchados = contarPorStatus()
 
   const tabelas = Object.entries(m.tabelas ?? {})
     .map(([nome, v]) => ({ nome, ...v }))
@@ -165,6 +222,147 @@ export default async function CapacidadePage() {
             </Card>
           )
         })}
+      </section>
+
+      {/* Simulação de escala */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Se a operação chegar em {formatarNumero(alvo.arenas)} arenas ×{' '}
+            {formatarNumero(alvo.alunosPorArena)} alunos
+          </h2>
+          <div className="flex gap-1">
+            {PRESETS.map((p) => {
+              const ativo = p.arenas === alvo.arenas && p.alunosPorArena === alvo.alunosPorArena
+              return (
+                <Link
+                  key={p.arenas}
+                  href={`/super-admin/capacidade?arenas=${p.arenas}&alunos=${p.alunosPorArena}`}
+                  className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                    ativo
+                      ? 'border-brand-500 bg-brand-500/15 text-brand-500'
+                      : 'border-surface-border text-slate-300 hover:bg-surface-border'
+                  }`}
+                >
+                  {formatarNumero(p.arenas)}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+
+        <Card className="p-4">
+          <p className="text-sm text-slate-300">
+            Extrapolação a partir do que a base consome hoje: {formatarNumero(m.alunos)} aluno(s) em{' '}
+            {formatarNumero(m.orgs)} arena(s) → {formatarNumero(escala.alunosAlvo)} alunos, ou{' '}
+            <strong className="text-white">{escala.fator.toFixed(1)}×</strong> a base atual.
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            Só a parte que cresce com aluno é multiplicada — {formatarBytes(escala.bytesFixos)} de
+            catálogo e configuração entram como parcela fixa.
+          </p>
+
+          {!escala.confiavel && (
+            <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+              Número frágil: {escala.ressalva}.
+            </p>
+          )}
+          <p className="mt-2 rounded-lg border border-surface-border bg-surface p-3 text-xs text-slate-300">
+            {maturidade.dias > 0 && `Base com ${formatarNumero(maturidade.dias)} dias de operação — `}
+            {maturidade.aviso}.
+          </p>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {escala.limites.map((l) => (
+            <Card key={l.id} className="p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-white">{l.titulo}</span>
+                <span className={`text-sm font-semibold ${CORES[l.severidade]}`}>
+                  {valorFormatado(l, l.atual)}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Teto: {valorFormatado(l, l.teto)} —{' '}
+                {l.severidade === 'estourado'
+                  ? `estoura em ${(l.uso).toFixed(1)}× o teto`
+                  : l.severidade === 'atencao'
+                    ? 'chega perto do teto'
+                    : 'cabe com folga'}
+                .
+              </p>
+            </Card>
+          ))}
+        </div>
+
+        {escala.tabelas.length > 0 && (
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-sm">
+              <thead className="border-b border-surface-border text-left text-xs uppercase text-slate-400">
+                <tr>
+                  <th className="p-3">Tabela</th>
+                  <th className="p-3 text-right">Linhas hoje</th>
+                  <th className="p-3 text-right">Linhas no alvo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-border">
+                {escala.tabelas.slice(0, 8).map((t) => (
+                  <tr key={t.nome}>
+                    <td className="p-3 text-slate-200">{t.nome}</td>
+                    <td className="p-3 text-right text-slate-400">{formatarNumero(t.atual)}</td>
+                    <td className="p-3 text-right font-semibold text-slate-200">
+                      {formatarNumero(t.projetado)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </section>
+
+      {/* Diagnóstico de arquitetura */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Diagnóstico de arquitetura
+          </h2>
+          <span className="text-xs text-slate-400">
+            auditoria de {new Date(AUDITORIA_EM).toLocaleDateString('pt-BR')} ·{' '}
+            {statusAchados.corrigido} corrigido(s) · {statusAchados.pendente} pendente(s) ·{' '}
+            {statusAchados.monitorar} a monitorar
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-400">
+          Retrato datado, não verificação viva: nada aqui é medido em tempo de execução. Ao mexer em
+          algum destes pontos, atualize <code>lib/plataforma/diagnostico.ts</code>.
+        </p>
+
+        <Card className="divide-y divide-surface-border p-0">
+          {ACHADOS.map((a) => (
+            <div key={a.id} className="p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-white">{a.titulo}</span>
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_CLASSE[a.status]}`}
+                >
+                  {STATUS_ROTULO[a.status]}
+                </span>
+              </div>
+              <p className="mt-1.5 text-xs text-slate-400">{a.sintoma}</p>
+              <p className="mt-1 text-xs text-slate-300">
+                <span className="text-slate-500">Impacto:</span> {a.impacto}
+              </p>
+              <p className="mt-1 text-xs text-slate-300">
+                <span className="text-slate-500">
+                  {a.status === 'corrigido' ? 'Como ficou:' : 'O que falta:'}
+                </span>{' '}
+                {a.desfecho}
+              </p>
+            </div>
+          ))}
+        </Card>
       </section>
 
       {/* Tetos que este painel NÃO enxerga */}

@@ -77,6 +77,8 @@ Migrations live in `supabase/migrations/` and must be applied via `supabase db p
 
 `/super-admin/capacidade` responde "quando preciso subir de plano?" com data, não palpite. O cron diário `capacity-snapshot` grava um retrato (linhas e bytes por tabela, orgs, alunos, MAU, tamanho do banco) em `capacity_snapshots`; a página projeta por mínimos quadrados quando cada teto é cruzado. Regras puras e testadas em [lib/plataforma/capacity.ts](lib/plataforma/capacity.ts).
 
+A mesma página traz mais duas leituras. **Simulação de escala** ([lib/plataforma/projecaoEscala.ts](lib/plataforma/projecaoEscala.ts)) extrapola do consumo real para um alvo (padrão: mil arenas × 300 alunos, ajustável por `?arenas=&alunos=`) — só a parte que cresce com aluno é multiplicada, o overhead fixo entra como parcela, e a projeção se declara não confiável abaixo de 200 alunos em vez de imprimir número bonito e errado. Ela assume o histórico por aluno de hoje, então `avaliarMaturidade` mostra a idade da base ao lado: em operação nova o número é **piso, não teto**. **Diagnóstico de arquitetura** ([lib/plataforma/diagnostico.ts](lib/plataforma/diagnostico.ts)) é um retrato datado dos achados da auditoria, não verificação viva — ao mexer num dos pontos, atualize o item.
+
 O que o painel **não** mede está listado nele mesmo (`LIMITES_EXTERNOS`): CPU/RAM da instância e queries caras ficam no painel do Supabase, invocações e GB-hrs no da Vercel. Os tetos em `LIMITES` vêm dos planos publicados e envelhecem — confira o pricing antes de decidir por eles.
 
 ### Design System
