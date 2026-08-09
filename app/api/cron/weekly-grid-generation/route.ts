@@ -14,8 +14,12 @@ import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { generateGrid } from '@/features/aulas/gridGeneration'
 import { notifyGridGenerated } from '@/features/aulas/gridNotify'
 import { brtToday, addDaysStr, shouldRunGridNow } from '@/lib/utils/gridSchedule'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 export const maxDuration = 300
+
+/** Margem para responder antes de a plataforma matar a função. */
+const TIME_BUDGET_MS = 240_000
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
@@ -25,18 +29,26 @@ export async function GET(req: NextRequest) {
   try {
     const admin = createAdminClient()
     const now = new Date()
+    const deadline = Date.now() + TIME_BUDGET_MS
 
-    // Todas as chaves de grade de todas as academias, numa query.
-    const { data: rowsRaw, error: readErr } = await admin
-      .from('system_settings')
-      .select('organization_id, key, value')
-      .in('key', ['grid_auto_enabled', 'grid_auto_day', 'grid_auto_hour', 'grid_auto_last_run'])
-
-    if (readErr) throw new Error(readErr.message)
+    // Todas as chaves de grade de todas as academias. Paginado: são 4 linhas por
+    // academia, então o teto de 1.000 do PostgREST começava a cortar academias
+    // fora da varredura já em ~250 arenas — sem erro, sem log, só arena sem grade.
+    const rowsRaw = await fetchAllPages<{ organization_id: string; key: string; value: string }>(
+      (from, to) =>
+        admin
+          .from('system_settings')
+          .select('organization_id, key, value')
+          .in('key', ['grid_auto_enabled', 'grid_auto_day', 'grid_auto_hour', 'grid_auto_last_run'])
+          .order('organization_id', { ascending: true })
+          .order('key', { ascending: true })
+          .range(from, to),
+      { label: 'cron/weekly-grid:settings' },
+    )
 
     // Agrupa por academia.
     const byOrg = new Map<string, Record<string, string>>()
-    for (const r of (rowsRaw ?? []) as { organization_id: string; key: string; value: string }[]) {
+    for (const r of rowsRaw) {
       const m = byOrg.get(r.organization_id) ?? {}
       m[r.key] = r.value
       byOrg.set(r.organization_id, m)
@@ -45,8 +57,15 @@ export async function GET(req: NextRequest) {
     let orgsProcessed = 0
     let sessionsCreated = 0
     let failed = 0
+    let skipped = 0
 
     for (const [orgId, s] of Array.from(byOrg.entries())) {
+      // Orçamento de tempo: a marca d'água (grid_auto_last_run) só avança para
+      // quem foi gerado, então o catch-up da passada seguinte pega o resto.
+      if (Date.now() >= deadline) {
+        skipped++
+        continue
+      }
       if (s.grid_auto_enabled !== 'true') continue
 
       const day = Number(s.grid_auto_day ?? '1')
@@ -94,7 +113,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ orgsProcessed, sessionsCreated, failed })
+    if (skipped > 0) {
+      Sentry.captureMessage('[cron/weekly-grid-generation] varredura incompleta no orçamento de tempo', {
+        level: 'warning',
+        extra: { orgs: byOrg.size, orgsProcessed, skipped },
+      })
+    }
+
+    return NextResponse.json({ orgs: byOrg.size, orgsProcessed, sessionsCreated, failed, skipped })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'weekly-grid-generation' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })
