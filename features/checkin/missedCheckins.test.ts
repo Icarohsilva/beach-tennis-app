@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 vi.mock('@/lib/supabase/server', () => ({ createAdminClient: vi.fn() }))
 vi.mock('@/lib/notifications/dispatch', () => ({ notifyUsers: vi.fn() }))
@@ -172,7 +173,10 @@ describe('enforceMissedCheckinBlock', () => {
 
     const call = vi.mocked(cancelFutureBookings).mock.calls[0][1]
     expect(call).toMatchObject({ studentId: 'stu-1', orgId: 'org-1', onlyFromEnrollment: false })
-    const hoje = new Date().toISOString().slice(0, 10)
+    // brtToday, e não toISOString(): o código calcula "amanhã" em horário de
+    // Brasília, então comparar com a data UTC fazia o teste quebrar todo dia entre
+    // 21h e meia-noite BRT, quando o UTC já virou e o Brasil não.
+    const hoje = brtToday(new Date())
     expect(call.from).toBeDefined()
     expect(call.from! > hoje).toBe(true)
   })

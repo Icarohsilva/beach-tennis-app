@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
+import { checkProfileComplete } from '@/features/liga/extraPoints'
 import { revalidatePath } from 'next/cache'
 
 export interface MedicalProfileData {
@@ -39,6 +40,10 @@ export async function saveMedicalProfile(data: MedicalProfileData): Promise<{ er
     )
 
   if (error) return { error: error.message }
+
+  // Liga: preencher a ficha pode ter completado o cadastro.
+  if (orgId) await checkProfileComplete(createAdminClient(), orgId, user.id)
+
   revalidatePath('/perfil')
   return {}
 }
@@ -85,6 +90,9 @@ export async function updatePersonalData(data: PersonalData): Promise<{ error?: 
     // custou uma investigação — repassa o detalhe do Postgres.
     if (medicalErr) return { error: `Erro ao salvar a data de nascimento: ${medicalErr.message}` }
   }
+
+  const { orgId: ligaOrgId } = await activeOrgIdOrError()
+  if (ligaOrgId) await checkProfileComplete(createAdminClient(), ligaOrgId, user.id)
 
   revalidatePath('/perfil')
   return {}

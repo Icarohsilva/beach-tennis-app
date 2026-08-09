@@ -24,6 +24,7 @@ import {
 } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
+import { checkProfileComplete } from '@/features/liga/extraPoints'
 import { notifyWaitlistSpotOpen } from './waitlistActions'
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,11 @@ export async function updateStudentSports(
     .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao atualizar esportes.' }
+
+  // Liga: o cadastro completo também pode ser fechado POR AQUI, quando é a academia
+  // que preenche os dados do aluno. Sem esta chamada, quem tem a ficha preenchida
+  // pela secretaria nunca ganharia o bônus — e o aluno não tem como saber por quê.
+  await checkProfileComplete(adminClient, orgId, studentId)
 
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')

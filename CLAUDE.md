@@ -90,3 +90,5 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
 - O feed (`features/comunidade/`) voltou ao menu como **seção da Liga**; `/comunidade` redireciona. `posts.is_pinned` é o mural de comunicados do admin.
 - Fotos de torneio (`tournament_photos`) vão para um bucket **privado**, servidas por URL assinada — ao contrário de `tournament-images` (capa, pública). Upload só por server action de admin.
 - Três crons: `liga-streak` (diário), `liga-season-close` (dia 1º) e `liga-season-alert` (diário, dispara só a 2 dias do fim da temporada).
+- Fontes extras de ponto (`features/liga/extraPoints.ts`) premiam comportamento que ajuda a academia: self check-in, cancelar dentro da janela, pegar vaga da fila, agendar com antecedência, cadastro completo (uma vez na vida) e day use. Todas best-effort — a Liga falhando nunca derruba a operação de origem.
+- Premiação: `liga_prizes` é o que a academia **promete** (editável enquanto a temporada roda) e `liga_prize_awards` é o que ela **deve**, congelado no fechamento. Sem essa separação, reescrever o prêmio em janeiro mudaria retroativamente o que alguém ganhou em dezembro.

@@ -9,6 +9,7 @@ import { generateTempPassword } from '@/lib/auth/tempPassword'
 import { setStudentType } from '@/features/checkin/actions'
 import { acceptLegalDocuments } from '@/features/legal/actions'
 import { OWNER_REQUIRED_SLUGS } from '@/lib/legal/documents'
+import { checkProfileComplete } from '@/features/liga/extraPoints'
 
 // Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
 const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
@@ -497,6 +498,10 @@ export async function selfSetSports(sports: string[]): Promise<{ error?: string 
     .eq('user_id', user.id)
     .eq('organization_id', orgId)
   if (error) return { error: 'Erro ao salvar seus esportes. Tente novamente.' }
+
+  // Liga: escolher a modalidade pode ter completado o cadastro.
+  await checkProfileComplete(admin, orgId, user.id)
+
   revalidatePath('/perfil')
   return {}
 }

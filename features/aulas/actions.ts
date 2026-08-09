@@ -6,6 +6,9 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { notifyWaitlistSpotOpen, clearWaitlistEntry } from './waitlistActions'
+import { awardLigaExtra } from '@/features/liga/extraPoints'
+import { isEarlyBooking } from '@/lib/liga/points'
+import { brtToday } from '@/lib/utils/gridSchedule'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
@@ -135,7 +138,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
   // 2. Fetch session + class (escopado pela academia ativa)
   const { data: session, error: sessionErr } = await adminClient
     .from('class_sessions')
-    .select('id, class_id, session_date, status, class:classes(id, level, type, max_students, name)')
+    .select('id, class_id, session_date, status, class:classes(id, level, type, max_students, name, sport)')
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .single()
@@ -153,6 +156,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     type: ClassType
     max_students: number
     name: string
+    sport: string | null
   }
 
   // 3. Kids check
@@ -355,7 +359,29 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
 
   // Entrou na aula: sai da fila de espera. Vale para qualquer porta de entrada —
   // o botão da fila e o agendamento normal passam os dois por aqui.
-  await clearWaitlistEntry(sessionId, user.id)
+  const veioDaFila = await clearWaitlistEntry(sessionId, user.id)
+
+  // Liga: pegar vaga da fila e agendar com antecedência são coisas diferentes, e o
+  // aluno recebe uma OU outra. Somar as duas premiaria duas vezes a mesma reserva.
+  if (orgId) {
+    if (veioDaFila) {
+      await awardLigaExtra(adminClient, {
+        orgId,
+        studentId: user.id,
+        reason: 'waitlist_accept',
+        sourceId: sessionId,
+        sport: cls.sport ?? null,
+      })
+    } else if (isEarlyBooking(brtToday(new Date()), session.session_date)) {
+      await awardLigaExtra(adminClient, {
+        orgId,
+        studentId: user.id,
+        reason: 'early_booking',
+        sourceId: sessionId,
+        sport: cls.sport ?? null,
+      })
+    }
+  }
 
   revalidatePath('/home')
   revalidatePath('/agendar')
@@ -708,6 +734,17 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
   // Notify next person on waitlist if any
   await notifyWaitlistSpotOpen(booking.session_id)
+
+  // Liga: cancelar DENTRO da janela é o que libera a vaga a tempo de outro aluno
+  // pegar. Cancelar em cima da hora não pontua — seria premiar o furo.
+  if (refundEligible) {
+    await awardLigaExtra(adminClient, {
+      orgId: booking.organization_id,
+      studentId: user.id,
+      reason: 'cancel_in_time',
+      sourceId: booking.session_id,
+    })
+  }
 
   revalidatePath('/home')
   revalidatePath('/agendar')
