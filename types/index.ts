@@ -76,6 +76,7 @@ export type TournamentFormat =
   | 'americano'
   | 'round_robin'
   | 'eliminatoria'
+  | 'grupos'
   | 'ranking'
   | 'super8'
 
@@ -446,6 +447,10 @@ export interface Tournament {
   entry_price_cents: number | null
   pix_key: string | null
   max_players: number | null
+  // Só no formato 'grupos'. group_count nulo = a academia não configurou e vale
+  // o padrão de lib/torneios/formats.ts.
+  group_count: number | null
+  advance_per_group: number
 }
 
 export interface TournamentEntry {

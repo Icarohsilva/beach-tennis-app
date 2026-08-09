@@ -12,13 +12,14 @@ export const MAX_ROUND_ROBIN_ENTRIES = 20
  * Método do círculo: um fixo, o resto girando. Com número ímpar de inscritos
  * entra um adversário fantasma, e quem cair contra ele folga na rodada — é
  * assim que todo mundo joga o mesmo número de partidas.
+ *
+ * Aceita a partir de 2 porque é o motor de cada GRUPO na fase de grupos, e
+ * grupo de dois é uma partida só — legítimo. O piso de 3 é do torneio
+ * todos-contra-todos avulso, em `generateRoundRobinSchedule`.
  */
-export function generateRoundRobinSchedule(entries: EntryRef[]): RoundPlan[] {
+export function circleSchedule(entries: EntryRef[]): RoundPlan[] {
   const n = entries.length
-  if (n < 3) throw new Error('O todos-contra-todos precisa de pelo menos 3 inscritos.')
-  if (n > MAX_ROUND_ROBIN_ENTRIES) {
-    throw new Error(`O todos-contra-todos aceita no máximo ${MAX_ROUND_ROBIN_ENTRIES} inscritos.`)
-  }
+  if (n < 2) return []
 
   const isOdd = n % 2 === 1
   const size = isOdd ? n + 1 : n
@@ -62,4 +63,14 @@ export function generateRoundRobinSchedule(entries: EntryRef[]): RoundPlan[] {
   }
 
   return plan
+}
+
+/** Torneio todos-contra-todos avulso: o mesmo círculo, com os limites do formato. */
+export function generateRoundRobinSchedule(entries: EntryRef[]): RoundPlan[] {
+  const n = entries.length
+  if (n < 3) throw new Error('O todos-contra-todos precisa de pelo menos 3 inscritos.')
+  if (n > MAX_ROUND_ROBIN_ENTRIES) {
+    throw new Error(`O todos-contra-todos aceita no máximo ${MAX_ROUND_ROBIN_ENTRIES} inscritos.`)
+  }
+  return circleSchedule(entries)
 }

@@ -4,8 +4,19 @@
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
-import { FORMATS, isBracketFormat } from '@/lib/torneios/formats'
+import {
+  DEFAULT_ADVANCE_PER_GROUP,
+  DEFAULT_GROUP_COUNT,
+  FORMATS,
+  hasGroupStage,
+  isBracketFormat,
+} from '@/lib/torneios/formats'
 import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
+import {
+  computeGroupTables,
+  generateKnockoutFromGroups,
+  isGroupStageComplete,
+} from '@/lib/torneios/schedule/grupos'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
@@ -146,6 +157,9 @@ export async function createTournament(input: {
   entry_price_cents?: number | null
   pix_key?: string | null
   max_players?: number | null
+  /** Só no formato 'grupos'. */
+  group_count?: number | null
+  advance_per_group?: number | null
 }): Promise<{ error?: string; id?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -184,6 +198,10 @@ export async function createTournament(input: {
       entry_price_cents: input.entry_price_cents ?? null,
       pix_key: input.pix_key ?? null,
       max_players: input.max_players ?? null,
+      // Fora do formato 'grupos' a configuração não se aplica e fica nula, para
+      // não sugerir na tela um grupo que o torneio não tem.
+      group_count: input.format === 'grupos' ? input.group_count ?? DEFAULT_GROUP_COUNT : null,
+      advance_per_group: input.advance_per_group ?? DEFAULT_ADVANCE_PER_GROUP,
     })
     .select('id')
     .single()
@@ -354,7 +372,7 @@ export async function generateBracket(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, format')
+    .select('id, status, format, group_count, advance_per_group')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -387,7 +405,10 @@ export async function generateBracket(
 
   let plan
   try {
-    plan = engine.generate(entries)
+    plan = engine.generate(entries, {
+      groupCount: (tournament.group_count as number | null) ?? DEFAULT_GROUP_COUNT,
+      advancePerGroup: (tournament.advance_per_group as number | null) ?? DEFAULT_ADVANCE_PER_GROUP,
+    })
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Erro ao gerar a chave.' }
   }
@@ -404,6 +425,9 @@ export async function generateBracket(
       // inserção: uma partida dispensada por bye deixa buraco na numeração de
       // propósito, e renumerar aqui quebraria o caminho do vencedor.
       match_no: m.matchNo ?? i + 1,
+      // 'A'/'B'/... na fase de grupos, null no mata-mata. É o que separa as
+      // duas fases dentro da mesma tabela.
+      group_label: m.group ?? null,
       player1_id: m.p1,
       partner1_id: m.partner1,
       player2_id: m.p2,
@@ -428,6 +452,158 @@ export async function generateBracket(
 }
 
 // ---------------------------------------------------------------------------
+// seedKnockoutFromGroups — monta o mata-mata quando a fase de grupos acaba
+// ---------------------------------------------------------------------------
+
+/**
+ * Lê as tabelas dos grupos e cria a chave com os classificados.
+ *
+ * Roda sozinha depois do último placar de grupo confirmado, e também pelo botão
+ * do admin — que é a saída quando alguém desiste e um jogo nunca é lançado.
+ *
+ * Idempotente pelo caminho seguro: se já existe partida de mata-mata, não faz
+ * nada. Regerar por cima apagaria resultados de quartas já jogadas por causa de
+ * uma correção de placar na fase de grupos.
+ */
+export async function seedKnockoutFromGroups(
+  tournamentId: string,
+): Promise<{ error?: string; created?: number }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  // Sem exigir admin de propósito: a action roda sozinha quando um ALUNO
+  // confirma o último placar da fase de grupos. O resultado é o mesmo em
+  // qualquer mão — a chave é derivada dos jogos já confirmados, e a action é
+  // idempotente e limitada à academia do usuário pelo orgId abaixo.
+  const orgId = await getActiveOrgId()
+  if (!orgId) return { error: 'Academia ativa não encontrada.' }
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, format, group_count, advance_per_group, sets_to_win, games_per_set, tiebreak_games')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+  if (!hasGroupStage(tournament.format as string)) {
+    return { error: 'Este torneio não tem fase de grupos.' }
+  }
+
+  const { data: matchRows } = await adminClient
+    .from('tournament_matches')
+    .select('round, match_no, group_label, player1_id, partner1_id, player2_id, partner2_id, games1, games2, result_status')
+    .eq('tournament_id', tournamentId)
+    .eq('organization_id', orgId)
+
+  const matches = (matchRows ?? []).map((m) => ({
+    player1_id: m.player1_id as string | null,
+    partner1_id: m.partner1_id as string | null,
+    player2_id: m.player2_id as string | null,
+    partner2_id: m.partner2_id as string | null,
+    games1: (m.games1 as number | null) ?? 0,
+    games2: (m.games2 as number | null) ?? 0,
+    result_status: m.result_status as 'pending' | 'confirmed' | null,
+    round: m.round as number,
+    group: m.group_label as string | null,
+  }))
+
+  if (matches.some((m) => !m.group)) return { created: 0 } // chave já existe
+  if (!isGroupStageComplete(matches)) {
+    return { error: 'Ainda faltam resultados na fase de grupos.' }
+  }
+
+  const { data: entryRows } = await adminClient
+    .from('tournament_entries')
+    .select('player_id, partner_id, seed')
+    .eq('tournament_id', tournamentId)
+    .eq('organization_id', orgId)
+    .eq('entry_status', 'confirmed')
+
+  type EntryDraw = { player_id: string; partner_id: string | null; seed: number | null }
+  // A distribuição em grupos é posicional, então a ordem tem que ser a MESMA da
+  // geração — senão as tabelas seriam lidas contra os grupos errados.
+  const { seeded, unseeded } = splitBySeed((entryRows ?? []) as EntryDraw[])
+  const entries = [...seeded, ...unseeded].map((e) => ({
+    playerId: e.player_id,
+    partnerId: e.partner_id,
+  }))
+
+  const groupCount = (tournament.group_count as number | null) ?? DEFAULT_GROUP_COUNT
+  const advancePerGroup = (tournament.advance_per_group as number | null) ?? DEFAULT_ADVANCE_PER_GROUP
+  const scoring: ScoringConfig = {
+    sets_to_win: (tournament.sets_to_win as number) ?? 1,
+    games_per_set: (tournament.games_per_set as number) ?? 6,
+    tiebreak_games: (tournament.tiebreak_games as boolean) ?? true,
+  }
+
+  const tables = computeGroupTables(entries, matches, groupCount, scoring)
+  const groupRounds = Math.max(...matches.map((m) => m.round))
+
+  let plan
+  try {
+    plan = generateKnockoutFromGroups(tables, advancePerGroup, groupRounds)
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Erro ao montar o mata-mata.' }
+  }
+  if (plan.length === 0) return { error: 'Classificados insuficientes para o mata-mata.' }
+
+  const rows = plan.flatMap((rp) =>
+    rp.matches.map((m, i) => ({
+      organization_id: orgId,
+      tournament_id: tournamentId,
+      round: rp.round,
+      match_no: m.matchNo ?? i + 1,
+      group_label: null,
+      player1_id: m.p1,
+      partner1_id: m.partner1,
+      player2_id: m.p2,
+      partner2_id: m.partner2,
+    })),
+  )
+
+  const { error: insErr } = await adminClient.from('tournament_matches').insert(rows)
+  if (insErr) return { error: 'Erro ao salvar o mata-mata. Tente novamente.' }
+
+  revalidatePath(`/torneios/${tournamentId}`)
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  return { created: rows.length }
+}
+
+// ---------------------------------------------------------------------------
+// afterResultConfirmed — o que acontece depois de todo placar confirmado
+// ---------------------------------------------------------------------------
+
+/**
+ * Dois efeitos, ambos best-effort: promover o vencedor na chave e, num torneio
+ * de grupos, montar o mata-mata se aquele foi o último jogo da primeira fase.
+ *
+ * Nenhum dos dois pode derrubar a confirmação do placar — o jogo aconteceu, e
+ * o admin tem botão para refazer a chave se algo falhar aqui.
+ */
+async function afterResultConfirmed(
+  adminClient: ReturnType<typeof createAdminClient>,
+  matchId: string,
+  orgId: string,
+): Promise<void> {
+  await advanceBracketWinner(adminClient, matchId, orgId)
+
+  const { data: match } = await adminClient
+    .from('tournament_matches')
+    .select('tournament_id, group_label')
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  // Só o fim de um jogo de GRUPO pode fechar a primeira fase.
+  if (!match?.group_label) return
+
+  // A própria action confere se a fase acabou e se a chave já existe; aqui o
+  // erro é esperado no caso comum (ainda falta jogo) e não vai para o usuário.
+  await seedKnockoutFromGroups(match.tournament_id as string)
+}
+
+// ---------------------------------------------------------------------------
 // advanceBracketWinner — promove o vencedor para a partida seguinte
 // ---------------------------------------------------------------------------
 
@@ -449,11 +625,14 @@ async function advanceBracketWinner(
 ): Promise<void> {
   const { data: match } = await adminClient
     .from('tournament_matches')
-    .select('id, tournament_id, round, match_no, player1_id, partner1_id, player2_id, partner2_id, games1, games2')
+    .select('id, tournament_id, round, match_no, group_label, player1_id, partner1_id, player2_id, partner2_id, games1, games2')
     .eq('id', matchId)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!match || match.match_no === null) return
+  // Partida de fase de grupos não promove ninguém: quem passa sai da TABELA do
+  // grupo no fim da fase, não de um confronto direto.
+  if (match.group_label) return
 
   const { data: tournament } = await adminClient
     .from('tournaments')
@@ -541,7 +720,7 @@ export async function recordMatchResult(
     .eq('organization_id', orgId)
   if (updErr) return { error: 'Erro ao salvar resultado. Tente novamente.' }
 
-  await advanceBracketWinner(adminClient, matchId, orgId)
+  await afterResultConfirmed(adminClient, matchId, orgId)
   return {}
 }
 
@@ -637,7 +816,7 @@ export async function confirmMatchResult(
     .eq('id', matchId)
   if (updErr) return { error: 'Erro ao confirmar placar. Tente novamente.' }
 
-  await advanceBracketWinner(adminClient, matchId, orgId)
+  await afterResultConfirmed(adminClient, matchId, orgId)
   return {}
 }
 

@@ -6,7 +6,7 @@
 // confrontos. Com o torneio em andamento a página se atualiza sozinha
 // (LiveRefresher), então quem está na arquibancada vê o placar mudar.
 import { notFound, redirect } from 'next/navigation'
-import { CalendarClock, ListOrdered, Swords, Trophy } from 'lucide-react'
+import { CalendarClock, LayoutGrid, ListOrdered, Swords, Trophy } from 'lucide-react'
 import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { PhotoGallery } from '@/features/torneios/PhotoGallery'
@@ -21,7 +21,15 @@ import { PodiumCard, type PodiumPlace } from '@/features/torneios/PodiumCard'
 import { LiveRefresher } from '@/features/torneios/LiveRefresher'
 import { ShareButton } from '@/features/torneios/ShareButton'
 import { RegisterButton } from './RegisterButton'
-import { FORMATS, isBracketFormat } from '@/lib/torneios/formats'
+import {
+  DEFAULT_ADVANCE_PER_GROUP,
+  DEFAULT_GROUP_COUNT,
+  FORMATS,
+  hasGroupStage,
+  isBracketFormat,
+} from '@/lib/torneios/formats'
+import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
+import { GroupTables } from '@/features/torneios/GroupTables'
 import { roundLabel as bracketRoundLabel } from '@/lib/torneios/bracket'
 import { buildBracketColumns } from '@/lib/torneios/bracketView'
 import { competitorNoun } from '@/lib/torneios/sportProfile'
@@ -72,7 +80,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       .eq('tournament_id', params.id),
     adminClient
       .from('tournament_matches')
-      .select(`id, tournament_id, round, match_no,
+      .select(`id, tournament_id, round, match_no, group_label,
         player1_id, player2_id, partner1_id, partner2_id,
         games1, games2, result_status, reported_by, confirmed_by, played_at,
         player1:profiles!player1_id(id, full_name),
@@ -96,6 +104,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
 
   type ScoreMatchRaw = {
     id: string; tournament_id: string; round: number; match_no: number | null
+    group_label: string | null
     player1_id: string | null; player2_id: string | null
     partner1_id: string | null; partner2_id: string | null
     games1: number | null; games2: number | null; result_status: string | null
@@ -143,20 +152,35 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     games_per_set: t.games_per_set ?? 6,
     tiebreak_games: t.tiebreak_games ?? true,
   }
-  const engine = FORMATS[t.format ?? 'americano']
-  const standings = engine
-    ? engine.computeStandings(entryRefs, matches as unknown as MatchResultInput[], scoring)
-    : []
-
-  const isBracket = isBracketFormat(t.format)
-  // O select devolve result_status como text; a coluna tem check constraint
-  // (20260626000700) que garante os únicos valores possíveis.
-  const bracketInput = matches.map((m) => ({
+  // O select devolve result_status e group_label como text; as constraints das
+  // migrações 20260626000700/20260809000300 garantem os valores possíveis.
+  const normalized = matches.map((m) => ({
     ...m,
     result_status: m.result_status as 'pending' | 'confirmed' | null,
+    group: m.group_label,
   }))
-  const bracketColumns = isBracket ? buildBracketColumns(bracketInput, nameById, user.id) : []
-  const totalRounds = matches.length > 0 ? Math.max(...matches.map((m) => m.round)) : 0
+
+  const engine = FORMATS[t.format ?? 'americano']
+  const standings = engine
+    ? engine.computeStandings(entryRefs, normalized as unknown as MatchResultInput[], scoring)
+    : []
+
+  // As duas fases moram na mesma tabela; o mata-mata volta a contar rodadas do
+  // 1 para a chave saber que a última é a final e não a "quinta fase".
+  const { groupMatches, knockoutMatches, groupRounds } = splitPhases(normalized)
+  const isBracket = isBracketFormat(t.format)
+  const withGroups = hasGroupStage(t.format)
+  const bracketColumns = isBracket
+    ? buildBracketColumns(knockoutMatches, nameById, user.id)
+    : []
+  const knockoutRounds = knockoutMatches.length > 0 ? Math.max(...knockoutMatches.map((m) => m.round)) : 0
+
+  const groupCount = t.group_count ?? DEFAULT_GROUP_COUNT
+  const advancePerGroup = t.advance_per_group ?? DEFAULT_ADVANCE_PER_GROUP
+  const groupTables =
+    withGroups && groupMatches.length > 0
+      ? computeGroupTables(entryRefs, normalized as unknown as MatchResultInput[], groupCount, scoring)
+      : []
 
   // Pódio: sai dos vencedores gravados no fechamento; sem eles, do topo da
   // classificação. O torneio encerrado congela o pódio em `winnerN_id`, então
@@ -203,8 +227,18 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     }, new Map<number, typeof matches>()),
   ).sort(([a], [b]) => a - b)
 
-  const labelForRound = (round: number) =>
-    isBracket && totalRounds > 0 ? bracketRoundLabel(round, totalRounds) : `Rodada ${round}`
+  /**
+   * Nome da rodada na lista de confrontos.
+   *
+   * Na fase de grupos é só o número. No mata-mata é a FASE, e ela se conta a
+   * partir de onde os grupos pararam: sem descontar o deslocamento, a final de
+   * um torneio com 3 rodadas de grupo seria anunciada como "4ª rodada".
+   */
+  const labelForRound = (round: number, group: string | null) => {
+    if (group) return `Rodada ${round}`
+    if (!isBracket || knockoutRounds === 0) return `Rodada ${round}`
+    return bracketRoundLabel(round - groupRounds, knockoutRounds)
+  }
 
   const toScoreMatch = (m: (typeof matches)[number]) => ({
     ...m,
@@ -276,7 +310,21 @@ export default async function TorneioDetailPage({ params }: PageProps) {
             match={toScoreMatch(myNextMatch)}
             currentUserId={user.id}
             isAdmin={false}
-            roundLabel={labelForRound(myNextMatch.round)}
+            roundLabel={labelForRound(myNextMatch.round, myNextMatch.group_label)}
+          />
+        </Reveal>
+      )}
+
+      {/* ── Fase de grupos ──────────────────────────────────────────────── */}
+      {groupTables.length > 0 && (
+        <Reveal step={3} as="section">
+          <SectionTitle icon={LayoutGrid}>Fase de grupos</SectionTitle>
+          <GroupTables
+            tables={groupTables}
+            nameById={nameById}
+            advancePerGroup={advancePerGroup}
+            currentUserId={user.id}
+            settled={knockoutMatches.length > 0}
           />
         </Reveal>
       )}
@@ -284,7 +332,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       {/* ── Chave ───────────────────────────────────────────────────────── */}
       {bracketColumns.length > 0 && (
         <Reveal step={3} as="section">
-          <SectionTitle icon={Swords}>Chave</SectionTitle>
+          <SectionTitle icon={Swords}>{withGroups ? 'Mata-mata' : 'Chave'}</SectionTitle>
           <BracketView columns={bracketColumns} />
         </Reveal>
       )}
@@ -305,7 +353,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
             {roundsOfMatches.map(([round, roundMatches]) => (
               <div key={round}>
                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                  {labelForRound(round)}
+                  {labelForRound(round, roundMatches[0]?.group_label ?? null)}
                 </h3>
                 <div className="space-y-2">
                   {roundMatches.map((match) => (

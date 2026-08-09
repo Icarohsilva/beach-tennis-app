@@ -21,6 +21,11 @@ export interface MatchPlan {
    * (rodada 2, partida 2). Formatos sem chave podem omitir: cai no índice.
    */
   matchNo?: number
+  /**
+   * Grupo da fase de grupos ('A', 'B', ...). Ausente/nulo marca partida de
+   * mata-mata — é o que separa as duas fases dentro da mesma tabela.
+   */
+  group?: string | null
 }
 
 export interface RoundPlan {
@@ -46,6 +51,16 @@ export interface MatchResultInput {
   result_status: 'pending' | 'confirmed' | null
   /** Necessário só onde a classificação depende da fase (eliminatória). */
   round?: number
+  /** 'A'/'B'/... na fase de grupos; nulo no mata-mata. */
+  group?: string | null
+}
+
+/** Configuração do torneio que o gerador precisa além das inscrições. */
+export interface GenerateOptions {
+  /** Quantos grupos na primeira fase (formato `grupos`). */
+  groupCount?: number
+  /** Quantos passam de cada grupo para o mata-mata. */
+  advancePerGroup?: number
 }
 
 export interface FormatEngine {
@@ -54,7 +69,7 @@ export interface FormatEngine {
    * Recebe as inscrições, não uma lista de ids: em dupla fixa o parceiro faz
    * parte da unidade que entra na chave e se perderia no caminho.
    */
-  generate(entries: EntryRef[]): RoundPlan[]
+  generate(entries: EntryRef[], options?: GenerateOptions): RoundPlan[]
   computeStandings(
     entries: EntryRef[],
     matches: MatchResultInput[],

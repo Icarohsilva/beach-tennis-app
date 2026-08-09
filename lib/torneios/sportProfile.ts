@@ -187,6 +187,7 @@ const FORMAT_LABELS: Record<TournamentFormat, string> = {
   americano: 'Americano',
   round_robin: 'Todos contra todos',
   eliminatoria: 'Eliminatória',
+  grupos: 'Grupos + mata-mata',
   ranking: 'Ranking',
   super8: 'Super 8', // legado: linhas anteriores ao motor genérico
 }
