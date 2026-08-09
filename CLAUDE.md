@@ -39,6 +39,12 @@ Academy/school management app for any activity with classes and students — bea
 
 Never import `@supabase/supabase-js` directly — always use the wrappers above.
 
+**Identidade/academia vem sempre dos helpers memoizados** de `lib/supabase/server.ts` (`getAuthUser`, `getMemberships`, `getActiveOrgId`, `getActiveMembership`, `getCurrentOrg`, `getStaffContext`). Eles são embrulhados em `requestCache` ([lib/utils/requestCache.ts](lib/utils/requestCache.ts)), então a cascata inteira custa 1 `auth.getUser()` + 1 select por request em vez de ~10. Nunca chame `supabase.auth.getUser()` direto numa página ou layout — some com o ganho. Em server action o valor congela no primeiro acesso do request: para reler algo que a própria action acabou de escrever, vá direto na tabela.
+
+**Toda leitura de lista que cresce com o tamanho da academia passa por `fetchAllPages`** ([lib/supabase/paginate.ts](lib/supabase/paginate.ts)). O Supabase hospedado corta qualquer resposta em 1.000 linhas (`max_rows`), inclusive para a service role, e devolve `error: null` — a query "dá certo" com resultado errado. Use `chunk(ids, IN_CHUNK_SIZE)` para `.in(...)` com muitos ids (a lista vai na URL). Leitura com teto natural (uma sessão, um aluno, 20 notificações) pode usar `.select()` direto. Para contar, use `{ count: 'exact', head: true }` — nunca `select('id')` + `.length`, que trafega a tabela para contar no Node.
+
+Crons varrem a base inteira: usam `fetchAllPages`, `mapWithConcurrency` ([lib/utils/concurrency.ts](lib/utils/concurrency.ts)) com orçamento de tempo, e respondem `truncated: true` quando não terminaram — o que sobrar fica para a próxima passada (todas as operações são idempotentes).
+
 ### Business Logic Utilities
 
 | File | Purpose |
@@ -63,7 +69,15 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
 - Presença tem três origens (`attendance.source`): `manual` (professor na chamada), `wellhub`/`totalpass` (webhook do parceiro) e `self` (aluno confirma pelo app). A confirmação do aluno é gravada em `self_checkins` com a evidência de GPS e só vira `attendance` quando `validated`; `pending` espera o professor aprovar. Ver [docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md](docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md)
 
+- RLS: policy nenhuma chama `auth.uid()` cru nem `is_org_admin(coluna)` — as duas rodam **por linha**. A forma correta é `(select auth.uid())` e `organization_id in (select auth_admin_org_ids())`, que viram InitPlan (uma avaliação por statement). A migração `20260809000000_escala_rls_e_indices.sql` converteu as existentes e a verificação está no cabeçalho dela; policy nova já deve nascer assim. Medido em 300k linhas: 1.320ms → 44ms.
+
 Migrations live in `supabase/migrations/` and must be applied via `supabase db push`.
+
+### Capacidade e limites de plano
+
+`/super-admin/capacidade` responde "quando preciso subir de plano?" com data, não palpite. O cron diário `capacity-snapshot` grava um retrato (linhas e bytes por tabela, orgs, alunos, MAU, tamanho do banco) em `capacity_snapshots`; a página projeta por mínimos quadrados quando cada teto é cruzado. Regras puras e testadas em [lib/plataforma/capacity.ts](lib/plataforma/capacity.ts).
+
+O que o painel **não** mede está listado nele mesmo (`LIMITES_EXTERNOS`): CPU/RAM da instância e queries caras ficam no painel do Supabase, invocações e GB-hrs no da Vercel. Os tetos em `LIMITES` vêm dos planos publicados e envelhecem — confira o pricing antes de decidir por eles.
 
 ### Design System
 

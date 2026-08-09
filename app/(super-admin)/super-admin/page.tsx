@@ -15,6 +15,12 @@ export default async function SuperAdminHome() {
         </div>
         <div className="flex gap-2">
           <Link
+            href="/super-admin/capacidade"
+            className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-slate-200 hover:bg-surface-border transition-colors"
+          >
+            Capacidade
+          </Link>
+          <Link
             href="/super-admin/feedback"
             className="rounded-lg border border-surface-border px-3 py-1.5 text-sm text-slate-200 hover:bg-surface-border transition-colors"
           >
