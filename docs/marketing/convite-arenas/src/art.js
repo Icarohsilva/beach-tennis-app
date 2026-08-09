@@ -26,7 +26,7 @@ const marca = (altura, un, corTexto = '#ffffff') => `
 const logo = (alturaMm, corTexto) => marca(alturaMm, 'mm', corTexto)
 const logoPx = (alturaPx, corTexto) => marca(alturaPx, 'px', corTexto)
 
-// Quadra de beach tennis em perspectiva — o "chão" da peça.
+// Quadra de beach tennis em perspectiva, o "chão" da peça.
 // `id` precisa ser único: dois SVGs na mesma página com o mesmo id de gradiente
 // fazem o segundo herdar o primeiro.
 // Duas geometrias, não uma esticada: a faixa da capa é muito mais baixa que
@@ -52,7 +52,7 @@ const quadra = (opacidade = 0.22, esmaecer = true, forma = 'normal') => {
   <defs>
     <!-- userSpaceOnUse é obrigatório: no modo padrão (objectBoundingBox) uma
          linha horizontal tem bbox de altura zero, o gradiente fica indefinido e
-         o traço simplesmente não desenha — some a rede inteira da quadra. -->
+         o traço simplesmente não desenha, e some a rede inteira da quadra. -->
     <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${g.h}">
       ${
         esmaecer
@@ -87,7 +87,7 @@ const quadra = (opacidade = 0.22, esmaecer = true, forma = 'normal') => {
 }
 
 // Geometria dos QR impressos, em mm. Fica aqui porque o verify.js usa os mesmos
-// números para calcular o tamanho do módulo — mudar o layout sem mudar isto
+// números para calcular o tamanho do módulo. Mudar o layout sem mudar isto
 // faria o QA validar uma peça que não existe mais.
 const QR_IMPRESSO = {
   contracapa: { painelMm: 66, padMm: 5 },
@@ -220,7 +220,7 @@ function contracapa(cfg, qrInstagram) {
 
 const CARTA = (cfg) => [
   `Eu construí o ArenaHub sozinho, linha por linha, depois de ver de perto o caos que é tocar uma arena no caderno e no grupo de WhatsApp lotado.`,
-  `Hoje ele já roda numa arena de verdade aqui em ${cfg.cidade}. Agora eu quero as próximas — e queria muito que a sua fosse uma delas.`,
+  `Hoje ele já roda numa arena de verdade aqui em ${cfg.cidade}. Agora eu quero as próximas, e queria muito que a sua fosse uma delas.`,
   `Isto não é um panfleto. É um convite: abra sua conta, monte sua grade em 5 minutos e use o primeiro mês por minha conta. Se não fizer sentido pra você, me diz e a gente encerra ali, sem drama.`,
 ]
 
@@ -248,7 +248,7 @@ function interna(cfg, qrCriar) {
 <div class="painel" style="position:relative;overflow:hidden;width:300mm">
   <!-- Sem quadra aqui de propósito: esticada na abertura inteira ela vira um
        risco diagonal atravessando a carta. A parte de dentro é texto, e texto
-       pede fundo quieto — a quadra fica na capa e nas peças digitais. -->
+       pede fundo quieto. A quadra fica na capa e nas peças digitais. -->
 
   <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:14mm 15mm 11mm">
     <div style="display:flex;gap:36mm;flex:1">
@@ -351,7 +351,7 @@ function folha({ cfg, conteudo, comMarcas, rotulo }) {
           m.push(traco(`top:${y}mm;left:${L - sangria - g - c}mm;height:.2mm;width:${c}mm`))
           m.push(traco(`top:${y}mm;left:${R + sangria + g}mm;height:.2mm;width:${c}mm`))
         }
-        // Marca de vinco/dobra no centro — tracejada, para não confundir com corte.
+        // Marca de vinco/dobra no centro, tracejada para não confundir com corte.
         const X = off + sangria + aberto / 2
         m.push(
           `<div style="position:absolute;left:${X}mm;top:${T - sangria - g - c}mm;width:.2mm;height:${c}mm;background:repeating-linear-gradient(180deg,#000 0 1mm,transparent 1mm 2mm)"></div>`
@@ -390,7 +390,7 @@ function documentoPrint({ cfg, qrInstagram, qrCriar, comMarcas }) {
   const pgH = altura + sangria * 2 + (comMarcas ? marcaFolga * 2 : 0)
   const painelCss = `.painel{width:150mm;height:150mm;flex:none}`
 
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub — Convite</title>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub · Convite</title>
 <style>
 ${baseCss(cfg.cor)}
 ${painelCss}
@@ -399,8 +399,8 @@ body{background:#fff}
 .pagina{break-after:page}
 .pagina:last-child{break-after:auto}
 </style></head><body>
-${folha({ cfg, comMarcas, rotulo: 'PÁG. 1 — EXTERNA (capa à direita)', conteudo: contracapa(cfg, qrInstagram) + capa(cfg) })}
-${folha({ cfg, comMarcas, rotulo: 'PÁG. 2 — INTERNA (carta à esquerda)', conteudo: interna(cfg, qrCriar) })}
+${folha({ cfg, comMarcas, rotulo: 'PÁG. 1 · EXTERNA (capa à direita)', conteudo: contracapa(cfg, qrInstagram) + capa(cfg) })}
+${folha({ cfg, comMarcas, rotulo: 'PÁG. 2 · INTERNA (carta à esquerda)', conteudo: interna(cfg, qrCriar) })}
 </body></html>`
 }
 
@@ -412,7 +412,7 @@ function pecaDigital({ cfg, qrInstagram, largura, altura, story }) {
   const pad = 76
   const respiro = story ? 1.9 : 1
 
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub — Convite digital</title>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub · Convite digital</title>
 <style>
 ${baseCss(c)}
 html,body{width:${largura}px;height:${altura}px;overflow:hidden}
@@ -440,8 +440,8 @@ html,body{width:${largura}px;height:${altura}px;overflow:hidden}
         Sua arena merece mais que um <span style="color:${c.laranja}">grupo de WhatsApp</span>.
       </h1>
       <p style="margin-top:28px;font-family:Inter;font-size:31px;line-height:1.5;color:#cbd5e1;max-width:830px">
-        Grade, reposição, Wellhub, financeiro e torneios num app só —
-        e o aluno para de te mandar “sobrou vaga?” às 22h.
+        Grade, reposição, Wellhub, financeiro e torneios num app só.
+        E o aluno para de te mandar “sobrou vaga?” às 22h.
       </p>
     </div>
 
@@ -509,7 +509,7 @@ function selo(cfg) {
   const d = 40 // diâmetro final em mm
   const s = 3 // sangria
   const t = d + s * 2
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub — Selo</title>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub · Selo</title>
 <style>${baseCss(c)}@page{size:${t}mm ${t}mm;margin:0}body{background:#fff}</style></head><body>
 <div style="width:${t}mm;height:${t}mm">
   <svg viewBox="0 0 100 100" style="width:100%;height:100%;display:block">

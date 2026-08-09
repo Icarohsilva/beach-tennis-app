@@ -118,7 +118,7 @@ async function main() {
       await p.setContent(`<style>*{margin:0;padding:0}svg{width:${px}px;height:${px}px;display:block}</style>${svg}`)
       await p.screenshot({ path: path.join(qa, nome) })
       await p.close()
-      console.log(`QA ${nome} — ${mm.toFixed(1)} mm a 300 dpi = ${px}px`)
+      console.log(`QA ${nome} · ${mm.toFixed(1)} mm a 300 dpi = ${px}px`)
     }
   }
 

@@ -1,6 +1,6 @@
 // QR code de marca: módulos arredondados, olhos customizados e a raquete no miolo.
 //
-// Correção de erro em nível H (recupera 30% do código) — é o que autoriza o furo
+// Correção de erro em nível H (recupera 30% do código). É o que autoriza o furo
 // central do logo. Testado: decodifica até 13,5 mm impresso, e o convite usa 32 mm.
 const QRCode = require('qrcode')
 
@@ -13,7 +13,7 @@ const LOGO_MARCA = `
 /**
  * @param {string} url        destino do código
  * @param {object} opts
- * @param {string} opts.fg    cor dos módulos (escuro — sempre escuro sobre claro)
+ * @param {string} opts.fg    cor dos módulos (sempre escuro sobre claro)
  * @param {string} opts.bg    cor do fundo (claro)
  * @param {boolean} opts.logo furo central com a raquete
  * @param {number} opts.quiet zona de silêncio, em módulos (mínimo 4 pela norma)

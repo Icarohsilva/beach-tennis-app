@@ -4,7 +4,7 @@
 //
 //  1. O módulo impresso é grande o suficiente? Abaixo de ~0,4 mm o ponto começa
 //     a fechar no papel e o código morre na tiragem inteira. Isso é geometria,
-//     não é opinião — dá para calcular antes de imprimir.
+//     não é opinião, dá para calcular antes de imprimir.
 //  2. O código decodifica de fato? As peças são decodificadas a partir da imagem
 //     gerada, reduzida ao tamanho em que uma câmera de celular enquadra a peça.
 //     (Decodificar no raster nativo de 3471 px não vale como teste: o jsQR falha
@@ -86,7 +86,7 @@ const falhou = (msg) => {
 
 for (const p of PECAS) {
   if (!fs.existsSync(path.join(OUT, p.arquivo))) {
-    falhou(`${p.arquivo} não existe — rode npm run build`)
+    falhou(`${p.arquivo} não existe, rode npm run build`)
     continue
   }
 
