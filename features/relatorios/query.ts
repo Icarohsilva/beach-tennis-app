@@ -1,5 +1,6 @@
 // features/relatorios/query.ts
 import { createAdminClient } from '@/lib/supabase/server'
+import { fetchAllPages, chunk, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
 import {
   buildAttendanceReport,
   ATTENDANCE_TRACKING_START,
@@ -43,22 +44,6 @@ export async function getFrequencyReport(
 ): Promise<FrequencyReport> {
   const admin = createAdminClient()
 
-  const [{ data: orgRow }, { data: sessionsRaw }, { data: enrollRaw }] = await Promise.all([
-    admin.from('organizations').select('created_at').eq('id', orgId).single(),
-    admin
-      .from('class_sessions')
-      .select('id, session_date, status, class_id, classes(name)')
-      .eq('organization_id', orgId)
-      .gte('session_date', window.from)
-      .lte('session_date', window.to),
-    // Sem filtro de is_active: uma matrícula encerrada ainda valia nas aulas
-    // anteriores ao cancelamento.
-    admin
-      .from('enrollments')
-      .select('student_id, class_id, enrolled_at, cancelled_at')
-      .eq('organization_id', orgId),
-  ])
-
   type SessionRow = {
     id: string
     session_date: string
@@ -66,7 +51,41 @@ export async function getFrequencyReport(
     class_id: string
     classes: { name: string } | { name: string }[] | null
   }
-  const sessionRows = (sessionsRaw ?? []) as unknown as SessionRow[]
+  type EnrollRow = {
+    student_id: string
+    class_id: string
+    enrolled_at: string
+    cancelled_at: string | null
+  }
+
+  const [{ data: orgRow }, sessionRows, enrollRows] = await Promise.all([
+    admin.from('organizations').select('created_at').eq('id', orgId).single(),
+    fetchAllPages(
+      (from, to) =>
+        admin
+          .from('class_sessions')
+          .select('id, session_date, status, class_id, classes(name)')
+          .eq('organization_id', orgId)
+          .gte('session_date', window.from)
+          .lte('session_date', window.to)
+          .order('id', { ascending: true })
+          .range(from, to),
+      { label: 'relatorios/frequencia:sessions' },
+    ) as Promise<SessionRow[]>,
+    // Sem filtro de is_active: uma matrícula encerrada ainda valia nas aulas
+    // anteriores ao cancelamento. Cresce com o histórico da academia, não com a
+    // janela do relatório — é a leitura que estoura o teto primeiro.
+    fetchAllPages<EnrollRow>(
+      (from, to) =>
+        admin
+          .from('enrollments')
+          .select('student_id, class_id, enrolled_at, cancelled_at')
+          .eq('organization_id', orgId)
+          .order('id', { ascending: true })
+          .range(from, to),
+      { label: 'relatorios/frequencia:enrollments' },
+    ),
+  ])
   const classNameOf = (row: SessionRow) => {
     const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
     return cls?.name ?? 'Turma'
@@ -80,16 +99,33 @@ export async function getFrequencyReport(
   }))
   const sessionIds = sessions.map((s) => s.id)
 
-  const [{ data: bookingsRaw }, { data: attendanceRaw }] = sessionIds.length > 0
-    ? await Promise.all([
-        admin.from('session_bookings').select('student_id, session_id, status').in('session_id', sessionIds),
-        admin.from('attendance').select('student_id, session_id, status').in('session_id', sessionIds),
-      ])
-    : [{ data: [] }, { data: [] }]
+  // Reservas e presenças das sessões do período. Dois cuidados: a lista de ids vai
+  // na URL (por isso o chunk) e o resultado passa de 1.000 linhas num mês de
+  // academia cheia (por isso o fetchAllPages).
+  type BySessionRow = { student_id: string; session_id: string; status: string }
+  const loadBySession = async (table: 'session_bookings' | 'attendance'): Promise<BySessionRow[]> => {
+    const pages = await Promise.all(
+      chunk(sessionIds, IN_CHUNK_SIZE).map((ids) =>
+        fetchAllPages<BySessionRow>(
+          (from, to) =>
+            admin
+              .from(table)
+              .select('student_id, session_id, status')
+              .in('session_id', ids)
+              .order('id', { ascending: true })
+              .range(from, to),
+          { label: `relatorios/frequencia:${table}` },
+        ),
+      ),
+    )
+    return pages.flat()
+  }
 
-  const enrollments: ReportEnrollment[] = (
-    (enrollRaw ?? []) as { student_id: string; class_id: string; enrolled_at: string; cancelled_at: string | null }[]
-  ).map((e) => ({
+  const [bookingsRaw, attendanceRaw] = sessionIds.length > 0
+    ? await Promise.all([loadBySession('session_bookings'), loadBySession('attendance')])
+    : [[] as BySessionRow[], [] as BySessionRow[]]
+
+  const enrollments: ReportEnrollment[] = enrollRows.map((e) => ({
     studentId: e.student_id,
     classId: e.class_id,
     enrolledAt: (e.enrolled_at ?? '').slice(0, 10),
@@ -110,12 +146,23 @@ export async function getFrequencyReport(
 
   // Nomes só de quem apareceu na conta.
   const ids = totals.map((t) => t.studentId)
-  const { data: profiles } = ids.length > 0
-    ? await admin.from('profiles').select('id, full_name').in('id', ids)
-    : { data: [] }
-  const nameById = new Map(
-    ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
-  )
+  const profiles = (
+    await Promise.all(
+      chunk(ids, IN_CHUNK_SIZE).map((slice) =>
+        fetchAllPages<{ id: string; full_name: string }>(
+          (from, to) =>
+            admin
+              .from('profiles')
+              .select('id, full_name')
+              .in('id', slice)
+              .order('id', { ascending: true })
+              .range(from, to),
+          { label: 'relatorios/frequencia:profiles' },
+        ),
+      ),
+    )
+  ).flat()
+  const nameById = new Map(profiles.map((p) => [p.id, p.full_name]))
 
   const rows: FrequencyRow[] = totals.map((t) => ({ ...t, name: nameById.get(t.studentId) ?? 'Aluno' }))
 

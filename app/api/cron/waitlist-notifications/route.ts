@@ -14,9 +14,19 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { notifyWaitlistSpotOpen } from '@/features/aulas/waitlistActions'
 import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { fetchAllPages, chunk, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
+import { mapWithConcurrency } from '@/lib/utils/concurrency'
+
+export const maxDuration = 300
 
 /** Não reavisa a mesma fila com intervalo menor que isto (evita spam diário). */
 const RENOTIFY_AFTER_MS = 12 * 60 * 60 * 1000
+
+/** Margem para responder antes de a plataforma matar a função. */
+const TIME_BUDGET_MS = 240_000
+
+/** Avisos de vaga em voo ao mesmo tempo (cada um manda push para a fila inteira). */
+const NOTIFY_CONCURRENCY = 4
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {
@@ -24,16 +34,19 @@ export async function GET(req: NextRequest) {
   }
 
   const adminClient = createAdminClient()
+  const deadline = Date.now() + TIME_BUDGET_MS
 
   try {
-    const { data: waitingRaw, error } = await adminClient
-      .from('waitlists')
-      .select('session_id, notified_at')
-      .eq('status', 'waiting')
-
-    if (error) throw error
-
-    const waiting = (waitingRaw ?? []) as { session_id: string; notified_at: string | null }[]
+    const waiting = await fetchAllPages<{ session_id: string; notified_at: string | null }>(
+      (from, to) =>
+        adminClient
+          .from('waitlists')
+          .select('session_id, notified_at')
+          .eq('status', 'waiting')
+          .order('id', { ascending: true })
+          .range(from, to),
+      { label: 'cron/waitlist:waiting' },
+    )
     if (waiting.length === 0) return NextResponse.json({ notified: 0, checked: 0 })
 
     // Último aviso por sessão: null (nunca avisada) conta como "pode avisar".
@@ -51,51 +64,90 @@ export async function GET(req: NextRequest) {
 
     // Só sessões futuras e ainda agendadas — fila de aula que já passou não
     // interessa. `class` traz a capacidade para comparar com as reservas.
-    const { data: sessionsRaw } = await adminClient
-      .from('class_sessions')
-      .select('id, status, session_date, class:classes(max_students)')
-      .in('id', sessionIds)
-      .eq('status', 'scheduled')
-      .gte('session_date', brtToday(new Date()))
-
-    const sessions = (sessionsRaw ?? []) as {
+    type SessionRow = {
       id: string
       session_date: string
       class: { max_students: number } | { max_students: number }[] | null
-    }[]
+    }
+    const sessions = (
+      await Promise.all(
+        chunk(sessionIds, IN_CHUNK_SIZE).map((ids) =>
+          fetchAllPages<SessionRow>(
+            (from, to) =>
+              adminClient
+                .from('class_sessions')
+                .select('id, status, session_date, class:classes(max_students)')
+                .in('id', ids)
+                .eq('status', 'scheduled')
+                .gte('session_date', brtToday(new Date()))
+                .order('id', { ascending: true })
+                .range(from, to),
+            { label: 'cron/waitlist:sessions' },
+          ),
+        ),
+      )
+    ).flat()
 
     const cutoff = Date.now() - RENOTIFY_AFTER_MS
-    let notified = 0
 
-    for (const s of sessions) {
-      const last = lastNotifiedBySession.get(s.id)
-      // Avisada há pouco: a notificação da hora do cancelamento já cobriu.
-      if (last !== null && last !== undefined && last > cutoff) continue
+    // Candidatas: fila não avisada há pouco e turma com capacidade declarada.
+    const candidates = sessions
+      .map((s) => {
+        const clsRaw = Array.isArray(s.class) ? s.class[0] : s.class
+        return { id: s.id, maxStudents: (clsRaw as { max_students: number } | null)?.max_students ?? 0 }
+      })
+      .filter((s) => {
+        const last = lastNotifiedBySession.get(s.id)
+        // Avisada há pouco: a notificação da hora do cancelamento já cobriu.
+        if (last !== null && last !== undefined && last > cutoff) return false
+        return s.maxStudents > 0
+      })
 
-      const clsRaw = Array.isArray(s.class) ? s.class[0] : s.class
-      const maxStudents = (clsRaw as { max_students: number } | null)?.max_students ?? 0
-      if (maxStudents <= 0) continue
+    // Ocupação de todas as candidatas de uma vez. Antes era um count por sessão,
+    // em série — com milhares de filas abertas o cron não terminava.
+    const bookings = (
+      await Promise.all(
+        chunk(candidates.map((c) => c.id), IN_CHUNK_SIZE).map((ids) =>
+          fetchAllPages<{ session_id: string }>(
+            (from, to) =>
+              adminClient
+                .from('session_bookings')
+                .select('session_id')
+                .in('session_id', ids)
+                .eq('status', 'confirmed')
+                .order('id', { ascending: true })
+                .range(from, to),
+            { label: 'cron/waitlist:bookings' },
+          ),
+        ),
+      )
+    ).flat()
 
-      const { count: booked } = await adminClient
-        .from('session_bookings')
-        .select('id', { count: 'exact', head: true })
-        .eq('session_id', s.id)
-        .eq('status', 'confirmed')
-
-      if ((booked ?? 0) >= maxStudents) continue // sem vaga, nada a avisar
-
-      try {
-        await notifyWaitlistSpotOpen(s.id)
-        notified++
-      } catch (e) {
-        Sentry.captureException(e, {
-          tags: { cron: 'waitlist-notifications' },
-          extra: { sessionId: s.id },
-        })
-      }
+    const bookedBySession = new Map<string, number>()
+    for (const b of bookings) {
+      bookedBySession.set(b.session_id, (bookedBySession.get(b.session_id) ?? 0) + 1)
     }
 
-    return NextResponse.json({ notified, checked: sessions.length })
+    const withSpot = candidates.filter((c) => (bookedBySession.get(c.id) ?? 0) < c.maxStudents)
+
+    let notified = 0
+    await mapWithConcurrency(
+      withSpot,
+      async (s) => {
+        try {
+          await notifyWaitlistSpotOpen(s.id)
+          notified++
+        } catch (e) {
+          Sentry.captureException(e, {
+            tags: { cron: 'waitlist-notifications' },
+            extra: { sessionId: s.id },
+          })
+        }
+      },
+      { concurrency: NOTIFY_CONCURRENCY, deadline },
+    )
+
+    return NextResponse.json({ notified, checked: sessions.length, candidates: candidates.length })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'waitlist-notifications' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })

@@ -1,6 +1,6 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
-import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser } from '@/lib/supabase/server'
+import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser, getAuthUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { NotificationBell } from '@/components/ui/NotificationBell'
@@ -17,7 +17,7 @@ import { PullToRefresh } from '@/components/ui/PullToRefresh'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
   if (user.user_metadata?.must_change_password === true) redirect('/definir-senha')
 

@@ -5,6 +5,7 @@
 // outra coisa: quantos alunos a Liga está alcançando, quem parou de aparecer e quem
 // está prestes a subir ou cair — informação que vira conversa na quadra.
 import { createAdminClient } from '@/lib/supabase/server'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import type { LigaDivision } from '@/types'
 
@@ -66,64 +67,86 @@ export async function getOrgLigaOverview(
     return new Date(Date.UTC(y, m - 1, d - dias)).toISOString().slice(0, 10)
   }
 
-  const [{ data: members }, { data: standings }, { data: points }, { data: kudos }, { count: medals }] =
-    await Promise.all([
-      admin
-        .from('memberships')
-        .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name, phone)')
-        .eq('organization_id', orgId)
-        .eq('role', 'student'),
-      seasonId
-        ? admin
-            .from('liga_standings')
-            .select('student_id, division')
-            .eq('season_id', seasonId)
-        : Promise.resolve({ data: [] as { student_id: string; division: LigaDivision }[] }),
-      seasonId
-        ? admin
-            .from('liga_points')
-            .select('id')
-            .eq('season_id', seasonId)
-            .eq('reason', 'attendance')
-        : Promise.resolve({ data: [] as { id: string }[] }),
-      seasonId
-        ? admin.from('liga_kudos').select('id').eq('season_id', seasonId)
-        : Promise.resolve({ data: [] as { id: string }[] }),
-      admin
-        .from('liga_medals')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .gte('earned_at', `${desde(30)}T00:00:00.000Z`),
-    ])
-
   type MemberRow = {
     user_id: string
     profiles: { full_name: string; phone: string | null } | { full_name: string; phone: string | null }[] | null
   }
-  const memberRows = (members ?? []) as MemberRow[]
+
+  // points/kudos viravam `.length` de um select('id') — ou seja, o banco mandava
+  // 30 mil linhas pela rede para o Node contar. Vira count exact (head), que é uma
+  // linha de resposta e não esbarra no teto de 1.000.
+  const [members, standings, points, kudos, { count: medals }] = await Promise.all([
+    fetchAllPages<MemberRow>(
+      (from, to) =>
+        admin
+          .from('memberships')
+          .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name, phone)')
+          .eq('organization_id', orgId)
+          .eq('role', 'student')
+          .order('user_id', { ascending: true })
+          .range(from, to),
+      { label: 'liga/overview:memberships' },
+    ),
+    seasonId
+      ? fetchAllPages<{ student_id: string; division: LigaDivision }>(
+          (from, to) =>
+            admin
+              .from('liga_standings')
+              .select('student_id, division')
+              .eq('season_id', seasonId)
+              .order('student_id', { ascending: true })
+              .range(from, to),
+          { label: 'liga/overview:standings' },
+        )
+      : Promise.resolve([] as { student_id: string; division: LigaDivision }[]),
+    seasonId
+      ? admin
+          .from('liga_points')
+          .select('id', { count: 'exact', head: true })
+          .eq('season_id', seasonId)
+          .eq('reason', 'attendance')
+      : Promise.resolve({ count: 0 }),
+    seasonId
+      ? admin.from('liga_kudos').select('id', { count: 'exact', head: true }).eq('season_id', seasonId)
+      : Promise.resolve({ count: 0 }),
+    admin
+      .from('liga_medals')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .gte('earned_at', `${desde(30)}T00:00:00.000Z`),
+  ])
+
+  const memberRows = members
 
   const byDivision: Record<LigaDivision, number> = { bronze: 0, prata: 0, ouro: 0, diamante: 0 }
   const scoringIds = new Set<string>()
-  for (const row of (standings ?? []) as { student_id: string; division: LigaDivision }[]) {
+  for (const row of standings) {
     scoringIds.add(row.student_id)
     byDivision[row.division] = (byDivision[row.division] ?? 0) + 1
   }
 
   // Última presença de cada aluno nos últimos 90 dias, para separar "sumiu" de
-  // "nunca veio".
-  const { data: recentAttendance } = await admin
-    .from('attendance')
-    .select('student_id, class_sessions!inner(session_date)')
-    .eq('organization_id', orgId)
-    .eq('status', 'present')
-    .gte('class_sessions.session_date', desde(DIAS_HISTORICO))
-
+  // "nunca veio". Paginado: 90 dias de uma academia média passam de 7 mil linhas,
+  // e o corte silencioso em 1.000 fazia aluno presente aparecer como sumido.
   type AttRow = {
     student_id: string
     class_sessions: { session_date: string } | { session_date: string }[]
   }
+  const recentAttendance = (await fetchAllPages(
+    (from, to) =>
+      admin
+        .from('attendance')
+        .select('student_id, class_sessions!inner(session_date)')
+        .eq('organization_id', orgId)
+        .eq('status', 'present')
+        .gte('class_sessions.session_date', desde(DIAS_HISTORICO))
+        .order('id', { ascending: true })
+        .range(from, to),
+    { label: 'liga/overview:attendance' },
+  )) as unknown as AttRow[]
+
   const lastByStudent = new Map<string, string>()
-  for (const raw of (recentAttendance ?? []) as AttRow[]) {
+  for (const raw of recentAttendance) {
     const session = Array.isArray(raw.class_sessions) ? raw.class_sessions[0] : raw.class_sessions
     const date = session?.session_date
     if (!date) continue
@@ -152,8 +175,8 @@ export async function getOrgLigaOverview(
   return {
     totalStudents: memberRows.length,
     scoring: scoringIds.size,
-    attendancePoints: (points ?? []).length,
-    kudos: (kudos ?? []).length,
+    attendancePoints: points.count ?? 0,
+    kudos: kudos.count ?? 0,
     recentMedals: medals ?? 0,
     byDivision,
     missing: missing.slice(0, 12),

@@ -1,5 +1,5 @@
 // app/(dashboard)/perfil/page.tsx
-import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
+import { createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
@@ -25,8 +25,7 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
 
 export default async function PerfilPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const adminClient = createAdminClient()

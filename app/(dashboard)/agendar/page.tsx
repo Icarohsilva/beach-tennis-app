@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { CalendarX } from 'lucide-react'
-import { createClient, createAdminClient, getActiveMembership, getActiveOrgId } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { ClassCard } from '@/features/aulas/ClassCard'
 import { AgendarClient } from '@/features/aulas/AgendarClient'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -25,7 +25,7 @@ export default async function AgendarPage({
   searchParams: { esporte?: string }
 }) {
   const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   // Campos por-academia (level, is_dependent) vêm da membership da academia ativa.

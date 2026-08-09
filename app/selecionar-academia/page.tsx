@@ -1,11 +1,10 @@
 // app/selecionar-academia/page.tsx
 import { redirect } from 'next/navigation'
-import { createClient, getMemberships } from '@/lib/supabase/server'
+import { getMemberships, getAuthUser } from '@/lib/supabase/server'
 import { AcademyChooser } from './AcademyChooser'
 
 export default async function SelecionarAcademiaPage() {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
 
   const memberships = await getMemberships()
