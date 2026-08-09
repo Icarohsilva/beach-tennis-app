@@ -2,8 +2,8 @@
 // Depois de editar, rode:  npm run build
 
 module.exports = {
-  // --- Contato (PREENCHA O WHATSAPP ANTES DE MANDAR PRA GRÁFICA) ---
-  whatsapp: '(31) 9 0000-0000',
+  // --- Contato ---
+  whatsapp: '(31) 99631-3913',
   site: 'arenahub.website',
   instagram: '@arenahub.app',
   fundador: 'Ícaro Silva',

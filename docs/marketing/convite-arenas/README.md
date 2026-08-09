@@ -4,15 +4,13 @@
 
 ---
 
-## ⚠️ Antes de mandar para a gráfica
+## Estado
 
-Um campo está com valor de exemplo e **vai imprimir errado se você não trocar**:
+Os arquivos em [`out/`](out/) estão **prontos para a gráfica**. Contato impresso na peça:
+WhatsApp `(31) 99631-3913` · `arenahub.website` · `@arenahub.app`.
 
-| Campo | Está | Onde trocar |
-|---|---|---|
-| WhatsApp | `(31) 9 0000-0000` | [`src/config.js`](src/config.js) → `whatsapp` |
-
-Trocou? Rode `npm run build` de novo (instruções no fim). Os arquivos em `out/` são regerados.
+Para trocar qualquer um deles, edite [`src/config.js`](src/config.js) e rode `npm run build`
+(instruções no fim). Os arquivos em `out/` são regerados.
 
 ---
 
