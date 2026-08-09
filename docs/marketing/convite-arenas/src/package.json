@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "jsqr": "^1.4.0",
-    "pdfjs-dist": "^6.2.108",
     "playwright": "^1.56.0",
     "pngjs": "^7.0.0",
     "qrcode": "^1.5.4"
