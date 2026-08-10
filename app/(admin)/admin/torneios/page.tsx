@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { CreateTournamentForm } from './CreateTournamentForm'
 import { TournamentStatusActions } from './TournamentStatusActions'
+import { EventsPanel, type AdminEvent } from './EventsPanel'
+import { EventPicker } from './EventPicker'
 import { Trophy } from 'lucide-react'
 import type { Tournament, TournamentStatus } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -31,19 +33,38 @@ export default async function AdminTorneiosPage() {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
-  const { data, error } = await adminClient
-    .from('tournaments')
-    .select('*')
-    .eq('organization_id', orgId)
-    .order('date', { ascending: false })
+  const [{ data, error }, { data: eventRows }] = await Promise.all([
+    adminClient
+      .from('tournaments')
+      .select('*')
+      .eq('organization_id', orgId)
+      .order('date', { ascending: false }),
+    adminClient
+      .from('tournament_events')
+      .select('id, name, slug, starts_on, ends_on, is_published')
+      .eq('organization_id', orgId)
+      .order('starts_on', { ascending: false }),
+  ])
 
   const tournaments = (data ?? []) as Tournament[]
+
+  // Quantos torneios já estão em cada evento — é o número que diz se a capa
+  // tem conteúdo para ser publicada.
+  const events: AdminEvent[] = (
+    (eventRows ?? []) as Array<Omit<AdminEvent, 'tournamentCount'>>
+  ).map((e) => ({
+    ...e,
+    tournamentCount: tournaments.filter((t) => t.event_id === e.id).length,
+  }))
+  const eventOptions = events.map((e) => ({ id: e.id, name: e.name }))
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-white">Torneios</h1>
       </div>
+
+      <EventsPanel events={events} />
 
       {/* Create tournament form */}
       <Card>
@@ -82,6 +103,13 @@ export default async function AdminTorneiosPage() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
+                  {eventOptions.length > 0 && (
+                    <EventPicker
+                      tournamentId={tournament.id}
+                      currentEventId={tournament.event_id ?? null}
+                      options={eventOptions}
+                    />
+                  )}
                   <Link href={`/admin/torneios/${tournament.id}`}>
                     <Button variant="secondary" size="sm">
                       Gerenciar

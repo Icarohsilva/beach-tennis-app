@@ -22,9 +22,39 @@ export function generateInviteCode(length = 8): string {
   return code
 }
 
-async function slugTaken(db: SupabaseClient, slug: string): Promise<boolean> {
-  const { data } = await db.from('organizations').select('id').eq('slug', slug).maybeSingle()
+async function slugTakenIn(
+  db: SupabaseClient,
+  table: string,
+  slug: string,
+): Promise<boolean> {
+  const { data } = await db.from(table).select('id').eq('slug', slug).maybeSingle()
   return !!data
+}
+
+async function slugTaken(db: SupabaseClient, slug: string): Promise<boolean> {
+  return slugTakenIn(db, 'organizations', slug)
+}
+
+/**
+ * Slug único em qualquer tabela que tenha a coluna `slug` UNIQUE.
+ *
+ * Existe porque o evento de torneio (`tournament_events`) precisa da mesma
+ * garantia da academia: o slug é o link divulgado, e colidir significaria dois
+ * eventos disputando a mesma URL.
+ */
+export async function generateUniqueSlugIn(
+  db: SupabaseClient,
+  table: string,
+  name: string,
+  fallback: string,
+): Promise<string> {
+  const base = slugify(name) || fallback
+  if (!(await slugTakenIn(db, table, base))) return base
+  for (let i = 0; i < 10; i++) {
+    const candidate = `${base}-${generateInviteCode(4).toLowerCase()}`
+    if (!(await slugTakenIn(db, table, candidate))) return candidate
+  }
+  return `${base}-${Date.now()}`
 }
 
 async function codeTaken(db: SupabaseClient, code: string): Promise<boolean> {

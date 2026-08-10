@@ -12,9 +12,11 @@ interface ShareButtonProps {
   /** Caminho público relativo, ex: /t/abc123. */
   path: string
   title: string
+  /** O que está sendo compartilhado, para o leitor de tela: "torneio", "evento", "arena". */
+  what?: string
 }
 
-export function ShareButton({ path, title }: ShareButtonProps) {
+export function ShareButton({ path, title, what = 'torneio' }: ShareButtonProps) {
   const [copied, setCopied] = useState(false)
 
   async function handleShare() {

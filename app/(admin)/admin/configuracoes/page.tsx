@@ -94,7 +94,7 @@ export default async function ConfiguracoesPage() {
 
   const { data: orgRow } = await adminClient
     .from('organizations')
-    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp, tournament_discount_2_pct, tournament_discount_3_pct, self_checkin_enabled, latitude, longitude, checkin_radius_m')
+    .select('name, brand_color, logo_url, is_listed, cep, state, city, neighborhood, address_line, address_number, no_number, sports, whatsapp, instagram, tournament_discount_2_pct, tournament_discount_3_pct, self_checkin_enabled, latitude, longitude, checkin_radius_m')
     .eq('id', orgId)
     .single()
 
@@ -112,6 +112,7 @@ export default async function ConfiguracoesPage() {
     no_number?: boolean
     sports?: string[] | null
     whatsapp?: string | null
+    instagram?: string | null
     tournament_discount_2_pct?: number | null
     tournament_discount_3_pct?: number | null
     self_checkin_enabled?: boolean
@@ -138,6 +139,7 @@ export default async function ConfiguracoesPage() {
     no_number: org.no_number ?? false,
     sports: org.sports ?? [],
     whatsapp: org.whatsapp ?? '',
+    instagram: org.instagram ?? '',
   }
 
   return (

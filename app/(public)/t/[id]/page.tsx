@@ -63,7 +63,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
   const { data: tournamentRaw } = await adminClient
     .from('tournaments')
-    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players')
+    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players, event_id')
     .eq('id', params.id)
     .not('status', 'eq', 'draft')
     .single()
@@ -76,8 +76,21 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     winner1_id: string | null; winner2_id: string | null; winner3_id: string | null
     entry_price_cents: number | null; pix_key: string | null
     max_players: number | null
+    event_id: string | null
   }
   const t = tournamentRaw as unknown as TRow
+
+  // Torneio dentro de um evento ganha o caminho de volta para a capa — quem
+  // chegou pelo link direto ainda descobre que existem outras categorias.
+  const { data: eventRaw } = t.event_id
+    ? await adminClient
+        .from('tournament_events')
+        .select('name, slug')
+        .eq('id', t.event_id)
+        .eq('is_published', true)
+        .maybeSingle()
+    : { data: null }
+  const parentEvent = eventRaw as { name: string; slug: string } | null
 
   // Inscritos
   const { data: entriesRaw } = await adminClient
@@ -182,6 +195,14 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
       {/* Header */}
       <div className="bg-surface-card border-b border-surface-border px-4 py-4">
+        {parentEvent && (
+          <Link
+            href={`/e/${parentEvent.slug}`}
+            className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-400 transition-colors hover:text-brand-300"
+          >
+            ← {parentEvent.name}
+          </Link>
+        )}
         <div className="flex flex-wrap gap-2 mb-2.5">
           {t.status !== 'draft' && (
             <span

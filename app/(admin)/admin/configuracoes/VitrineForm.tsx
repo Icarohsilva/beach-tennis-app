@@ -20,6 +20,7 @@ interface VitrineFormProps {
     no_number: boolean
     sports: string[]
     whatsapp: string
+    instagram: string
   }
 }
 
@@ -35,6 +36,7 @@ export function VitrineForm({ listing }: VitrineFormProps) {
   const [addressLine, setAddressLine] = useState(listing.address_line)
   const [sports, setSports] = useState<string[]>(listing.sports)
   const [whatsapp, setWhatsapp] = useState(listing.whatsapp)
+  const [instagram, setInstagram] = useState(listing.instagram)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -74,6 +76,7 @@ export function VitrineForm({ listing }: VitrineFormProps) {
         no_number: noNumber,
         sports,
         whatsapp,
+        instagram,
       })
       if (result.error) setError(result.error)
       else setSuccess('Vitrine salva com sucesso.')
@@ -135,6 +138,12 @@ export function VitrineForm({ listing }: VitrineFormProps) {
           <span className="text-sm text-slate-200">Sem número</span>
         </label>
         <Input label="WhatsApp" placeholder="(11) 99999-9999" value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} />
+        <div>
+          <Input label="Instagram" placeholder="@suaarena" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
+          <p className="text-xs text-slate-500 mt-1">
+            Aparece como botão na página pública da arena. Pode colar o @ ou o link inteiro.
+          </p>
+        </div>
 
         <SportsPicker value={sports} onChange={setSports} />
 
