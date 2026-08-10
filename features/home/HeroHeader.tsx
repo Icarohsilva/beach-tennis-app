@@ -5,6 +5,13 @@ import { GreetingLine } from './GreetingLine'
 interface HeroStat {
   label: string
   value: string | number
+  /**
+   * Fração 0..1 do progresso. Desenha a barrinha sob o número — é o que faz um
+   * "3/6" virar informação em vez de dois algarismos.
+   */
+  progress?: number
+  /** Linha curta de contexto ("Faltam 3 para a meta"). */
+  hint?: string
 }
 
 /**
@@ -44,6 +51,21 @@ export function HeroHeader({ name, stats }: { name: string; stats: HeroStat[] })
                   <span className="text-base">{stat.value}</span>
                 )}
               </p>
+              {stat.progress !== undefined && (
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/25">
+                  <div
+                    className="h-full rounded-full bg-white/90 transition-all duration-500"
+                    // Clamp aqui, não em quem chama: meta batida com sobra
+                    // (7 de 6) estouraria a barra para fora da pastilha.
+                    style={{ width: `${Math.min(Math.max(stat.progress, 0), 1) * 100}%` }}
+                  />
+                </div>
+              )}
+              {stat.hint && (
+                <p className="mt-1.5 text-[10px] font-semibold leading-tight text-white/75">
+                  {stat.hint}
+                </p>
+              )}
             </div>
           ))}
         </div>
