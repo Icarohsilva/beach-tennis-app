@@ -8,7 +8,7 @@ import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { notifyWaitlistSpotOpen, clearWaitlistEntry } from './waitlistActions'
 import { awardLigaExtra } from '@/features/liga/extraPoints'
 import { isEarlyBooking } from '@/lib/liga/points'
-import { brtToday } from '@/lib/utils/gridSchedule'
+import { brtToday, nextDateForDayOfWeek } from '@/lib/utils/gridSchedule'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
@@ -30,18 +30,11 @@ import {
 import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
-// ---------------------------------------------------------------------------
-// getNextOccurrence — returns the next date (>= from) matching dayOfWeek
-// ---------------------------------------------------------------------------
-
-function getNextOccurrence(from: Date, dayOfWeek: number): Date {
-  const date = new Date(from)
-  const currentDay = date.getDay()
-  let daysUntil = dayOfWeek - currentDay
-  if (daysUntil < 0) daysUntil += 7
-  date.setDate(date.getDate() + daysUntil)
-  return date
-}
+// A próxima ocorrência de um dia-da-semana saiu daqui para
+// `nextDateForDayOfWeek` (lib/utils/gridSchedule). A versão local usava
+// `getDay()`/`setDate()`, que leem o fuso do PROCESSO: na Vercel (UTC), das 21h à
+// meia-noite BRT o dia-da-semana de partida já era o do dia seguinte e a sessão
+// nascia uma semana adiantada. O helper opera sobre a data BRT em string.
 
 // ---------------------------------------------------------------------------
 // bookNextSession — books the next upcoming session for a class.
@@ -56,7 +49,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
   const adminClient = createAdminClient()
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   // Find next scheduled session (escopado pela academia ativa)
   const { data: existingSession } = await adminClient
@@ -85,8 +78,7 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
 
     if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
 
-    const nextDate = getNextOccurrence(new Date(), cls.day_of_week as number)
-    const sessionDate = nextDate.toISOString().slice(0, 10)
+    const sessionDate = nextDateForDayOfWeek(brtToday(new Date()), cls.day_of_week as number)
 
     const { data: newSession, error: createErr } = await adminClient
       .from('class_sessions')
@@ -477,7 +469,7 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
 
   if ((enrolled ?? 0) === 0) return { error: 'Você não está matriculado nesta turma.' }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   // Find or create the next session (escopado pela academia ativa)
   const { data: existingSession } = await adminClient
@@ -504,10 +496,10 @@ export async function skipEnrollmentNoBooking(classId: string): Promise<{ error?
       .single()
     if (!cls) return { error: 'Turma não encontrada.' }
 
-    const nextDate = getNextOccurrence(new Date(), cls.day_of_week as number)
+    const nextDate = nextDateForDayOfWeek(brtToday(new Date()), cls.day_of_week as number)
     const { data: newSess, error: createErr } = await adminClient
       .from('class_sessions')
-      .insert({ organization_id: orgId, class_id: classId, session_date: nextDate.toISOString().slice(0, 10), status: 'scheduled', notes: null })
+      .insert({ organization_id: orgId, class_id: classId, session_date: nextDate, status: 'scheduled', notes: null })
       .select('id')
       .single()
     if (createErr || !newSess) return { error: 'Erro ao preparar sessão.' }

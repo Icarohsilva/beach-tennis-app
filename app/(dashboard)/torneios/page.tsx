@@ -31,6 +31,7 @@ import {
   type Phase,
 } from '@/lib/torneios/browse'
 import type { DayUseSlot } from '@/types'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const PHASE_TITLES: Record<Phase, string> = {
   live: 'Acontecendo agora',
@@ -55,7 +56,8 @@ export default async function ArenaPage({ searchParams }: PageProps) {
   if (!user) redirect('/login')
 
   const orgId = await getActiveOrgId()
-  const today = new Date().toISOString().slice(0, 10)
+  // BRT: com o UTC cru, o day use de hoje sumia da grade depois das 21h.
+  const today = brtToday(new Date())
 
   const [browse, dayUseResult, tournamentHome] = await Promise.all([
     getTournamentBrowse({ orgId, userId: user.id }),

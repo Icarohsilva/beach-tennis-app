@@ -5,12 +5,13 @@ import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 export default async function AdminDayUsePage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   const { data: slots } = await adminClient
     .from('dayuse_slots')

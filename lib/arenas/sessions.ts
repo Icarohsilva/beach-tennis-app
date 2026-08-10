@@ -5,6 +5,7 @@
 
 import { createAdminClient } from '@/lib/supabase/server'
 import type { ClassSession, Class } from '@/types'
+import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
 
 export interface TrialSessionOption {
   id: string
@@ -19,8 +20,9 @@ export interface TrialSessionOption {
 export async function getOpenTrialSessions(orgId: string): Promise<TrialSessionOption[]> {
   const admin = createAdminClient()
 
-  const today = new Date().toISOString().slice(0, 10)
-  const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // BRT: com o UTC cru, as sessões de hoje saíam da vitrine da arena depois das 21h.
+  const today = brtToday(new Date())
+  const in30 = addDaysStr(today, 30)
 
   const { data: sessions } = await admin
     .from('class_sessions')

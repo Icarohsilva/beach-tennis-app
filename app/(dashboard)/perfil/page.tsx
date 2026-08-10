@@ -23,6 +23,7 @@ import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard
 import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { StudentSubscription, SubscriptionPlan, Payment, StudentLevel } from '@/types'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 export default async function PerfilPage() {
   const user = await getAuthUser()
@@ -162,7 +163,10 @@ export default async function PerfilPage() {
   // Mensalista ativo ⇒ trava o autoatendimento (subscription já carregada acima).
   const isActiveSubscriber = subscription?.status === 'active'
 
-  const hoje = new Date().toISOString().slice(0, 10)
+  // brtToday, não toISOString: em servidor UTC o "hoje" cru vira amanhã depois das
+  // 21h BRT, e a janela do mês (getMonthWindow) já é BRT — misturar as duas bases
+  // fazia o corte da frequência discordar da janela.
+  const hoje = brtToday(new Date())
   const anoWindow = { from: `${hoje.slice(0, 4)}-01-01`, to: `${hoje.slice(0, 4)}-12-31` }
   const [freqMes, freqAno] = orgId
     ? await Promise.all([

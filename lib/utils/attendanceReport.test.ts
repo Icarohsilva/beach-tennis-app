@@ -40,6 +40,37 @@ describe('buildAttendanceReport', () => {
     expect(ana).toMatchObject({ present: 0, absent: 0, notified: 1, expected: 1, rate: 0 })
   })
 
+  // O corte é `s.date < today`, então quem calcula `today` decide o que entra no
+  // relatório. Enquanto as páginas montavam "hoje" com `toISOString()` (UTC) e a
+  // Vercel rodava em UTC, das 21h à meia-noite BRT o `today` já era amanhã e a aula
+  // de amanhã contava como passada — presença presumida para aula que não ocorreu.
+  // Hoje o "hoje" vem de `brtToday`; estes casos travam a semântica do corte.
+  it('não conta a aula de hoje (o dia ainda não terminou)', () => {
+    const input = base()
+    input.sessions = [{ id: 's1', date: '2026-07-22', status: 'scheduled', classId: 'c1' }]
+    expect(buildAttendanceReport(input)).toEqual([])
+  })
+
+  it('não conta aula futura', () => {
+    const input = base()
+    input.sessions = [{ id: 's1', date: '2026-07-23', status: 'scheduled', classId: 'c1' }]
+    expect(buildAttendanceReport(input)).toEqual([])
+  })
+
+  it('na virada do mês, a aula do último dia entra assim que o dia 1º começa', () => {
+    const input = base()
+    input.today = '2026-08-01'
+    input.sessions = [{ id: 's1', date: '2026-07-31', status: 'scheduled', classId: 'c1' }]
+    expect(buildAttendanceReport(input)[0]).toMatchObject({ present: 1, expected: 1 })
+  })
+
+  it('no último dia do mês, a aula daquele dia ainda não conta', () => {
+    const input = base()
+    input.today = '2026-07-31'
+    input.sessions = [{ id: 's1', date: '2026-07-31', status: 'scheduled', classId: 'c1' }]
+    expect(buildAttendanceReport(input)).toEqual([])
+  })
+
   it('ignora sessão cancelada para todo mundo', () => {
     const input = base()
     input.sessions = [{ id: 's1', date: '2026-07-20', status: 'cancelled', classId: 'c1' }]

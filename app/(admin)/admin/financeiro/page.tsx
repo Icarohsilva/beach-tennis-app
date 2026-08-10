@@ -13,6 +13,8 @@ import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { getOrgDebtors } from '@/features/financeiro/debtQueries'
 import type { PaymentStatus } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { BRT_OFFSET } from '@/lib/utils/sessionTime'
+import { getMonthWindow } from '@/lib/utils/monthWindow'
 
 interface RevenueRow {
   amount: number
@@ -48,15 +50,17 @@ export default async function FinanceiroPage() {
   const orgId = await getCurrentOrgId()
 
   // ─── Receita do mês ──────────────────────────────────────────────────────
-  const startOfMonth = new Date()
-  startOfMonth.setDate(1)
-  startOfMonth.setHours(0, 0, 0, 0)
+  // O corte é a meia-noite do dia 1º em BRT, ancorada explicitamente em −03:00.
+  // Antes era `setHours(0,0,0,0)` no fuso do processo: a Vercel roda em UTC, então
+  // o corte caía em 31/às 21h BRT e os pagamentos das últimas 3h do mês anterior
+  // entravam nesta receita.
+  const monthStartIso = `${getMonthWindow(new Date()).from}T00:00:00.000${BRT_OFFSET}`
 
   const { data: monthlyPayments } = await adminClient
     .from('payments')
     .select('amount, status, type')
     .eq('organization_id', orgId)
-    .gte('created_at', startOfMonth.toISOString())
+    .gte('created_at', monthStartIso)
 
   const monthlyPaymentRows = (monthlyPayments as RevenueRow[]) ?? []
 

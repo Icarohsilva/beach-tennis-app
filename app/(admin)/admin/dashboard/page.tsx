@@ -26,6 +26,7 @@ import { OccupancyPanel } from '@/features/painel/OccupancyPanel'
 import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 export default async function AdminDashboardPage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -33,7 +34,7 @@ export default async function AdminDashboardPage() {
   const orgId = await getCurrentOrgId()
   const staff = await getStaffContext()
   const isOwner = staff?.isOwner ?? false
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   const [
     { count: activeStudents },

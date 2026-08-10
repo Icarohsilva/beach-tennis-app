@@ -36,6 +36,7 @@ import { ShareButton } from '@/features/torneios/ShareButton'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
 import type { BrowseTournament } from '@/lib/torneios/browse'
 import { TrialBookingForm } from './TrialBookingForm'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const ARENA_COLUMNS =
   'id, name, slug, status, is_listed, city, state, neighborhood, address_line, address_number, no_number, sports, whatsapp, instagram, brand_color, logo_url'
@@ -109,7 +110,7 @@ export default async function ArenaPage({ params }: PageProps) {
   const org = await loadArena(params.slug)
   if (!visible(org)) notFound()
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   const [showcase, sessions, photos, memberships] = await Promise.all([
     getArenaShowcase(org.id, today),

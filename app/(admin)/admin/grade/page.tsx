@@ -14,6 +14,7 @@ import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -44,7 +45,7 @@ export default async function GradePage() {
   const allClasses = (classes ?? []) as Class[]
 
   // Fetch today's sessions
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
   const { data: todaySessions } = await adminClient
     .from('class_sessions')
     .select('*, class:classes(name, level, type, start_time, end_time, max_students)')

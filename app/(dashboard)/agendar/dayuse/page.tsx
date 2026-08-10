@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Card } from '@/components/ui/Card'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -18,7 +19,8 @@ export default async function AgendarDayUsePage({
   const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  const today = new Date().toISOString().slice(0, 10)
+  // BRT: com o UTC cru o day use de hoje desaparecia da lista depois das 21h.
+  const today = brtToday(new Date())
 
   // Use adminClient to bypass RLS and see all bookings + names
   const adminClient = createAdminClient()
