@@ -5,6 +5,7 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import { reconcileEnrollmentCredits } from '@/features/aulas/reconcileEnrollment'
 import { getRemainingMonthWindow } from '@/lib/utils/monthWindow'
 import { normalizeSports } from '@/lib/arenas/sports'
+import { normalizeInstagram } from '@/lib/arenas/instagram'
 import { getMpAccount } from '@/lib/billing/gatewayAccounts'
 import { mpCancelPreapproval } from '@/lib/billing/mpClient'
 
@@ -570,6 +571,7 @@ export async function updateOrgListing(input: {
   no_number: boolean
   sports: string[]
   whatsapp: string
+  instagram: string
 }): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -611,6 +613,9 @@ export async function updateOrgListing(input: {
       no_number: input.no_number,
       sports: normalizeSports(input.sports),
       whatsapp: input.whatsapp.trim() || null,
+      // Guardamos só o @. A arena cola de tudo aqui (URL inteira, com barra no
+      // fim, com "@"), e a página monta o link a partir do handle limpo.
+      instagram: normalizeInstagram(input.instagram),
     })
     .eq('id', orgId)
 

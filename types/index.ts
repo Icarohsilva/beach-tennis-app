@@ -121,6 +121,8 @@ export interface Organization {
   address_line: string | null
   sports: string[]
   whatsapp: string | null
+  /** Handle do Instagram, sem "@" e sem URL — a página monta o link. */
+  instagram: string | null
   cep: string | null
   address_number: string | null
   no_number: boolean
@@ -454,6 +456,30 @@ export interface Tournament {
   // o padrão de lib/torneios/formats.ts.
   group_count: number | null
   advance_per_group: number
+  /** Evento que agrupa este torneio na divulgação. Nulo = torneio avulso. */
+  event_id: string | null
+}
+
+/**
+ * Evento: a capa que agrupa vários torneios do mesmo dia ou fim de semana.
+ *
+ * A academia divulga "Copa de Agosto", não "Super 8 Masculino B". O evento é só
+ * agrupamento e capa — inscrição, chave, placar e pódio continuam no torneio.
+ */
+export interface TournamentEvent {
+  id: string
+  organization_id: string
+  name: string
+  /** Global (como o da academia): o link divulgado é /e/<slug>. */
+  slug: string
+  description: string | null
+  cover_image_url: string | null
+  starts_on: string
+  /** Nulo = evento de um dia só. */
+  ends_on: string | null
+  is_published: boolean
+  created_by: string | null
+  created_at: string
 }
 
 export interface TournamentEntry {

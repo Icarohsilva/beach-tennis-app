@@ -34,7 +34,9 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/ajuda') ||
     pathname.startsWith('/instalar') ||
     pathname.startsWith('/legal') ||
-    pathname.startsWith('/t/')
+    pathname.startsWith('/t/') ||
+    // Capa pública do evento de torneio — é o link que a academia divulga.
+    pathname.startsWith('/e/')
   ) {
     return NextResponse.next()
   }
