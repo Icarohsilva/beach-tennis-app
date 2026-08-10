@@ -2,22 +2,64 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, MapPin, Plus, Trophy, User } from 'lucide-react'
+import { Compass, Home, MapPin, Plus, Trophy, User } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
-const navItems = [
+interface NavEntry {
+  href: string
+  icon: typeof Home
+  label: string
+  dataTour?: string
+}
+
+// Menu de quem é aluno de alguma academia: a rotina (agenda, arena, liga) e o
+// perfil. É o menu que existia antes de a conta livre existir.
+const STUDENT_NAV: NavEntry[] = [
   { href: '/home', icon: Home, label: 'Home' },
   { href: '/torneios', icon: MapPin, label: 'Arena', dataTour: 'tour-aluno-arena' },
   { href: '/liga', icon: Trophy, label: 'Liga' },
   { href: '/perfil', icon: User, label: 'Perfil', dataTour: 'tour-aluno-perfil' },
 ]
 
-export function BottomNav() {
+// Menu de quem ainda não é aluno de ninguém (conta livre) ou só entrou como
+// atleta de torneio. Home, Liga e a agenda de aulas seriam telas vazias: ele
+// não tem turma, não tem plano e não pontua em ranking. O que ele tem é
+// descobrir arena e acompanhar os torneios em que entrou.
+const VISITOR_NAV: NavEntry[] = [
+  { href: '/explorar', icon: Compass, label: 'Explorar' },
+  { href: '/torneios', icon: MapPin, label: 'Arena' },
+  { href: '/perfil', icon: User, label: 'Perfil' },
+]
+
+interface BottomNavProps {
+  /**
+   * A pessoa é aluno (ou admin) de pelo menos uma academia. Falso para conta
+   * livre e para quem só tem vínculo de atleta.
+   */
+  isStudent?: boolean
+}
+
+export function BottomNav({ isStudent = true }: BottomNavProps) {
   const pathname = usePathname()
+
+  // O visitante não tem o botão central de agendar: agendar aula pressupõe
+  // turma, e ele não tem. O menu dele é simples e sem o furo do meio.
+  if (!isStudent) {
+    return (
+      <nav className="glass fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.07]">
+        <div className="flex items-center justify-around px-2 pb-safe">
+          {VISITOR_NAV.map((item) => (
+            <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />
+          ))}
+        </div>
+      </nav>
+    )
+  }
+
   return (
     <nav className="glass fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.07]">
       <div className="flex items-center justify-around px-2 pb-safe">
-        {navItems.slice(0, 2).map((item) => (
+        {STUDENT_NAV.slice(0, 2).map((item) => (
           <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />
         ))}
 
@@ -30,7 +72,7 @@ export function BottomNav() {
           </div>
         </Link>
 
-        {navItems.slice(2).map((item) => (
+        {STUDENT_NAV.slice(2).map((item) => (
           <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />
         ))}
       </div>

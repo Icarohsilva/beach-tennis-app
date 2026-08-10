@@ -73,6 +73,19 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   if (!slot) return { error: 'Slot não encontrado' }
   const orgId = slot.organization_id as string
 
+  // Quem reserva vindo de fora (conta livre, descoberta pela aba Explorar) vira
+  // ATLETA daquela academia. O vínculo é o que a RLS usa para ele enxergar a
+  // própria reserva depois — e o papel distinto mantém quem só passou por um
+  // day use fora da lista de alunos do professor.
+  //
+  // `ignoreDuplicates` protege quem já é aluno (ou admin) de ser rebaixado.
+  await adminClient
+    .from('memberships')
+    .upsert(
+      { user_id: user.id, organization_id: orgId, role: 'athlete' },
+      { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
+    )
+
   const { data: settingsRaw } = await adminClient
     .from('system_settings')
     .select('key, value')

@@ -29,6 +29,9 @@ function CadastroInner() {
   const [joining, setJoining] = useState(false)
   // Visitante não logado escolhe entre Entrar (já tem conta) e Criar conta.
   const [showForm, setShowForm] = useState(false)
+  // Conta sem academia: dá para jogar torneio e day use antes de ter professor.
+  // O vínculo vem depois, ao entrar num torneio ou usar um código de convite.
+  const [freeSignup, setFreeSignup] = useState(false)
 
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
   const [partner, setPartner] = useState<'none' | 'wellhub' | 'totalpass'>('none')
@@ -119,7 +122,9 @@ function CadastroInner() {
       })
     }
     if (data.session) {
-      router.push('/home')
+      // Sem academia a Home não tem o que mostrar; o lugar de chegada é a
+      // descoberta de arenas e torneios.
+      router.push(orgName ? '/home' : '/explorar')
       router.refresh()
       return
     }
@@ -139,24 +144,38 @@ function CadastroInner() {
     )
   }
 
-  // BLOQUEIO: sem código de convite válido não é possível cadastrar aluno.
-  if (!orgName) {
+  // Sem convite: em vez de barrar, oferece a conta livre. Quem chega assim joga
+  // torneio e day use nas arenas da região; virar aluno de uma academia é um
+  // passo posterior (link de convite), não um pré-requisito.
+  if (!orgName && !freeSignup) {
     return (
       <Card>
         <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
-        <div className="text-center py-4">
-          <div className="text-4xl mb-4">🔒</div>
-          <h2 className="text-lg font-semibold text-white mb-2">Convite necessário</h2>
-          <p className="text-slate-400 text-sm mb-6">
-            Para se cadastrar como aluno, use o <span className="text-brand-400">link de convite</span> da sua academia.
-            Peça o link ao seu professor.
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-3">🏖️</div>
+          <h2 className="text-lg font-semibold text-white mb-1">Criar sua conta</h2>
+          <p className="text-slate-400 text-sm">
+            Para jogar torneios e reservar day use nas arenas perto de você.
           </p>
-          <Link href="/criar-academia" className="text-brand-400 text-sm hover:text-brand-300">
+        </div>
+        <div className="flex flex-col gap-3">
+          <Button onClick={() => setFreeSignup(true)} size="lg" className="w-full">
+            Criar conta para jogar
+          </Button>
+          <Link
+            href="/login"
+            className="w-full inline-flex items-center justify-center rounded-xl border border-surface-border bg-surface-card px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-surface-border"
+          >
+            Já tenho conta · Entrar
+          </Link>
+        </div>
+        <p className="mt-6 text-center text-xs text-slate-500">
+          Tem um link de convite da sua academia? Abra o link para entrar direto como aluno.
+        </p>
+        <div className="mt-3 text-center">
+          <Link href="/criar-academia" className="text-sm text-brand-400 hover:text-brand-300">
             É professor? Crie sua academia →
           </Link>
-          <div className="mt-3">
-            <Link href="/login" className="text-slate-500 text-sm hover:text-slate-300">Já tem conta? Entrar</Link>
-          </div>
         </div>
       </Card>
     )
@@ -241,12 +260,20 @@ function CadastroInner() {
       <div className="h-1.5 -mx-4 -mt-4 mb-6 rounded-t-xl bg-gradient-to-r from-brand-500 to-brand-700" />
       <h2 className="text-lg font-semibold text-white mb-1">Criar conta</h2>
       <p className="text-slate-400 text-sm mb-6">
-        Você está se cadastrando na <span className="text-brand-400">{orgName}</span>.
+        {orgName ? (
+          <>Você está se cadastrando na <span className="text-brand-400">{orgName}</span>.</>
+        ) : (
+          <>Sua conta para jogar torneios e day use. Você entra numa academia depois, pelo link do professor.</>
+        )}
       </p>
       <form onSubmit={handleCadastro} className="flex flex-col gap-4">
         <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
         <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
         <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
+        {/* Gympass/TotalPass e modalidades são dados POR ACADEMIA: o trigger os
+            grava na membership, que não existe no cadastro livre. Pedi-los aqui
+            seria coletar o que vai ser descartado. */}
+        {orgName && (
         <label className="text-sm text-slate-300">
           Você usa Gympass ou TotalPass?
           <select
@@ -259,9 +286,11 @@ function CadastroInner() {
             <option value="totalpass">TotalPass</option>
           </select>
         </label>
-        {partner !== 'none' && (
+        )}
+        {orgName && partner !== 'none' && (
           <Input label="ID do Gympass/TotalPass" value={partnerId} onChange={(e) => setPartnerId(e.target.value)} required />
         )}
+        {orgName && (
         <div>
           <SportsPicker
             value={sports}
@@ -274,6 +303,7 @@ function CadastroInner() {
             Define de quais rankings você participa. Você pode mudar depois no seu perfil.
           </p>
         </div>
+        )}
         <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
         <Checkbox
           checked={acceptedTerms}
@@ -296,7 +326,10 @@ function CadastroInner() {
         <Button type="submit" loading={loading} size="lg" className="w-full">Criar conta</Button>
       </form>
       <div className="mt-4 text-center text-sm text-slate-400">
-        <Link href={`/login?convite=${encodeURIComponent(inviteCode)}`} className="hover:text-brand-400">
+        <Link
+          href={inviteCode ? `/login?convite=${encodeURIComponent(inviteCode)}` : '/login'}
+          className="hover:text-brand-400"
+        >
           Já tem conta? Entrar
         </Link>
       </div>

@@ -6,6 +6,7 @@ import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 import { Logo } from '@/components/ui/Logo'
+import { hasStudentAccess } from '@/lib/org/activeOrg'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
@@ -32,6 +33,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (org?.status === 'suspended') return <SuspendedNotice />
   const memberships = await getMemberships()
   const activeOrgId = await getActiveOrgId()
+  // Conta livre e vínculo só de atleta não têm turma, plano nem ranking: Home,
+  // Liga e a agenda seriam telas vazias. O menu deles é Explorar/Arena/Perfil.
+  const isStudent = hasStudentAccess(memberships)
 
   // Fetch recent notifications (last 20)
   const { data: notificationsRaw } = await supabase
@@ -71,7 +75,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
         ) : (
           <span className="inline-flex items-center gap-2 max-w-[60%]">
             <Logo variant="icon" size="sm" logoUrl={org?.logo_url ?? null} orgName={org?.name ?? undefined} />
-            <span className="text-sm font-semibold text-white truncate">{org?.name ?? ''}</span>
+            {/* Sem academia o nome sairia vazio e a barra ficaria órfã. */}
+            <span className="text-sm font-semibold text-white truncate">{org?.name ?? 'ArenaHub'}</span>
           </span>
         )}
         <div className="flex items-center gap-1">
@@ -93,8 +98,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </div>
         </PullToRefresh>
       </main>
-      <BottomNav />
-      <TourProvider variant="aluno" seenAt={tourProfile?.tour_aluno_seen_at ?? null} />
+      <BottomNav isStudent={isStudent} />
+      {/* O tour explica agenda, chamada e créditos — nada disso existe para
+          quem ainda não é aluno de uma academia. */}
+      {isStudent && <TourProvider variant="aluno" seenAt={tourProfile?.tour_aluno_seen_at ?? null} />}
     </div>
   )
 }

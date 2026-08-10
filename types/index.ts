@@ -1,6 +1,9 @@
 // types/index.ts
 
-export type UserRole = 'student' | 'admin' | 'super_admin'
+// 'athlete' = tem relação com a academia (jogou torneio, usou day use) sem ser
+// aluno dela. As telas do admin filtram 'student', então o atleta não aparece
+// na lista de alunos. Ver 20260810000100_athlete_role.sql.
+export type UserRole = 'student' | 'athlete' | 'admin' | 'super_admin'
 export type OrganizationStatus = 'active' | 'suspended'
 export type StudentLevel = 'A' | 'B' | 'C' | 'D' | 'iniciante'
 export type PaymentType = 'subscriber' | 'per_class' | 'wellhub' | 'totalpass'

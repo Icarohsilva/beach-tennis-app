@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic'
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser, getMemberships } from '@/lib/supabase/server'
+import { hasStudentAccess } from '@/lib/org/activeOrg'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
@@ -47,6 +48,11 @@ export default async function HomePage() {
   const supabase = createClient()
   const user = await getAuthUser()
   if (!user) redirect('/login')
+
+  // Quem ainda não é aluno de nenhuma academia não tem agenda, plano nem
+  // presença: a Home inteira sairia vazia. O lugar dele é a descoberta.
+  const memberships = await getMemberships()
+  if (!hasStudentAccess(memberships)) redirect('/explorar')
 
   const today = new Date().toISOString().slice(0, 10)
   const adminClient = createAdminClient()

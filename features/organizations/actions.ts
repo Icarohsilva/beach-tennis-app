@@ -452,6 +452,18 @@ export async function joinAcademy(
     return { error: 'Não foi possível entrar na academia.' }
   }
 
+  // Quem entrou antes só para jogar um torneio (role 'athlete') e agora chegou
+  // pelo link da academia VIROU aluno — é exatamente o que o convite significa.
+  // A condição no role evita rebaixar admin, que também casa no conflito.
+  if (insErr?.code === '23505') {
+    await admin
+      .from('memberships')
+      .update({ role: 'student' })
+      .eq('user_id', user.id)
+      .eq('organization_id', org.id)
+      .eq('role', 'athlete')
+  }
+
   // Já participava: preenche os esportes se ainda estiverem em branco. Não
   // sobrescreve escolha anterior — reentrar no link não pode apagar o que o
   // aluno (ou o admin) já tinha configurado.

@@ -1392,14 +1392,17 @@ export async function registerExternal(
 
   const tournamentOrgId = tournament.organization_id as string
 
-  // Vincula o jogador à academia do torneio (membership de aluno). Idempotente:
-  // se ele já tem cadastro nesta academia — ou em qualquer outra — o vínculo é
-  // apenas adicionado, sem remover os existentes ("sem sair da outra"). Isso corrige
-  // o caso em que o cadastro avulso caiu na academia padrão (Hudson) em vez da do torneio.
+  // Vincula o jogador à academia do torneio como ATLETA, não como aluno: ele
+  // precisa da membership para a RLS liberar a leitura do torneio e da chave
+  // (auth_org_ids), mas não tem plano nem entra na chamada — e por isso não
+  // aparece na lista de alunos do professor, que filtra role = 'student'.
+  //
+  // Idempotente e não-destrutivo: `ignoreDuplicates` garante que quem JÁ é aluno
+  // (ou admin) daquela academia não seja rebaixado a atleta ao se inscrever.
   await adminClient
     .from('memberships')
     .upsert(
-      { user_id: user.id, organization_id: tournamentOrgId, role: 'student' },
+      { user_id: user.id, organization_id: tournamentOrgId, role: 'athlete' },
       { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
     )
 
