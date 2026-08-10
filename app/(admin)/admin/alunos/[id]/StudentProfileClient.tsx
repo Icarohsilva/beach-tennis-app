@@ -2,6 +2,8 @@
 // app/(admin)/alunos/[id]/StudentProfileClient.tsx
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -18,6 +20,8 @@ import { SportsPicker } from '@/components/ui/SportsPicker'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
 import { setStudentType, recordCheckin, clearPendingPartner } from '@/features/checkin/actions'
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
+import { formatDate } from '@/lib/utils/dateHelpers'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -237,13 +241,16 @@ export function StudentProfileClient({
     setError(null)
     startTransition(async () => {
       const result = await addDependent(studentId, newDependentName, newDependentLevel)
-      if (result.error) {
-        setError(result.error)
+      if (result.error || !result.dependentId) {
+        setError(result.error ?? 'Erro ao criar dependente.')
         return
       }
+      // Id REAL devolvido pela action, não um randomUUID: cada dependente da
+      // lista é um link para a ficha dele, e um id inventado levaria a 404 até
+      // a página ser recarregada.
       setDependentList((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), full_name: newDependentName.trim(), level: newDependentLevel },
+        { id: result.dependentId!, full_name: newDependentName.trim(), level: newDependentLevel },
       ])
       setNewDependentName('')
       setNewDependentLevel('iniciante')
@@ -367,7 +374,11 @@ export function StudentProfileClient({
         {
           id: crypto.randomUUID(),
           partner: linkedPartner,
-          checkin_date: new Date().toISOString().slice(0, 10),
+          // brtToday, não toISOString: o servidor grava a data em BRT
+          // (`todayInBrt` em features/checkin/actions.ts). Com o UTC cru, um
+          // check-in feito depois das 21h aparecia na lista com a data de amanhã
+          // até o próximo carregamento.
+          checkin_date: brtToday(new Date()),
           session_id: result.linkedSessionId ?? null,
           validation: 'manual',
           created_at: new Date().toISOString(),
@@ -551,13 +562,24 @@ export function StudentProfileClient({
             <p className="text-slate-500 text-sm mb-3">Nenhum dependente cadastrado.</p>
           ) : (
             <ul className="space-y-2 mb-4">
+              {/* Cada dependente abre a ficha dele — é de lá que se matricula numa
+                  turma kids e se atribui o plano. Sem este link o admin tinha que
+                  voltar na listagem geral e caçar o nome. */}
               {dependentList.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex items-center justify-between px-4 py-2 bg-surface-card border border-surface-border rounded-xl"
-                >
-                  <span className="text-white text-sm">{d.full_name}</span>
-                  <Badge variant="kids">KIDS</Badge>
+                <li key={d.id}>
+                  <Link
+                    href={`/admin/alunos/${d.id}`}
+                    className="flex items-center justify-between gap-3 px-4 py-2 bg-surface-card border border-surface-border rounded-xl transition-colors hover:border-brand-500/40"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-white text-sm">
+                      {d.full_name}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge variant="kids">KIDS</Badge>
+                      <span className="text-[11px] font-semibold text-brand-500">Ver ficha</span>
+                      <ChevronRight className="h-4 w-4 text-slate-500" />
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -841,8 +863,8 @@ export function StudentProfileClient({
 
         {(linkedPartner === 'wellhub' || linkedPartner === 'totalpass') && (
           <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-slate-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <p className="min-w-0 text-sm text-slate-300">
                 {checkinsDone} / {monthlyTarget} check-ins no mês
                 {checkinsDone < monthlyTarget && (
                   <span className="text-yellow-400"> · faltam {monthlyTarget - checkinsDone}</span>
@@ -851,7 +873,7 @@ export function StudentProfileClient({
                   <span className="text-green-400"> · {checkinsDone - monthlyTarget} adiantado(s)</span>
                 )}
               </p>
-              <Button onClick={handleRecordCheckin} disabled={isPending}>
+              <Button onClick={handleRecordCheckin} disabled={isPending} size="sm">
                 Registrar check-in
               </Button>
             </div>
@@ -859,15 +881,22 @@ export function StudentProfileClient({
               {checkinList.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-center justify-between text-xs px-3 py-2 bg-surface-card border border-surface-border rounded-lg"
+                  className="flex items-center justify-between gap-2 text-xs px-3 py-2 bg-surface-card border border-surface-border rounded-lg"
                 >
-                  <span className="text-white">
-                    {new Date(c.checkin_date).toLocaleDateString('pt-BR')}
+                  {/* formatDate, não `new Date(...)`: checkin_date é data pura
+                      (yyyy-MM-dd) e o construtor a lê como meia-noite UTC —
+                      exibida em BRT (UTC−3) voltava 3h, então o check-in do dia
+                      01 aparecia como dia 31 do mês anterior e parecia que a
+                      contagem do mês estava pegando o mês passado. */}
+                  <span className="min-w-0 text-white">
+                    {formatDate(c.checkin_date)}
                     {c.session_id && <span className="text-green-400"> · presença em aula</span>}
                   </span>
-                  <Badge variant={c.partner === 'wellhub' ? 'success' : 'warning'}>
-                    {c.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
-                  </Badge>
+                  <span className="shrink-0">
+                    <Badge variant={c.partner === 'wellhub' ? 'success' : 'warning'}>
+                      {c.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
+                    </Badge>
+                  </span>
                 </li>
               ))}
               {checkinList.length === 0 && (

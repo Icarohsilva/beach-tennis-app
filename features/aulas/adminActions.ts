@@ -374,7 +374,7 @@ export async function addDependent(
   parentId: string,
   fullName: string,
   level: StudentLevel,
-): Promise<{ error?: string }> {
+): Promise<{ dependentId?: string; error?: string }> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
@@ -424,7 +424,15 @@ export async function addDependent(
     console.error('[addDependent] memberships.insert', memErr)
     return { error: 'Erro ao criar dependente.' }
   }
-  return {}
+
+  // A ficha do responsável lista os dependentes com link para a ficha de cada um;
+  // sem revalidar, o dependente novo só aparece (com o id de verdade) no próximo
+  // carregamento completo. `newId` volta para o cliente pelo mesmo motivo: o
+  // append otimista precisa do id real para montar um link que funcione.
+  revalidatePath(`/admin/alunos/${parentId}`)
+  revalidatePath('/admin/alunos')
+
+  return { dependentId: newId }
 }
 
 // ---------------------------------------------------------------------------

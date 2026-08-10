@@ -154,6 +154,18 @@ export default async function StudentProfilePage({ params }: Props) {
     dependents.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
   }
 
+  // Responsável do dependente: a ficha precisa dizer de quem ele é e dar o
+  // caminho de volta. `parent_id` já vinha na membership e nunca era usado.
+  let guardian: { id: string; full_name: string } | null = null
+  if (student.is_dependent && student.parent_id) {
+    const { data: guardianRaw } = await adminClient
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', student.parent_id)
+      .maybeSingle()
+    if (guardianRaw) guardian = guardianRaw as { id: string; full_name: string }
+  }
+
   // Fetch active subscription plans (for plan assignment)
   const { data: plansRaw } = await adminClient
     .from('subscription_plans')
@@ -239,22 +251,48 @@ export default async function StudentProfilePage({ params }: Props) {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-slate-400">
+      {/* Breadcrumb — o responsável entra como degrau para o admin saber de onde
+          o dependente vem e voltar num toque. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-400">
         <Link href="/admin/alunos" className="hover:text-white transition-colors">
           Alunos
         </Link>
+        {guardian && (
+          <>
+            <span>/</span>
+            <Link
+              href={`/admin/alunos/${guardian.id}`}
+              className="max-w-[12rem] truncate hover:text-white transition-colors"
+            >
+              {guardian.full_name}
+            </Link>
+          </>
+        )}
         <span>/</span>
-        <span className="text-white">{student.full_name}</span>
+        <span className="min-w-0 truncate text-white">{student.full_name}</span>
       </div>
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold text-white">{student.full_name}</h1>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-white break-words">
+              {student.full_name}
+            </h1>
             {student.is_dependent && <Badge variant="kids">KIDS</Badge>}
           </div>
+
+          {guardian && (
+            <p className="mb-1.5 text-sm text-slate-400">
+              Responsável:{' '}
+              <Link
+                href={`/admin/alunos/${guardian.id}`}
+                className="font-semibold text-brand-500 hover:text-brand-400 transition-colors"
+              >
+                {guardian.full_name}
+              </Link>
+            </p>
+          )}
           <div className="flex flex-wrap gap-3 text-sm text-slate-400">
             {student.phone && <span>📞 {student.phone}</span>}
             <span

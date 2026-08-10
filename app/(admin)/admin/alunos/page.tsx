@@ -9,11 +9,13 @@ import { computeProgress } from '@/lib/checkin/progress'
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { chunk, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
 import type { Membership, StudentLevel } from '@/types'
 import { CriarAlunoButton } from './CriarAlunoButton'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
+import { cn } from '@/lib/utils/cn'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -175,6 +177,23 @@ export default async function AlunosPage({ searchParams }: Props) {
     ])
   }
 
+  // Nome do responsável de cada dependente: "Dependente" solto não dizia de quem,
+  // e o admin tinha que abrir a ficha para descobrir. `parent_id` já vinha na
+  // query acima e nunca era usado.
+  const parentIds = Array.from(
+    new Set(students.filter((s) => s.is_dependent && s.parent_id).map((s) => s.parent_id!)),
+  )
+  const parentNameById = new Map<string, string>()
+  for (const ids of chunk(parentIds, IN_CHUNK_SIZE)) {
+    const { data: parentsRaw } = await adminClient
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', ids)
+    for (const p of (parentsRaw ?? []) as { id: string; full_name: string }[]) {
+      parentNameById.set(p.id, p.full_name)
+    }
+  }
+
   // Meta padrão da academia para quem não tem meta própria — mesma regra da ficha do
   // aluno e do Controle Wellhub, senão o card mostraria "3 / 0".
   const orgDefaultTarget =
@@ -184,8 +203,8 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Alunos</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Alunos</h1>
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-400">{students.length} alunos</span>
           <CriarAlunoButton orgSports={orgSports} />
@@ -274,7 +293,14 @@ export default async function AlunosPage({ searchParams }: Props) {
                     <div className="min-w-0">
                       <p className="text-white font-medium text-sm truncate">{student.full_name}</p>
                       {student.is_dependent && (
-                        <span className="text-xs text-slate-500">Dependente</span>
+                        // Nome do responsável em vez de "Dependente" solto: é o que
+                        // permite identificar de quem é a criança sem abrir a ficha.
+                        // Texto, não link — o card inteiro já é um <Link>.
+                        <span className="block truncate text-xs text-slate-500">
+                          {student.parent_id && parentNameById.get(student.parent_id)
+                            ? `Dependente de ${parentNameById.get(student.parent_id)}`
+                            : 'Dependente'}
+                        </span>
                       )}
                       {student.pending_partner && (
                         <span className="block text-xs text-yellow-400 mt-0.5">
@@ -298,14 +324,15 @@ export default async function AlunosPage({ searchParams }: Props) {
                   )}
 
                   <div className="space-y-1 text-xs text-slate-400">
-                    <div className="flex items-center justify-between">
-                      <span>Plano</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="shrink-0">Plano</span>
                       <span
-                        className={
+                        className={cn(
+                          'min-w-0 break-words text-right',
                           student.payment_type !== 'subscriber' || student.contract_active
                             ? 'text-green-400'
-                            : 'text-red-400'
-                        }
+                            : 'text-red-400',
+                        )}
                       >
                         {student.payment_type === 'subscriber'
                           ? (planNameMap.get(student.id) ?? 'Mensalista (sem plano)')
@@ -314,21 +341,22 @@ export default async function AlunosPage({ searchParams }: Props) {
                       </span>
                     </div>
                     {student.partner && (
-                      <div className="flex items-center justify-between">
-                        <span>Parceiro</span>
-                        <span className="text-brand-500">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="shrink-0">Parceiro</span>
+                        <span className="shrink-0 text-brand-500">
                           {student.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
                         </span>
                       </div>
                     )}
                     {student.partner && checkinProgress && (
                       <div className="pt-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span>Check-ins no mês</span>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="min-w-0 truncate">Check-ins no mês</span>
                           <span
-                            className={
-                              checkinProgress.remaining === 0 ? 'text-green-400' : 'text-white'
-                            }
+                            className={cn(
+                              'shrink-0',
+                              checkinProgress.remaining === 0 ? 'text-green-400' : 'text-white',
+                            )}
                           >
                             {checkinProgress.done} / {checkinProgress.target}
                           </span>
@@ -350,14 +378,19 @@ export default async function AlunosPage({ searchParams }: Props) {
                         )}
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span>Turmas fixas</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="shrink-0">Turmas fixas</span>
                       <span className="text-white">{enrollCount}</span>
                     </div>
                     {student.payment_type === 'subscriber' && (
-                      <div className="flex items-center justify-between">
-                        <span>Créditos</span>
-                        <span className={student.credits_balance > 0 ? 'text-white' : 'text-slate-500'}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="shrink-0">Créditos</span>
+                        <span
+                          className={cn(
+                            'shrink-0',
+                            student.credits_balance > 0 ? 'text-white' : 'text-slate-500',
+                          )}
+                        >
                           {student.credits_balance}
                         </span>
                       </div>
