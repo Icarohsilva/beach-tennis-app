@@ -11,7 +11,7 @@ import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
 import { joinWaitlist, leaveWaitlist } from '@/features/aulas/waitlistActions'
 import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
-import type { AgendaSession } from './WeekAgenda'
+import type { AgendaSession } from './agendaTypes'
 
 /**
  * Ficha da aula sobre a agenda: horário, quem já está confirmado e a ação de

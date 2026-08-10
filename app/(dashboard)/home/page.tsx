@@ -8,14 +8,17 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser, getMemberships } from '@/lib/supabase/server'
 import { hasStudentAccess } from '@/lib/org/activeOrg'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
-import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import { addDaysISO } from '@/lib/utils/agenda'
 import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { HeroHeader } from '@/features/home/HeroHeader'
-import { NextClassSpotlight, type SpotlightCandidate } from '@/features/home/NextClassSpotlight'
-import { WeekAgenda, type AgendaSession } from '@/features/home/WeekAgenda'
+import type { SpotlightCandidate } from '@/features/home/NextClassSpotlight'
+import { SpotlightRow } from '@/features/home/SpotlightRow'
+import { ArenaWeek } from '@/features/home/ArenaWeek'
+import { ArenaCalendar } from '@/features/home/ArenaCalendar'
+import { getArenaExtras, getArenaMonth } from '@/features/home/arenaMonthQuery'
+import { monthOf } from '@/lib/home/arenaAgenda'
+import type { AgendaSession } from '@/features/home/agendaTypes'
 import { SelfCheckinCard, type SelfCheckinCandidate } from '@/features/home/SelfCheckinCard'
 import { SelfCheckinModal } from '@/features/home/SelfCheckinModal'
 import { getSelfCheckinViews } from '@/features/checkin/selfCheckinQueries'
@@ -30,17 +33,16 @@ import {
   type MissedCheckinSummary,
 } from '@/lib/checkin/missedCheckins'
 import { getMissedCheckinSettings } from '@/features/checkin/missedCheckinSettings'
-import { CheckinProgressCard } from '@/components/ui/CheckinProgressCard'
 import { getStudentFrequency } from '@/features/relatorios/query'
 import { StudentFrequencyCard } from '@/features/relatorios/StudentFrequencyCard'
-import { CalendarPlus, Sun } from 'lucide-react'
+import { CalendarDays } from 'lucide-react'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { brtToday } from '@/lib/utils/gridSchedule'
-import type { Profile, DayUseSlot, Periodicity, MissedCheckinStatus } from '@/types'
+import type { Profile, Periodicity, MissedCheckinStatus } from '@/types'
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -96,33 +98,12 @@ export default async function HomePage() {
     .in('status', ['active', 'past_due', 'pending_payment'])
     .maybeSingle()
 
-  const [
-    { data: profileData },
-    { data: nextSessionsData },
-    { data: todayDayUseData },
-    { count: weeklyClassesCount },
-  ] = await Promise.all([
+  const [{ data: profileData }, { count: weeklyClassesCount }] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name')
       .eq('id', user.id)
       .single(),
-    supabase
-      .from('session_bookings')
-      .select('id, session:class_sessions(id, session_date, class:classes(name, start_time, end_time, level, type))')
-      .eq('student_id', user.id)
-      .eq('organization_id', orgId)
-      .eq('status', 'confirmed')
-      .gte('session_date', today)
-      .order('session_date', { referencedTable: 'class_sessions', ascending: true })
-      .limit(5),
-    supabase
-      .from('dayuse_slots')
-      .select('id, court, start_time, end_time, capacity, notes')
-      .eq('date', today)
-      .eq('is_active', true)
-      .eq('organization_id', orgId)
-      .order('start_time', { ascending: true }),
     supabase
       .from('enrollments')
       .select('id', { count: 'exact', head: true })
@@ -179,22 +160,6 @@ export default async function HomePage() {
   const frequency = orgId
     ? await getStudentFrequency(orgId, user.id, frequencyWindow, today)
     : null
-  const todayDayUse = (todayDayUseData ?? []) as Pick<DayUseSlot, 'id' | 'court' | 'start_time' | 'end_time' | 'capacity' | 'notes'>[]
-
-  type SessionRow = {
-    id: string
-    session: {
-      id: string
-      session_date: string
-      class: { name: string; start_time: string; end_time: string; level: string; type: string }
-    } | {
-      id: string
-      session_date: string
-      class: { name: string; start_time: string; end_time: string; level: string; type: string }
-    }[]
-  }
-  const nextSessions = (nextSessionsData ?? []) as unknown as SessionRow[]
-
   // ── Matrículas fixas do aluno (usadas na agenda) ──────────────────────────
   const { data: studentEnrollmentsRaw } = await supabase
     .from('enrollments')
@@ -426,6 +391,22 @@ export default async function HomePage() {
       state,
     }))
 
+  // ── Torneio e day use ─────────────────────────────────────────────────────
+  // A agenda da arena não é só aula: a faixa da semana recebe a janela de 7
+  // dias, e o calendário recebe o mês corrente (as setas dele trocam por action).
+  const currentMonth = monthOf(today)
+  const [weekExtras, monthEvents] = orgId
+    ? await Promise.all([
+        getArenaExtras({ orgId, userId: user.id, from: today, to: weekEnd }),
+        getArenaMonth({
+          orgId,
+          userId: user.id,
+          monthISO: currentMonth,
+          includeKids: membership?.is_dependent ?? false,
+        }),
+      ])
+    : [[], []]
+
   // Candidatas ao atalho de confirmação na home. Qual (se alguma) tem a janela
   // aberta é decisão do cliente, pelo relógio do aluno.
   const selfCheckinCandidates: SelfCheckinCandidate[] = mySessions
@@ -458,12 +439,28 @@ export default async function HomePage() {
                 ? [{ label: 'Créditos', value: membership?.credits_balance ?? 0 }]
                 : [{ label: 'Plano', value: membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass' }]),
               { label: 'Aulas/semana', value: weeklyClassesCount ?? 0 },
-              ...(quota
+              // A terceira pastilha responde "quanto do meu mês já usei". Para
+              // quem é Wellhub/TotalPass isso é a meta de check-ins (o que ele
+              // precisa bater para não ser cobrado); para quem assina plano, a
+              // cota de aulas. São a mesma pergunta com fonte diferente, então
+              // ocupam o mesmo lugar em vez de um card extra só para o parceiro.
+              ...(checkinProgress && checkinProgress.target > 0
                 ? [{
-                    label: `Aulas do plano ${plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}`,
-                    value: `${quota.used}/${quota.limit}`,
+                    label: `Check-ins do mês · ${membership?.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}`,
+                    value: `${checkinProgress.done}/${checkinProgress.target}`,
+                    progress: checkinProgress.done / checkinProgress.target,
+                    hint:
+                      checkinProgress.remaining > 0
+                        ? `Faltam ${checkinProgress.remaining} para a meta`
+                        : 'Meta do mês batida!',
                   }]
-                : [{ label: 'Nesta semana', value: mySessions.length }]),
+                : quota
+                  ? [{
+                      label: `Aulas do plano ${plan?.cycle === 'weekly' ? 'nesta semana' : 'neste mês'}`,
+                      value: `${quota.used}/${quota.limit}`,
+                      progress: quota.limit > 0 ? quota.used / quota.limit : undefined,
+                    }]
+                  : [{ label: 'Nesta semana', value: mySessions.length }]),
             ]}
           />
         </div>
@@ -484,21 +481,6 @@ export default async function HomePage() {
         <Reveal step={1}>
           <SelfCheckinCard candidates={selfCheckinCandidates} />
           <SelfCheckinModal candidates={selfCheckinCandidates} />
-        </Reveal>
-      )}
-
-      {spotlightCandidates.length > 0 && (
-        <Reveal step={1}>
-          <NextClassSpotlight candidates={spotlightCandidates} todayISO={today} />
-        </Reveal>
-      )}
-
-      {isPartner && checkinProgress && (
-        <Reveal step={2}>
-          <CheckinProgressCard
-            partner={membership!.partner as 'wellhub' | 'totalpass'}
-            progress={checkinProgress}
-          />
         </Reveal>
       )}
 
@@ -544,8 +526,13 @@ export default async function HomePage() {
         </Reveal>
       )}
 
-      <Reveal step={2}>
-        <StudentFrequencyCard totals={frequency} periodLabel={formatDate(today, 'MMMM')} />
+      {/* Próxima aula e frequência dividem a linha: são os dois retratos do
+          "como estou" e nenhum dos dois precisa da largura inteira. Sem aula à
+          frente, o SpotlightRow devolve só a frequência, ocupando tudo. */}
+      <Reveal step={1}>
+        <SpotlightRow candidates={spotlightCandidates} todayISO={today}>
+          <StudentFrequencyCard totals={frequency} periodLabel={formatDate(today, 'MMMM')} />
+        </SpotlightRow>
       </Reveal>
 
       {showPlanCTA && (
@@ -568,82 +555,33 @@ export default async function HomePage() {
         </Reveal>
       )}
 
-      {/* Agenda da semana — cada aula abre a ficha em modal (ver/entrar/sair). */}
-      {agendaSessions.length > 0 && (
+      {/* Agenda da semana — aula abre a ficha em modal (ver/entrar/sair);
+          torneio e day use levam para a página deles. */}
+      {(agendaSessions.length > 0 || weekExtras.length > 0) && (
         <Reveal step={3} as="section">
-          <SectionHeader title="Sua semana" href="/agendar" linkLabel="agendar" />
-          <WeekAgenda todayISO={today} sessions={agendaSessions} />
+          <SectionHeader title="Agenda da academia" href="/agendar" linkLabel="agendar" />
+          <ArenaWeek todayISO={today} sessions={agendaSessions} events={weekExtras} />
         </Reveal>
       )}
 
-      {/* Day Use hoje */}
-      {todayDayUse.length > 0 && (
-        <Reveal step={4} as="section">
-          <SectionHeader title="Day Use hoje" href="/agendar/dayuse" linkLabel="reservar" />
-          <div className="space-y-2">
-            {todayDayUse.map((slot) => (
-              <Link key={slot.id} href="/agendar/dayuse" className="group block">
-                <Card glass interactive>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
-                        <Sun className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white">
-                          {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
-                        </p>
-                        {slot.notes && (
-                          <p className="mt-0.5 truncate text-xs text-slate-400">{slot.notes}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="rounded-full border border-sky-700/50 bg-sky-900/40 px-2 py-0.5 text-xs text-sky-300">
-                        Espaço {slot.court}
-                      </span>
-                      <span className="text-xs text-slate-400">Day Use · Gratuito</span>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </Reveal>
-      )}
-
-      {/* Próximas aulas agendadas */}
-      <Reveal step={5} as="section">
-        <SectionHeader title="Minhas próximas aulas" />
-        {nextSessions.length === 0 ? (
+      {/* Calendário do mês — o que a arena tem, não só o que o aluno marcou.
+          Tocar num dia abre o que há nele, com o caminho para entrar. */}
+      <Reveal step={4} as="section">
+        <SectionHeader title="Calendário da arena" href="/agendar" linkLabel="agendar" />
+        {monthEvents.length === 0 ? (
           <EmptyState
-            icon={CalendarPlus}
-            title="Nenhuma aula agendada"
-            description="Garanta sua vaga na próxima aula da sua turma."
+            icon={CalendarDays}
+            title="Nada marcado neste mês"
+            description="Quando a academia abrir turmas, torneios ou day use, eles aparecem aqui."
             ctaHref="/agendar"
-            ctaLabel="Agendar agora"
+            ctaLabel="Ver a grade"
           />
         ) : (
-          <div className="space-y-2">
-            {nextSessions.map((item) => {
-              const session = Array.isArray(item.session) ? item.session[0] : item.session
-              const cls = session ? (Array.isArray(session.class) ? session.class[0] : session.class) : null
-              if (!session || !cls) return null
-              return (
-                <Card key={item.id} glass>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white">{cls.name}</p>
-                      <p className="mt-0.5 text-xs text-slate-400">
-                        {formatDate(session.session_date, "EEE, dd 'de' MMM")} · {formatTime(cls.start_time)}
-                      </p>
-                    </div>
-                    {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
+          <ArenaCalendar
+            todayISO={today}
+            initialMonth={currentMonth}
+            initialEvents={monthEvents}
+          />
         )}
       </Reveal>
     </div>
