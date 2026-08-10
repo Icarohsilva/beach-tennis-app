@@ -11,7 +11,7 @@
 //
 // Mesmos padrões de portal/acessibilidade de features/home/SessionModal.tsx.
 // A escolha das aulas é do CLIENTE, pelo relógio do aluno — mesma razão do
-// SelfCheckinCard e do NextClassSpotlight.
+// SelfCheckinCard e do SpotlightRow.
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'

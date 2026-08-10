@@ -8,14 +8,16 @@
 // vez de ficar meia página com um buraco do lado.
 import { useEffect, useState, type ReactNode } from 'react'
 import { NextClassCard } from './NextClassCard'
-import type { SpotlightCandidate } from './NextClassSpotlight'
+import { SessionModal } from './SessionModal'
+import type { AgendaSession } from './agendaTypes'
 
 export function SpotlightRow({
   candidates,
   todayISO,
   children,
 }: {
-  candidates: SpotlightCandidate[]
+  /** Aulas do aluno em ordem, já filtradas pelo servidor. */
+  candidates: AgendaSession[]
   todayISO: string
   /** O card de frequência, renderizado no servidor. */
   children: ReactNode
@@ -23,6 +25,7 @@ export function SpotlightRow({
   // Começa fora da lista: no primeiro passo do servidor não há relógio do aluno,
   // e mostrar a aula de ontem por um quadro é pior que aparecer um quadro depois.
   const [index, setIndex] = useState(candidates.length)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     const now = Date.now()
@@ -42,11 +45,22 @@ export function SpotlightRow({
         endTime={pick.end}
         booked={pick.booked}
         capacity={pick.capacity}
-        state={pick.state}
-        href="/agendar"
+        state={pick.mine || pick.fixed ? 'booked' : 'available'}
         isToday={pick.date === todayISO}
+        onOpen={() => setOpen(true)}
       />
       {children}
+
+      {/* A MESMA ficha da agenda: quem vai, fila de espera, entrar/sair e a
+          confirmação de presença. Duplicar um modal só para este card daria
+          duas verdades sobre a mesma aula. */}
+      {open && (
+        <SessionModal
+          session={pick}
+          isToday={pick.date === todayISO}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </div>
   )
 }
