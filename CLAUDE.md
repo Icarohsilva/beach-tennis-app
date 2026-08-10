@@ -15,6 +15,34 @@ npm run test:run     # vitest single run (CI)
 npm run test:run -- lib/utils/creditRules.test.ts
 ```
 
+## Fluxo de trabalho (git)
+
+**Antes de qualquer push, confira se o PR da branch já foi mergeado.** A branch de
+trabalho é reaproveitada entre tarefas, e o PR dela costuma ser mergeado enquanto
+a tarefa seguinte já está em andamento. Empilhar commit novo sobre histórico já
+mergeado produz um PR que "não tem mudança nenhuma" (o GitHub já viu tudo) ou
+que reabre commits antigos — nos dois casos o trabalho novo se perde de vista.
+
+```bash
+git fetch origin main
+git log --oneline origin/main..HEAD   # o que ainda NÃO está na main
+```
+
+Como ler o resultado:
+
+- **Vazio** → tudo já foi mergeado. Recomece a branch da main antes de trabalhar:
+  `git checkout -B <branch> origin/main`.
+- **Só os commits desta tarefa** → o PR anterior foi mergeado e o trabalho novo
+  ficou de fora. Rebaseie sobre a main (`git rebase origin/main`), rode a
+  validação **de novo depois do rebase** (a main pode ter andado) e faça
+  `git push --force-with-lease`. O PR que sair daí é um PR **novo** — o mergeado
+  não volta a receber commit.
+- **Commits que você já viu no PR anterior** → aquele PR ainda está aberto; o
+  push normal segue nele.
+
+Um PR mergeado está encerrado. Nunca reutilize a numeração nem force o push por
+cima do que já entrou na main.
+
 ## Architecture
 
 **Stack:** Next.js 14 App Router · TypeScript · Tailwind CSS · Supabase · Vitest · Vercel

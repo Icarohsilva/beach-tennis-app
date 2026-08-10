@@ -5,6 +5,8 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
 import { StandingsTable } from '@/features/torneios/StandingsTable'
+import { ParticipantModalProvider } from '@/features/torneios/ParticipantModal'
+import { ParticipantName } from '@/features/torneios/ParticipantName'
 import { GenerateBracketButton } from './GenerateBracketButton'
 import { SeedKnockoutButton } from './SeedKnockoutButton'
 import { CoverImageCard } from './CoverImageCard'
@@ -175,6 +177,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   }
 
   return (
+    // Um modal para a página inteira; cada nome só pede para abri-lo.
+    <ParticipantModalProvider tournamentId={t.id}>
     <div className="space-y-6">
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-5">
@@ -256,7 +260,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                   <Card key={entry.id}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
+                        <ParticipantName
+                          playerId={entry.player_id}
+                          name={p?.full_name ?? entry.player_id}
+                          className="block text-sm font-medium text-white"
+                        />
                         {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
                         {entry.payment_status === 'pending' && (
                           <p className="text-xs text-yellow-400 mt-0.5">
@@ -338,7 +346,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                   <Card key={entry.id}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white font-medium">{p?.full_name ?? entry.player_id}</p>
+                        <ParticipantName
+                          playerId={entry.player_id}
+                          name={p?.full_name ?? entry.player_id}
+                          className="block text-sm font-medium text-white"
+                        />
                         {expired ? (
                           <span className="text-xs text-slate-400 bg-slate-800 rounded px-1.5 py-0.5 mt-1 inline-block">
                             Expirada, será reprocessada na próxima ação
@@ -379,7 +391,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                 return (
                   <div key={entry.id} className="flex items-center gap-3 py-1.5 px-3 bg-surface-card rounded-lg border border-surface-border">
                     <span className="text-xs text-slate-500 font-mono w-6">#{idx + 1}</span>
-                    <span className="text-sm text-white flex-1">{p?.full_name ?? entry.player_id}</span>
+                    <ParticipantName
+                      playerId={entry.player_id}
+                      name={p?.full_name ?? entry.player_id}
+                      className="flex-1 text-sm text-white"
+                    />
                     <span className="text-xs text-slate-500">
                       {new Date(entry.created_at).toLocaleDateString('pt-BR')}
                     </span>
@@ -399,7 +415,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       {standings.length > 0 && (
         <section>
           <h2 className="text-lg font-semibold text-white mb-3">Classificação</h2>
-          <StandingsTable rows={standings} nameById={nameById} />
+          <StandingsTable rows={standings} nameById={nameById} linkToProfile />
         </section>
       )}
 
@@ -444,5 +460,6 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         )}
       </section>
     </div>
+    </ParticipantModalProvider>
   )
 }

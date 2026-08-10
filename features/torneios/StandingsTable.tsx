@@ -1,7 +1,7 @@
 // features/torneios/StandingsTable.tsx
-import Link from 'next/link'
 import type { StandingRow } from '@/types'
 import { PlayerAvatar } from './PlayerAvatar'
+import { ParticipantName } from './ParticipantName'
 import { cn } from '@/lib/utils/cn'
 
 interface StandingsTableProps {
@@ -10,8 +10,8 @@ interface StandingsTableProps {
   /** Destaca a linha deste jogador (ex: o aluno logado). */
   highlightId?: string
   /**
-   * Nome vira link para o retrospecto do atleta. Fica de fora no painel do
-   * admin, que navega dentro do próprio painel.
+   * Nome abre a ficha do inscrito (contato + campanha). Exige estar dentro de
+   * um ParticipantModalProvider; sem ele o clique não faz nada.
    */
   linkToProfile?: boolean
 }
@@ -68,12 +68,11 @@ export function StandingsTable({
                       size="sm"
                     />
                     {linkToProfile ? (
-                      <Link
-                        href={`/torneios/atleta/${r.playerId}`}
-                        className="truncate font-medium text-white underline-offset-2 hover:text-brand-300 hover:underline"
-                      >
-                        {name}
-                      </Link>
+                      <ParticipantName
+                        playerId={r.playerId}
+                        name={name}
+                        className="font-medium text-white"
+                      />
                     ) : (
                       <span className="truncate font-medium text-white">{name}</span>
                     )}
