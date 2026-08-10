@@ -38,6 +38,7 @@ export async function notifyGridGenerated(
       .eq('organization_id', orgId)
       .eq('role', 'student')
       .eq('contract_active', true)
+      .is('archived_at', null)
     const recipients = ((mems ?? []) as { user_id: string }[]).map((m) => ({ userId: m.user_id }))
     if (recipients.length === 0) return
 

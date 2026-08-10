@@ -47,7 +47,7 @@ export default async function AdminDashboardPage() {
   ] = await Promise.all([
     // Alunos ativos é por-academia: conta memberships desta org (não profiles,
     // que só reflete a academia padrão do aluno multi-vínculo).
-    adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).eq('organization_id', orgId),
+    adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).is('archived_at', null).eq('organization_id', orgId),
     adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled').eq('organization_id', orgId),
     adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
     adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true).eq('organization_id', orgId),

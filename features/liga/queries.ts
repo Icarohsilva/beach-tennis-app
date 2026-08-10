@@ -109,10 +109,12 @@ export async function getLigaView(
     ids.length > 0
       ? admin
           .from('memberships')
-          .select('user_id, liga_opted_out')
+          .select('user_id, liga_opted_out, archived_at')
           .eq('organization_id', orgId)
           .in('user_id', ids)
-      : Promise.resolve({ data: [] as { user_id: string; liga_opted_out: boolean }[] }),
+      : Promise.resolve({
+          data: [] as { user_id: string; liga_opted_out: boolean; archived_at: string | null }[],
+        }),
   ])
 
   const profileById = new Map(
@@ -120,9 +122,19 @@ export async function getLigaView(
       (profiles ?? []) as { id: string; full_name: string; avatar_url: string | null }[]
     ).map((p) => [p.id, p]),
   )
-  const optedOut = new Set(
-    ((memberships ?? []) as { user_id: string; liga_opted_out: boolean }[])
-      .filter((m) => m.liga_opted_out)
+  // Cadastro inativo sai do ranking pelo mesmo caminho de quem optou por não
+  // aparecer: `liga_standings` é cache de posição e continua tendo a linha de quem
+  // saiu (o extrato em `liga_points` é a verdade e não se apaga), então sem este
+  // filtro alguém que deixou a academia seguiria ocupando lugar na tabela.
+  const hidden = new Set(
+    (
+      (memberships ?? []) as {
+        user_id: string
+        liga_opted_out: boolean
+        archived_at: string | null
+      }[]
+    )
+      .filter((m) => m.liga_opted_out || m.archived_at)
       .map((m) => m.user_id),
   )
 
@@ -135,7 +147,7 @@ export async function getLigaView(
       position: i + 1,
       isMe: r.student_id === studentId,
     }))
-    .filter((e) => e.isMe || !optedOut.has(e.studentId))
+    .filter((e) => e.isMe || !hidden.has(e.studentId))
 
   const myPosition = rows.findIndex((r) => r.student_id === studentId) + 1
 

@@ -63,6 +63,9 @@ export default async function PerfilPage() {
         .eq('parent_id', user.id)
         .eq('organization_id', orgId)
         .eq('is_dependent', true)
+        // Dependente inativado pela academia sai da lista do responsável: ele não
+        // agenda nem pontua mais, e mantê-lo visível sugeriria o contrário.
+        .is('archived_at', null)
     : { data: [] }
 
   const dependentMembers = (dependentMembersRaw ?? []) as { user_id: string; level: StudentLevel }[]

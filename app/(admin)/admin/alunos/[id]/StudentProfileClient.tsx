@@ -19,6 +19,7 @@ import {
 import { SportsPicker } from '@/components/ui/SportsPicker'
 import { adminSubscribeStudentToPlan, adminCancelStudentPlan } from '@/features/financeiro/actions'
 import { setStudentType, recordCheckin, clearPendingPartner } from '@/features/checkin/actions'
+import { archiveStudent, reactivateStudent } from '@/features/aulas/archiveStudent'
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { brtToday } from '@/lib/utils/gridSchedule'
@@ -43,6 +44,8 @@ interface DependentSummary {
   id: string
   full_name: string
   level: StudentLevel
+  /** Cadastro inativado na academia. null = ativo. */
+  archivedAt: string | null
 }
 
 interface PlanSummary {
@@ -80,6 +83,11 @@ interface StudentProfileClientProps {
   monthlyTarget: number
   orgDefaultTarget: number
   pendingPartner: 'wellhub' | 'totalpass' | null
+  /** Cadastro inativado nesta academia. null = ativo. */
+  archivedAt: string | null
+  /** Alimenta o texto do diálogo: o admin precisa saber o que vai ser encerrado. */
+  hasActivePlan: boolean
+  activeEnrollmentCount: number
   checkins: {
     id: string
     partner: 'wellhub' | 'totalpass'
@@ -116,6 +124,9 @@ export function StudentProfileClient({
   monthlyTarget,
   orgDefaultTarget,
   pendingPartner,
+  archivedAt,
+  hasActivePlan,
+  activeEnrollmentCount,
   checkins,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
@@ -133,6 +144,13 @@ export function StudentProfileClient({
   const [creditAmount, setCreditAmount] = useState('')
   const [creditReason, setCreditReason] = useState('')
   const [showCancelPlanDialog, setShowCancelPlanDialog] = useState(false)
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false)
+  const [archived, setArchived] = useState<string | null>(archivedAt)
+
+  // Ativos e inativos vêm na mesma lista (a página precisa dos dois para dar caminho
+  // de reativação) e são separados aqui.
+  const activeDependents = dependentList.filter((d) => !d.archivedAt)
+  const archivedDependents = dependentList.filter((d) => d.archivedAt)
   const [billing, setBilling] = useState<'subscriber' | 'per_class'>(
     paymentType === 'subscriber' ? 'subscriber' : 'per_class',
   )
@@ -250,11 +268,60 @@ export function StudentProfileClient({
       // a página ser recarregada.
       setDependentList((prev) => [
         ...prev,
-        { id: result.dependentId!, full_name: newDependentName.trim(), level: newDependentLevel },
+        {
+          id: result.dependentId!,
+          full_name: newDependentName.trim(),
+          level: newDependentLevel,
+          archivedAt: null,
+        },
       ])
       setNewDependentName('')
       setNewDependentLevel('iniciante')
       notify('Dependente adicionado.')
+    })
+  }
+
+  function handleArchive() {
+    setError(null)
+    startTransition(async () => {
+      const result = await archiveStudent(studentId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setArchived(new Date().toISOString())
+      setShowArchiveDialog(false)
+      // O painel inteiro reflete o novo estado (plano encerrado, matrículas
+      // canceladas), então a mensagem resume o que de fato aconteceu em vez de um
+      // "pronto!" genérico.
+      const partes = ['Cadastro inativado']
+      if (result.planCancelled) partes.push('assinatura encerrada')
+      if (result.enrollmentsCancelled) {
+        partes.push(
+          `${result.enrollmentsCancelled} matrícula${result.enrollmentsCancelled > 1 ? 's' : ''} encerrada${result.enrollmentsCancelled > 1 ? 's' : ''}`,
+        )
+      }
+      if (result.bookingsCancelled) {
+        partes.push(
+          `${result.bookingsCancelled} reserva${result.bookingsCancelled > 1 ? 's' : ''} cancelada${result.bookingsCancelled > 1 ? 's' : ''}`,
+        )
+      }
+      notify(`${partes.join(' · ')}.`)
+      setEnrollmentList([])
+      setActiveSub(null)
+    })
+  }
+
+  function handleReactivate() {
+    setError(null)
+    startTransition(async () => {
+      const result = await reactivateStudent(studentId)
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+      setArchived(null)
+      notify('Cadastro reativado. Matricule numa turma e associe um plano para ele voltar a agendar.')
     })
   }
 
@@ -558,14 +625,14 @@ export function StudentProfileClient({
         <section>
           <h2 className="text-base font-semibold text-white mb-3">Dependentes (Kids)</h2>
 
-          {dependentList.length === 0 ? (
+          {activeDependents.length === 0 ? (
             <p className="text-slate-500 text-sm mb-3">Nenhum dependente cadastrado.</p>
           ) : (
             <ul className="space-y-2 mb-4">
               {/* Cada dependente abre a ficha dele — é de lá que se matricula numa
                   turma kids e se atribui o plano. Sem este link o admin tinha que
                   voltar na listagem geral e caçar o nome. */}
-              {dependentList.map((d) => (
+              {activeDependents.map((d) => (
                 <li key={d.id}>
                   <Link
                     href={`/admin/alunos/${d.id}`}
@@ -583,6 +650,38 @@ export function StudentProfileClient({
                 </li>
               ))}
             </ul>
+          )}
+
+          {/* Dependentes inativos, à parte. Ficam aqui porque a listagem geral os
+              esconde por padrão: sem esta lista o admin não teria caminho nenhum
+              para reativar um dependente que ele mesmo inativou. Inativar sai pela
+              ficha do dependente, junto do diálogo que diz o que vai ser encerrado. */}
+          {archivedDependents.length > 0 && (
+            <div className="mb-4">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Inativos
+              </p>
+              <ul className="space-y-2">
+                {archivedDependents.map((d) => (
+                  <li key={d.id}>
+                    <Link
+                      href={`/admin/alunos/${d.id}`}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-surface-border bg-surface-card/50 px-4 py-2 transition-colors hover:border-brand-500/40"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm text-slate-400">
+                        {d.full_name}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="whitespace-nowrap text-[11px] text-slate-500">
+                          desde {formatDate(d.archivedAt!)}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-slate-600" />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {/* Add dependent */}
@@ -906,6 +1005,80 @@ export function StudentProfileClient({
               )}
             </ul>
           </div>
+        )}
+      </section>
+
+      {/* ── Situação do cadastro ────────────────────────────────────────────────
+          Por último de propósito: é a ação destrutiva da ficha, e não deve estar
+          no caminho de quem entrou para trocar o nível ou matricular numa turma. */}
+      <section className="border-t border-surface-border pt-5">
+        <h2 className="text-base font-semibold text-white mb-1">Situação do cadastro</h2>
+
+        {archived ? (
+          <>
+            <p className="mb-3 text-sm text-slate-400">
+              Inativo desde {formatDate(archived)}. O aluno está fora das listas, da
+              chamada e da Liga.
+            </p>
+            <Button variant="secondary" size="sm" loading={isPending} onClick={handleReactivate}>
+              Reativar cadastro
+            </Button>
+            <p className="mt-2 text-xs text-slate-500">
+              Reativar devolve só a visibilidade. Turma e plano precisam ser
+              refeitos — as regras de vaga e de cota valem de novo.
+            </p>
+          </>
+        ) : showArchiveDialog ? (
+          // O diálogo lista o que vai ser encerrado, com os números desta ficha.
+          // Um "tem certeza?" genérico não deixaria claro que a assinatura do
+          // responsável para de ser cobrada.
+          <div className="space-y-3 rounded-xl border border-red-800/50 bg-red-950/40 px-4 py-3">
+            <p className="text-sm font-semibold text-white">
+              Inativar o cadastro deste aluno na academia?
+            </p>
+            <ul className="space-y-1 text-xs text-slate-300">
+              <li>· Sai das listas, da chamada, da Liga e não pode ser agendado.</li>
+              {activeEnrollmentCount > 0 && (
+                <li>
+                  · {activeEnrollmentCount} matrícula{activeEnrollmentCount > 1 ? 's' : ''} fixa
+                  {activeEnrollmentCount > 1 ? 's' : ''} encerrada
+                  {activeEnrollmentCount > 1 ? 's' : ''} — a vaga na turma fica livre.
+                </li>
+              )}
+              <li>· Reservas futuras canceladas, com o crédito estornado.</li>
+              {hasActivePlan && (
+                <li className="text-yellow-300">
+                  · A assinatura é encerrada: o responsável para de ser cobrado.
+                </li>
+              )}
+              <li>
+                · Presenças, extrato de crédito e pontuação da Liga são preservados. Os{' '}
+                {creditsBalance} crédito{creditsBalance !== 1 ? 's' : ''} ficam guardados.
+              </li>
+            </ul>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="danger" size="sm" loading={isPending} onClick={handleArchive}>
+                Inativar cadastro
+              </Button>
+              <button
+                type="button"
+                onClick={() => setShowArchiveDialog(false)}
+                className="text-xs text-slate-400 underline hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="mb-3 text-sm text-slate-400">
+              Aluno que saiu da academia. Inativar preserva todo o histórico e pode
+              ser desfeito.
+            </p>
+            <Button variant="danger" size="sm" onClick={() => setShowArchiveDialog(true)}>
+              Inativar cadastro
+            </Button>
+          </>
         )}
       </section>
     </div>

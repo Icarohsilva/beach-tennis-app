@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolveClassAccess } from './accessRules'
 
 const base = {
+  archived: false,
   partner: null,
   hasActivePlan: false,
   creditsBalance: 0,
@@ -15,6 +16,38 @@ const base = {
 }
 
 describe('resolveClassAccess', () => {
+  // Cadastro inativo é a primeira negação, antes de parceiro e de crédito. Importa
+  // testar as duas combinações abaixo porque inativar CANCELA o plano mas PRESERVA o
+  // crédito: sem esta regra, um aluno inativado com saldo cairia no `grant: 'credit'`
+  // e voltaria a reservar aula sozinho pelo app.
+  it('bloqueia cadastro inativo', () => {
+    expect(resolveClassAccess({ ...base, archived: true })).toEqual({ denied: 'archived' })
+  })
+
+  it('inativo bloqueia mesmo com crédito guardado', () => {
+    expect(resolveClassAccess({ ...base, archived: true, creditsBalance: 10 })).toEqual({
+      denied: 'archived',
+    })
+  })
+
+  it('inativo bloqueia mesmo com parceiro', () => {
+    expect(resolveClassAccess({ ...base, archived: true, partner: 'wellhub' })).toEqual({
+      denied: 'archived',
+    })
+  })
+
+  it('inativo bloqueia mesmo com plano ativo e cota sobrando', () => {
+    expect(
+      resolveClassAccess({
+        ...base,
+        archived: true,
+        hasActivePlan: true,
+        quotaEnforced: true,
+        quotaRemaining: 5,
+      }),
+    ).toEqual({ denied: 'archived' })
+  })
+
   it('bloqueia quem tem dívida aberta', () => {
     expect(resolveClassAccess({ ...base, hasOpenDebt: true })).toEqual({
       denied: 'blocked_by_debt',

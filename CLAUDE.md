@@ -98,6 +98,18 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
+- `memberships.archived_at` é a **exclusão lógica do aluno por academia** (null = ativo).
+  Não confundir com `contract_active`, que é "assinatura ativa" — misturar as duas faria
+  reativar a mensalidade ressuscitar um cadastro excluído. Inativar (`features/aulas/archiveStudent.ts`)
+  encerra matrículas fixas, cancela reservas futuras com estorno e **cancela a assinatura
+  via `adminCancelStudentPlan`** — nunca por update direto, porque aquela função cancela a
+  preapproval no Mercado Pago primeiro; sem isso o responsável seguiria sendo cobrado.
+  Crédito NÃO é zerado (é valor pago, e a ação é reversível). Toda listagem de aluno filtra
+  `archived_at is null`; as exceções deliberadas são a ficha do aluno e a lista de dependentes
+  do responsável, que precisam mostrar o inativo para dar caminho de reativação, e o mapa de
+  memberships da chamada, porque aula passada continua listando quem saiu. A trava de
+  agendamento mora em `resolveClassAccess` (`denied: 'archived'`, antes de parceiro e crédito)
+  — necessária porque o crédito guardado, sozinho, concederia acesso.
 - Presença tem três origens (`attendance.source`): `manual` (professor na chamada), `wellhub`/`totalpass` (webhook do parceiro) e `self` (aluno confirma pelo app). A confirmação do aluno é gravada em `self_checkins` com a evidência de GPS e só vira `attendance` quando `validated`; `pending` espera o professor aprovar. Ver [docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md](docs/superpowers/specs/2026-08-03-confirmacao-presenca-aluno-design.md)
 
 - RLS: policy nenhuma chama `auth.uid()` cru nem `is_org_admin(coluna)` — as duas rodam **por linha**. A forma correta é `(select auth.uid())` e `organization_id in (select auth_admin_org_ids())`, que viram InitPlan (uma avaliação por statement). A migração `20260809000000_escala_rls_e_indices.sql` converteu as existentes e a verificação está no cabeçalho dela; policy nova já deve nascer assim. Medido em 300k linhas: 1.320ms → 44ms.

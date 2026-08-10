@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Users } from 'lucide-react'
 import { computeProgress } from '@/lib/checkin/progress'
@@ -23,6 +24,8 @@ interface SearchParams {
   q?: string
   level?: string
   esporte?: string
+  /** 'inativos' mostra só os cadastros inativados. Ausente = só os ativos. */
+  situacao?: string
 }
 
 interface Props {
@@ -40,6 +43,9 @@ export default async function AlunosPage({ searchParams }: Props) {
   const levelFilter = searchParams.level ?? ''
   const orgSports = await getOrgSports(orgId)
   const sportFilter = orgSports.includes(searchParams.esporte ?? '') ? searchParams.esporte! : ''
+  // Inativos são exceção: ficam fora por padrão e têm uma visão própria, em vez de
+  // misturados com apagado visual na lista de todo dia.
+  const showArchived = searchParams.situacao === 'inativos'
 
   // Campos por-academia vêm da membership da academia ativa (não de profiles):
   // um aluno multi-vínculo só aparece nesta lista se tiver membership nesta org,
@@ -48,10 +54,16 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
+
+  // Uma visão ou a outra, nunca as duas juntas: cadastro inativo apagadinho no meio
+  // da lista de todo dia é convite a erro na chamada e na cobrança.
+  dbQuery = showArchived
+    ? dbQuery.not('archived_at', 'is', null)
+    : dbQuery.is('archived_at', null)
 
   if (query) {
     dbQuery = dbQuery.ilike('profiles.full_name', `%${query}%`)
@@ -81,6 +93,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     credits_balance: Membership['credits_balance']
     pending_partner: Membership['pending_partner']
     monthly_checkin_target: number
+    archived_at: string | null
   }
 
   const students: StudentRow[] = (
@@ -96,6 +109,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       credits_balance: number
       pending_partner: Membership['pending_partner']
       monthly_checkin_target: number | null
+      archived_at: string | null
       profiles: { full_name: string } | { full_name: string }[] | null
     }[]
   )
@@ -114,6 +128,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         credits_balance: m.credits_balance,
         pending_partner: m.pending_partner,
         monthly_checkin_target: m.monthly_checkin_target ?? 0,
+        archived_at: m.archived_at,
       }
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
@@ -204,15 +219,59 @@ export default async function AlunosPage({ searchParams }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Alunos</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">{students.length} alunos</span>
-          <CriarAlunoButton orgSports={orgSports} />
+        <h1 className="text-xl sm:text-2xl font-bold text-white">
+          {showArchived ? 'Alunos inativos' : 'Alunos'}
+        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-400">
+            {students.length} {showArchived ? 'inativo' : 'aluno'}
+            {students.length !== 1 ? 's' : ''}
+          </span>
+          {!showArchived && <CriarAlunoButton orgSports={orgSports} />}
         </div>
+      </div>
+
+      {/* Alternância ativos/inativos. Preserva os filtros já aplicados: o admin que
+          buscou um nome e não achou quer justamente conferir se saiu da academia. */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Link
+          href={`/admin/alunos?${new URLSearchParams({
+            ...(query ? { q: query } : {}),
+            ...(levelFilter ? { level: levelFilter } : {}),
+            ...(sportFilter ? { esporte: sportFilter } : {}),
+          })}`}
+          className={
+            'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
+            (showArchived
+              ? 'border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:text-white'
+              : 'bg-brand-600 text-white')
+          }
+        >
+          Ativos
+        </Link>
+        <Link
+          href={`/admin/alunos?${new URLSearchParams({
+            situacao: 'inativos',
+            ...(query ? { q: query } : {}),
+            ...(levelFilter ? { level: levelFilter } : {}),
+            ...(sportFilter ? { esporte: sportFilter } : {}),
+          })}`}
+          className={
+            'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
+            (showArchived
+              ? 'bg-brand-600 text-white'
+              : 'border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:text-white')
+          }
+        >
+          Inativos
+        </Link>
       </div>
 
       {/* Filters */}
       <form method="GET" className="flex flex-wrap gap-3 items-end">
+        {/* Sem isto, filtrar por nome dentro da visão de inativos jogaria o admin de
+            volta para a lista de ativos e o resultado pareceria "não existe". */}
+        {showArchived && <input type="hidden" name="situacao" value="inativos" />}
         <div className="flex-1 min-w-48">
           <label className="block text-xs text-slate-400 mb-1">Buscar por nome</label>
           <input
@@ -270,7 +329,15 @@ export default async function AlunosPage({ searchParams }: Props) {
 
       {/* Student list */}
       {students.length === 0 ? (
-        <EmptyState icon={Users} title="Nenhum aluno encontrado." description="Tente ajustar os filtros ou cadastre um novo aluno." />
+        <EmptyState
+          icon={Users}
+          title={showArchived ? 'Nenhum cadastro inativo.' : 'Nenhum aluno encontrado.'}
+          description={
+            showArchived
+              ? 'Alunos que saírem da academia aparecem aqui e podem ser reativados.'
+              : 'Tente ajustar os filtros ou cadastre um novo aluno.'
+          }
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {students.map((student) => {
@@ -292,6 +359,11 @@ export default async function AlunosPage({ searchParams }: Props) {
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="min-w-0">
                       <p className="text-white font-medium text-sm truncate">{student.full_name}</p>
+                      {student.archived_at && (
+                        <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                          Inativo desde {formatDate(student.archived_at)}
+                        </span>
+                      )}
                       {student.is_dependent && (
                         // Nome do responsável em vez de "Dependente" solto: é o que
                         // permite identificar de quem é a criança sem abrir a ficha.

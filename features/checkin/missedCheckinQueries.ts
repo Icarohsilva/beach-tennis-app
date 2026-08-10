@@ -72,6 +72,7 @@ export async function getWellhubOverview(
     .select('user_id, partner, monthly_checkin_target')
     .eq('organization_id', orgId)
     .eq('role', 'student')
+    .is('archived_at', null)
     .not('partner', 'is', null)
 
   type MemRow = {

@@ -220,12 +220,21 @@ export async function confirmSelfAttendance(
   //    não duplica. Sem check-in, a confirmação segue como plano B.
   const { data: membership } = await adminClient
     .from('memberships')
-    .select('partner')
+    .select('partner, archived_at')
     .eq('user_id', user.id)
     .eq('organization_id', orgId)
     .maybeSingle()
 
-  if ((membership as { partner: string | null } | null)?.partner) {
+  const mem = membership as { partner: string | null; archived_at: string | null } | null
+
+  // Cadastro inativo não confirma presença. Sem isto um aluno que a academia tirou da
+  // operação ainda geraria `self_checkins` — e, se o professor aprovasse sem olhar,
+  // viraria presença e ponto de Liga de quem já não treina ali.
+  if (mem?.archived_at) {
+    return { error: 'Seu cadastro nesta academia está inativo. Fale com a academia.' }
+  }
+
+  if (mem?.partner) {
     const { data: partnerCheckin } = await adminClient
       .from('checkins')
       .select('id')

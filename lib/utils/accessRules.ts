@@ -9,6 +9,7 @@ export type AccessGrant =
   | 'debt' // entra; pendência nasce se houver presença
 
 export type AccessDenial =
+  | 'archived'
   | 'blocked_by_debt'
   | 'blocked_by_missed_checkins'
   | 'quota_exhausted'
@@ -17,6 +18,15 @@ export type AccessDenial =
 export type AccessDecision = { grant: AccessGrant } | { denied: AccessDenial }
 
 export interface AccessInput {
+  /**
+   * Cadastro inativado nesta academia (memberships.archived_at).
+   *
+   * Precisa estar aqui e não só nas listagens: inativar cancela o plano mas PRESERVA
+   * o crédito, então um aluno inativado com saldo passaria pelo `grant: 'credit'` e
+   * conseguiria reservar aula sozinho pelo app. Dependente não faz login (não tem
+   * auth user), mas aluno adulto faz.
+   */
+  archived: boolean
   partner: CheckinPartner | null
   /** status='active' E período vigente (isSubscriptionCurrent). Ver spec §1. */
   hasActivePlan: boolean
@@ -64,6 +74,9 @@ export interface AccessInput {
  * especificamente quando decide adicionar mesmo assim.
  */
 export function resolveClassAccess(input: AccessInput): AccessDecision {
+  // Primeiro de todos, e antes mesmo de `partner`: quem saiu da academia não entra em
+  // aula por nenhum caminho — nem por parceiro, nem por crédito que ficou guardado.
+  if (input.archived) return { denied: 'archived' }
   if (input.hasOpenDebt) return { denied: 'blocked_by_debt' }
   if (isMissedCheckinBlocked(input.openMissedCheckins, input.missedCheckinBlockLimit)) {
     return { denied: 'blocked_by_missed_checkins' }

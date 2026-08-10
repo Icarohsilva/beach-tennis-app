@@ -115,14 +115,23 @@ export async function enrollStudentInClass(
   // Fixa exige plano ou parceiro (spec §2). Crédito não compra vaga fixa.
   const { data: membership } = await adminClient
     .from('memberships')
-    .select('partner')
+    .select('partner, archived_at')
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
     .maybeSingle()
 
   if (!membership) return { error: 'Aluno não participa desta academia.' }
 
-  const partner = (membership as { partner: string | null }).partner
+  const { partner, archived_at: archivedAt } = membership as {
+    partner: string | null
+    archived_at: string | null
+  }
+
+  // Inativar cancela as matrículas; dar uma nova sem reativar recriaria a vaga
+  // recorrente de alguém que a academia tirou da operação.
+  if (archivedAt) {
+    return { error: 'O cadastro desse aluno está inativo. Reative na ficha dele antes de matricular.' }
+  }
 
   if (!partner) {
     const hasActivePlan = await hasActiveSubscriptionPlan(adminClient, studentId, orgId)
@@ -646,13 +655,25 @@ export async function addStudentToSession(
 
   const { data: membership } = await adminClient
     .from('memberships')
-    .select('partner, credits_balance')
+    .select('partner, credits_balance, archived_at')
     .eq('user_id', studentId)
     .eq('organization_id', orgId)
     .maybeSingle()
 
   if (!membership) return { error: 'Aluno não participa desta academia.' }
-  const mem = membership as { partner: string | null; credits_balance: number }
+  const mem = membership as {
+    partner: string | null
+    credits_balance: number
+    archived_at: string | null
+  }
+
+  // Cadastro inativo é bloqueio DURO, antes do `force`. O force existe para o
+  // professor furar capacidade e cota conscientemente; furar a inativação apagaria o
+  // significado dela pelas costas de quem inativou. Quem precisa do aluno em aula
+  // reativa o cadastro — é um clique na ficha.
+  if (mem.archived_at) {
+    return { error: 'O cadastro desse aluno está inativo. Reative na ficha dele para colocá-lo em aula.' }
+  }
 
   const plan = await getActivePlan(adminClient, studentId, orgId)
   const hasActivePlan = plan !== null
@@ -709,6 +730,8 @@ export async function addStudentToSession(
       : 0
 
   const decision = resolveClassAccess({
+    // Já barrado acima com mensagem própria; aqui é só para satisfazer o tipo.
+    archived: false,
     partner: mem.partner as CheckinPartner | null,
     hasActivePlan,
     creditsBalance: mem.credits_balance,

@@ -84,6 +84,7 @@ export async function getOrgLigaOverview(
           .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name, phone)')
           .eq('organization_id', orgId)
           .eq('role', 'student')
+          .is('archived_at', null)
           .order('user_id', { ascending: true })
           .range(from, to),
       { label: 'liga/overview:memberships' },

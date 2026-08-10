@@ -247,6 +247,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
       : 0
 
   const decision = resolveClassAccess({
+    archived: Boolean(profile.archived_at),
     partner: profile.partner,
     hasActivePlan,
     creditsBalance: profile.credits_balance,
@@ -268,6 +269,9 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
       return {
         error: `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
       }
+    }
+    if (decision.denied === 'archived') {
+      return { error: 'Seu cadastro nesta academia está inativo. Fale com a academia para voltar a agendar.' }
     }
     if (decision.denied === 'blocked_by_missed_checkins') {
       return {

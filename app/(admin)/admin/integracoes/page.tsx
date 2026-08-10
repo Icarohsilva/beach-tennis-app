@@ -29,7 +29,8 @@ export default async function IntegracoesPage() {
       .from('memberships')
       .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
       .eq('organization_id', orgId)
-      .eq('role', 'student'),
+      .eq('role', 'student')
+      .is('archived_at', null),
   ])
 
   // Deriva has_api_key e descarta o valor cru da api_key antes de serializar p/ o browser.

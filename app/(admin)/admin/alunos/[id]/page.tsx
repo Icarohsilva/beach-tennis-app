@@ -9,6 +9,7 @@ import { StudentProfileClient } from './StudentProfileClient'
 import { RecommendPlanCard } from './RecommendPlanCard'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import { getOrgSports } from '@/lib/arenas/orgSports'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import type { Profile, Membership, Enrollment, Class, StudentLevel, PlanBillingOption } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 
@@ -35,7 +36,9 @@ export default async function StudentProfilePage({ params }: Props) {
   const { data: membership } = await adminClient
     .from('memberships')
     .select(
-      'level, sports, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner',
+      // `archived_at` entra, mas a ficha NÃO filtra por ele: é justamente aqui que o
+      // admin vê que o cadastro está inativo e o reativa.
+      'level, sports, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner, archived_at',
     )
     .eq('user_id', params.id)
     .eq('organization_id', orgId)
@@ -58,7 +61,7 @@ export default async function StudentProfilePage({ params }: Props) {
     ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
     ...(membership as Pick<
       Membership,
-      'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner'
+      'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner' | 'archived_at'
     >),
     organization_id: orgId,
   }
@@ -133,11 +136,14 @@ export default async function StudentProfilePage({ params }: Props) {
   // Fetch dependents (if student is not a dependent themselves). Vínculo
   // pai/dependente é por-academia: vem das memberships desta org. Identidade
   // (full_name) vem de profiles via join.
-  const dependents: { id: string; full_name: string; level: StudentLevel }[] = []
+  // Inclui os inativos, marcados: escondê-los aqui deixaria o admin sem nenhum
+  // caminho para reativar um dependente que ele mesmo inativou (a listagem geral
+  // também os filtra). Quem separa ativo de inativo é a UI.
+  const dependents: { id: string; full_name: string; level: StudentLevel; archivedAt: string | null }[] = []
   if (!student.is_dependent) {
     const { data: depsRaw } = await adminClient
       .from('memberships')
-      .select('user_id, level, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
+      .select('user_id, level, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
       .eq('parent_id', params.id)
       .eq('is_dependent', true)
       .eq('organization_id', orgId)
@@ -145,11 +151,17 @@ export default async function StudentProfilePage({ params }: Props) {
     type DepRow = {
       user_id: string
       level: StudentLevel
+      archived_at: string | null
       profiles: { full_name: string } | { full_name: string }[] | null
     }
     for (const d of (depsRaw ?? []) as unknown as DepRow[]) {
       const prof = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles
-      dependents.push({ id: d.user_id, full_name: prof?.full_name ?? '', level: d.level })
+      dependents.push({
+        id: d.user_id,
+        full_name: prof?.full_name ?? '',
+        level: d.level,
+        archivedAt: d.archived_at,
+      })
     }
     dependents.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
   }
@@ -280,6 +292,7 @@ export default async function StudentProfilePage({ params }: Props) {
               {student.full_name}
             </h1>
             {student.is_dependent && <Badge variant="kids">KIDS</Badge>}
+            {student.archived_at && <Badge variant="default">INATIVO</Badge>}
           </div>
 
           {guardian && (
@@ -319,6 +332,22 @@ export default async function StudentProfilePage({ params }: Props) {
         </div>
       </div>
 
+      {/* Aviso de cadastro inativo. Fica ANTES do painel: quem abre esta ficha para
+          matricular numa turma precisa saber, antes de tentar, que este aluno saiu da
+          academia. */}
+      {student.archived_at && (
+        <div className="rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3">
+          <p className="text-sm font-semibold text-white">
+            Cadastro inativo nesta academia desde {formatDate(student.archived_at)}.
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            O aluno não aparece nas listas, na chamada nem na Liga, e não pode ser
+            agendado. O histórico de presenças e o extrato de créditos seguem
+            intactos. Matrícula em turma e plano não voltam sozinhos ao reativar.
+          </p>
+        </div>
+      )}
+
       {/* Interactive section (level, enrollments, dependents, subscription) */}
       <Card>
         <StudentProfileClient
@@ -341,6 +370,9 @@ export default async function StudentProfilePage({ params }: Props) {
           monthlyTarget={student.monthly_checkin_target}
           orgDefaultTarget={orgDefaultTarget}
           pendingPartner={student.pending_partner}
+          archivedAt={student.archived_at}
+          hasActivePlan={Boolean(currentSubscription)}
+          activeEnrollmentCount={enrollments.length}
           checkins={checkins}
         />
       </Card>

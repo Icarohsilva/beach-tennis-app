@@ -89,6 +89,7 @@ export default async function AdminLigaPage() {
     .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name)')
     .eq('organization_id', orgId)
     .eq('role', 'student')
+    .is('archived_at', null)
 
   const members = (
     (membersRaw ?? []) as {
