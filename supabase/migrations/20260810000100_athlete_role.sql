@@ -1,0 +1,21 @@
+-- Papel "atleta": quem tem relação com a academia sem ser aluno dela.
+--
+-- Nasce de quem se inscreve num torneio ou reserva um day use vindo de fora.
+-- A pessoa PRECISA de uma membership (é ela que a RLS usa para liberar a
+-- leitura do torneio — ver auth_org_ids em 20260621000000), mas não é aluno:
+-- não tem plano, não entra na chamada e não deve aparecer na lista de alunos
+-- do professor.
+--
+-- Por que um valor no enum e não uma coluna nova: as telas do admin já filtram
+-- `role = 'student'` (alunos, dashboard, liga, integrações). Com um papel
+-- distinto o atleta some dessas listas sem tocar em nenhuma delas. Uma coluna
+-- `source` exigiria mexer em cada consulta — e esquecer uma significa vazar
+-- gente na lista de alunos de outra pessoa.
+--
+-- auth_org_ids() (a RLS) não filtra por papel, então o atleta enxerga o torneio
+-- e a chave da academia exatamente como um aluno enxerga. É o que se quer.
+--
+-- Sozinho neste arquivo de propósito: `alter type ... add value` não pode ser
+-- USADO na mesma transação em que é criado, então quem consome 'athlete' entra
+-- na migração seguinte.
+alter type user_role add value if not exists 'athlete';
