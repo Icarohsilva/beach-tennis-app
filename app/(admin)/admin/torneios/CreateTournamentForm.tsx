@@ -24,10 +24,30 @@ const PARTICIPANT_OPTIONS: { value: ParticipantType; label: string }[] = [
   { value: 'dupla_fixa', label: 'Dupla Fixa' },
   { value: 'individual', label: 'Individual' },
 ]
-const FORMAT_OPTIONS: { value: TournamentFormat; label: string; enabled: boolean }[] = [
-  { value: 'americano', label: 'Americano (Super N)', enabled: true },
-  { value: 'round_robin', label: 'Round-robin (em breve)', enabled: false },
-  { value: 'eliminatoria', label: 'Eliminatória (em breve)', enabled: false },
+// A lista espelha as chaves de lib/torneios/formats.ts: oferecer aqui um
+// formato que o motor não sabe gerar dá "formato não suportado" só na hora de
+// gerar a chave, com o torneio já divulgado e as inscrições abertas.
+const FORMAT_OPTIONS: { value: TournamentFormat; label: string; hint: string }[] = [
+  {
+    value: 'americano',
+    label: 'Americano (Super N)',
+    hint: 'Todos jogam com todos, trocando de parceiro a cada rodada. Classifica por saldo de games.',
+  },
+  {
+    value: 'round_robin',
+    label: 'Todos contra todos',
+    hint: 'A mesma dupla o torneio inteiro, enfrentando cada adversário uma vez.',
+  },
+  {
+    value: 'eliminatoria',
+    label: 'Eliminatória (mata-mata)',
+    hint: 'Quem perde está fora. A chave sai completa, com cabeças-de-chave e bye.',
+  },
+  {
+    value: 'grupos',
+    label: 'Grupos + mata-mata',
+    hint: 'Primeira fase em grupos, e os melhores decidem no mata-mata. Todo mundo joga várias vezes antes de arriscar a eliminação.',
+  },
 ]
 
 const selectClass =
@@ -47,6 +67,8 @@ export function CreateTournamentForm() {
   const [entryPrice, setEntryPrice] = useState<string>('')
   const [pixKey, setPixKey] = useState<string>('')
   const [maxPlayers, setMaxPlayers] = useState<string>('')
+  const [groupCount, setGroupCount] = useState(2)
+  const [advancePerGroup, setAdvancePerGroup] = useState(2)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -106,6 +128,8 @@ export function CreateTournamentForm() {
         entry_price_cents: entryPriceCents,
         pix_key: pixKey.trim() || null,
         max_players: maxPlayersValue,
+        group_count: groupCount,
+        advance_per_group: advancePerGroup,
       })
       if (result.error) setError(result.error)
       else {
@@ -160,10 +184,49 @@ export function CreateTournamentForm() {
         <label className="text-sm font-medium text-slate-300">Formato</label>
         <select value={format} onChange={(e) => setFormat(e.target.value as TournamentFormat)} className={selectClass}>
           {FORMAT_OPTIONS.map((f) => (
-            <option key={f.value} value={f.value} disabled={!f.enabled}>{f.label}</option>
+            <option key={f.value} value={f.value}>{f.label}</option>
           ))}
         </select>
+        <p className="text-xs text-slate-400">
+          {FORMAT_OPTIONS.find((f) => f.value === format)?.hint}
+        </p>
       </div>
+
+      {/* Configuração que só existe no formato de grupos — some nos outros para
+          não sugerir um grupo que o torneio não tem. */}
+      {format === 'grupos' && (
+        <div className="grid gap-3 rounded-lg border border-surface-border bg-surface-card/60 p-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-300">Grupos</label>
+            <select
+              value={groupCount}
+              onChange={(e) => setGroupCount(Number(e.target.value))}
+              className={selectClass}
+            >
+              {[2, 3, 4, 5, 6, 8].map((n) => (
+                <option key={n} value={n}>{n} grupos</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-slate-300">Passam por grupo</label>
+            <select
+              value={advancePerGroup}
+              onChange={(e) => setAdvancePerGroup(Number(e.target.value))}
+              className={selectClass}
+            >
+              {[1, 2, 3, 4].map((n) => (
+                <option key={n} value={n}>{n === 1 ? 'Só o líder' : `Os ${n} primeiros`}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-400 sm:col-span-2">
+            Precisa de ao menos {groupCount * 2} inscritos. O mata-mata com{' '}
+            {groupCount * advancePerGroup} classificados sai sozinho quando o último jogo
+            da fase de grupos for confirmado.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-slate-300">Games por set</label>

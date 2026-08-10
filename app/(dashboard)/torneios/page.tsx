@@ -1,32 +1,52 @@
 // app/(dashboard)/torneios/page.tsx
-// Aba "Arena": reúne o Day Use (quadra avulsa) e os Torneios da academia.
-// Substituiu a antiga aba "Aulas" — a agenda de aulas passou para a Home.
+// Aba "Arena": os torneios da academia e o Day Use (quadra avulsa).
+//
+// A vitrine é multimodalidade: as abas de esporte nascem do que a academia
+// realmente publicou, e o vocabulário de cada card (dupla/atleta/time, escala de
+// nível, nome do formato) sai de lib/torneios/sportProfile. Filtro, busca e
+// ordem moram na URL e são resolvidos no servidor por lib/torneios/browse — a
+// página só desenha.
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Sun, Trophy, ArrowRight } from 'lucide-react'
+import { Sun, Trophy, SearchX } from 'lucide-react'
 import { createClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
+import { TournamentFilters } from '@/features/torneios/TournamentFilters'
+import { ArenaHero } from '@/features/torneios/ArenaHero'
 import { NextMatchCard } from '@/features/torneios/NextMatchCard'
 import { getStudentTournamentHome } from '@/features/torneios/studentHome'
+import { getTournamentBrowse } from '@/features/torneios/browseQueries'
 import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
-import type { Tournament, DayUseSlot } from '@/types'
+import {
+  filterTournaments,
+  groupByPhase,
+  levelFacets,
+  phaseCounts,
+  sportFacets,
+  summarize,
+  type Phase,
+} from '@/lib/torneios/browse'
+import type { DayUseSlot } from '@/types'
 
-const LEVEL_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos os níveis' },
-  { value: 'iniciante', label: 'Iniciante' },
-  { value: 'D', label: 'Nível D' },
-  { value: 'C', label: 'Nível C' },
-  { value: 'B', label: 'Nível B' },
-  { value: 'A', label: 'Nível A' },
-]
+const PHASE_TITLES: Record<Phase, string> = {
+  live: 'Acontecendo agora',
+  open: 'Inscrições abertas',
+  past: 'Já aconteceram',
+}
 
 interface PageProps {
-  searchParams: { nivel?: string }
+  // `nivel` mantém o nome que a lista antiga já usava, então link salvo continua
+  // abrindo o mesmo recorte.
+  searchParams: {
+    busca?: string
+    esporte?: string
+    nivel?: string
+    quando?: string
+  }
 }
 
 export default async function ArenaPage({ searchParams }: PageProps) {
@@ -35,19 +55,10 @@ export default async function ArenaPage({ searchParams }: PageProps) {
   if (!user) redirect('/login')
 
   const orgId = await getActiveOrgId()
-  const nivel = searchParams.nivel ?? ''
   const today = new Date().toISOString().slice(0, 10)
 
-  let tournamentQuery = supabase
-    .from('tournaments')
-    .select('*')
-    .eq('organization_id', orgId)
-    .neq('status', 'draft')
-    .order('date', { ascending: true })
-  if (nivel) tournamentQuery = tournamentQuery.eq('level', nivel)
-
-  const [{ data: tournamentsData }, { data: dayUseData }, tournamentHome] = await Promise.all([
-    tournamentQuery,
+  const [browse, dayUseResult, tournamentHome] = await Promise.all([
+    getTournamentBrowse({ orgId, userId: user.id }),
     supabase
       .from('dayuse_slots')
       .select('id, court, date, start_time, end_time, capacity, notes')
@@ -60,38 +71,74 @@ export default async function ArenaPage({ searchParams }: PageProps) {
     getStudentTournamentHome({ orgId, userId: user.id }),
   ])
 
-  const tournaments = (tournamentsData ?? []) as Tournament[]
-  const dayUseSlots = (dayUseData ?? []) as Pick<
+  const dayUseSlots = (dayUseResult.data ?? []) as Pick<
     DayUseSlot,
     'id' | 'court' | 'date' | 'start_time' | 'end_time' | 'capacity' | 'notes'
   >[]
-  const { myTournaments, myTournamentIds, nextMatch } = tournamentHome
-  const otherTournaments = tournaments.filter((t) => !myTournamentIds.has(t.id))
+  const { tournaments, championById } = browse
+  const { nextMatch } = tournamentHome
+
+  // Filtros vindos da URL. `esporte` só vale se a academia tiver torneio nele —
+  // link velho ou parâmetro inventado não pode esvaziar a página sem explicação.
+  const sports = sportFacets(tournaments)
+  const sport = sports.some((s) => s.value === searchParams.esporte) ? searchParams.esporte! : ''
+  const q = (searchParams.busca ?? '').slice(0, 80)
+  const level = searchParams.nivel ?? ''
+  const phase = searchParams.quando ?? ''
+
+  // As facetas de nível seguem o esporte aberto: dentro de uma modalidade os
+  // níveis mudam de nome (e de existência).
+  const inSport = sport ? tournaments.filter((t) => t.sport === sport) : tournaments
+  const levels = levelFacets(inSport, sport || undefined)
+  const counts = phaseCounts(inSport, today)
+
+  const visible = filterTournaments(tournaments, { q, sport, level, phase }, today)
+  const sections = groupByPhase(visible, today)
+  const summary = summarize(tournaments, today)
+
+  const hasFilter = !!(q || sport || level || (phase && phase !== 'todos'))
+  const sportsLabel =
+    sports.length > 0 && sports.length <= 3
+      ? sports.map((s) => s.label).join(', ')
+      : sports.length > 3
+        ? `${sports.length} modalidades`
+        : null
+
+  const phaseOptions = [
+    { key: 'todos' as const, label: 'Todos', count: counts.todos },
+    ...(counts.live > 0 ? [{ key: 'live' as const, label: 'Ao vivo', count: counts.live }] : []),
+    { key: 'open' as const, label: 'Abertos', count: counts.open },
+    ...(counts.meus > 0 ? [{ key: 'meus' as const, label: 'Meus', count: counts.meus }] : []),
+    ...(counts.past > 0 ? [{ key: 'past' as const, label: 'Encerrados', count: counts.past }] : []),
+  ]
+
+  // A cascata de entrada é contínua entre as seções: o card 3 da segunda seção
+  // continua de onde a primeira parou, em vez de reiniciar o atraso.
+  let cardStep = 0
 
   return (
-    <div className="space-y-6 p-4 pb-24">
-      {/* Cabeçalho de marca da aba */}
+    <div className="space-y-5 p-4 pb-24">
       <Reveal step={0}>
-        <div className="sheen relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-brand-500 via-brand-700 to-brand-900 p-5 shadow-[0_24px_60px_-30px_rgb(var(--brand-600)/0.95)]">
-          <div
-            aria-hidden
-            className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgb(255_255_255/0.5)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.5)_1px,transparent_1px)] [background-size:26px_26px]"
-          />
-          <div
-            aria-hidden
-            className="absolute -right-16 -top-20 h-52 w-52 rounded-full bg-white/20 blur-3xl"
-          />
-          <div className="relative">
-            <h1 className="text-2xl font-extrabold text-white">Arena</h1>
-            <p className="mt-1 text-sm font-medium text-white/85">
-              Torneios da sua academia e quadra avulsa (Day Use).
-            </p>
-          </div>
-        </div>
+        <ArenaHero
+          summary={summary}
+          sportsLabel={sportsLabel}
+          playerId={user.id}
+          // Só oferece o retrospecto para quem já entrou em algum torneio;
+          // numa conta nova a página abriria vazia.
+          hasHistory={tournaments.some((t) => t.isMine)}
+        />
       </Reveal>
 
-      {/* ── Day Use ─────────────────────────────────────────────────────────── */}
-      <Reveal step={1} as="section">
+      {nextMatch && (
+        <Reveal step={1}>
+          <NextMatchCard match={nextMatch} />
+        </Reveal>
+      )}
+
+      {/* ── Day Use ─────────────────────────────────────────────────────────
+          Faixa horizontal: antes era uma pilha de até seis cards que empurrava
+          os torneios para fora da primeira tela. */}
+      <Reveal step={2} as="section">
         <SectionHeader title="Day Use" href="/agendar/dayuse" linkLabel="reservar" />
         {dayUseSlots.length === 0 ? (
           <EmptyState
@@ -100,117 +147,95 @@ export default async function ArenaPage({ searchParams }: PageProps) {
             description="O professor divulga os horários de day use com antecedência."
           />
         ) : (
-          <div className="space-y-2">
-            {dayUseSlots.map((slot) => (
-              <Link key={slot.id} href="/agendar/dayuse" className="group block">
-                <Card glass interactive>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
-                        <Sun className="h-5 w-5" />
+          <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <ul className="flex w-max gap-2">
+              {dayUseSlots.map((slot) => (
+                <li key={slot.id} className="w-[190px] shrink-0">
+                  <Link href="/agendar/dayuse" className="group block h-full">
+                    <Card glass interactive className="h-full">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300">
+                        <Sun className="h-4 w-4" />
                       </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white">
-                          {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {formatDate(slot.date, "EEE, dd 'de' MMM")}
-                          {slot.notes ? ` · ${slot.notes}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="rounded-full border border-sky-700/50 bg-sky-900/40 px-2 py-0.5 text-xs text-sky-300">
+                      <p className="mt-2 text-sm font-semibold text-white">
+                        {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-400 first-letter:uppercase">
+                        {formatDate(slot.date, "EEE, dd 'de' MMM")}
+                      </p>
+                      <p className="mt-1.5 inline-flex rounded-full border border-sky-700/50 bg-sky-900/40 px-2 py-0.5 text-[11px] font-semibold text-sky-300">
                         Espaço {slot.court}
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-slate-400 transition-colors group-hover:text-brand-400" />
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            ))}
+                      </p>
+                    </Card>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </Reveal>
 
-      {/* ── Próximo confronto do aluno ──────────────────────────────────────── */}
-      {nextMatch && (
-        <Reveal step={2}>
-          <NextMatchCard match={nextMatch} />
-        </Reveal>
-      )}
-
-      {/* ── Meus torneios ───────────────────────────────────────────────────── */}
-      {myTournaments.length > 0 && (
-        <Reveal step={2} as="section">
-          <SectionHeader title="Meus torneios" />
-          <div className="space-y-2">
-            {myTournaments.map((t) => (
-              <Link key={t.id} href={`/torneios/${t.id}`} className="group block">
-                <Card glass accent interactive>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
-                        <Trophy className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{t.name}</p>
-                        <p className="mt-0.5 text-xs text-slate-400">
-                          {formatDate(t.date, "dd 'de' MMMM")}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant={t.status === 'in_progress' ? 'warning' : 'success'}>
-                      {t.status === 'in_progress' ? 'Em andamento' : 'Inscrito'}
-                    </Badge>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </Reveal>
-      )}
-
-      {/* ── Torneios da academia ────────────────────────────────────────────── */}
-      <Reveal step={3} as="section">
+      {/* ── Torneios ────────────────────────────────────────────────────── */}
+      <Reveal step={3} as="section" className="space-y-4">
         <SectionHeader title="Torneios" />
 
-        <div className="mb-3 flex flex-wrap gap-2">
-          {LEVEL_OPTIONS.map((opt) => {
-            const isActive = nivel === opt.value
-            const href = opt.value ? `/torneios?nivel=${opt.value}` : '/torneios'
-            return (
-              <Link
-                key={opt.value}
-                href={href}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  isActive
-                    ? 'bg-brand-600 text-white'
-                    : 'border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:border-brand-600/50 hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </Link>
-            )
-          })}
-        </div>
-
-        {otherTournaments.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400">
-            {myTournaments.length > 0
-              ? 'Nenhum outro torneio disponível no momento.'
-              : 'Nenhum torneio disponível no momento.'}
-          </p>
+        {tournaments.length === 0 ? (
+          <EmptyState
+            icon={Trophy}
+            title="Nenhum torneio por aqui ainda"
+            description="Quando a academia abrir um torneio, ele aparece nesta aba com as vagas em tempo real."
+          />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {otherTournaments.map((tournament) => (
-              <TournamentCard
-                key={tournament.id}
-                tournament={tournament}
-                href={`/torneios/${tournament.id}`}
+          <>
+            <TournamentFilters
+              sports={sports}
+              levels={levels}
+              phases={phaseOptions}
+              active={{ q, sport, level, phase }}
+            />
+
+            {sections.length === 0 ? (
+              <EmptyState
+                icon={SearchX}
+                title="Nada encontrado com esses filtros"
+                description={
+                  hasFilter
+                    ? 'Tente outra modalidade, outro nível ou limpe a busca.'
+                    : 'Nenhum torneio disponível no momento.'
+                }
+                ctaHref="/torneios"
+                ctaLabel="Limpar filtros"
               />
-            ))}
-          </div>
+            ) : (
+              <div className="space-y-6">
+                {sections.map((section) => (
+                  <div key={section.phase}>
+                    <h3 className="mb-2.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                      {section.phase === 'live' && (
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-400" />
+                        </span>
+                      )}
+                      {PHASE_TITLES[section.phase]}
+                      <span className="text-slate-600">{section.items.length}</span>
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {section.items.map((t) => (
+                        <TournamentCard
+                          key={t.id}
+                          tournament={t}
+                          href={`/torneios/${t.id}`}
+                          phase={section.phase}
+                          champion={championById[t.id]}
+                          step={cardStep++}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </Reveal>
     </div>

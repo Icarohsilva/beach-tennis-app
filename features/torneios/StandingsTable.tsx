@@ -1,4 +1,5 @@
 // features/torneios/StandingsTable.tsx
+import Link from 'next/link'
 import type { StandingRow } from '@/types'
 import { PlayerAvatar } from './PlayerAvatar'
 import { cn } from '@/lib/utils/cn'
@@ -8,11 +9,21 @@ interface StandingsTableProps {
   nameById: Record<string, string>
   /** Destaca a linha deste jogador (ex: o aluno logado). */
   highlightId?: string
+  /**
+   * Nome vira link para o retrospecto do atleta. Fica de fora no painel do
+   * admin, que navega dentro do próprio painel.
+   */
+  linkToProfile?: boolean
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-export function StandingsTable({ rows, nameById, highlightId }: StandingsTableProps) {
+export function StandingsTable({
+  rows,
+  nameById,
+  highlightId,
+  linkToProfile,
+}: StandingsTableProps) {
   if (rows.length === 0) {
     return <p className="text-slate-400 text-sm">Sem classificação ainda.</p>
   }
@@ -56,7 +67,16 @@ export function StandingsTable({ rows, nameById, highlightId }: StandingsTablePr
                       tone={isMe ? 'brand' : i < 3 ? 'gold' : 'slate'}
                       size="sm"
                     />
-                    <span className="truncate font-medium text-white">{name}</span>
+                    {linkToProfile ? (
+                      <Link
+                        href={`/torneios/atleta/${r.playerId}`}
+                        className="truncate font-medium text-white underline-offset-2 hover:text-brand-300 hover:underline"
+                      >
+                        {name}
+                      </Link>
+                    ) : (
+                      <span className="truncate font-medium text-white">{name}</span>
+                    )}
                     {isMe && (
                       <span className="shrink-0 rounded bg-brand-500 px-1.5 py-0.5 text-[10px] font-bold text-surface">
                         Você

@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { MatchScoreCard } from '@/features/torneios/MatchScoreCard'
 import { StandingsTable } from '@/features/torneios/StandingsTable'
 import { GenerateBracketButton } from './GenerateBracketButton'
+import { SeedKnockoutButton } from './SeedKnockoutButton'
 import { CoverImageCard } from './CoverImageCard'
 import { CloseTournamentButton } from './CloseTournamentButton'
 import { WinnersCard } from './WinnersCard'
@@ -206,6 +207,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Ações</p>
             <div className="flex flex-wrap gap-2">
               {t.status === 'open' && <GenerateBracketButton tournamentId={t.id} />}
+              {/* Só faz sentido com a fase de grupos rolando: antes não há
+                  tabela, depois a chave já existe. */}
+              {t.format === 'grupos' && t.status === 'in_progress' && (
+                <SeedKnockoutButton tournamentId={t.id} />
+              )}
               {t.status !== 'finished' && (
                 <CloseTournamentButton tournamentId={t.id} />
               )}
