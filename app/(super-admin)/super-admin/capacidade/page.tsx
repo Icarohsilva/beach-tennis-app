@@ -30,6 +30,7 @@ import {
   type AlvoEscala,
 } from '@/lib/plataforma/projecaoEscala'
 import { ACHADOS, AUDITORIA_EM, contarPorStatus, type StatusAchado } from '@/lib/plataforma/diagnostico'
+import { formatDate } from '@/lib/utils/dateHelpers'
 
 const CORES: Record<Limite['severidade'], string> = {
   ok: 'text-emerald-400',
@@ -52,7 +53,9 @@ function textoProjecao(dias: number | null, data: string | null, historico: numb
   if (dias === null) return 'não cruza no ritmo atual'
   if (dias <= 0) return 'teto já cruzado'
   if (dias > 3650) return 'mais de 10 anos no ritmo atual'
-  return `~${formatarNumero(dias)} dias (por volta de ${new Date(data!).toLocaleDateString('pt-BR')})`
+  // formatDate: `dataEstimada` é data pura (yyyy-MM-dd) e `new Date(...)` a leria
+  // como meia-noite UTC, imprimindo o dia anterior em BRT.
+  return `~${formatarNumero(dias)} dias (por volta de ${formatDate(data!)})`
 }
 
 const STATUS_ROTULO: Record<StatusAchado, string> = {

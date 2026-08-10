@@ -10,6 +10,20 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // O app é mobile-first, mas o menor breakpoint do Tailwind é `sm` (640px):
+      // não havia como dizer "só em celular pequeno", e todo utilitário sem prefixo
+      // valia igual em 320px e em 639px. `xs` fica logo acima do iPhone 11 (375px),
+      // então `grid-cols-2 xs:grid-cols-3` dá 2 colunas no aparelho do dia a dia e
+      // 3 só onde caibam de fato.
+      screens: {
+        xs: '400px',
+      },
+      spacing: {
+        // `pb-safe` era usada na BottomNav e em modais bottom-sheet, mas nunca
+        // existiu: sem plugin e sem este token o Tailwind não emitia nada. Depende
+        // de `viewportFit: 'cover'` em app/layout.tsx para resolver > 0 no iOS.
+        safe: 'env(safe-area-inset-bottom)',
+      },
       colors: {
         brand: {
           50:  'rgb(var(--brand-50) / <alpha-value>)',

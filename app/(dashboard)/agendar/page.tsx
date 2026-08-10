@@ -15,7 +15,7 @@ import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { getMissedCheckinSettings } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
-import { brtToday } from '@/lib/utils/gridSchedule'
+import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import type { Class, ClassSession } from '@/types'
 
@@ -87,10 +87,10 @@ export default async function AgendarPage({
   }
 
   const classIds = availableClasses.map((c) => c.id)
-  const today = new Date().toISOString().slice(0, 10)
-  const in30 = new Date()
-  in30.setDate(in30.getDate() + 30)
-  const in30Str = in30.toISOString().slice(0, 10)
+  // Janela em BRT: com o UTC cru, depois das 21h o aluno perdia o dia de hoje da
+  // lista de aulas agendáveis.
+  const today = brtToday(new Date())
+  const in30Str = addDaysStr(today, 30)
 
   const adminClient = createAdminClient()
 

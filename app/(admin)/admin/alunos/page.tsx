@@ -3,17 +3,20 @@ import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Users } from 'lucide-react'
 import { computeProgress } from '@/lib/checkin/progress'
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import { getMonthWindow } from '@/lib/utils/monthWindow'
+import { chunk, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
 import type { Membership, StudentLevel } from '@/types'
 import { CriarAlunoButton } from './CriarAlunoButton'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
+import { cn } from '@/lib/utils/cn'
 
 const LEVEL_ORDER: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -21,6 +24,8 @@ interface SearchParams {
   q?: string
   level?: string
   esporte?: string
+  /** 'inativos' mostra só os cadastros inativados. Ausente = só os ativos. */
+  situacao?: string
 }
 
 interface Props {
@@ -38,6 +43,9 @@ export default async function AlunosPage({ searchParams }: Props) {
   const levelFilter = searchParams.level ?? ''
   const orgSports = await getOrgSports(orgId)
   const sportFilter = orgSports.includes(searchParams.esporte ?? '') ? searchParams.esporte! : ''
+  // Inativos são exceção: ficam fora por padrão e têm uma visão própria, em vez de
+  // misturados com apagado visual na lista de todo dia.
+  const showArchived = searchParams.situacao === 'inativos'
 
   // Campos por-academia vêm da membership da academia ativa (não de profiles):
   // um aluno multi-vínculo só aparece nesta lista se tiver membership nesta org,
@@ -46,10 +54,16 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
+
+  // Uma visão ou a outra, nunca as duas juntas: cadastro inativo apagadinho no meio
+  // da lista de todo dia é convite a erro na chamada e na cobrança.
+  dbQuery = showArchived
+    ? dbQuery.not('archived_at', 'is', null)
+    : dbQuery.is('archived_at', null)
 
   if (query) {
     dbQuery = dbQuery.ilike('profiles.full_name', `%${query}%`)
@@ -79,6 +93,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     credits_balance: Membership['credits_balance']
     pending_partner: Membership['pending_partner']
     monthly_checkin_target: number
+    archived_at: string | null
   }
 
   const students: StudentRow[] = (
@@ -94,6 +109,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       credits_balance: number
       pending_partner: Membership['pending_partner']
       monthly_checkin_target: number | null
+      archived_at: string | null
       profiles: { full_name: string } | { full_name: string }[] | null
     }[]
   )
@@ -112,6 +128,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         credits_balance: m.credits_balance,
         pending_partner: m.pending_partner,
         monthly_checkin_target: m.monthly_checkin_target ?? 0,
+        archived_at: m.archived_at,
       }
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
@@ -175,6 +192,23 @@ export default async function AlunosPage({ searchParams }: Props) {
     ])
   }
 
+  // Nome do responsável de cada dependente: "Dependente" solto não dizia de quem,
+  // e o admin tinha que abrir a ficha para descobrir. `parent_id` já vinha na
+  // query acima e nunca era usado.
+  const parentIds = Array.from(
+    new Set(students.filter((s) => s.is_dependent && s.parent_id).map((s) => s.parent_id!)),
+  )
+  const parentNameById = new Map<string, string>()
+  for (const ids of chunk(parentIds, IN_CHUNK_SIZE)) {
+    const { data: parentsRaw } = await adminClient
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', ids)
+    for (const p of (parentsRaw ?? []) as { id: string; full_name: string }[]) {
+      parentNameById.set(p.id, p.full_name)
+    }
+  }
+
   // Meta padrão da academia para quem não tem meta própria — mesma regra da ficha do
   // aluno e do Controle Wellhub, senão o card mostraria "3 / 0".
   const orgDefaultTarget =
@@ -184,16 +218,60 @@ export default async function AlunosPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Alunos</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">{students.length} alunos</span>
-          <CriarAlunoButton orgSports={orgSports} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">
+          {showArchived ? 'Alunos inativos' : 'Alunos'}
+        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-400">
+            {students.length} {showArchived ? 'inativo' : 'aluno'}
+            {students.length !== 1 ? 's' : ''}
+          </span>
+          {!showArchived && <CriarAlunoButton orgSports={orgSports} />}
         </div>
+      </div>
+
+      {/* Alternância ativos/inativos. Preserva os filtros já aplicados: o admin que
+          buscou um nome e não achou quer justamente conferir se saiu da academia. */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Link
+          href={`/admin/alunos?${new URLSearchParams({
+            ...(query ? { q: query } : {}),
+            ...(levelFilter ? { level: levelFilter } : {}),
+            ...(sportFilter ? { esporte: sportFilter } : {}),
+          })}`}
+          className={
+            'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
+            (showArchived
+              ? 'border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:text-white'
+              : 'bg-brand-600 text-white')
+          }
+        >
+          Ativos
+        </Link>
+        <Link
+          href={`/admin/alunos?${new URLSearchParams({
+            situacao: 'inativos',
+            ...(query ? { q: query } : {}),
+            ...(levelFilter ? { level: levelFilter } : {}),
+            ...(sportFilter ? { esporte: sportFilter } : {}),
+          })}`}
+          className={
+            'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
+            (showArchived
+              ? 'bg-brand-600 text-white'
+              : 'border border-white/[0.08] bg-white/[0.04] text-slate-400 hover:text-white')
+          }
+        >
+          Inativos
+        </Link>
       </div>
 
       {/* Filters */}
       <form method="GET" className="flex flex-wrap gap-3 items-end">
+        {/* Sem isto, filtrar por nome dentro da visão de inativos jogaria o admin de
+            volta para a lista de ativos e o resultado pareceria "não existe". */}
+        {showArchived && <input type="hidden" name="situacao" value="inativos" />}
         <div className="flex-1 min-w-48">
           <label className="block text-xs text-slate-400 mb-1">Buscar por nome</label>
           <input
@@ -251,7 +329,15 @@ export default async function AlunosPage({ searchParams }: Props) {
 
       {/* Student list */}
       {students.length === 0 ? (
-        <EmptyState icon={Users} title="Nenhum aluno encontrado." description="Tente ajustar os filtros ou cadastre um novo aluno." />
+        <EmptyState
+          icon={Users}
+          title={showArchived ? 'Nenhum cadastro inativo.' : 'Nenhum aluno encontrado.'}
+          description={
+            showArchived
+              ? 'Alunos que saírem da academia aparecem aqui e podem ser reativados.'
+              : 'Tente ajustar os filtros ou cadastre um novo aluno.'
+          }
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {students.map((student) => {
@@ -273,8 +359,20 @@ export default async function AlunosPage({ searchParams }: Props) {
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="min-w-0">
                       <p className="text-white font-medium text-sm truncate">{student.full_name}</p>
+                      {student.archived_at && (
+                        <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                          Inativo desde {formatDate(student.archived_at)}
+                        </span>
+                      )}
                       {student.is_dependent && (
-                        <span className="text-xs text-slate-500">Dependente</span>
+                        // Nome do responsável em vez de "Dependente" solto: é o que
+                        // permite identificar de quem é a criança sem abrir a ficha.
+                        // Texto, não link — o card inteiro já é um <Link>.
+                        <span className="block truncate text-xs text-slate-500">
+                          {student.parent_id && parentNameById.get(student.parent_id)
+                            ? `Dependente de ${parentNameById.get(student.parent_id)}`
+                            : 'Dependente'}
+                        </span>
                       )}
                       {student.pending_partner && (
                         <span className="block text-xs text-yellow-400 mt-0.5">
@@ -298,14 +396,15 @@ export default async function AlunosPage({ searchParams }: Props) {
                   )}
 
                   <div className="space-y-1 text-xs text-slate-400">
-                    <div className="flex items-center justify-between">
-                      <span>Plano</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="shrink-0">Plano</span>
                       <span
-                        className={
+                        className={cn(
+                          'min-w-0 break-words text-right',
                           student.payment_type !== 'subscriber' || student.contract_active
                             ? 'text-green-400'
-                            : 'text-red-400'
-                        }
+                            : 'text-red-400',
+                        )}
                       >
                         {student.payment_type === 'subscriber'
                           ? (planNameMap.get(student.id) ?? 'Mensalista (sem plano)')
@@ -314,21 +413,22 @@ export default async function AlunosPage({ searchParams }: Props) {
                       </span>
                     </div>
                     {student.partner && (
-                      <div className="flex items-center justify-between">
-                        <span>Parceiro</span>
-                        <span className="text-brand-500">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="shrink-0">Parceiro</span>
+                        <span className="shrink-0 text-brand-500">
                           {student.partner === 'wellhub' ? 'Wellhub' : 'TotalPass'}
                         </span>
                       </div>
                     )}
                     {student.partner && checkinProgress && (
                       <div className="pt-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span>Check-ins no mês</span>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="min-w-0 truncate">Check-ins no mês</span>
                           <span
-                            className={
-                              checkinProgress.remaining === 0 ? 'text-green-400' : 'text-white'
-                            }
+                            className={cn(
+                              'shrink-0',
+                              checkinProgress.remaining === 0 ? 'text-green-400' : 'text-white',
+                            )}
                           >
                             {checkinProgress.done} / {checkinProgress.target}
                           </span>
@@ -350,14 +450,19 @@ export default async function AlunosPage({ searchParams }: Props) {
                         )}
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span>Turmas fixas</span>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="shrink-0">Turmas fixas</span>
                       <span className="text-white">{enrollCount}</span>
                     </div>
                     {student.payment_type === 'subscriber' && (
-                      <div className="flex items-center justify-between">
-                        <span>Créditos</span>
-                        <span className={student.credits_balance > 0 ? 'text-white' : 'text-slate-500'}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="shrink-0">Créditos</span>
+                        <span
+                          className={cn(
+                            'shrink-0',
+                            student.credits_balance > 0 ? 'text-white' : 'text-slate-500',
+                          )}
+                        >
                           {student.credits_balance}
                         </span>
                       </div>

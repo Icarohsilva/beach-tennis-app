@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { summarizeDebts, type DebtRow } from '@/lib/utils/debtRules'
+import { formatDate } from '@/lib/utils/dateHelpers'
 import { getDebtGraceDays } from './debtQueries'
 import { PayDebtButton } from './PayDebtButton'
 import { DebtReceiptUpload } from './DebtReceiptUpload'
@@ -14,9 +15,13 @@ const DAY_MS = 24 * 60 * 60 * 1000
 function fmt(amount: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
 }
+// formatDate, não `new Date(...)`: `sessionDate` é data pura (yyyy-MM-dd) e o
+// construtor a lê como meia-noite UTC — em BRT (UTC−3) isso volta 3h e a aula do
+// dia 01 era exibida como dia 31 do mês anterior. `formatDate` preserva o dia do
+// calendário para data pura e mantém o parse normal para timestamptz (createdAt).
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatDate(iso)
 }
 
 interface Props {

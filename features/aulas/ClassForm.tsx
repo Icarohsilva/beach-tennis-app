@@ -82,16 +82,21 @@ export function ClassForm({ orgSports }: { orgSports: string[] }) {
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        <div>
+      {/* 2 colunas em celular: o controle nativo `type="time"` do iOS tem largura
+          mínima intrínseca de ~95-110px que `w-full` não encolhe, então três deles
+          numa coluna de ~69px estouravam o card e davam rolagem horizontal na
+          página. Início e Fim ficam lado a lado (é como se leem) e Vagas ocupa a
+          linha de baixo. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        <div className="min-w-0">
           <label className="text-sm text-slate-400 block mb-1">Início *</label>
           <Input name="start_time" type="time" required />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="text-sm text-slate-400 block mb-1">Fim *</label>
           <Input name="end_time" type="time" required />
         </div>
-        <div>
+        <div className="col-span-2 min-w-0 sm:col-span-1">
           <label className="text-sm text-slate-400 block mb-1">Vagas *</label>
           <Input name="max_students" type="number" required min="1" max="20" defaultValue="8" />
         </div>

@@ -54,7 +54,7 @@ export function BottomNav({ isStudent = true }: BottomNavProps) {
   if (!isStudent) {
     return (
       <nav className="glass fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.07]">
-        <div className="flex items-center justify-around px-2 pb-safe">
+        <div className="flex items-center justify-around px-1 pb-safe xs:px-2">
           {VISITOR_NAV.map((item) => (
             <NavItem key={item.href} {...item} active={pathname.startsWith(item.href)} />
           ))}
@@ -89,11 +89,26 @@ export function BottomNav({ isStudent = true }: BottomNavProps) {
   )
 }
 
+// px menor e rótulo que não quebra: os 5 alvos somavam ~298px dos 320px de um
+// iPhone SE — cabia, mas com 22px de folga e sem nenhuma trava. Um rótulo mais
+// longo estourava a linha. `whitespace-nowrap` mantém cada item numa linha só e o
+// padding responsivo devolve a folga.
 function NavItem({ href, icon: Icon, label, active, dataTour }: { href: string; icon: typeof Home; label: string; active: boolean; dataTour?: string }) {
   return (
-    <Link href={href} data-tour={dataTour} className="flex flex-col items-center gap-0.5 py-2 px-3">
-      <Icon className={cn('h-5 w-5', active ? 'text-brand-500' : 'text-slate-500')} />
-      <span className={cn('text-[10px] font-medium', active ? 'text-brand-500' : 'text-slate-500')}>{label}</span>
+    <Link
+      href={href}
+      data-tour={dataTour}
+      className="flex min-w-0 flex-col items-center gap-0.5 py-2 px-2 xs:px-3"
+    >
+      <Icon className={cn('h-5 w-5 shrink-0', active ? 'text-brand-500' : 'text-slate-500')} />
+      <span
+        className={cn(
+          'whitespace-nowrap text-[10px] font-medium',
+          active ? 'text-brand-500' : 'text-slate-500',
+        )}
+      >
+        {label}
+      </span>
     </Link>
   )
 }

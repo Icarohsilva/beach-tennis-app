@@ -24,6 +24,18 @@ describe('formatDate', () => {
     expect(formatDate('2026-07-22', 'EEE')).toMatch(/^qua/i)
   })
 
+  // O mesmo defeito apareceu na lista de check-ins da ficha do aluno: um check-in
+  // gravado em 01/08 (data BRT correta, coluna `date`) era exibido como 31/07, e a
+  // academia lia isso como "a contagem do mês está pegando o mês passado".
+  it('primeiro dia do mês não vira o último dia do mês anterior', () => {
+    expect(formatDate('2026-08-01')).toBe('01/08/2026')
+    expect(formatDate('2026-03-01')).toBe('01/03/2026')
+  })
+
+  it('primeiro dia do ano não vira 31/12 do ano anterior', () => {
+    expect(formatDate('2027-01-01')).toBe('01/01/2027')
+  })
+
   it('respeita o formato customizado', () => {
     expect(formatDate('2026-07-28', 'dd/MM')).toBe('28/07')
     expect(formatDate('2026-07-28', "dd 'de' MMM")).toBe('28 de jul')

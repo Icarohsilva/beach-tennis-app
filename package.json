@@ -9,6 +9,8 @@
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:responsive": "playwright test tests/responsive.spec.ts",
+    "test:responsive:rotas": "playwright test tests/responsive-rotas.spec.ts",
     "gerar:video-instalacao": "node scripts/gerar-video-instalacao.mjs"
   },
   "dependencies": {

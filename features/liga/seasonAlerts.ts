@@ -8,6 +8,7 @@ import { seasonAlertKind, seasonAlertText } from '@/lib/liga/seasonAlert'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getLigaSettings } from './settings'
 import type { LigaDivision, LigaSeason } from '@/types'
+import { BRT_OFFSET } from '@/lib/utils/sessionTime'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -129,7 +130,9 @@ export async function sendSeasonEndAlerts(
     .select('user_id')
     .eq('organization_id', orgId)
     .eq('type', NOTIFICATION_TYPE)
-    .gte('created_at', `${brtToday(now)}T00:00:00.000Z`)
+    // −03:00, não Z: `brtToday` já é data BRT; ancorá-la em UTC fazia a janela
+    // "hoje" começar às 21h de ontem.
+    .gte('created_at', `${brtToday(now)}T00:00:00.000${BRT_OFFSET}`)
 
   const avisados = new Set(((jaAvisados ?? []) as { user_id: string }[]).map((n) => n.user_id))
   const novos = pending.filter((p) => !avisados.has(p.studentId))

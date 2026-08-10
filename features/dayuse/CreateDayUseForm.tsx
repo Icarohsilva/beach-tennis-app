@@ -46,16 +46,17 @@ export function CreateDayUseForm() {
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div>
+      {/* Ver ClassForm: dois `type="time"` não caberiam em colunas de ~69px. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="min-w-0">
           <label className="text-xs text-slate-400 block mb-1">Início</label>
           <Input name="start_time" type="time" required />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="text-xs text-slate-400 block mb-1">Fim</label>
           <Input name="end_time" type="time" required />
         </div>
-        <div>
+        <div className="col-span-2 min-w-0 sm:col-span-1">
           <label className="text-xs text-slate-400 block mb-1">Vagas</label>
           <Input name="capacity" type="number" min="1" max="20" defaultValue="8" required />
         </div>

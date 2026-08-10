@@ -55,7 +55,10 @@ export default async function HomePage() {
   const memberships = await getMemberships()
   if (!hasStudentAccess(memberships)) redirect('/explorar')
 
-  const today = new Date().toISOString().slice(0, 10)
+  // brtToday, não toISOString: a Vercel roda em UTC, então das 21h à meia-noite
+  // BRT o "hoje" cru já era amanhã — a agenda pulava o dia e o corte de
+  // `attendanceReport` tratava as aulas de amanhã como passadas.
+  const today = brtToday(new Date())
   const adminClient = createAdminClient()
 
   // Campos por-academia vêm da membership da academia ativa; identidade (full_name) de profiles.

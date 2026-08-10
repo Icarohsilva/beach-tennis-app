@@ -18,7 +18,14 @@ import * as Sentry from '@sentry/nextjs'
  */
 function makeClient(opts: {
   orgName?: string | null
-  memberships: Array<{ user_id: string; organization_id: string; role: string; contract_active: boolean }>
+  memberships: Array<{
+    user_id: string
+    organization_id: string
+    role: string
+    contract_active: boolean
+    /** Ausente = cadastro ativo (o padrão no banco é null). */
+    archived_at?: string | null
+  }>
 }) {
   const client = {
     from(table: string) {
@@ -46,10 +53,18 @@ function makeClient(opts: {
           filters.push([field, value])
           return builder
         }
+        // `.is(campo, null)` entra como filtro de igualdade contra null: assim
+        // remover o `.is('archived_at', null)` do código-fonte volta a incluir o
+        // aluno inativado e o teste falha.
+        builder.is = (field: string, value: unknown) => {
+          filters.push([field, value])
+          return builder
+        }
         builder.then = (resolve: (v: { data: unknown[] }) => void) => {
-          const filtered = opts.memberships.filter((m) =>
-            filters.every(([field, value]) => (m as Record<string, unknown>)[field] === value),
-          )
+          const filtered = opts.memberships.filter((m) => {
+            const row = { archived_at: null, ...m } as Record<string, unknown>
+            return filters.every(([field, value]) => row[field] === value)
+          })
           resolve({ data: filtered.map((m) => ({ user_id: m.user_id })) })
         }
         return builder
@@ -76,6 +91,15 @@ describe('notifyGridGenerated', () => {
         { user_id: 'aluno-outra-org', organization_id: 'org-2', role: 'student', contract_active: true },
         { user_id: 'admin-1', organization_id: 'org-1', role: 'admin', contract_active: true },
         { user_id: 'aluno-inativo', organization_id: 'org-1', role: 'student', contract_active: false },
+        // Nem quem teve o cadastro inativado na academia: avisar da grade alguém
+        // que saiu é convite a ele tentar agendar e bater na trava.
+        {
+          user_id: 'aluno-arquivado',
+          organization_id: 'org-1',
+          role: 'student',
+          contract_active: true,
+          archived_at: '2026-08-01T12:00:00Z',
+        },
       ],
     })
 
@@ -138,6 +162,15 @@ describe('notifyGridGenerated', () => {
       memberships: [
         { user_id: 'admin-1', organization_id: 'org-1', role: 'admin', contract_active: true },
         { user_id: 'aluno-inativo', organization_id: 'org-1', role: 'student', contract_active: false },
+        // Nem quem teve o cadastro inativado na academia: avisar da grade alguém
+        // que saiu é convite a ele tentar agendar e bater na trava.
+        {
+          user_id: 'aluno-arquivado',
+          organization_id: 'org-1',
+          role: 'student',
+          contract_active: true,
+          archived_at: '2026-08-01T12:00:00Z',
+        },
       ],
     })
 

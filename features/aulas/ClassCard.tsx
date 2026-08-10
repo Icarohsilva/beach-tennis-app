@@ -32,9 +32,13 @@ export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCa
             <p className="text-slate-400 text-xs mb-2 line-clamp-2">{c.description}</p>
           )}
 
-          <div className="flex items-center gap-3 text-xs text-slate-400">
-            <span>{DAY_NAMES[c.day_of_week]}</span>
-            <span>
+          {/* flex-wrap + whitespace-nowrap no par de horário: o ` – ` é oportunidade
+              de quebra, então em tela estreita "07:00 – 08:00" rachava em "07:00 –"
+              / "08:00" — a "data deformada" que a academia relatou. Agora a linha
+              quebra ENTRE os campos e cada horário fica inteiro. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+            <span className="whitespace-nowrap">{DAY_NAMES[c.day_of_week]}</span>
+            <span className="whitespace-nowrap">
               {formatTime(c.start_time)} – {formatTime(c.end_time)}
             </span>
             {/* Modalidade é rótulo: identifica a turma, não restringe quem entra. */}

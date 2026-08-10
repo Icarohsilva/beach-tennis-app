@@ -21,6 +21,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Bancada de responsividade (app/dev/): ferramenta de desenvolvimento, sem
+  // sessão. A dupla trava é de propósito — em produção este desvio não existe E a
+  // própria página responde notFound(), então nenhuma das duas metades sozinha
+  // expõe a rota.
+  if (process.env.NODE_ENV !== 'production' && pathname.startsWith('/dev/')) {
+    return NextResponse.next()
+  }
+
   // Public routes — pass through immediately
   if (
     pathname === '/' ||

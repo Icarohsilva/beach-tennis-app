@@ -31,6 +31,7 @@ import { sportChip } from '@/lib/torneios/sportProfile'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import type { BrowseTournament } from '@/lib/torneios/browse'
 import { cn } from '@/lib/utils/cn'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 interface PageProps {
   params: { slug: string }
@@ -81,7 +82,7 @@ export default async function EventoPage({ params }: PageProps) {
   if (!data) notFound()
 
   const { event, org, tournaments } = data
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
   const phase = eventPhase(event, today)
   const summary = summarizeEvent(tournaments)
   const ordered = sortEventTournaments(tournaments)

@@ -8,6 +8,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { fetchAllPages } from '@/lib/supabase/paginate'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import type { LigaDivision } from '@/types'
+import { BRT_OFFSET } from '@/lib/utils/sessionTime'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -83,6 +84,7 @@ export async function getOrgLigaOverview(
           .select('user_id, profiles:profiles!memberships_user_id_fkey!inner(full_name, phone)')
           .eq('organization_id', orgId)
           .eq('role', 'student')
+          .is('archived_at', null)
           .order('user_id', { ascending: true })
           .range(from, to),
       { label: 'liga/overview:memberships' },
@@ -113,7 +115,9 @@ export async function getOrgLigaOverview(
       .from('liga_medals')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
-      .gte('earned_at', `${desde(30)}T00:00:00.000Z`),
+      // −03:00, não Z: `desde()` devolve data de calendário BRT, e fixá-la em
+      // meia-noite UTC puxava as 3 últimas horas do dia anterior.
+      .gte('earned_at', `${desde(30)}T00:00:00.000${BRT_OFFSET}`),
   ])
 
   const memberRows = members

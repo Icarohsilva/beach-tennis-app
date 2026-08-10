@@ -10,6 +10,7 @@ import {
   rejectDebtReceipt,
 } from '@/features/financeiro/debtActions'
 import { ChargeButton } from './ChargeButton'
+import { formatDate } from '@/lib/utils/dateHelpers'
 
 const METHODS = [
   { value: 'dinheiro', label: 'Dinheiro' },
@@ -44,9 +45,12 @@ export interface DebtorRowProps {
 function fmt(amount: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
 }
+// formatDate, não `new Date(...)`: `sessionDate` é data pura (yyyy-MM-dd), lida
+// como meia-noite UTC e exibida em BRT voltava um dia. `formatDate` preserva o dia
+// do calendário e mantém o parse normal para timestamptz (createdAt).
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return formatDate(iso)
 }
 
 export function DebtorRow(props: DebtorRowProps) {

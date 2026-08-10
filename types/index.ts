@@ -174,6 +174,9 @@ export interface Membership {
   totalpass_id: string | null
   sports: string[] // esportes que a pessoa pratica NESTA academia; slugs de lib/arenas/sports.ts
   liga_opted_out: boolean // aluno escolheu não aparecer no ranking da Liga; continua pontuando
+  // Exclusão lógica por academia: null = ativo. Não confundir com contract_active,
+  // que é "assinatura ativa". Toda listagem de aluno filtra `archived_at is null`.
+  archived_at: string | null
   created_at: string
 }
 

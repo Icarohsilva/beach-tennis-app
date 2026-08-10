@@ -178,11 +178,13 @@ export function AgendarClient({
 
       {/* Action area */}
       {isEnrolled ? (
-        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
-          <div className="flex items-center gap-2">
+        // flex-wrap + gap: badge + data ("seg., 11/08") + "Sair desta aula" pediam
+        // ~240px dos 256px disponíveis, sem um pixel de folga entre os lados.
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 bg-surface-card border border-surface-border rounded-xl">
+          <div className="flex min-w-0 items-center gap-2">
             <Badge variant="success">Aluno fixo</Badge>
             {nextSession && (
-              <span className="text-xs text-slate-400">
+              <span className="whitespace-nowrap text-xs text-slate-400">
                 {formatDate(nextSession.session_date, "EEE, dd/MM")}
               </span>
             )}
@@ -191,7 +193,7 @@ export function AgendarClient({
             type="button"
             disabled={isPending}
             onClick={hasBooking && bookingId ? handleSkip : handleSkipNoBooking}
-            className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            className="shrink-0 text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
           >
             Sair desta aula
           </button>
@@ -244,13 +246,13 @@ export function AgendarClient({
           </p>
         </div>
       ) : hasBooking ? (
-        <div className="flex items-center justify-between px-3 py-2 bg-surface-card border border-surface-border border-l-[3px] border-l-brand-500 rounded-xl">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 bg-surface-card border border-surface-border border-l-[3px] border-l-brand-500 rounded-xl">
           <Badge variant="success">CONFIRMADO</Badge>
           <button
             type="button"
             disabled={isPending}
             onClick={handleCancel}
-            className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+            className="shrink-0 text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
           >
             Sair da aula
           </button>

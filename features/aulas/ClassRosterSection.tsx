@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getClassRoster } from './enrollmentRoster'
 import { SkipDateButton } from './SkipDateButton'
 import type { EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const STATUS_META: Record<EnrollmentStatus, { label: string; cls: string }> = {
   elegivel: { label: '✅ Elegível', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
@@ -27,7 +28,7 @@ export async function ClassRosterSection({ classId, orgId }: { classId: string; 
   // Próximas sessões geradas (scheduled, hoje em diante) desta turma. Consulta
   // direta reusando o adminClient/orgId já resolvidos aqui, em vez de disparar
   // um requireAdmin() (auth.getUser() + role query) redundante.
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
   const { data: upSessionsRaw } = await adminClient
     .from('class_sessions')
     .select('id, session_date')

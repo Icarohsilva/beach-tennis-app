@@ -208,7 +208,9 @@ export function LigaSettingsForm({ settings }: Props) {
             não distribuir elogio. O teto semanal limita quantos elogios seus ainda pontuam por
             semana; acima dele o elogio continua aparecendo, só não vale ponto.
           </p>
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          {/* 1 coluna em celular: três colunas davam ~69px cada, e estes rótulos
+              ("Teto semanal de elogios que pontuam") viravam 5 linhas empilhadas. */}
+          <div className="mt-3 grid grid-cols-1 gap-3 xs:grid-cols-3">
             <div className="space-y-1">
               <label className="text-xs text-slate-300">{FIELD_LABEL.kudosCap}</label>
               <Input type="number" min="0" value={kudosCap} onChange={(e) => setKudosCap(e.target.value)} />

@@ -142,7 +142,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         tourTargets={tourTargets}
         helpSlot={<HelpButton variant="admin" inline />}
       />
-      <main className="flex-1 p-6 mt-14 md:mt-0">
+      {/* p-4 em celular: o p-6 fixo cobrava 48px de padding horizontal, sobrando
+          272px de conteúdo em 320px — era um imposto sobre TODA tela do admin, e a
+          causa de metade dos estouros de tabela e de grade de 3 colunas. */}
+      <main className="min-w-0 flex-1 p-4 sm:p-6 mt-14 md:mt-0">
         <InstallGate manual="academia" />
         {isTrialing && (
           <div

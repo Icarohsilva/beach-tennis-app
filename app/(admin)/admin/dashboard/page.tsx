@@ -26,6 +26,7 @@ import { OccupancyPanel } from '@/features/painel/OccupancyPanel'
 import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 export default async function AdminDashboardPage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -33,7 +34,7 @@ export default async function AdminDashboardPage() {
   const orgId = await getCurrentOrgId()
   const staff = await getStaffContext()
   const isOwner = staff?.isOwner ?? false
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
   const [
     { count: activeStudents },
@@ -46,7 +47,7 @@ export default async function AdminDashboardPage() {
   ] = await Promise.all([
     // Alunos ativos é por-academia: conta memberships desta org (não profiles,
     // que só reflete a academia padrão do aluno multi-vínculo).
-    adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).eq('organization_id', orgId),
+    adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).is('archived_at', null).eq('organization_id', orgId),
     adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled').eq('organization_id', orgId),
     adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
     adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true).eq('organization_id', orgId),

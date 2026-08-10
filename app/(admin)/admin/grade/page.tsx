@@ -14,6 +14,7 @@ import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -44,7 +45,7 @@ export default async function GradePage() {
   const allClasses = (classes ?? []) as Class[]
 
   // Fetch today's sessions
-  const today = new Date().toISOString().slice(0, 10)
+  const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
   const { data: todaySessions } = await adminClient
     .from('class_sessions')
     .select('*, class:classes(name, level, type, start_time, end_time, max_students)')
@@ -112,9 +113,12 @@ export default async function GradePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Grade de Aulas</h1>
-        <div className="flex gap-2">
+      {/* flex-wrap: era o único header do admin sem ele. Os três botões somavam
+          ~316px contra 272px de conteúdo em 320px, e deformavam encostados no h1.
+          Mesmo padrão de /admin/torneios. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Grade de Aulas</h1>
+        <div className="flex flex-wrap items-center gap-2">
           <GenerateWeekButton />
           <Link href="/admin/grade/dayuse">
             <Button variant="secondary" size="sm">Day Use</Button>
@@ -190,7 +194,11 @@ export default async function GradePage() {
                         </div>
                       </div>
                       <p className="text-xs text-slate-400 mb-1">
-                        {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                        {/* nowrap: divide a linha com a modalidade, e o ` – ` é
+                            oportunidade de quebra — sem isto "07:00 – 08:00" racha. */}
+                        <span className="whitespace-nowrap">
+                          {formatTime(c.start_time)} – {formatTime(c.end_time)}
+                        </span>
                         {c.sport && <span className="ml-2 text-slate-300">{sportEmoji(c.sport)} {sportLabel(c.sport)}</span>}
                       </p>
 

@@ -42,6 +42,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#ea580c',
+  // viewport-fit=cover: sem ele env(safe-area-inset-*) resolve 0 e o `pb-safe` da
+  // BottomNav e dos modais bottom-sheet não tem efeito nenhum. Com ele, o conteúdo
+  // passa a poder ir até a borda, então quem é fixo no rodapé precisa do padding
+  // seguro — é o par que faz o indicador de home do iPhone não cobrir a navegação.
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

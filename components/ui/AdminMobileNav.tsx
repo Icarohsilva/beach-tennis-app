@@ -33,7 +33,10 @@ export function AdminMobileNav({
   return (
     <>
       {/* Fixed topbar — only visible on mobile */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-surface-card border-b border-surface-border md:hidden">
+      {/* Altura fixa h-12: o dropdown abaixo é posicionado em `top-12`, e com a
+          altura derivada do conteúdo (py-3 + ícone) a barra e o dropdown não
+          fechavam exatamente — sobrava uma costura de alguns pixels. */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex h-12 items-center justify-between gap-2 px-4 bg-surface-card border-b border-surface-border md:hidden">
         <span className="text-white font-semibold text-sm">Painel Admin</span>
         <div className="flex items-center gap-2">
           {helpSlot}

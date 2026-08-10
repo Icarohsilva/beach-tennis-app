@@ -27,6 +27,7 @@ import { hasStudentAccess } from '@/lib/org/activeOrg'
 import { cityFacets, parsePosition, rankArenas } from '@/lib/explorar/nearby'
 import type { BrowseTournament } from '@/lib/torneios/browse'
 import { cn } from '@/lib/utils/cn'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 /** Quantos torneios em destaque antes de virar rolagem infinita de card. */
 const MAX_TOURNAMENTS = 8
@@ -39,7 +40,8 @@ export default async function ExplorarPage({ searchParams }: PageProps) {
   const user = await getAuthUser()
   if (!user) redirect('/login')
 
-  const today = new Date().toISOString().slice(0, 10)
+  // BRT: com o UTC cru, depois das 21h os eventos de hoje saíam da descoberta.
+  const today = brtToday(new Date())
   const [{ arenas, tournaments }, memberships] = await Promise.all([
     getDiscoverData(today),
     getMemberships(),
@@ -107,7 +109,7 @@ export default async function ExplorarPage({ searchParams }: PageProps) {
           quando a posição já ordena a lista. */}
       {!position && cities.length > 1 && (
         <Reveal step={1}>
-          <div className="-mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="rail-fade -mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-2">
               <CityChip label="Todas" href="/explorar" active={!city} />
               {cities.map((c) => (

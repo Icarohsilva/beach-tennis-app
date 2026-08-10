@@ -100,9 +100,15 @@ export default async function SessionDetailPage({ params }: Props) {
   // §6) — mesma regra de acesso do resolveClassAccess, sem o eixo dívida (aqui
   // só decide se avisa/pede motivo, nunca bloqueia). `level`/`payment_type` só
   // importam para quem já está matriculado.
+  // Cadastro inativo NÃO é filtrado aqui de propósito. Este mapa serve duas coisas:
+  // os dados de quem já está na chamada e a lista de candidatos a adicionar. Inativar
+  // um aluno só cancela reserva FUTURA, então a chamada de uma aula passada continua
+  // (corretamente) listando quem saiu — e sem a linha dele no mapa o nível apareceria
+  // errado e `wouldOweDebt` viraria true à toa. Quem é filtrado é só o candidato,
+  // mais abaixo.
   const { data: allMemsRaw } = await adminClient
     .from('memberships')
-    .select('user_id, level, payment_type, partner, credits_balance')
+    .select('user_id, level, payment_type, partner, credits_balance, archived_at')
     .eq('organization_id', orgId)
     .eq('role', 'student')
 
@@ -111,6 +117,7 @@ export default async function SessionDetailPage({ params }: Props) {
     payment_type: Membership['payment_type']
     partner: CheckinPartner | null
     credits_balance: number
+    archived_at: string | null
   }>()
   for (const m of (allMemsRaw ?? []) as {
     user_id: string
@@ -118,12 +125,14 @@ export default async function SessionDetailPage({ params }: Props) {
     payment_type: Membership['payment_type']
     partner: CheckinPartner | null
     credits_balance: number
+    archived_at: string | null
   }[]) {
     memById.set(m.user_id, {
       level: m.level,
       payment_type: m.payment_type,
       partner: m.partner,
       credits_balance: m.credits_balance,
+      archived_at: m.archived_at,
     })
   }
 
@@ -235,7 +244,11 @@ export default async function SessionDetailPage({ params }: Props) {
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))
 
   // Alunos da academia que ainda NÃO estão nesta sessão (candidatos a adicionar).
-  const candidateIds = Array.from(memById.keys()).filter((id) => !studentIds.includes(id))
+  // Cadastro inativo fica fora: quem saiu da academia não deve poder ser adicionado
+  // a uma aula.
+  const candidateIds = Array.from(memById.entries())
+    .filter(([id, mem]) => !mem.archived_at && !studentIds.includes(id))
+    .map(([id]) => id)
 
   const { data: candidateProfiles } =
     candidateIds.length > 0
@@ -286,7 +299,11 @@ export default async function SessionDetailPage({ params }: Props) {
           {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
         </div>
         <p className="text-slate-400 text-sm">
-          {formatDate(typedSession.session_date)} · {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
+          {formatDate(typedSession.session_date)} ·{' '}
+          {/* nowrap: divide a linha com a data, e o ` – ` quebraria o horário. */}
+          <span className="whitespace-nowrap">
+            {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
+          </span>
         </p>
       </div>
 

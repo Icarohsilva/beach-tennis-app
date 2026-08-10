@@ -12,6 +12,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getWeekWindow, getMonthWindow, shiftWindow, type WindowKind } from '@/lib/utils/monthWindow'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { brtToday } from '@/lib/utils/gridSchedule'
 
 interface PageProps {
   searchParams: { periodo?: string; offset?: string }
@@ -24,7 +25,9 @@ export default async function RelatoriosPage({ searchParams }: PageProps) {
   const offset = Number.parseInt(searchParams.offset ?? '0', 10) || 0
 
   const now = new Date()
-  const today = now.toISOString().slice(0, 10)
+  // brtToday: as janelas abaixo (getWeekWindow/getMonthWindow) são BRT, e um
+  // "hoje" em UTC discordava delas nas últimas 3h do dia.
+  const today = brtToday(now)
   const current = kind === 'week' ? getWeekWindow(now) : getMonthWindow(now)
   const window = offset === 0 ? current : shiftWindow(current, kind, offset)
 

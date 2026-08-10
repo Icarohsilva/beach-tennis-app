@@ -249,6 +249,7 @@ export async function sendNotification(params: {
     .eq('organization_id', orgId)
     .eq('role', 'student')
     .eq('contract_active', true)
+    .is('archived_at', null)
 
   if (filterMode === 'by_level' && filterValue) {
     memQuery = memQuery.eq('level', filterValue as StudentLevel)

@@ -50,6 +50,10 @@ next-env.d.ts
 # playwright mcp session logs
 .playwright-mcp/
 
+# saida da suite de responsividade (screenshots e relatorio HTML)
+tests/.artifacts/
+playwright-report/
+
 # dev server logs
 devserver.log
 

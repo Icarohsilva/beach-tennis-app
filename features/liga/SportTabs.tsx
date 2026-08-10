@@ -16,7 +16,7 @@ export function SportTabs({ sports, active }: Props) {
   if (sports.length <= 1) return null
 
   return (
-    <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+    <div className="no-scrollbar rail-fade -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
       {sports.map((sport) => (
         <Link
           key={sport}
