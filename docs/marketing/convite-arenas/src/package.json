@@ -1,0 +1,16 @@
+{
+  "name": "arenahub-convite-arenas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kit do convite impresso e digital para prospecção de arenas",
+  "scripts": {
+    "build": "node build.js",
+    "verify": "node verify.js"
+  },
+  "dependencies": {
+    "jsqr": "^1.4.0",
+    "playwright": "^1.56.0",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4"
+  }
+}
