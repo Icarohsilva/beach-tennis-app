@@ -5,7 +5,7 @@
 // GPS não impede confirmar, só manda a confirmação para revisão do professor.
 //
 // A janela é avaliada pelo relógio do CLIENTE — o servidor roda em UTC e não
-// serve de referência para "abre às 18h", mesma razão do NextClassSpotlight.
+// serve de referência para "abre às 18h", mesma razão do SpotlightRow.
 
 import { useEffect, useState, useTransition } from 'react'
 import { Check, Clock, MapPin, ShieldCheck } from 'lucide-react'

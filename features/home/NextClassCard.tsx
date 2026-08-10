@@ -1,5 +1,4 @@
 // features/home/NextClassCard.tsx
-import Link from 'next/link'
 import { Clock, ArrowRight } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Countdown } from '@/components/ui/Countdown'
@@ -17,14 +16,19 @@ interface NextClassCardProps {
   capacity: number
   /** Reserva confirmada do aluno, ou uma aula que ele ainda pode entrar. */
   state: 'booked' | 'available'
-  href: string
   isToday: boolean
+  /** Abre a ficha da aula. É a mesma do dia na agenda — quem vai, entrar, sair. */
+  onOpen: () => void
 }
 
 /**
  * O card de topo da home: qual é a próxima aula e quanto falta para ela.
  * A contagem regressiva é o elemento principal — é a informação que o aluno
  * abre o app para ver.
+ *
+ * Botão e não link: "Ver aula" levava para /agendar, que é a grade inteira da
+ * academia — o aluno tinha de reencontrar ali a aula que o card acabou de
+ * mostrar. Abrir a ficha responde no lugar.
  */
 export function NextClassCard({
   className_,
@@ -34,15 +38,15 @@ export function NextClassCard({
   booked,
   capacity,
   state,
-  href,
   isToday,
+  onOpen,
 }: NextClassCardProps) {
   const startsAt = `${date}T${startTime}`
   const endsAt = `${date}T${endTime}`
   const spotsLeft = Math.max(capacity - booked, 0)
 
   return (
-    <Link href={href} className="group block">
+    <button type="button" onClick={onOpen} className="group block w-full text-left">
       <div className="glass relative overflow-hidden rounded-3xl border border-brand-500/30 p-5 shadow-[0_20px_50px_-30px_rgb(var(--brand-500)/0.9)] transition-transform duration-300 group-hover:-translate-y-0.5">
         {/* Brilho de fundo puxando a cor da academia para o canto do card. */}
         <div
@@ -108,6 +112,6 @@ export function NextClassCard({
           </div>
         </div>
       </div>
-    </Link>
+    </button>
   )
 }

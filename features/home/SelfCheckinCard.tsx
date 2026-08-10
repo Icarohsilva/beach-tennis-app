@@ -4,7 +4,7 @@
 // app na quadra e a ação precisa estar ali, não a dois toques de distância.
 //
 // A escolha da aula é do CLIENTE, pelo relógio do aluno — o servidor roda em
-// UTC e escolheria a aula errada (mesma razão do NextClassSpotlight).
+// UTC e escolheria a aula errada (mesma razão do SpotlightRow).
 
 import { useEffect, useState } from 'react'
 import { formatTime } from '@/lib/utils/dateHelpers'

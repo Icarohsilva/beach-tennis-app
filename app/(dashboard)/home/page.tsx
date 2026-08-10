@@ -12,7 +12,6 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import { addDaysISO } from '@/lib/utils/agenda'
 import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { HeroHeader } from '@/features/home/HeroHeader'
-import type { SpotlightCandidate } from '@/features/home/NextClassSpotlight'
 import { SpotlightRow } from '@/features/home/SpotlightRow'
 import { ArenaWeek } from '@/features/home/ArenaWeek'
 import { ArenaCalendar } from '@/features/home/ArenaCalendar'
@@ -371,25 +370,14 @@ export default async function HomePage() {
 
   // Destaque: as aulas do aluno vêm primeiro; sem nenhuma, oferece as que ainda
   // têm vaga. O card final é escolhido no cliente, pelo relógio do aluno.
+  //
+  // Vai a sessão INTEIRA, não um resumo: o card abre a mesma ficha da agenda, e
+  // ela precisa de quem vai, fila de espera e a reserva do aluno para poder
+  // oferecer entrar ou sair.
   const mySessions = agendaSessions.filter((s) => s.mine || s.fixed)
-  const spotlightCandidates: SpotlightCandidate[] = (
-    mySessions.length > 0
-      ? mySessions.map((s) => ({ ...s, state: 'booked' as const }))
-      : agendaSessions
-          .filter((s) => s.booked < s.capacity)
-          .map((s) => ({ ...s, state: 'available' as const }))
-  )
-    .slice(0, 6)
-    .map(({ id, className, date, start, end, booked, capacity, state }) => ({
-      id,
-      className,
-      date,
-      start,
-      end,
-      booked,
-      capacity,
-      state,
-    }))
+  const spotlightCandidates: AgendaSession[] = (
+    mySessions.length > 0 ? mySessions : agendaSessions.filter((s) => s.booked < s.capacity)
+  ).slice(0, 6)
 
   // ── Torneio e day use ─────────────────────────────────────────────────────
   // A agenda da arena não é só aula: a faixa da semana recebe a janela de 7
