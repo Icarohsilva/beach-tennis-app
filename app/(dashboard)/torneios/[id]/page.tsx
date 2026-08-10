@@ -341,7 +341,12 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       {standings.length > 0 && (
         <Reveal step={4} as="section">
           <SectionTitle icon={ListOrdered}>Classificação</SectionTitle>
-          <StandingsTable rows={standings} nameById={nameById} highlightId={user.id} />
+          <StandingsTable
+            rows={standings}
+            nameById={nameById}
+            highlightId={user.id}
+            linkToProfile
+          />
         </Reveal>
       )}
 

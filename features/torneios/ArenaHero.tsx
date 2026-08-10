@@ -4,6 +4,8 @@
 // O anterior era só um título sobre um degradê. Este responde, antes de qualquer
 // rolagem, as quatro perguntas com que o aluno abre a aba: tem algo rolando
 // agora? dá pra entrar em quê? sobrou vaga? eu estou em algum?
+import Link from 'next/link'
+import { BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import type { BrowseSummary } from '@/lib/torneios/browse'
 
@@ -11,9 +13,13 @@ interface ArenaHeroProps {
   summary: BrowseSummary
   /** Quantas modalidades a academia oferece — muda a frase de apoio. */
   sportsLabel: string | null
+  /** Id do aluno logado, para o atalho do próprio retrospecto. */
+  playerId?: string
+  /** Sem torneio jogado não há retrospecto para abrir. */
+  hasHistory?: boolean
 }
 
-export function ArenaHero({ summary, sportsLabel }: ArenaHeroProps) {
+export function ArenaHero({ summary, sportsLabel, playerId, hasHistory }: ArenaHeroProps) {
   const stats = [
     summary.live > 0 ? { key: 'live', value: summary.live, label: 'ao vivo', live: true } : null,
     { key: 'open', value: summary.open, label: 'com inscrição' },
@@ -36,6 +42,16 @@ export function ArenaHero({ summary, sportsLabel }: ArenaHeroProps) {
             ? `Torneios de ${sportsLabel} e quadra avulsa.`
             : 'Torneios da sua academia e quadra avulsa (Day Use).'}
         </p>
+
+        {playerId && hasHistory && (
+          <Link
+            href={`/torneios/atleta/${playerId}`}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+          >
+            <BarChart3 className="h-3.5 w-3.5" aria-hidden />
+            Meu retrospecto
+          </Link>
+        )}
 
         {stats.length > 0 && (
           <dl className="mt-4 flex flex-wrap gap-2">

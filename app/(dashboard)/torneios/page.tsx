@@ -119,7 +119,14 @@ export default async function ArenaPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-5 p-4 pb-24">
       <Reveal step={0}>
-        <ArenaHero summary={summary} sportsLabel={sportsLabel} />
+        <ArenaHero
+          summary={summary}
+          sportsLabel={sportsLabel}
+          playerId={user.id}
+          // Só oferece o retrospecto para quem já entrou em algum torneio;
+          // numa conta nova a página abriria vazia.
+          hasHistory={tournaments.some((t) => t.isMine)}
+        />
       </Reveal>
 
       {nextMatch && (

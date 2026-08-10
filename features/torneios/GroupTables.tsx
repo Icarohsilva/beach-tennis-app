@@ -4,6 +4,7 @@
 // Durante a primeira fase a pergunta do aluno não é "quem é o campeão", é "eu
 // passo?". Por isso o corte de classificação é desenhado: acima dele estão os
 // que avançam agora, e a faixa some quando o mata-mata já saiu.
+import Link from 'next/link'
 import { cn } from '@/lib/utils/cn'
 import type { GroupTable } from '@/lib/torneios/schedule/grupos'
 import { PlayerAvatar } from './PlayerAvatar'
@@ -90,9 +91,12 @@ export function GroupTables({
                             tone={isMe ? 'brand' : qualifies ? 'gold' : 'slate'}
                             size="sm"
                           />
-                          <span className="truncate text-xs font-medium text-white">
+                          <Link
+                            href={`/torneios/atleta/${row.playerId}`}
+                            className="truncate text-xs font-medium text-white underline-offset-2 hover:text-brand-300 hover:underline"
+                          >
                             {nameById[row.playerId] ?? 'Jogador'}
-                          </span>
+                          </Link>
                           {isMe && (
                             <span className="shrink-0 rounded bg-brand-500 px-1 py-0.5 text-[9px] font-bold text-surface">
                               Você
