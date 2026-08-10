@@ -30,6 +30,7 @@ import {
 } from '@/lib/torneios/formats'
 import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
 import { GroupTables } from '@/features/torneios/GroupTables'
+import { ParticipantModalProvider } from '@/features/torneios/ParticipantModal'
 import { roundLabel as bracketRoundLabel } from '@/lib/torneios/bracket'
 import { buildBracketColumns } from '@/lib/torneios/bracketView'
 import { competitorNoun } from '@/lib/torneios/sportProfile'
@@ -249,6 +250,9 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   })
 
   return (
+    // O provider guarda UM modal para a página inteira; as tabelas só pedem
+    // para abri-lo pelo id do inscrito.
+    <ParticipantModalProvider tournamentId={t.id}>
     <div className="space-y-5 p-4 pb-24">
       <Reveal step={0}>
         <TournamentHero
@@ -380,6 +384,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
         <PhotoGallery photos={photos} title="MURAL DO TORNEIO" />
       </Reveal>
     </div>
+    </ParticipantModalProvider>
   )
 }
 
