@@ -41,16 +41,23 @@ export function SubscriptionCard({ subscription, plan, creditsBalance }: Subscri
 
   return (
     <Card>
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="text-white font-semibold">{plan.name}</h3>
+      {/* Empilha em celular. Sem isso o nome do plano encostava direto no badge
+          "Aguardando pagamento" (os dois no min-content, zero folga); e só pôr
+          `flex-wrap` não resolve — com `flex-1` a base é 0, então o badge nunca sai da
+          linha e o nome era comprimido a ~60px, virando uma coluna de 5 linhas de uma
+          palavra cada. Aparece em /financeiro e /perfil. */}
+      <div className="mb-3 flex flex-col gap-2 xs:flex-row xs:items-start xs:justify-between xs:gap-3">
+        <div className="min-w-0">
+          <h3 className="text-white font-semibold break-words">{plan.name}</h3>
           {plan.description && (
             <p className="text-xs text-slate-400 mt-0.5">{plan.description}</p>
           )}
         </div>
-        <Badge variant={statusVariant(subscription.status)}>
-          {statusLabel(subscription.status)}
-        </Badge>
+        <span className="shrink-0">
+          <Badge variant={statusVariant(subscription.status)}>
+            {statusLabel(subscription.status)}
+          </Badge>
+        </span>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">

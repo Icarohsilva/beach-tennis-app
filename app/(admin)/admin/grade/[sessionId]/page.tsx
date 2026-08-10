@@ -286,7 +286,11 @@ export default async function SessionDetailPage({ params }: Props) {
           {cls.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
         </div>
         <p className="text-slate-400 text-sm">
-          {formatDate(typedSession.session_date)} · {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
+          {formatDate(typedSession.session_date)} ·{' '}
+          {/* nowrap: divide a linha com a data, e o ` – ` quebraria o horário. */}
+          <span className="whitespace-nowrap">
+            {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
+          </span>
         </p>
       </div>
 

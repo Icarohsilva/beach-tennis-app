@@ -149,7 +149,7 @@ export default async function ArenaPage({ searchParams }: PageProps) {
             description="O professor divulga os horários de day use com antecedência."
           />
         ) : (
-          <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="rail-fade -mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <ul className="flex w-max gap-2">
               {dayUseSlots.map((slot) => (
                 <li key={slot.id} className="w-[190px] shrink-0">

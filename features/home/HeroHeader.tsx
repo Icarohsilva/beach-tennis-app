@@ -35,20 +35,33 @@ export function HeroHeader({ name, stats }: { name: string; stats: HeroStat[] })
       <div className="relative">
         <GreetingLine name={name} />
 
-        <div className="mt-5 grid grid-cols-3 gap-2">
-          {stats.map((stat) => (
+        {/* 2 colunas em celular, 3 só a partir de `sm` (640px). Em 3 colunas a
+            pastilha tinha ~71px de caixa de texto num iPhone 11 e ~53px num SE — e o
+            rótulo mais longo ("CHECK-INS DO MÊS · WELLHUB") sozinho pede bem mais que
+            isso. Resultado: rótulo, número e dica se empilhavam colados, que é o
+            "texto em cima do outro" relatado. Três KPIs lado a lado só fazem sentido
+            em tela larga; até lá a terceira pastilha — a que carrega rótulo longo,
+            barra e dica — ocupa a linha inteira. */}
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {stats.map((stat, i) => (
             <div
               key={stat.label}
-              className="rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5 backdrop-blur-sm"
+              className={
+                'min-w-0 rounded-2xl border border-white/15 bg-white/10 px-2.5 py-2.5 backdrop-blur-sm xs:px-3' +
+                (i >= 2 ? ' col-span-2 sm:col-span-1' : '')
+              }
             >
-              <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/75">
+              {/* tracking contido + break-words: "Aulas/semana" é um token único (o
+                  navegador não quebra em "/"), e com tracking-[0.12em] media 87px
+                  numa caixa de 82px — transbordava a pastilha em 414px. */}
+              <p className="break-words text-[9px] font-bold uppercase tracking-wide text-white/75 xs:tracking-[0.1em]">
                 {stat.label}
               </p>
               <p className="mt-0.5 text-xl font-extrabold leading-none text-white">
                 {typeof stat.value === 'number' ? (
                   <AnimatedNumber value={stat.value} />
                 ) : (
-                  <span className="text-base">{stat.value}</span>
+                  <span className="break-words text-base">{stat.value}</span>
                 )}
               </p>
               {stat.progress !== undefined && (

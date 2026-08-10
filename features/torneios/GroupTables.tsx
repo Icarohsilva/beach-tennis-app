@@ -46,14 +46,18 @@ export function GroupTables({
               </p>
             </div>
 
-            <table className="w-full text-sm">
+            {/* table-fixed + max-w-0 no nome: em auto-layout o `truncate` do
+                ParticipantName obrigava a tabela a caber o nome inteiro, então as
+                reticências nunca apareciam e o `overflow-hidden` do card cortava a
+                coluna Saldo fora da tela. Mesmo defeito de StandingsTable. */}
+            <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="bg-surface text-[10px] uppercase tracking-wide text-slate-500">
                   <th className="w-8 px-2 py-1.5 text-center font-semibold">#</th>
                   <th className="px-2 py-1.5 text-left font-semibold">Jogador</th>
-                  <th className="px-1.5 py-1.5 text-center font-semibold" title="Jogos">J</th>
-                  <th className="px-1.5 py-1.5 text-center font-semibold" title="Vitórias">V</th>
-                  <th className="px-2 py-1.5 text-center font-semibold">Saldo</th>
+                  <th className="w-7 px-1 py-1.5 text-center font-semibold" title="Jogos">J</th>
+                  <th className="w-7 px-1 py-1.5 text-center font-semibold" title="Vitórias">V</th>
+                  <th className="w-12 px-2 py-1.5 text-center font-semibold">Saldo</th>
                 </tr>
               </thead>
               <tbody>
@@ -84,7 +88,7 @@ export function GroupTables({
                           {i + 1}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="max-w-0 px-2 py-1.5">
                         <div className="flex min-w-0 items-center gap-2">
                           <PlayerAvatar
                             name={nameById[row.playerId] ?? 'Jogador'}
@@ -103,8 +107,8 @@ export function GroupTables({
                           )}
                         </div>
                       </td>
-                      <td className="px-1.5 py-1.5 text-center text-xs text-slate-400">{row.played}</td>
-                      <td className="px-1.5 py-1.5 text-center text-xs font-semibold text-white">{row.wins}</td>
+                      <td className="px-1 py-1.5 text-center text-xs text-slate-400">{row.played}</td>
+                      <td className="px-1 py-1.5 text-center text-xs font-semibold text-white">{row.wins}</td>
                       <td
                         className={cn(
                           'px-2 py-1.5 text-center text-xs font-bold',

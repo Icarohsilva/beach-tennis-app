@@ -14,9 +14,11 @@ export function CheckinProgressCard({
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-white">Check-ins do mês · {label}</p>
-        <span className="text-sm text-slate-400">
+      {/* gap + shrink-0: "Check-ins do mês · TotalPass" pede ~190px e o contador
+          ~52px; sem folga entre os dois eles encostavam em tela estreita. */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="min-w-0 text-sm font-semibold text-white">Check-ins do mês · {label}</p>
+        <span className="shrink-0 whitespace-nowrap text-sm text-slate-400">
           {progress.done}
           {progress.target > 0 ? ` / ${progress.target}` : ''}
         </span>

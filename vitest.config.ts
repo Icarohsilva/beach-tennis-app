@@ -12,7 +12,9 @@ export default defineConfig({
     // Worktrees do git vivem em .claude/worktrees/ e são checkouts completos:
     // sem excluí-las, a suíte rodada da raiz executa também os testes de OUTRAS
     // branches, inflando a contagem e medindo código que não é o desta árvore.
-    exclude: [...configDefaults.exclude, '**/.claude/**'],
+    // tests/ é a suíte de responsividade do Playwright: o include padrão do vitest
+    // pega *.spec.ts, e ele quebraria tentando importar @playwright/test.
+    exclude: [...configDefaults.exclude, '**/.claude/**', 'tests/**'],
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, '.') },

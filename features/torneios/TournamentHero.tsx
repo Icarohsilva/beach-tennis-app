@@ -97,9 +97,16 @@ export function TournamentHero({
           </span>
         </div>
 
-        <h1 className="mt-2 text-2xl font-extrabold leading-tight text-white">{t.name}</h1>
+        <h1 className="mt-2 text-xl font-extrabold leading-tight text-white break-words xs:text-2xl">
+          {t.name}
+        </h1>
+        {/* "quarta-feira, 22 de setembro de 2026" pede ~275px em text-sm e quebrava
+            em 320px. Abaixo de 400px o formato encurta em vez de embolar. */}
         <p className="mt-1 text-sm font-medium text-white/85 first-letter:uppercase">
-          {formatDate(t.date, "EEEE, dd 'de' MMMM 'de' yyyy")}
+          <span className="xs:hidden">{formatDate(t.date, "EEE, dd/MM/yyyy")}</span>
+          <span className="hidden xs:inline">
+            {formatDate(t.date, "EEEE, dd 'de' MMMM 'de' yyyy")}
+          </span>
         </p>
 
         <ul className="mt-3 flex flex-wrap gap-1.5">

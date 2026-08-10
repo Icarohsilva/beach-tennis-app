@@ -159,18 +159,26 @@ export function SessionModal({
             <p className="mt-1 text-[10px] text-slate-400">até {session.end.slice(0, 5)}</p>
           </div>
           <div className="min-w-0 flex-1">
+            {/* "6 de 8 confirmados" (~130px) contra o badge de vagas (~62px) em
+                ~168px de espaço: os dois quebravam e o badge fragmentava. O texto
+                encurta em tela estreita e o badge nunca encolhe. */}
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1 text-xs text-slate-400">
-                <Clock className="h-3 w-3" />
-                {session.booked} de {session.capacity} confirmados
+              <span className="flex min-w-0 items-center gap-1 text-xs text-slate-400">
+                <Clock className="h-3 w-3 shrink-0" />
+                <span className="whitespace-nowrap">
+                  {session.booked} de {session.capacity}
+                  <span className="hidden xs:inline"> confirmados</span>
+                </span>
               </span>
-              {isFull ? (
-                <Badge variant="danger">Lotada</Badge>
-              ) : (
-                <Badge variant="success">
-                  {spotsLeft} {spotsLeft === 1 ? 'vaga' : 'vagas'}
-                </Badge>
-              )}
+              <span className="shrink-0">
+                {isFull ? (
+                  <Badge variant="danger">Lotada</Badge>
+                ) : (
+                  <Badge variant="success">
+                    {spotsLeft} {spotsLeft === 1 ? 'vaga' : 'vagas'}
+                  </Badge>
+                )}
+              </span>
             </div>
             <OccupancyBar booked={session.booked} capacity={session.capacity} className="mt-2" />
           </div>

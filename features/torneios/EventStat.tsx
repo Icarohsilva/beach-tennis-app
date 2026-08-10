@@ -13,11 +13,15 @@ interface EventStatProps {
 
 export function EventStat({ label, value, tone }: EventStatProps) {
   return (
-    <div className="rounded-2xl border border-white/[0.07] bg-surface-card p-3">
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</dt>
+    <div className="min-w-0 rounded-2xl border border-white/[0.07] bg-surface-card p-2.5 xs:p-3">
+      {/* tracking menor e quebra permitida: em grade de 3 colunas a caixa tem ~56px
+          em 320px, e "INSCRIÇÃO" com tracking-wider sozinho pede ~62px. */}
+      <dt className="break-words text-[10px] font-bold uppercase tracking-wide text-slate-400 xs:tracking-wider">
+        {label}
+      </dt>
       <dd
         className={cn(
-          'mt-1 text-2xl font-extrabold leading-none tabular-nums',
+          'mt-1 text-xl font-extrabold leading-none tabular-nums xs:text-2xl',
           tone === 'emerald' ? 'text-emerald-300' : tone === 'brand' ? 'text-brand-400' : 'text-white',
         )}
       >

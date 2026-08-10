@@ -152,7 +152,9 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
         />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {/* 1 coluna em celular: são os únicos StatCards com valor em moeda, e
+              "R$ 12.345,67" não cabe em meia tela sem quebrar dentro do número. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {/* Leva para Alunos, onde cada card mostra o progresso do mês do aluno. */}
             <StatCard
               label="Alunos de parceiro"

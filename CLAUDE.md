@@ -13,6 +13,9 @@ npm run test:run     # vitest single run (CI)
 
 # run a single test file
 npm run test:run -- lib/utils/creditRules.test.ts
+
+npm run test:responsive        # Playwright: 320/375/414px na bancada de fixtures
+npm run test:responsive:rotas  # o mesmo nas rotas reais (precisa de .env.local)
 ```
 
 ## Fluxo de trabalho (git)
@@ -122,6 +125,35 @@ Gradiente de marca: bg-gradient-to-br from-brand-600 to-brand-800 (headers/CTAs 
 ```
 
 UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge`, `Input`, `BottomNav`. Always use these rather than raw HTML elements for consistency.
+
+### Responsividade
+
+O app é usado em celular, e o piso é **320px** (iPhone SE), não 375. Há um breakpoint
+extra `xs: 400px` em [tailwind.config.ts](tailwind.config.ts) — os defaults do Tailwind
+começam em `sm: 640px`, então sem ele não havia como dizer "só em celular pequeno".
+`pb-safe` depende do par `spacing.safe` + `viewportFit: 'cover'` (em [app/layout.tsx](app/layout.tsx));
+os dois andam juntos, e sem o segundo `env(safe-area-inset-*)` resolve 0.
+
+Dois defeitos se repetem — vale conhecer os dois antes de escrever linha nova:
+
+1. **`flex justify-between` sem `gap-*` e sem `shrink-0` no chip da direita.** Os dois
+   filhos encolhem até o min-content e se encostam. Quando o lado esquerdo é longo,
+   empilhe (`flex-col xs:flex-row`) em vez de só `flex-wrap`: com `flex-1` a base é 0,
+   então o chip nunca sai da linha e o texto vira uma coluna de uma palavra por linha.
+2. **`truncate` em `<td>` de tabela auto-layout.** `truncate` implica `nowrap`, e o
+   texto inteiro passa a contar para a largura mínima da tabela: as reticências nunca
+   aparecem e um wrapper `overflow-hidden` amputa colunas em silêncio. Use
+   `table-fixed` + `max-w-0` na célula.
+
+`npm run test:responsive` mede isso em 320/375/414px sobre a bancada
+[app/dev/responsivo](app/dev/responsivo/page.tsx) (fixtures fixas, **sem** Supabase — roda
+em qualquer lugar). As asserções são três: nada estoura sem ser contido, rótulo de KPI
+não passa de 2 linhas e valor de KPI não quebra. As duas últimas existem porque medir
+estouro sozinho tem ponto cego: com quebra permitida, um rótulo em caixa estreita não
+transborda — ele viborneia em 5 linhas, que é o defeito de verdade. Os screenshots
+saem em `tests/.artifacts/bancada-<largura>px.png`. Ao mexer num componente da
+bancada, atualize a fixture: ela replica o layout real e um teste sobre marcação
+desatualizada passa sem medir nada.
 
 ### Planned but Not Yet Implemented
 

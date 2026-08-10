@@ -109,7 +109,7 @@ export default async function ExplorarPage({ searchParams }: PageProps) {
           quando a posição já ordena a lista. */}
       {!position && cities.length > 1 && (
         <Reveal step={1}>
-          <div className="-mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="rail-fade -mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex w-max gap-2">
               <CityChip label="Todas" href="/explorar" active={!city} />
               {cities.map((c) => (

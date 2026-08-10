@@ -78,14 +78,14 @@ export function DivisionRanking({
 
       {/* Pódio: os três primeiros ganham corpo, o resto é lista. */}
       {podium.length >= 3 && (
-        <ul className="mb-4 grid grid-cols-3 items-end gap-2">
+        <ul className="mb-4 grid grid-cols-3 items-end gap-1.5 xs:gap-2">
           {[podium[1], podium[0], podium[2]].map((e, i) => {
             const place = i === 1 ? 1 : i === 0 ? 2 : 3
             return (
               <li
                 key={e.studentId}
                 className={cn(
-                  'flex flex-col items-center gap-1 rounded-2xl border px-2 pb-2 pt-3 text-center',
+                  'flex min-w-0 flex-col items-center gap-1 rounded-2xl border px-1.5 pb-2 pt-3 text-center xs:px-2',
                   place === 1
                     ? 'border-yellow-400/40 bg-yellow-400/10 pt-4'
                     : 'border-surface-border bg-surface/50',

@@ -68,25 +68,33 @@ export function LigaHero({
       />
 
       <div className="relative">
-        <div className="flex items-start gap-3">
+        {/* Em 320px sobravam ~136px para dividir entre a divisão ("Diamante",
+            ~76px) e o bloco de pontos (4 dígitos em 30px, ~76px): eles se
+            encontravam no meio e a linha do esporte quebrava em 3-4 linhas. O bloco
+            de pontos ganha shrink-0 (não pode ser comprimido), a divisão truncate, e
+            a linha do esporte não quebra no meio de "1º de 12". */}
+        <div className="flex items-start gap-2 xs:gap-3">
           <div
             className={cn(
-              'flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-sm',
+              'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border backdrop-blur-sm xs:h-14 xs:w-14',
               theme.ring,
             )}
           >
-            <MedalIcon name={DIVISION_ICON[division]} className="h-7 w-7 text-white" />
+            <MedalIcon name={DIVISION_ICON[division]} className="h-6 w-6 text-white xs:h-7 xs:w-7" />
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-extrabold leading-tight text-white">{theme.label}</p>
+            <p className="truncate text-lg font-extrabold leading-tight text-white">{theme.label}</p>
             <p className={cn('text-xs', theme.accent)}>
-              {sportEmoji(sport)} {sportLabel(sport)} · {position}º de {divisionSize}
+              <span className="whitespace-nowrap">
+                {sportEmoji(sport)} {sportLabel(sport)}
+              </span>{' '}
+              · <span className="whitespace-nowrap">{position}º de {divisionSize}</span>
             </p>
           </div>
 
-          <div className="text-right">
-            <p className="text-3xl font-extrabold leading-none text-white">
+          <div className="shrink-0 text-right">
+            <p className="text-2xl font-extrabold leading-none text-white xs:text-3xl">
               <AnimatedNumber value={points} />
             </p>
             <p className={cn('text-[10px] font-bold uppercase tracking-[0.12em]', theme.accent)}>

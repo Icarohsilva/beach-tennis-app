@@ -92,16 +92,17 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        <div>
+      {/* Ver ClassForm: dois `type="time"` não caberiam em colunas de ~69px. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        <div className="min-w-0">
           <label className="text-sm text-slate-400 block mb-1">Início *</label>
           <Input name="start_time" type="time" required defaultValue={c.start_time} />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="text-sm text-slate-400 block mb-1">Fim *</label>
           <Input name="end_time" type="time" required defaultValue={c.end_time} />
         </div>
-        <div>
+        <div className="col-span-2 min-w-0 sm:col-span-1">
           <label className="text-sm text-slate-400 block mb-1">Vagas *</label>
           <Input name="max_students" type="number" required min="1" max="20" defaultValue={c.max_students} />
         </div>

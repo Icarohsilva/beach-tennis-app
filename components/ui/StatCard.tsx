@@ -54,7 +54,13 @@ export function StatCard({ label, value, hint, icon: Icon, suffix, step = 0, hre
         )}
       </div>
 
-      <p className="relative mt-1.5 text-3xl font-extrabold leading-none text-white">
+      {/* text-2xl em celular, 3xl a partir de 400px: em grade de 2 colunas a caixa
+          fica com ~98px em 320px, e "R$ 1.234,56" em 30px pede ~190px.
+          Deliberadamente SEM `break-words`: com ele o valor quebrava dentro do
+          número ("12.345," / "67"), que é pior que quebrar depois do "R$". Se ainda
+          não couber, a grade da página é que precisa de menos colunas — e é isso que
+          tests/responsive.spec.ts acusa. */}
+      <p className="relative mt-1.5 text-2xl font-extrabold leading-none text-white sm:text-3xl">
         {typeof value === 'number' ? <AnimatedNumber value={value} suffix={suffix} /> : value}
       </p>
 

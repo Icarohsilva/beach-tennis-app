@@ -117,7 +117,7 @@ export function TournamentFilters({ sports, levels, phases, active }: Tournament
           Só aparece quando há mais de uma: numa academia só de beach tennis a
           aba seria uma fileira de um botão sempre ligado. */}
       {sports.length > 1 && (
-        <div className="-mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="rail-fade -mx-4 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex w-max gap-2">
             <SportChip
               label="Todos"

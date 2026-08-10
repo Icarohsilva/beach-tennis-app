@@ -58,7 +58,7 @@ export function ArenaWeek({ todayISO, sessions, events }: ArenaWeekProps) {
   return (
     <div>
       {/* ── Faixa dos 7 dias ─────────────────────────────────────────────── */}
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div className="no-scrollbar rail-fade -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {days.map((date) => {
           const dayItems = [...(sessionsByDate.get(date) ?? []), ...(eventsByDate.get(date) ?? [])]
           const counts = countByKind(dayItems)
@@ -214,8 +214,13 @@ function SessionRow({
             className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-brand-400 to-brand-700"
           />
         )}
-        <div className="flex items-start gap-3">
-          <div className="w-12 shrink-0 text-center">
+        {/* Em 320px esta linha estourava: w-12 + dois gap-3 + coluna direita
+            (~90px) deixavam 98px para um meio que pedia ~122px (piso de 56px da
+            barra + emoji + contador). Em 375px a folga era de ~15px e evaporava
+            quando o badge dizia "Lotada" em vez de "Sua". Gaps e piso menores em
+            tela estreita, e o contador "6/8" — que a barra já mostra — some. */}
+        <div className="flex items-start gap-2 xs:gap-3">
+          <div className="w-11 shrink-0 text-center xs:w-12">
             <p className="text-sm font-extrabold leading-none text-white">
               {session.start.slice(0, 5)}
             </p>
@@ -235,7 +240,7 @@ function SessionRow({
                 booked={session.booked}
                 capacity={session.capacity}
                 step={index}
-                className="min-w-[3.5rem] flex-1"
+                className="min-w-[2.5rem] flex-1 xs:min-w-[3.5rem]"
               />
               {session.sport && (
                 <span className="shrink-0 text-[11px] text-slate-400">
@@ -245,7 +250,7 @@ function SessionRow({
                   <span className="hidden sm:inline"> {sportLabel(session.sport)}</span>
                 </span>
               )}
-              <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400">
+              <span className="hidden shrink-0 items-center gap-1 text-[11px] text-slate-400 xs:flex">
                 <Users className="h-3 w-3" />
                 {session.booked}/{session.capacity}
               </span>
@@ -261,9 +266,11 @@ function SessionRow({
             ) : (
               isFull && <Badge variant="danger">Lotada</Badge>
             )}
-            <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-500 to-brand-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm shadow-brand-600/30 transition-transform group-hover:scale-105">
-              {isMine ? 'Ver' : 'Ver / Entrar'}
-              <ArrowRight className="h-3 w-3" />
+            <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-brand-500 to-brand-600 px-2 py-1 text-[10px] font-bold text-white shadow-sm shadow-brand-600/30 transition-transform group-hover:scale-105 xs:px-2.5">
+              {/* "Ver / Entrar" custa ~90px de uma linha que não os tem em 320px. */}
+              {isMine ? 'Ver' : <span className="hidden xs:inline">Ver / </span>}
+              {!isMine && 'Entrar'}
+              <ArrowRight className="h-3 w-3 shrink-0" />
             </span>
           </div>
         </div>

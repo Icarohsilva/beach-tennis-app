@@ -20,6 +20,11 @@
 
 html {
   background-color: #0c1220;
+  /* Rede de segurança, não substituto: um único elemento que estoura fazia a página
+     inteira rolar de lado no celular, sintoma que aparecia como "texto deformado".
+     `clip` e não `hidden` de propósito — `hidden` cria contexto de rolagem e quebra
+     `position: sticky`. Os estouros continuam sendo corrigidos na origem. */
+  overflow-x: clip;
 }
 
 * {
@@ -161,6 +166,20 @@ html {
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Pista de que a faixa continua para o lado. As faixas horizontais escondem a
+     barra de rolagem (.no-scrollbar), então em 320-375px o conteúdo do fim — sábado
+     e domingo na agenda da semana, justamente quando há torneio e day use — sumia
+     sem nenhum sinal. Desvanece só os últimos 28px. */
+  .rail-fade {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 0,
+      #000 calc(100% - 28px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
   }
 }
 

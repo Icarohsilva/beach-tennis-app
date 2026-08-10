@@ -524,7 +524,7 @@ export function StudentProfileClient({
 
         {/* Enroll in new class */}
         {eligibleClasses.length > 0 && (
-          <div className="flex gap-2 items-end">
+          <div className="flex flex-wrap gap-2 items-end">
             <div className="flex-1">
               <label className="block text-xs text-slate-400 mb-1">Matricular em turma</label>
               <select
@@ -587,8 +587,10 @@ export function StudentProfileClient({
 
           {/* Add dependent */}
           <div className="space-y-2">
-            <div className="flex gap-2 items-end">
-              <div className="flex-1">
+            {/* flex-wrap: nome + select de nível + botão pediam ~366px contra os
+                240px de um card do admin em 320px. */}
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="min-w-40 flex-1">
                 <Input
                   label="Nome do dependente"
                   placeholder="Nome completo..."
@@ -738,7 +740,7 @@ export function StudentProfileClient({
           )}
 
           {/* Assign plan */}
-          <div className="flex gap-2 items-end">
+          <div className="flex flex-wrap gap-2 items-end">
             <div className="flex-1">
               <label className="block text-xs text-slate-400 mb-1">
                 {activeSub ? 'Trocar plano' : 'Associar plano'}
@@ -793,7 +795,7 @@ export function StudentProfileClient({
             <p className="text-xs text-slate-400 mt-1">
               Defina a meta mensal abaixo e confirme.
             </p>
-            <div className="flex gap-2 mt-2">
+            <div className="flex flex-wrap gap-2 mt-2">
               <Button onClick={handleConfirmPartner} disabled={isPending}>
                 Confirmar
               </Button>

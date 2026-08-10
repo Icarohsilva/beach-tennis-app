@@ -45,7 +45,7 @@ export function MedalsCard({ medals, sport }: Props) {
           Nenhuma ainda. A primeira chega na sua 10ª aula de {sportLabel(sport)}.
         </p>
       ) : (
-        <ul className="no-scrollbar -mx-4 mb-4 flex gap-3 overflow-x-auto px-4">
+        <ul className="no-scrollbar rail-fade -mx-4 mb-4 flex gap-3 overflow-x-auto px-4">
           {conquistadas.map((medal) => (
             <li
               key={scopeKey(medal)}
