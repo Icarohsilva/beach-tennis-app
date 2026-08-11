@@ -50,6 +50,7 @@ Tudo em [`out/`](out/), gerado por código. Não tem arquivo de Canva ou Photosh
 | `ArenaHub-Convite-SANGRIA-3mm.pdf` | 2 páginas, 306 × 156 mm. Só arte + sangria, sem marcas. Para gráfica que impõe sozinha e pede o arquivo limpo. |
 | `ArenaHub-Selo-Adesivo-40mm.pdf` | Selo redondo Ø 40 mm com 3 mm de sangria. |
 | `preview-300dpi-1-externa.png` · `-2-interna.png` | A mesma arte rasterizada a 300 dpi (3616 × 1844 px). Reserva, caso o pré‑impressão prefira imagem achatada ao vetor. |
+| `ArenaHub-Ficha-Grafica-PROVA-3un.png` · `-150un.png` | Ficha de produção em A4, clara e legível no celular. Mande junto com o PDF: a gráfica lê formato, dobra e sangria de uma vez, em vez de garimpar num parágrafo. |
 
 ### Para o WhatsApp
 
@@ -130,6 +131,31 @@ Vale conferir na hora de fechar o pedido:
 > **2) Adesivo redondo.** Ø 40 mm, couché adesivo brilho, impressão 4/0, corte circular, sangria 3 mm. Tiragem: 200 unidades.
 >
 > Preciso de **prova de cor** antes da tiragem, porque a peça tem chapada escura e um laranja de marca que preciso conferir. Podem me passar prazo e valor com e sem o soft touch?
+
+### Antes da tiragem cheia: a prova de 3 unidades
+
+Vale imprimir 3 antes de rodar 150. Em quantidade pequena, **soft touch e verniz
+localizado não compensam** (são acabamentos com custo de preparação, e em 3 peças
+custam mais que a tiragem inteira da versão simples), então a prova sai só com
+laminação fosca. Isso ainda valida o que importa: a profundidade do fundo escuro,
+se a dobra racha, se a peça fica em pé no balcão e se o QR lê no papel.
+
+O que a prova **não** valida: o toque do soft touch, o brilho do verniz, e a cor
+caso a tiragem cheia vá para offset em vez de digital.
+
+Use a ficha `ArenaHub-Ficha-Grafica-PROVA-3un.png` e este texto:
+
+> Oi! Preciso de uma prova de **3 unidades** antes de rodar a tiragem cheia (150).
+>
+> Convite dobrado ao meio: aberto **300 × 150 mm**, fechado **150 × 150 mm**, 1 dobra vertical no centro **com vinco antes de dobrar**. Couché fosco 300 g, impressão 4/4 digital, laminação fosca frente e verso (se tiverem filme soft touch, prefiro soft touch). Sangria 3 mm. Mando o PDF fechado com marcas de corte, 2 páginas.
+>
+> **Nesta prova de 3 não precisa de verniz localizado**, sei que não compensa em quantidade pequena. Quero validar a cor do fundo, a dobra e a leitura do QR code.
+>
+> Dois pontos: **(1)** o fundo é uma chapada quase preta, precisa ser preto rico nos quatro canais, senão sai cinza lavado; **(2)** nada de verniz brilhante sobre o QR code, ele precisa ficar fosco ou o reflexo atrapalha a leitura no celular.
+>
+> Me passa valor e prazo dessas 3, e também o valor de 150 unidades com laminação soft touch e verniz localizado só nos elementos laranja?
+
+---
 
 **Ordem de grandeza para você não ser surpreendido** (estimativa para calibrar expectativa; peça 3 orçamentos, o valor varia muito entre gráficas):
 

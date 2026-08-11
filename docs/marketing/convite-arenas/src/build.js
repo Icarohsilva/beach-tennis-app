@@ -10,7 +10,7 @@ const os = require('os')
 const { chromium } = require('playwright')
 const cfg = require('./config')
 const { qrSvg } = require('./qr')
-const { documentoPrint, pecaDigital, selo, QR_IMPRESSO } = require('./art')
+const { documentoPrint, pecaDigital, selo, fichaProducao, QR_IMPRESSO } = require('./art')
 
 const SRC = __dirname
 const OUT = path.join(SRC, '..', 'out')
@@ -138,6 +138,25 @@ async function main() {
       registrar(nome)
     }
     await p.close()
+  }
+
+  // ------------------------------------------------------- ficha de produção
+  // Folha A4 clara para mandar no WhatsApp da gráfica junto com o PDF. Vem
+  // depois dos previews porque embute as duas páginas como miniatura.
+  {
+    const mini = ['preview-300dpi-1-externa.png', 'preview-300dpi-2-interna.png'].map(
+      (f) => 'data:image/png;base64,' + fs.readFileSync(path.join(OUT, f)).toString('base64')
+    )
+    for (const { nome, tiragem, acabamentoCompleto } of cfg.fichas) {
+      const p = await navegador.newPage({ viewport: { width: 1240, height: 1754 }, deviceScaleFactor: 1 })
+      await p.goto(escrever(`ficha-${tiragem}`, fichaProducao(cfg, { tiragem, acabamentoCompleto, miniaturas: mini })), {
+        waitUntil: 'networkidle',
+      })
+      await p.evaluate(() => document.fonts.ready)
+      await p.screenshot({ path: path.join(OUT, nome) })
+      await p.close()
+      registrar(nome)
+    }
   }
 
   await navegador.close()

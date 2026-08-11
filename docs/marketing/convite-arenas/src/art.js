@@ -541,4 +541,152 @@ function selo(cfg) {
 </body></html>`
 }
 
-module.exports = { documentoPrint, pecaDigital, selo, baseCss, logo, logoPx, quadra, QR_IMPRESSO }
+// ------------------------------------------------------ ficha de produção
+// Uma folha A4 clara para mandar no WhatsApp da gráfica junto com o PDF.
+// Fundo branco de propósito: é documento técnico, não peça de marca, e o
+// pré-impressão costuma imprimir isso para levar para a máquina.
+
+/**
+ * @param {object} cfg
+ * @param {object} p
+ * @param {number} p.tiragem        quantas unidades do convite
+ * @param {boolean} p.acabamentoCompleto  false na prova pequena, onde soft touch
+ *                                  e verniz localizado não compensam
+ * @param {string[]} p.miniaturas   data URIs das duas páginas, para a gráfica ver
+ *                                  o que está imprimindo sem abrir o PDF
+ */
+function fichaProducao(cfg, { tiragem, acabamentoCompleto = true, miniaturas = [] }) {
+  const T = '#0f172a'
+  const S = '#5b6b82'
+  const L = '#d8dee8'
+  const A = '#ea580c'
+
+  const linha = (k, v, destaque = false) => `
+    <tr>
+      <td style="padding:9px 0;border-bottom:1px solid ${L};color:${S};font-size:15px;width:40%">${k}</td>
+      <td style="padding:9px 0;border-bottom:1px solid ${L};color:${destaque ? A : T};font-size:15px;font-weight:${destaque ? 700 : 500}">${v}</td>
+    </tr>`
+
+  const acabamento = acabamentoCompleto
+    ? 'Laminação soft touch fosca 2 lados + verniz localizado (UV) só nos elementos laranja e no logo'
+    : 'Laminação fosca 2 lados (soft touch se tiverem o filme). <b>Sem verniz localizado nesta prova.</b>'
+
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ficha de produção</title>
+<style>
+${FONTES}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{width:1240px;height:1754px;background:#fff;font-family:Inter,sans-serif;color:${T}}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+h1{font-family:Sora;font-weight:800;letter-spacing:-0.03em;line-height:1.1}
+</style></head><body>
+<div style="padding:64px 72px;display:flex;flex-direction:column;height:100%">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:22px;border-bottom:2px solid ${T}">
+    ${logoPx(42, T)}
+    <div style="text-align:right">
+      <div style="font-family:Inter;font-weight:700;font-size:13px;letter-spacing:.22em;color:${A}">FICHA DE PRODUÇÃO</div>
+      <div style="font-size:13px;color:${S};margin-top:3px">${cfg.cidade} · ${cfg.ano}</div>
+    </div>
+  </div>
+
+  <h1 style="margin-top:30px;font-size:40px">Convite dobrado</h1>
+  <div style="margin-top:8px;font-size:17px;color:${S}">
+    Aberto <b style="color:${T}">300 × 150 mm</b> · fechado <b style="color:${T}">150 × 150 mm</b> ·
+    tiragem <b style="color:${A}">${tiragem} ${tiragem === 1 ? 'unidade' : 'unidades'}</b>
+  </div>
+
+  <!-- Esquema com as cotas. Vale mais que qualquer parágrafo: a gráfica lê
+       formato, dobra e sangria de uma vez. -->
+  <div style="margin-top:34px">
+    <svg viewBox="0 0 1096 420" style="width:100%;display:block">
+      <g font-family="Inter" font-size="17" fill="${S}">
+        <!-- sangria -->
+        <rect x="60" y="34" width="976" height="308" fill="none" stroke="${A}" stroke-width="1.5" stroke-dasharray="7 6"/>
+        <!-- corte -->
+        <rect x="70" y="44" width="956" height="288" fill="#f4f6fa" stroke="${T}" stroke-width="2"/>
+        <!-- vinco -->
+        <line x1="548" y1="44" x2="548" y2="332" stroke="${A}" stroke-width="2" stroke-dasharray="9 7"/>
+        <text x="548" y="30" text-anchor="middle" fill="${A}" font-weight="700">VINCO no centro, a 150 mm</text>
+        <!-- metades -->
+        <text x="309" y="180" text-anchor="middle" fill="${S}" font-size="16">metade esquerda</text>
+        <text x="309" y="204" text-anchor="middle" fill="${S}" font-size="16">150 × 150 mm</text>
+        <text x="787" y="180" text-anchor="middle" fill="${S}" font-size="16">metade direita</text>
+        <text x="787" y="204" text-anchor="middle" fill="${S}" font-size="16">150 × 150 mm</text>
+        <!-- cota horizontal -->
+        <line x1="70" y1="372" x2="1026" y2="372" stroke="${T}" stroke-width="1.5"/>
+        <line x1="70" y1="364" x2="70" y2="380" stroke="${T}" stroke-width="1.5"/>
+        <line x1="1026" y1="364" x2="1026" y2="380" stroke="${T}" stroke-width="1.5"/>
+        <rect x="470" y="358" width="156" height="28" fill="#fff"/>
+        <text x="548" y="378" text-anchor="middle" fill="${T}" font-weight="700">300 mm</text>
+        <!-- cota vertical -->
+        <line x1="1062" y1="44" x2="1062" y2="332" stroke="${T}" stroke-width="1.5"/>
+        <line x1="1054" y1="44" x2="1070" y2="44" stroke="${T}" stroke-width="1.5"/>
+        <line x1="1054" y1="332" x2="1070" y2="332" stroke="${T}" stroke-width="1.5"/>
+        <text x="1062" y="196" text-anchor="middle" fill="${T}" font-weight="700"
+              transform="rotate(90 1062 196)">150 mm</text>
+        <!-- sangria -->
+        <text x="60" y="410" fill="${A}" font-size="15">- - -  sangria de 3 mm em todos os lados</text>
+      </g>
+    </svg>
+  </div>
+
+  <table style="margin-top:26px;width:100%;border-collapse:collapse">
+    ${linha('Formato aberto', '300 × 150 mm')}
+    ${linha('Formato fechado', '150 × 150 mm (1 dobra vertical central)')}
+    ${linha('Dobra', 'Vinco mecânico ANTES de dobrar, no sentido das fibras', true)}
+    ${linha('Papel', 'Couché fosco 300 g/m²')}
+    ${linha('Impressão', '4/4, colorido frente e verso')}
+    ${linha('Acabamento', acabamento)}
+    ${linha('Sangria', '3 mm em todos os lados')}
+    ${linha('Arquivo', 'PDF vetorial, 2 páginas (pág. 1 externa, pág. 2 interna), com marcas de corte')}
+    ${linha('Aproveitamento', '2 peças por folha SRA3 (32 × 45 cm)')}
+  </table>
+
+  <div style="margin-top:26px;display:flex;gap:16px">
+    <div style="flex:1;border:2px solid ${A};border-radius:10px;padding:18px 20px">
+      <div style="font-family:Sora;font-weight:700;font-size:16px;color:${A}">1. Fundo em preto rico</div>
+      <div style="margin-top:7px;font-size:14.5px;line-height:1.5;color:${T}">
+        A peça é uma chapada escura quase preta. Monte nos quatro canais
+        (referência C 75 · M 62 · Y 40 · K 85). Com 100% K sozinho sai cinza lavado.
+      </div>
+    </div>
+    <div style="flex:1;border:2px solid ${A};border-radius:10px;padding:18px 20px">
+      <div style="font-family:Sora;font-weight:700;font-size:16px;color:${A}">2. QR code sem verniz brilhante</div>
+      <div style="margin-top:7px;font-size:14.5px;line-height:1.5;color:${T}">
+        O painel branco do QR fica fosco. Verniz brilhante em cima dele cria
+        reflexo e a câmera do celular deixa de ler.
+      </div>
+    </div>
+  </div>
+
+  ${
+    miniaturas.length
+      ? `<div style="margin-top:30px">
+           <div style="font-family:Inter;font-weight:700;font-size:12px;letter-spacing:.2em;color:${S}">O QUE ESTÁ NO PDF</div>
+           <!-- Lado a lado: empilhadas, duas peças de 300x150 estouram a A4. -->
+           <div style="margin-top:12px;display:flex;gap:16px">
+             ${miniaturas
+               .map(
+                 (src, i) => `
+               <div style="flex:1;min-width:0">
+                 <img src="${src}" style="width:100%;display:block;border:1px solid ${L};border-radius:4px">
+                 <div style="margin-top:6px;font-size:12px;line-height:1.4;color:${S}">
+                   <b style="color:${T}">Página ${i + 1}</b> · ${i === 0 ? 'externa (contracapa à esquerda, capa à direita)' : 'interna (a peça aberta)'}
+                 </div>
+               </div>`
+               )
+               .join('')}
+           </div>
+         </div>`
+      : ''
+  }
+
+  <div style="margin-top:auto;padding-top:24px;border-top:1px solid ${L};display:flex;justify-content:space-between;font-size:14px;color:${S}">
+    <span>ArenaHub · ${cfg.fundador}</span>
+    <span>WhatsApp ${cfg.whatsapp} · ${cfg.site}</span>
+  </div>
+</div>
+</body></html>`
+}
+
+module.exports = { documentoPrint, pecaDigital, selo, fichaProducao, baseCss, logo, logoPx, quadra, QR_IMPRESSO }

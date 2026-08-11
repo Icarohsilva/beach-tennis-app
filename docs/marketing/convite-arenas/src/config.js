@@ -22,6 +22,15 @@ module.exports = {
   precoUnidade: '/mês',
   garantias: ['alunos ilimitados', 'sem taxa por aluno', '1º mês grátis'],
 
+  // --- Fichas de produção geradas para a gráfica ---
+  // A prova pequena sai sem soft touch e sem verniz localizado: são acabamentos
+  // com custo de preparação, e em 3 unidades custam mais que a tiragem inteira
+  // da versão simples.
+  fichas: [
+    { nome: 'ArenaHub-Ficha-Grafica-PROVA-3un.png', tiragem: 3, acabamentoCompleto: false },
+    { nome: 'ArenaHub-Ficha-Grafica-150un.png', tiragem: 150, acabamentoCompleto: true },
+  ],
+
   // --- Numeração do convite ---
   // Deixe `null` para imprimir a linha em branco e escrever à mão (recomendado:
   // manuscrito converte mais em outbound 1-a-1 e não exige dado variável).
