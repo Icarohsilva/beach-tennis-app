@@ -47,7 +47,7 @@ export const KIND_LABEL: Record<ArenaEventKind, string> = {
  * Item sem hora vai para o FIM do dia, não para o começo: um torneio marcado
  * só por data não deve empurrar para baixo a aula das 7h que tem hora certa.
  */
-export function sortArenaEvents(events: ArenaEvent[]): ArenaEvent[] {
+export function sortArenaEvents<T extends ArenaEvent>(events: T[]): T[] {
   return events.slice().sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date)
     // '' ordena antes de qualquer hora, então o sem-hora recebe um sentinela alto.
@@ -59,9 +59,14 @@ export function sortArenaEvents(events: ArenaEvent[]): ArenaEvent[] {
   })
 }
 
-/** Agrupa por dia, já ordenado dentro de cada um. */
-export function groupByDate(events: ArenaEvent[]): Map<string, ArenaEvent[]> {
-  const out = new Map<string, ArenaEvent[]>()
+/**
+ * Agrupa por dia, já ordenado dentro de cada um.
+ *
+ * Genérico para o painel do admin poder passar o mesmo evento com os campos a
+ * mais dele (link de edição, ocupação) sem perdê-los no tipo de retorno.
+ */
+export function groupByDate<T extends ArenaEvent>(events: T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>()
   for (const e of sortArenaEvents(events)) {
     const list = out.get(e.date)
     if (list) list.push(e)
@@ -78,7 +83,7 @@ export interface KindCount {
   mine: number
 }
 
-export function countByKind(events: ArenaEvent[]): KindCount {
+export function countByKind(events: Pick<ArenaEvent, 'kind' | 'mine'>[]): KindCount {
   const out: KindCount = { aula: 0, torneio: 0, dayuse: 0, mine: 0 }
   for (const e of events) {
     out[e.kind] += 1
