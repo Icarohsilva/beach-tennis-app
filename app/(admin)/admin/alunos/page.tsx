@@ -26,6 +26,8 @@ interface SearchParams {
   esporte?: string
   /** 'inativos' mostra só os cadastros inativados. Ausente = só os ativos. */
   situacao?: string
+  /** 'kids' | 'adult'. Ausente = os dois. */
+  tipo?: string
 }
 
 interface Props {
@@ -46,6 +48,8 @@ export default async function AlunosPage({ searchParams }: Props) {
   // Inativos são exceção: ficam fora por padrão e têm uma visão própria, em vez de
   // misturados com apagado visual na lista de todo dia.
   const showArchived = searchParams.situacao === 'inativos'
+  const tipoFilter =
+    searchParams.tipo === 'kids' || searchParams.tipo === 'adult' ? searchParams.tipo : ''
 
   // Campos por-academia vêm da membership da academia ativa (não de profiles):
   // um aluno multi-vínculo só aparece nesta lista se tiver membership nesta org,
@@ -54,7 +58,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, age_group, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
@@ -77,6 +81,10 @@ export default async function AlunosPage({ searchParams }: Props) {
     dbQuery = dbQuery.contains('sports', [sportFilter])
   }
 
+  if (tipoFilter) {
+    dbQuery = dbQuery.eq('age_group', tipoFilter)
+  }
+
   const { data: membershipsRaw } = await dbQuery
 
   // Identidade (full_name) + campos por-academia (Membership) de cada aluno.
@@ -90,6 +98,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     contract_active: Membership['contract_active']
     is_dependent: Membership['is_dependent']
     parent_id: Membership['parent_id']
+    age_group: Membership['age_group']
     credits_balance: Membership['credits_balance']
     pending_partner: Membership['pending_partner']
     monthly_checkin_target: number
@@ -106,6 +115,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       contract_active: boolean
       is_dependent: boolean
       parent_id: string | null
+      age_group: Membership['age_group'] | null
       credits_balance: number
       pending_partner: Membership['pending_partner']
       monthly_checkin_target: number | null
@@ -125,6 +135,8 @@ export default async function AlunosPage({ searchParams }: Props) {
         contract_active: m.contract_active,
         is_dependent: m.is_dependent,
         parent_id: m.parent_id,
+        // Linha anterior à migration do age_group lê null; ali todo mundo era adulto.
+        age_group: m.age_group ?? 'adult',
         credits_balance: m.credits_balance,
         pending_partner: m.pending_partner,
         monthly_checkin_target: m.monthly_checkin_target ?? 0,
@@ -239,6 +251,7 @@ export default async function AlunosPage({ searchParams }: Props) {
             ...(query ? { q: query } : {}),
             ...(levelFilter ? { level: levelFilter } : {}),
             ...(sportFilter ? { esporte: sportFilter } : {}),
+            ...(tipoFilter ? { tipo: tipoFilter } : {}),
           })}`}
           className={
             'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
@@ -255,6 +268,7 @@ export default async function AlunosPage({ searchParams }: Props) {
             ...(query ? { q: query } : {}),
             ...(levelFilter ? { level: levelFilter } : {}),
             ...(sportFilter ? { esporte: sportFilter } : {}),
+            ...(tipoFilter ? { tipo: tipoFilter } : {}),
           })}`}
           className={
             'rounded-full px-3 py-1.5 font-semibold transition-colors ' +
@@ -311,13 +325,25 @@ export default async function AlunosPage({ searchParams }: Props) {
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Tipo</label>
+          <select
+            name="tipo"
+            defaultValue={tipoFilter}
+            className="bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+          >
+            <option value="">Todos</option>
+            <option value="adult">Adulto</option>
+            <option value="kids">Kids</option>
+          </select>
+        </div>
         <button
           type="submit"
           className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-xl transition-colors"
         >
           Filtrar
         </button>
-        {(query || levelFilter || sportFilter) && (
+        {(query || levelFilter || sportFilter || tipoFilter) && (
           <Link
             href="/admin/alunos"
             className="px-4 py-2 border border-surface-border text-slate-400 hover:text-white text-sm rounded-xl transition-colors"
@@ -362,6 +388,13 @@ export default async function AlunosPage({ searchParams }: Props) {
                       {student.archived_at && (
                         <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300">
                           Inativo desde {formatDate(student.archived_at)}
+                        </span>
+                      )}
+                      {student.age_group === 'kids' && (
+                        // Só o Kids ganha selo: adulto é a esmagadora maioria, e um
+                        // selo em cada card viraria ruído em vez de sinal.
+                        <span className="mt-0.5 mr-1 inline-block rounded bg-yellow-400/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-yellow-300">
+                          Kids
                         </span>
                       )}
                       {student.is_dependent && (

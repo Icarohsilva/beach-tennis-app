@@ -4,7 +4,8 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
-import type { AddStudentReason } from '@/types'
+import { ageGroupWarning } from '@/lib/aulas/ageGroup'
+import type { AddStudentReason, AgeGroup, ClassType } from '@/types'
 
 export interface AddableStudent {
   id: string
@@ -13,10 +14,14 @@ export interface AddableStudent {
   wouldOweDebt: boolean
   /** Pendências de check-in de parceiro em aberto. */
   openMissedCheckins: number
+  /** Adulto ou kids nesta academia — só para avisar se destoa da turma. */
+  ageGroup: AgeGroup
 }
 
 interface Props {
   sessionId: string
+  /** Tipo da turma desta sessão; casado com o do aluno só para avisar. */
+  classType: ClassType
   students: AddableStudent[]
   onAdd: (
     sessionId: string,
@@ -37,7 +42,7 @@ const REASONS: { value: AddStudentReason; label: string; hint: string }[] = [
   { value: 'open', label: 'Deixar em aberto', hint: 'Vira pendência a cobrar.' },
 ]
 
-export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
+export function AddStudentToSession({ sessionId, classType, students, onAdd }: Props) {
   const [studentId, setStudentId] = useState('')
   const [reason, setReason] = useState<AddStudentReason>('experimental')
   const [error, setError] = useState<string | null>(null)
@@ -54,6 +59,8 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
   // O motivo só faz sentido para quem entraria devendo. Quem tem plano, parceiro
   // ou crédito já tem a aula paga — perguntar seria ruído (spec §6).
   const needsReason = selected?.wouldOweDebt ?? false
+  // Aviso, não trava: o adolescente que treina com adulto é caso legítimo.
+  const avisoTipo = selected ? ageGroupWarning(selected.ageGroup, classType) : null
 
   function handleSelectStudent(id: string) {
     setStudentId(id)
@@ -104,6 +111,8 @@ export function AddStudentToSession({ sessionId, students, onAdd }: Props) {
           </option>
         ))}
       </select>
+
+      {avisoTipo && <p className="mb-3 text-xs text-yellow-400">⚠️ {avisoTipo}.</p>}
 
       {needsReason && (
         <div className="space-y-2 mb-3">

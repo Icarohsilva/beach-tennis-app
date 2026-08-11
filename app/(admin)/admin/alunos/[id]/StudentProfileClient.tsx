@@ -7,9 +7,10 @@ import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import type { StudentLevel, Enrollment, Class } from '@/types'
+import type { AgeGroup, StudentLevel, Enrollment, Class } from '@/types'
 import {
   updateStudentLevel,
+  updateStudentAgeGroup,
   updateStudentSports,
   enrollStudentInClass,
   cancelEnrollment,
@@ -23,6 +24,7 @@ import { archiveStudent, reactivateStudent } from '@/features/aulas/archiveStude
 import { countDistinctDays } from '@/lib/checkin/monthlyProgress'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { ageGroupWarning } from '@/lib/aulas/ageGroup'
 
 const LEVELS: StudentLevel[] = ['A', 'B', 'C', 'D', 'iniciante']
 
@@ -67,6 +69,8 @@ interface StudentProfileClientProps {
   studentId: string
   organizationId: string
   currentLevel: StudentLevel
+  /** Adulto ou kids nesta academia. */
+  currentAgeGroup: AgeGroup
   currentSports: string[]
   orgSports: string[]
   currentCreditsBalance: number
@@ -108,6 +112,7 @@ export function StudentProfileClient({
   studentId,
   organizationId,
   currentLevel,
+  currentAgeGroup,
   currentSports,
   orgSports,
   currentCreditsBalance,
@@ -130,6 +135,7 @@ export function StudentProfileClient({
   checkins,
 }: StudentProfileClientProps) {
   const [level, setLevel] = useState<StudentLevel>(currentLevel)
+  const [ageGroup, setAgeGroup] = useState<AgeGroup>(currentAgeGroup)
   const [sports, setSports] = useState<string[]>(currentSports)
   const [enrollmentList, setEnrollmentList] = useState(enrollments)
   const [dependentList, setDependentList] = useState(dependents)
@@ -192,6 +198,21 @@ export function StudentProfileClient({
         return
       }
       notify('Nível atualizado.')
+    })
+  }
+
+  function handleAgeGroupChange(next: AgeGroup) {
+    const previous = ageGroup
+    setAgeGroup(next)
+    setError(null)
+    startTransition(async () => {
+      const result = await updateStudentAgeGroup(studentId, next)
+      if (result.error) {
+        setAgeGroup(previous)
+        setError(result.error)
+        return
+      }
+      notify('Tipo de aluno atualizado.')
     })
   }
 
@@ -537,6 +558,37 @@ export function StudentProfileClient({
         </div>
       </section>
 
+      {/* Adulto ou kids. Fica ao lado do nível porque é a mesma pergunta — "com quem
+          esse aluno treina" — e porque o admin costuma acertar os dois de uma vez. */}
+      <section>
+        <h2 className="text-base font-semibold text-white mb-3">Tipo de aluno</h2>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { value: 'adult' as const, label: 'Adulto' },
+            { value: 'kids' as const, label: 'Kids' },
+          ]).map((op) => (
+            <button
+              key={op.value}
+              type="button"
+              disabled={isPending}
+              onClick={() => handleAgeGroupChange(op.value)}
+              className={[
+                'px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                ageGroup === op.value
+                  ? 'bg-brand-600 border-brand-500 text-white'
+                  : 'bg-surface-card border-surface-border text-slate-400 hover:border-slate-400 hover:text-white',
+              ].join(' ')}
+            >
+              {op.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Não bloqueia nada: serve para filtrar a lista de alunos e avisar quando a turma não
+          combina com o aluno.
+        </p>
+      </section>
+
       {/* Esportes — base dos rankings da Liga. Não restringe turmas. */}
       <section>
         <h2 className="text-base font-semibold text-white mb-3">Esportes</h2>
@@ -572,6 +624,13 @@ export function StudentProfileClient({
                     <p className="text-xs text-slate-400 mt-0.5">
                       {DAY_ABBR[cls.day_of_week]} · {formatTime(cls.start_time)}–{formatTime(cls.end_time)}
                     </p>
+                    {/* Turma que não combina com o tipo do aluno. Aviso, não trava:
+                        só existe para a matrícula errada não passar despercebida. */}
+                    {ageGroupWarning(ageGroup, cls.type === 'kids' ? 'kids' : 'adult') && (
+                      <p className="mt-0.5 text-xs text-yellow-400">
+                        ⚠️ {ageGroupWarning(ageGroup, cls.type === 'kids' ? 'kids' : 'adult')}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Button

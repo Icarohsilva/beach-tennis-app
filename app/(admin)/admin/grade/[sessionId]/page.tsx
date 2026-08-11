@@ -108,7 +108,7 @@ export default async function SessionDetailPage({ params }: Props) {
   // mais abaixo.
   const { data: allMemsRaw } = await adminClient
     .from('memberships')
-    .select('user_id, level, payment_type, partner, credits_balance, archived_at')
+    .select('user_id, level, payment_type, partner, age_group, credits_balance, archived_at')
     .eq('organization_id', orgId)
     .eq('role', 'student')
 
@@ -116,6 +116,7 @@ export default async function SessionDetailPage({ params }: Props) {
     level: Membership['level']
     payment_type: Membership['payment_type']
     partner: CheckinPartner | null
+    ageGroup: Membership['age_group']
     credits_balance: number
     archived_at: string | null
   }>()
@@ -124,6 +125,7 @@ export default async function SessionDetailPage({ params }: Props) {
     level: Membership['level']
     payment_type: Membership['payment_type']
     partner: CheckinPartner | null
+    age_group: Membership['age_group'] | null
     credits_balance: number
     archived_at: string | null
   }[]) {
@@ -131,6 +133,8 @@ export default async function SessionDetailPage({ params }: Props) {
       level: m.level,
       payment_type: m.payment_type,
       partner: m.partner,
+      // Linha anterior à migration do age_group lê null; ali todo mundo era adulto.
+      ageGroup: m.age_group ?? 'adult',
       credits_balance: m.credits_balance,
       archived_at: m.archived_at,
     })
@@ -267,6 +271,7 @@ export default async function SessionDetailPage({ params }: Props) {
       full_name: p.full_name,
       wouldOweDebt: !hasAccess(p.id),
       openMissedCheckins: openMissedByCandidate.get(p.id) ?? 0,
+      ageGroup: memById.get(p.id)?.ageGroup ?? 'adult',
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
@@ -309,6 +314,7 @@ export default async function SessionDetailPage({ params }: Props) {
 
       <AddStudentToSession
         sessionId={params.sessionId}
+        classType={cls.type === 'kids' ? 'kids' : 'adult'}
         students={addableStudents}
         onAdd={addStudentToSession}
       />

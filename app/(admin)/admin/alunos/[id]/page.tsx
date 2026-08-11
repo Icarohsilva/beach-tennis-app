@@ -38,7 +38,7 @@ export default async function StudentProfilePage({ params }: Props) {
     .select(
       // `archived_at` entra, mas a ficha NÃO filtra por ele: é justamente aqui que o
       // admin vê que o cadastro está inativo e o reativa.
-      'level, sports, payment_type, contract_active, is_dependent, parent_id, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner, archived_at',
+      'level, sports, payment_type, contract_active, is_dependent, parent_id, age_group, credits_balance, monthly_checkin_target, pending_partner, wellhub_id, totalpass_id, partner, archived_at',
     )
     .eq('user_id', params.id)
     .eq('organization_id', orgId)
@@ -61,7 +61,7 @@ export default async function StudentProfilePage({ params }: Props) {
     ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
     ...(membership as Pick<
       Membership,
-      'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner' | 'archived_at'
+      'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'age_group' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner' | 'archived_at'
     >),
     organization_id: orgId,
   }
@@ -354,6 +354,7 @@ export default async function StudentProfilePage({ params }: Props) {
           studentId={student.id}
           organizationId={student.organization_id}
           currentLevel={student.level as StudentLevel}
+          currentAgeGroup={student.age_group === 'kids' ? 'kids' : 'adult'}
           currentSports={student.sports ?? []}
           orgSports={orgSports}
           currentCreditsBalance={student.credits_balance}
