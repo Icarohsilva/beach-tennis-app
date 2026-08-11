@@ -3,12 +3,19 @@
 // de video_feed_url e dos pesos de crédito.
 import { createAdminClient } from '@/lib/supabase/server'
 import { DEFAULT_LIGA_WEIGHTS, type LigaWeights } from '@/lib/liga/points'
+import {
+  DEFAULT_DIVISION_CUTS,
+  DIVISION_ORDER,
+  type DemoteMode,
+  type Division,
+  type DivisionCuts,
+} from '@/lib/liga/divisions'
 
 export interface LigaSettings {
   enabled: boolean
   weights: LigaWeights
-  promoteCount: number
-  demoteCount: number
+  /** Quantos sobem e quantos descem, divisão a divisão. */
+  cuts: DivisionCuts
   /** Quantos elogios por semana ainda pontuam para quem envia (trava anti-farming). */
   kudosWeeklyCap: number
   kudosPointsGiven: number
@@ -20,8 +27,7 @@ export const DEFAULT_LIGA_SETTINGS: LigaSettings = {
   // veria um ranking quase vazio. O dono liga quando estiver pronto.
   enabled: false,
   weights: DEFAULT_LIGA_WEIGHTS,
-  promoteCount: 5,
-  demoteCount: 3,
+  cuts: DEFAULT_DIVISION_CUTS,
   kudosWeeklyCap: 3,
   // Receber vale mais que dar, de propósito: é a trava mais importante das quatro,
   // porque alinha o incentivo com SER elogiável em vez de distribuir elogio.
@@ -29,9 +35,51 @@ export const DEFAULT_LIGA_SETTINGS: LigaSettings = {
   kudosPointsReceived: 15,
 }
 
+/** Chaves de system_settings do corte de uma divisão. */
+export function promoteKey(division: Division): string {
+  return `liga_promote_${division}`
+}
+export function demoteKey(division: Division): string {
+  return `liga_demote_${division}`
+}
+export function demoteModeKey(division: Division): string {
+  return `liga_demote_mode_${division}`
+}
+
 function intOr(value: string | undefined, fallback: number): number {
   const n = Number(value)
   return Number.isInteger(n) && n >= 0 ? n : fallback
+}
+
+function modeOr(value: string | undefined, fallback: DemoteMode): DemoteMode {
+  return value === 'ultimos' || value === 'permanecem' ? value : fallback
+}
+
+/**
+ * Monta os cortes divisão a divisão.
+ *
+ * A cadeia de fallback é chave da divisão → chave global antiga → padrão. As chaves
+ * globais (`liga_promote_count` / `liga_demote_count`) são de quando o corte era um
+ * número só para a escada inteira: quem já tinha configurado continua com o mesmo
+ * comportamento até abrir as Configurações e distribuir os cortes por divisão.
+ */
+function readCuts(map: Map<string, string>): DivisionCuts {
+  const legacyPromote = map.get('liga_promote_count')
+  const legacyDemote = map.get('liga_demote_count')
+
+  const cuts = {} as DivisionCuts
+  for (const division of DIVISION_ORDER) {
+    const padrao = DEFAULT_DIVISION_CUTS[division]
+    cuts[division] = {
+      promote: intOr(
+        map.get(promoteKey(division)) ?? legacyPromote,
+        padrao.promote,
+      ),
+      demoteMode: modeOr(map.get(demoteModeKey(division)), padrao.demoteMode),
+      demote: intOr(map.get(demoteKey(division)) ?? legacyDemote, padrao.demote),
+    }
+  }
+  return cuts
 }
 
 /** Lê a config da Liga de uma academia. Chaves ausentes caem no default. */
@@ -61,8 +109,7 @@ export async function getLigaSettings(orgId: string | null | undefined): Promise
       profileComplete: intOr(map.get('liga_points_profile_complete'), d.weights.profileComplete),
       dayUse: intOr(map.get('liga_points_dayuse'), d.weights.dayUse),
     },
-    promoteCount: intOr(map.get('liga_promote_count'), d.promoteCount),
-    demoteCount: intOr(map.get('liga_demote_count'), d.demoteCount),
+    cuts: readCuts(map),
     kudosWeeklyCap: intOr(map.get('liga_kudos_weekly_cap'), d.kudosWeeklyCap),
     kudosPointsGiven: intOr(map.get('liga_points_kudos_given'), d.kudosPointsGiven),
     kudosPointsReceived: intOr(map.get('liga_points_kudos_received'), d.kudosPointsReceived),

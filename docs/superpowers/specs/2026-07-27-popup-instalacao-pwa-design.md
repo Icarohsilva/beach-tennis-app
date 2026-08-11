@@ -65,7 +65,7 @@ chama os mesmos helpers.
 |---|---|---|
 | `lib/pwa/environment.ts` | Lê o ambiente do browser: `isIOS`, `isAndroid`, `isMobile`, `standalone`, `isInAppBrowser`, `pushSupported`. Impuro por natureza; client-only. | `navigator`, `window` |
 | `lib/pwa/promptState.ts` | **Puro.** `resolvePrompt(input) → PromptDecision`. Toda a regra de negócio mora aqui. | nada |
-| `lib/pwa/dismissStorage.ts` | Lê/grava o timestamp de dispensa no localStorage, com a janela de 24h. Tolera localStorage indisponível. | `localStorage` |
+| `lib/pwa/dismissStorage.ts` | Lê/grava o timestamp de dispensa no localStorage, com a janela de 6h. Tolera localStorage indisponível. | `localStorage` |
 | `components/pwa/InstallGate.tsx` | Orquestrador client. Monta o ambiente, chama `resolvePrompt`, renderiza sheet ou faixa, escuta `beforeinstallprompt` / `appinstalled`. | os três acima |
 | `components/pwa/InstallSheet.tsx` | O popup em si (bottom sheet). Variantes iOS, Android e in-app browser. | `IosInstallAnimation` |
 | `components/pwa/IosInstallAnimation.tsx` | A animação do passo a passo. Sem estado externo, sem props obrigatórias — reusável em três contextos. | nada |
@@ -110,11 +110,11 @@ Regras, avaliadas em ordem:
    - senão → `push-ask`
 3. `isIOS && !standalone`:
    - `isInAppBrowser` → `install-ios-inapp`
-   - dispensado há menos de 24h → `none`
+   - dispensado há menos de 6h → `none`
    - senão → `install-ios`
    - (nunca `push-*`: push no iOS exige instalação)
 4. `!isIOS && !standalone && installable`:
-   - dispensado há menos de 24h → `none`
+   - dispensado há menos de 6h → `none`
    - senão → `install-android`
 5. Restante (Android sem o evento, browser sem suporte a instalação):
    - `!pushSupported` → `none`
@@ -125,7 +125,7 @@ Regras, avaliadas em ordem:
 ### Frequência e dispensa
 
 - **Sheet de instalação:** dispensável. "Agora não" e o `X` gravam
-  `arenahub-install-dismissed-at = Date.now()`. Reaparece após 24h. Quando o
+  `arenahub-install-dismissed-at = Date.now()`. Reaparece após 6h. Quando o
   evento `appinstalled` dispara ou `standalone` vira true, some para sempre.
 - **Faixa de push:** **não tem botão de fechar.** Fica visível enquanto a
   permissão não for concedida e some sozinha no instante em que for. É uma faixa
@@ -255,9 +255,9 @@ documentação junto:
 desktop; iOS não instalado; iOS in-app browser; iOS instalado com cada uma das
 três permissões; Android instalável; Android instalado; Android sem suporte a
 push; cada caso de instalação cruzado com `dismissedAt` dentro e fora da janela
-de 24h.
+de 6h.
 
-`lib/pwa/dismissStorage.test.ts` — grava e lê; janela de 24h nas duas bordas;
+`lib/pwa/dismissStorage.test.ts` — grava e lê; janela de 6h nas duas bordas;
 valor corrompido; timestamp futuro; localStorage que lança ao escrever.
 
 `components/pwa/` não recebe testes unitários — a verificação dos componentes é

@@ -442,8 +442,18 @@ export async function updateSystemSettings(settings: {
   liga_points_streak_week?: number
   liga_points_tournament_entry?: number
   liga_points_tournament_win?: number
-  liga_promote_count?: number
-  liga_demote_count?: number
+  // Corte por divisão: quantos sobem, quantos descem e como o corte de baixo é
+  // contado ('ultimos' | 'permanecem'). Bronze não rebaixa e Diamante não promove,
+  // então essas duas combinações não têm chave.
+  liga_promote_bronze?: number
+  liga_promote_prata?: number
+  liga_promote_ouro?: number
+  liga_demote_prata?: number
+  liga_demote_ouro?: number
+  liga_demote_diamante?: number
+  liga_demote_mode_prata?: string
+  liga_demote_mode_ouro?: string
+  liga_demote_mode_diamante?: string
   liga_kudos_weekly_cap?: number
   liga_points_kudos_given?: number
   liga_points_kudos_received?: number
@@ -522,8 +532,12 @@ export async function updateSystemSettings(settings: {
     ['Bônus de sequência', settings.liga_points_streak_week],
     ['Pontos por inscrição em torneio', settings.liga_points_tournament_entry],
     ['Pontos por vitória em torneio', settings.liga_points_tournament_win],
-    ['Quantos sobem de divisão', settings.liga_promote_count],
-    ['Quantos descem de divisão', settings.liga_demote_count],
+    ['Quantos sobem do Bronze', settings.liga_promote_bronze],
+    ['Quantos sobem da Prata', settings.liga_promote_prata],
+    ['Quantos sobem do Ouro', settings.liga_promote_ouro],
+    ['Corte de baixo da Prata', settings.liga_demote_prata],
+    ['Corte de baixo do Ouro', settings.liga_demote_ouro],
+    ['Corte de baixo do Diamante', settings.liga_demote_diamante],
     ['Teto semanal de elogios', settings.liga_kudos_weekly_cap],
     ['Pontos por elogio enviado', settings.liga_points_kudos_given],
     ['Pontos por elogio recebido', settings.liga_points_kudos_received],
@@ -537,6 +551,19 @@ export async function updateSystemSettings(settings: {
   for (const [label, value] of ligaInts) {
     if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
       return { error: `${label} deve ser um número inteiro não-negativo.` }
+    }
+  }
+
+  // O modo do corte de baixo é um enum; qualquer outro valor mudaria silenciosamente
+  // quem é rebaixado no fechamento, então barra aqui.
+  const ligaModes = [
+    settings.liga_demote_mode_prata,
+    settings.liga_demote_mode_ouro,
+    settings.liga_demote_mode_diamante,
+  ]
+  for (const mode of ligaModes) {
+    if (mode !== undefined && mode !== 'ultimos' && mode !== 'permanecem') {
+      return { error: 'Forma de contar o rebaixamento inválida.' }
     }
   }
 

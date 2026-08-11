@@ -24,7 +24,15 @@ export type PromptDecision =
   | 'push-ask' // faixa: ativar notificações
   | 'push-blocked' // faixa: como desbloquear
 
-export const DISMISS_WINDOW_MS = 24 * 60 * 60 * 1000
+/**
+ * Quanto tempo o popup de instalação some depois de dispensado.
+ *
+ * Seis horas, e não um dia: a dispensa mora no localStorage do aparelho, então
+ * quem fechou sem querer não tem como pedir de volta — nem a academia tem como
+ * resetar pelo painel. Janela curta o bastante para o aluno reencontrar o convite
+ * no mesmo dia, e longa o bastante para não virar perseguição a cada navegação.
+ */
+export const DISMISS_WINDOW_MS = 6 * 60 * 60 * 1000
 
 function dispensadoAgora(dismissedAt: number | null, now: number): boolean {
   if (dismissedAt === null) return false

@@ -1,6 +1,7 @@
 // features/liga/queries.ts
 // Leituras da Liga para a tela do aluno. Tudo escopado por organization_id.
 import { createAdminClient } from '@/lib/supabase/server'
+import { promoteLimit, type DivisionCuts } from '@/lib/liga/divisions'
 import type {
   LigaDivision,
   LigaMedal,
@@ -70,7 +71,7 @@ export async function getLigaView(
   studentId: string,
   season: LigaSeason,
   sport: string,
-  promoteCount: number,
+  cuts: DivisionCuts,
 ): Promise<LigaView | null> {
   const admin = createAdminClient()
 
@@ -152,12 +153,15 @@ export async function getLigaView(
   const myPosition = rows.findIndex((r) => r.student_id === studentId) + 1
 
   // Quanto falta para entrar na zona de promoção — o corte é o último colocado que
-  // ainda sobe, então depende do promoteCount configurado pela academia.
+  // ainda sobe, então depende do corte que a academia configurou PARA ESTA divisão.
+  const promoteCount = promoteLimit(cuts, standing.division)
   const cutoffIndex = Math.max(0, Math.min(rows.length - 1, promoteCount - 1))
   const promoteCutoff = rows[cutoffIndex]?.points ?? 0
   const alreadyPromoting = myPosition > 0 && myPosition <= promoteCount
+  // promoteCount 0 é o topo da escada ou uma divisão que a academia fechou: não há
+  // para onde subir, e prometer "faltam X pontos" seria mentira.
   const pointsToPromote =
-    standing.division === 'diamante' || alreadyPromoting
+    promoteCount === 0 || alreadyPromoting
       ? null
       : Math.max(1, promoteCutoff - standing.points + 1)
 

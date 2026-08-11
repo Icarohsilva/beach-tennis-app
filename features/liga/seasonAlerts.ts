@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { sportLabel } from '@/lib/arenas/sports'
 import { DIVISION_LABEL } from '@/lib/liga/labels'
+import { firstDemotedPosition, promoteLimit } from '@/lib/liga/divisions'
 import { seasonAlertKind, seasonAlertText } from '@/lib/liga/seasonAlert'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getLigaSettings } from './settings'
@@ -91,18 +92,17 @@ export async function sendSeasonEndAlerts(
     const [sport, division] = key.split('::') as [string, LigaDivision]
     rows.sort((a, b) => b.points - a.points || a.student_id.localeCompare(b.student_id))
 
-    const promotes = division !== 'diamante' && settings.promoteCount > 0
-    const demotes = division !== 'bronze' && settings.demoteCount > 0
-    const cutoffPoints = rows[Math.max(0, Math.min(rows.length - 1, settings.promoteCount - 1))]
-      ?.points ?? 0
-    const relegationFrom = rows.length - settings.demoteCount
+    // Cortes da divisão, não da academia: quem está no Ouro disputa outra faixa.
+    const promoteCount = promoteLimit(settings.cuts, division)
+    const demoteFrom = firstDemotedPosition(settings.cuts, division, rows.length)
+    const cutoffPoints = rows[Math.max(0, Math.min(rows.length - 1, promoteCount - 1))]?.points ?? 0
 
     rows.forEach((row, index) => {
       const position = index + 1
-      const jaSobe = promotes && position <= settings.promoteCount
+      const jaSobe = promoteCount > 0 && position <= promoteCount
       const pointsToPromote =
-        !promotes || jaSobe ? null : Math.max(1, cutoffPoints - row.points + 1)
-      const inRelegationZone = demotes && index >= relegationFrom
+        promoteCount === 0 || jaSobe ? null : Math.max(1, cutoffPoints - row.points + 1)
+      const inRelegationZone = position >= demoteFrom
 
       const kind = seasonAlertKind({
         daysLeft,

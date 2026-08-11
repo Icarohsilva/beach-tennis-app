@@ -11,8 +11,10 @@ interface Props {
   entries: RankingEntry[]
   division: LigaDivision
   divisionSize: number
+  /** Quantos sobem desta divisão (0 = ninguém). */
   promoteCount: number
-  demoteCount: number
+  /** Primeira posição que desce; acima do tamanho da divisão significa que ninguém desce. */
+  demoteFrom: number
 }
 
 type Zone = 'promocao' | 'rebaixamento' | null
@@ -29,7 +31,7 @@ export function DivisionRanking({
   division,
   divisionSize,
   promoteCount,
-  demoteCount,
+  demoteFrom,
 }: Props) {
   if (entries.length === 0) {
     return (
@@ -42,14 +44,14 @@ export function DivisionRanking({
     )
   }
 
-  // Diamante é o teto (não promove) e bronze é o piso (não rebaixa).
-  const promotes = division !== 'diamante' && promoteCount > 0
-  const demotes = division !== 'bronze' && demoteCount > 0
-  const relegationFrom = divisionSize - demoteCount + 1
+  // Os cortes já chegam resolvidos pela divisão (o teto não promove, o piso não
+  // rebaixa) — aqui é só desenhar.
+  const promotes = promoteCount > 0
+  const demotes = demoteFrom <= divisionSize
 
   const zoneOf = (position: number): Zone => {
     if (promotes && position <= promoteCount) return 'promocao'
-    if (demotes && position >= relegationFrom) return 'rebaixamento'
+    if (demotes && position >= demoteFrom) return 'rebaixamento'
     return null
   }
 

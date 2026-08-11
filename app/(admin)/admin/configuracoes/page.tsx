@@ -7,7 +7,7 @@ import { BrandingForm } from './BrandingForm'
 import { TournamentDiscountForm } from './TournamentDiscountForm'
 import { VideoFeedUrlForm } from './VideoFeedUrlForm'
 import { LigaSettingsForm } from './LigaSettingsForm'
-import { DEFAULT_LIGA_SETTINGS } from '@/features/liga/settings'
+import { getLigaSettings } from '@/features/liga/settings'
 import { SelfCheckinForm } from './SelfCheckinForm'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
@@ -58,38 +58,27 @@ export default async function ConfiguracoesPage() {
 
   const videoFeedUrl = map.get('video_feed_url') ?? ''
 
-  const d = DEFAULT_LIGA_SETTINGS
+  // A config da Liga sai de getLigaSettings, e não do `map` acima, porque a cadeia de
+  // fallback dos cortes por divisão (chave da divisão → chave global antiga → padrão)
+  // mora lá. Reproduzi-la aqui faria o formulário mostrar um número e o fechamento da
+  // temporada usar outro.
+  const l = await getLigaSettings(orgId)
   const liga = {
-    liga_enabled: map.get('liga_enabled') === 'true',
-    liga_points_attendance: Number(map.get('liga_points_attendance') ?? d.weights.attendance),
-    liga_points_streak_week: Number(map.get('liga_points_streak_week') ?? d.weights.streakWeek),
-    liga_points_tournament_entry: Number(
-      map.get('liga_points_tournament_entry') ?? d.weights.tournamentEntry,
-    ),
-    liga_points_tournament_win: Number(
-      map.get('liga_points_tournament_win') ?? d.weights.tournamentWin,
-    ),
-    liga_promote_count: Number(map.get('liga_promote_count') ?? d.promoteCount),
-    liga_demote_count: Number(map.get('liga_demote_count') ?? d.demoteCount),
-    liga_kudos_weekly_cap: Number(map.get('liga_kudos_weekly_cap') ?? d.kudosWeeklyCap),
-    liga_points_kudos_given: Number(map.get('liga_points_kudos_given') ?? d.kudosPointsGiven),
-    liga_points_kudos_received: Number(
-      map.get('liga_points_kudos_received') ?? d.kudosPointsReceived,
-    ),
-    liga_points_self_checkin: Number(map.get('liga_points_self_checkin') ?? d.weights.selfCheckin),
-    liga_points_cancel_in_time: Number(
-      map.get('liga_points_cancel_in_time') ?? d.weights.cancelInTime,
-    ),
-    liga_points_waitlist_accept: Number(
-      map.get('liga_points_waitlist_accept') ?? d.weights.waitlistAccept,
-    ),
-    liga_points_early_booking: Number(
-      map.get('liga_points_early_booking') ?? d.weights.earlyBooking,
-    ),
-    liga_points_profile_complete: Number(
-      map.get('liga_points_profile_complete') ?? d.weights.profileComplete,
-    ),
-    liga_points_dayuse: Number(map.get('liga_points_dayuse') ?? d.weights.dayUse),
+    liga_enabled: l.enabled,
+    liga_points_attendance: l.weights.attendance,
+    liga_points_streak_week: l.weights.streakWeek,
+    liga_points_tournament_entry: l.weights.tournamentEntry,
+    liga_points_tournament_win: l.weights.tournamentWin,
+    liga_kudos_weekly_cap: l.kudosWeeklyCap,
+    liga_points_kudos_given: l.kudosPointsGiven,
+    liga_points_kudos_received: l.kudosPointsReceived,
+    liga_points_self_checkin: l.weights.selfCheckin,
+    liga_points_cancel_in_time: l.weights.cancelInTime,
+    liga_points_waitlist_accept: l.weights.waitlistAccept,
+    liga_points_early_booking: l.weights.earlyBooking,
+    liga_points_profile_complete: l.weights.profileComplete,
+    liga_points_dayuse: l.weights.dayUse,
+    cuts: l.cuts,
   }
 
   const { data: orgRow } = await adminClient
@@ -186,7 +175,8 @@ export default async function ConfiguracoesPage() {
       <div>
         <h2 className="text-lg font-bold text-white">Liga</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Ranking de temporada por modalidade: quanto vale cada coisa e quantos sobem de divisão.
+          Ranking de temporada por modalidade: quanto vale cada coisa e qual o corte de cada
+          divisão no fim do mês.
         </p>
       </div>
       <LigaSettingsForm settings={liga} />
