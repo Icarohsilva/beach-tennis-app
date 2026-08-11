@@ -3,6 +3,8 @@ import { getClassRoster } from './enrollmentRoster'
 import { SkipDateButton } from './SkipDateButton'
 import type { EnrollmentStatus } from '@/lib/utils/enrollmentStatus'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { ageGroupWarning } from '@/lib/aulas/ageGroup'
+import type { AgeGroup, ClassType } from '@/types'
 
 const STATUS_META: Record<EnrollmentStatus, { label: string; cls: string }> = {
   elegivel: { label: '✅ Elegível', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
@@ -20,6 +22,26 @@ export async function ClassRosterSection({ classId, orgId }: { classId: string; 
     ? await adminClient.from('profiles').select('id, full_name').in('id', ids)
     : { data: [] }
   const nameById = new Map(((profs ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]))
+
+  // Adulto/kids do aluno e da turma: é aqui que o admin monta a turma, então é aqui
+  // que um kids numa turma de adulto precisa saltar aos olhos.
+  const [{ data: clsRow }, { data: memsRow }] = await Promise.all([
+    adminClient.from('classes').select('type').eq('id', classId).maybeSingle(),
+    ids.length > 0
+      ? adminClient
+          .from('memberships')
+          .select('user_id, age_group')
+          .eq('organization_id', orgId)
+          .in('user_id', ids)
+      : Promise.resolve({ data: [] as { user_id: string; age_group: AgeGroup | null }[] }),
+  ])
+  const classType: ClassType = (clsRow as { type: string } | null)?.type === 'kids' ? 'kids' : 'adult'
+  const ageGroupById = new Map(
+    ((memsRow ?? []) as { user_id: string; age_group: AgeGroup | null }[]).map((m) => [
+      m.user_id,
+      m.age_group ?? 'adult',
+    ]),
+  )
 
   if (students.length === 0) {
     return <p className="text-sm text-slate-500">Nenhum aluno matriculado nesta turma.</p>
@@ -61,11 +83,17 @@ export async function ClassRosterSection({ classId, orgId }: { classId: string; 
         .sort((a, b) => (nameById.get(a.studentId) ?? '').localeCompare(nameById.get(b.studentId) ?? '', 'pt-BR'))
         .map((s) => {
           const meta = STATUS_META[s.status]
+          const avisoTipo = ageGroupWarning(ageGroupById.get(s.studentId) ?? 'adult', classType)
           return (
             <div key={s.studentId} className="flex items-center gap-3 py-3 border-b border-surface-border last:border-0">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">{nameById.get(s.studentId) ?? 'Aluno'}</p>
                 <span className={`inline-block mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${meta.cls}`}>{meta.label}</span>
+                {avisoTipo && (
+                  <span className="ml-1 inline-block mt-1 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-2 py-0.5 text-[11px] font-semibold text-yellow-400">
+                    ⚠️ {avisoTipo}
+                  </span>
+                )}
               </div>
               <SkipDateButton
                 studentId={s.studentId}

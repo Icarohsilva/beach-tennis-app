@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { format, endOfMonth } from 'date-fns'
-import type { StudentLevel } from '@/types'
+import type { AgeGroup, StudentLevel } from '@/types'
 import { reconcileEnrollmentCredits } from './reconcileEnrollment'
 import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
@@ -47,6 +47,33 @@ export async function updateStudentLevel(
     .eq('organization_id', orgId)
 
   if (error) return { error: 'Erro ao atualizar nível.' }
+
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateStudentAgeGroup
+// ---------------------------------------------------------------------------
+
+// Adulto ou kids NESTA academia. Não restringe nada: alimenta o filtro da lista de
+// alunos e o aviso de turma incompatível.
+export async function updateStudentAgeGroup(
+  studentId: string,
+  ageGroup: AgeGroup,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  if (ageGroup !== 'adult' && ageGroup !== 'kids') return { error: 'Tipo de aluno inválido.' }
+
+  const adminClient = createAdminClient()
+  const { error } = await adminClient
+    .from('memberships')
+    .update({ age_group: ageGroup })
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+
+  if (error) return { error: 'Erro ao atualizar o tipo de aluno.' }
 
   return {}
 }

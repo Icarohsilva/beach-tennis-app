@@ -98,6 +98,16 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
+- Aluno **sem e-mail** é cadastro gerenciado pela academia: linha em `profiles` com UUID
+  próprio, sem usuário de auth (a FK para `auth.users` caiu em `20260626000300`), e sem login.
+  É o mesmo mecanismo do dependente, sem responsável — o caso da criança que não tem e-mail
+  nem telefone. Converter depois em conta com login **não é possível** hoje: `createUser` não
+  aceita id, então virar login significaria outro id e repontar todo o histórico. Quem tem
+  e-mail deve ser cadastrado com ele.
+- `memberships.age_group` (`'adult' | 'kids'`, default `adult`) é a leitura da academia sobre
+  o aluno; `classes.type` é a da turma. Cruzar os dois (`lib/aulas/ageGroup.ts`) só **avisa** —
+  nunca bloqueia, porque o adolescente na turma de adultos é caso legítimo. Não confundir com
+  `setStudentType()` (`features/checkin/actions.ts`), que é o eixo cobrança/parceiro
 - `memberships.archived_at` é a **exclusão lógica do aluno por academia** (null = ativo).
   Não confundir com `contract_active`, que é "assinatura ativa" — misturar as duas faria
   reativar a mensalidade ressuscitar um cadastro excluído. Inativar (`features/aulas/archiveStudent.ts`)

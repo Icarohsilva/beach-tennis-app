@@ -10,6 +10,7 @@ import { setStudentType } from '@/features/checkin/actions'
 import { acceptLegalDocuments } from '@/features/legal/actions'
 import { OWNER_REQUIRED_SLUGS } from '@/lib/legal/documents'
 import { checkProfileComplete } from '@/features/liga/extraPoints'
+import type { AgeGroup } from '@/types'
 
 // Contato do suporte exibido quando um documento (CPF/CNPJ) já está em uso.
 const SUPPORT_CONTACT = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? 'suporte@arenahub.website'
@@ -199,13 +200,21 @@ export async function createProfessor(input: CreateProfessorInput): Promise<{ er
 
 export interface CreateStudentInput {
   fullName: string
-  email: string
+  /**
+   * E-mail do aluno. **Opcional**: sem ele, o aluno é criado como cadastro
+   * gerenciado pela academia (linha em `profiles` sem usuário de auth, mesmo
+   * mecanismo do dependente) e não faz login. É o caso da criança que não tem
+   * telefone nem e-mail próprios e também não está pendurada num responsável.
+   */
+  email?: string
   /**
    * WhatsApp do aluno. Sem isso a academia não consegue cobrá-lo por WhatsApp em
    * /admin/wellhub — o cadastro público sempre pediu, a criação pelo admin não.
    */
   phone?: string
   gender?: 'M' | 'F'
+  /** Adulto ou kids nesta academia. Default 'adult'. */
+  ageGroup?: AgeGroup
   /** Esportes que o aluno pratica NESTA academia (slugs de lib/arenas/sports.ts). */
   sports?: string[]
   partner?: { type: 'wellhub' | 'totalpass'; partnerId: string; monthlyTarget: number }
@@ -229,11 +238,11 @@ export async function createStudent(
     .single()
   if (caller?.role !== 'admin') return { error: 'Apenas o staff pode criar alunos.' }
 
-  const email = input.email.trim()
+  const email = input.email?.trim() ?? ''
   const fullName = input.fullName.trim()
   const phone = input.phone?.trim() ?? ''
+  const ageGroup: AgeGroup = input.ageGroup === 'kids' ? 'kids' : 'adult'
   if (!fullName) return { error: 'Informe o nome do aluno.' }
-  if (!email) return { error: 'Informe o e-mail do aluno.' }
 
   const { data: org } = await admin
     .from('organizations')
@@ -243,6 +252,45 @@ export async function createStudent(
   if (!org) return { error: 'Academia não encontrada.' }
 
   const sports = normalizeSportsForOrg(input.sports, org.sports ?? [])
+
+  // Sem e-mail: cadastro gerenciado pela academia. Cria só a identidade e a
+  // membership, sem usuário de auth — é o mesmo caminho do dependente (profiles
+  // deixou de ter FK para auth.users em 20260626000300), com a diferença de não
+  // ter responsável. Serve para a criança que não tem e-mail nem telefone: ela
+  // aparece na chamada, na grade e no financeiro, só não entra no app.
+  if (!email) {
+    const managedId = crypto.randomUUID()
+
+    const { error: profileErr } = await admin.from('profiles').insert({
+      id: managedId,
+      full_name: fullName,
+      ...(phone ? { phone } : {}),
+      ...(input.gender === 'M' || input.gender === 'F' ? { gender: input.gender } : {}),
+    })
+    if (profileErr) {
+      console.error('[createStudent] profiles.insert', profileErr)
+      return { error: 'Não foi possível criar o aluno.' }
+    }
+
+    const { error: memErr } = await admin.from('memberships').insert({
+      user_id: managedId,
+      organization_id: ctx.organizationId,
+      role: 'student',
+      age_group: ageGroup,
+      sports,
+    })
+    if (memErr) {
+      console.error('[createStudent] memberships.insert', memErr)
+      // Sem membership o profile fica órfão e não aparece em lugar nenhum; desfaz
+      // para o admin poder tentar de novo com o mesmo nome.
+      await admin.from('profiles').delete().eq('id', managedId)
+      return { error: 'Não foi possível criar o aluno.' }
+    }
+
+    revalidatePath('/admin/alunos')
+    return {}
+  }
+
   const password = generateTempPassword()
 
   const { data: created, error: userErr } = await admin.auth.admin.createUser({
@@ -280,6 +328,16 @@ export async function createStudent(
   // Gênero (identidade) — opcional na criação.
   if (input.gender === 'M' || input.gender === 'F') {
     await admin.from('profiles').update({ gender: input.gender }).eq('id', created.user.id)
+  }
+
+  // A membership nasce no trigger handle_new_user(), que não conhece o tipo do
+  // aluno; só 'kids' precisa de update, porque 'adult' já é o default da coluna.
+  if (ageGroup === 'kids') {
+    await admin
+      .from('memberships')
+      .update({ age_group: 'kids' })
+      .eq('user_id', created.user.id)
+      .eq('organization_id', ctx.organizationId)
   }
 
   revalidatePath('/admin/alunos')

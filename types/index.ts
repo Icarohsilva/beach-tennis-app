@@ -8,6 +8,14 @@ export type OrganizationStatus = 'active' | 'suspended'
 export type StudentLevel = 'A' | 'B' | 'C' | 'D' | 'iniciante'
 export type PaymentType = 'subscriber' | 'per_class' | 'wellhub' | 'totalpass'
 export type ClassType = 'kids' | 'adult'
+/**
+ * Aluno adulto ou kids NESTA academia (`memberships.age_group`).
+ *
+ * Mesmos valores de ClassType, tipo separado de propósito: um descreve a turma e o
+ * outro a pessoa. Comparar os dois é justamente o que gera o aviso de turma
+ * incompatível — e um alias esconderia que são duas decisões diferentes.
+ */
+export type AgeGroup = 'kids' | 'adult'
 export type BookingStatus = 'confirmed' | 'cancelled'
 export type BookingType = 'extra' | 'makeup'
 export type AttendanceStatus = 'present' | 'absent' | 'late'
@@ -166,6 +174,7 @@ export interface Membership {
   partner: CheckinPartner | null // eixo parceiro, independente da cobrança
   is_dependent: boolean
   parent_id: string | null
+  age_group: AgeGroup // adulto ou kids nesta academia; espelha classes.type
   contract_active: boolean
   credits_balance: number // cache; verdade = credit_transactions
   monthly_checkin_target: number
