@@ -53,6 +53,9 @@ async function finishGeneration(
   if (sessionsCreated > 0) await notifyGridGenerated(orgId, notifyScope)
 
   revalidatePath('/admin/grade')
+  // O calendário do painel mostra o "gerei / não gerei" e precisa refletir o
+  // botão que o admin acabou de apertar.
+  revalidatePath('/admin/dashboard')
   return {
     sessionsCreated,
     reservados: roster.totals.eligible,
@@ -75,6 +78,34 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const today = brtToday(new Date())
   const target = nextDateForDayOfWeek(today, dayOfWeek)
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
+  if (r.error) return { error: r.error }
+
+  return finishGeneration(
+    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
+    { dayOfWeek }, { kind: 'day', dayOfWeek },
+  )
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Gera UMA data específica (todas as turmas do dia da semana dela).
+ *
+ * É o que o calendário do painel dispara: lá o admin aponta para o dia 27, não
+ * para "a próxima terça". `generateGridDay` não serve porque sempre resolve
+ * para a ocorrência mais próxima — apertar no dia 27 geraria o dia 13.
+ */
+export async function generateGridDate(dateISO: string): Promise<GridActionResult> {
+  const { orgId, error } = await requireAdmin()
+  if (error) return { error }
+
+  if (!DATE_RE.test(dateISO)) return { error: 'Data inválida.' }
+  // Gerar o passado cria sessão para aula que já aconteceu e dispara o push de
+  // "já dá pra agendar" para um dia que não existe mais.
+  if (dateISO < brtToday(new Date())) return { error: 'Não dá para gerar grade de um dia que já passou.' }
+
+  const dayOfWeek = new Date(`${dateISO}T12:00:00Z`).getUTCDay()
+  const r = await generateGrid(orgId, dateISO, dateISO)
   if (r.error) return { error: r.error }
 
   return finishGeneration(

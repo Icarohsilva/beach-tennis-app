@@ -23,6 +23,9 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { AdminHero } from '@/features/painel/AdminHero'
 import { DayTimeline, type TimelineSession } from '@/features/painel/DayTimeline'
 import { OccupancyPanel } from '@/features/painel/OccupancyPanel'
+import { AdminCalendar } from '@/features/painel/AdminCalendar'
+import { getAdminMonth } from '@/features/painel/adminMonthQuery'
+import { monthOf } from '@/lib/home/arenaAgenda'
 import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -121,6 +124,15 @@ export default async function AdminDashboardPage() {
     : null
 
   const trials = (recentTrials ?? []) as Array<{ id: string; name: string; phone: string; email: string; status: string; created_at: string }>
+
+  // Calendário do mês — só para quem cuida das aulas. Professor sem a área de
+  // aulas não gera grade nem edita turma; o calendário seria um mostruário de
+  // botões que ele não pode apertar.
+  const currentMonth = monthOf(today)
+  const calendar =
+    orgId && canAccessArea('aulas', isOwner)
+      ? await getAdminMonth({ orgId, monthISO: currentMonth, todayISO: today })
+      : null
 
   const pulse = timeline.length === 0
     ? 'Nenhuma aula na agenda de hoje.'
@@ -232,6 +244,19 @@ export default async function AdminDashboardPage() {
               </Card>
             ))}
           </div>
+        </Reveal>
+      )}
+
+      {/* Calendário do mês — o que foi gerado, o que falta gerar, e o caminho
+          para ver ou editar cada aula, torneio e day use. */}
+      {calendar && (
+        <Reveal step={8} as="section">
+          <SectionHeader title="Calendário da academia" href="/admin/grade" linkLabel="ver grade" />
+          <AdminCalendar
+            todayISO={today}
+            initialMonth={currentMonth}
+            initialData={calendar}
+          />
         </Reveal>
       )}
     </div>
