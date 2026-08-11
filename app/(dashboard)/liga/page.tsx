@@ -8,6 +8,7 @@ import { Trophy } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { getLigaSettings } from '@/features/liga/settings'
+import { firstDemotedPosition, promoteLimit } from '@/lib/liga/divisions'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
 import {
   getLigaView,
@@ -128,7 +129,7 @@ export default async function LigaPage({
     : sports[0]
 
   const [view, medals, kudos, peers, feed, photos, prizeView, membershipRow] = await Promise.all([
-    getLigaView(orgId, user.id, season, activeSport, settings.promoteCount),
+    getLigaView(orgId, user.id, season, activeSport, settings.cuts),
     getStudentMedals(orgId, user.id),
     getRecentKudos(orgId, user.id),
     getKudosPeers(season.id, activeSport, user.id),
@@ -183,7 +184,7 @@ export default async function LigaPage({
                 streakWeeks={view.streakWeeks}
                 sport={view.sport}
                 endsOn={season.ends_on}
-                promoteCount={settings.promoteCount}
+                promoteCount={promoteLimit(settings.cuts, view.division)}
               />
             </Reveal>
             <Reveal step={1}>
@@ -200,8 +201,8 @@ export default async function LigaPage({
                 entries={view.ranking}
                 division={view.division}
                 divisionSize={view.divisionSize}
-                promoteCount={settings.promoteCount}
-                demoteCount={settings.demoteCount}
+                promoteCount={promoteLimit(settings.cuts, view.division)}
+                demoteFrom={firstDemotedPosition(settings.cuts, view.division, view.divisionSize)}
               />
             </Reveal>
             <Reveal step={5}>

@@ -1,7 +1,8 @@
 // features/liga/RulesCard.tsx
-import { BookOpen, ChevronDown } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { DIVISION_LABEL } from '@/lib/liga/labels'
+import { DIVISION_ORDER, promoteLimit, type Division } from '@/lib/liga/divisions'
 import type { LigaSettings } from './settings'
 
 interface Props {
@@ -12,6 +13,27 @@ interface Regra {
   label: string
   pontos: number
   detalhe?: string
+}
+
+/**
+ * Como o corte de baixo daquela divisão é dito em português.
+ *
+ * Devolve null quando ninguém desce — Bronze é o piso, e uma academia pode ter
+ * zerado o corte de uma divisão. Anunciar rebaixamento que não acontece assusta à toa.
+ */
+function frasesDoCorte(settings: LigaSettings, division: Division): string | null {
+  if (DIVISION_ORDER.indexOf(division) === 0) return null
+
+  const cut = settings.cuts[division]
+  if (cut.demote <= 0) return null
+
+  if (cut.demoteMode === 'ultimos') {
+    return `os ${cut.demote} últimos descem`
+  }
+
+  const ficam = promoteLimit(settings.cuts, division) + cut.demote
+  if (ficam === 1) return 'só o 1º lugar permanece, o resto desce'
+  return `só os ${ficam} primeiros permanecem, o resto desce`
 }
 
 /**
@@ -113,27 +135,48 @@ export function RulesCard({ settings }: Props) {
             </p>
             <ul className="space-y-1.5 text-sm text-slate-300">
               <li>
-                Você disputa dentro da sua divisão, contra quem está no mesmo ritmo:{' '}
-                {DIVISION_LABEL.bronze.replace('Divisão ', '')} →{' '}
-                {DIVISION_LABEL.prata.replace('Divisão ', '')} →{' '}
-                {DIVISION_LABEL.ouro.replace('Divisão ', '')} →{' '}
-                {DIVISION_LABEL.diamante.replace('Divisão ', '')}.
+                Você disputa dentro da sua divisão, contra quem está no mesmo ritmo. No fim da
+                temporada cada divisão tem o próprio corte:
               </li>
-              {settings.promoteCount > 0 && (
-                <li>
-                  No fim da temporada, os{' '}
-                  <span className="font-semibold text-emerald-400">
-                    {settings.promoteCount} primeiros sobem
-                  </span>{' '}
-                  de divisão.
-                </li>
-              )}
-              {settings.demoteCount > 0 && (
-                <li>
-                  Os <span className="font-semibold text-rose-400">{settings.demoteCount} últimos descem</span>{' '}
-                  — menos quem já está no Bronze.
-                </li>
-              )}
+            </ul>
+
+            {/* Escada com o corte de cada degrau: é mais apertado lá em cima, e o
+                aluno precisa ver isso antes de chegar lá. */}
+            <ul className="mt-2 space-y-1.5">
+              {DIVISION_ORDER.map((division) => {
+                const sobem = promoteLimit(settings.cuts, division)
+                const descem = frasesDoCorte(settings, division)
+                return (
+                  <li
+                    key={division}
+                    className="flex items-baseline gap-2 rounded-lg bg-surface/60 px-2.5 py-1.5 text-sm"
+                  >
+                    <span className="w-20 shrink-0 font-semibold text-slate-200">
+                      {DIVISION_LABEL[division].replace('Divisão ', '')}
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[13px]">
+                      {sobem > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-emerald-400">
+                          <ChevronUp className="h-3 w-3" />
+                          os {sobem} primeiros sobem
+                        </span>
+                      )}
+                      {descem && (
+                        <span className="inline-flex items-center gap-0.5 text-rose-400">
+                          <ChevronDown className="h-3 w-3" />
+                          {descem}
+                        </span>
+                      )}
+                      {sobem === 0 && !descem && (
+                        <span className="text-slate-500">ninguém sobe nem desce</span>
+                      )}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+
+            <ul className="mt-2 space-y-1.5 text-sm text-slate-300">
               <li>
                 A temporada é mensal e os pontos zeram no dia 1º. Sua sequência de semanas e suas
                 medalhas <span className="font-medium text-white">não</span> zeram.

@@ -144,8 +144,8 @@ export default function BancadaResponsiva() {
               { studentId: 'p2', fullName: 'João Pedro Gonçalves', avatarUrl: null, points: 210, position: 2, isMe: true },
               { studentId: 'p3', fullName: 'Ana Beatriz Nascimento', avatarUrl: null, points: 180, position: 3, isMe: false },
             ]}
-            promoteCount={3}
-            demoteCount={3}
+            promoteCount={1}
+            demoteFrom={3}
           />
         </Bloco>
 

@@ -5,6 +5,13 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { updateSystemSettings } from '@/features/financeiro/actions'
+import {
+  DIVISION_ORDER,
+  type DemoteMode,
+  type Division,
+  type DivisionCuts,
+} from '@/lib/liga/divisions'
+import { DIVISION_LABEL } from '@/lib/liga/labels'
 
 interface Props {
   settings: {
@@ -13,8 +20,7 @@ interface Props {
     liga_points_streak_week: number
     liga_points_tournament_entry: number
     liga_points_tournament_win: number
-    liga_promote_count: number
-    liga_demote_count: number
+    cuts: DivisionCuts
     liga_kudos_weekly_cap: number
     liga_points_kudos_given: number
     liga_points_kudos_received: number
@@ -37,13 +43,22 @@ const EXTRAS: { key: string; label: string; hint: string }[] = [
   { key: 'dayUse', label: 'Reservar day use', hint: 'puxa receita de quadra ociosa' },
 ]
 
+/** Topo e piso da escada: um não promove, o outro não rebaixa. */
+const TOPO = DIVISION_ORDER[DIVISION_ORDER.length - 1]
+const PISO = DIVISION_ORDER[0]
+
+const DEMOTE_MODE_LABEL: Record<DemoteMode, string> = {
+  ultimos: 'descem os últimos',
+  permanecem: 'só permanecem os primeiros',
+}
+
+type CutForm = { promote: string; demote: string; demoteMode: DemoteMode }
+
 const FIELD_LABEL: Record<string, string> = {
   attendance: 'Presença',
   streak: 'Sequência (semana)',
   entry: 'Inscrição em torneio',
   win: 'Vitória em torneio',
-  promote: 'Sobem de divisão',
-  demote: 'Descem de divisão',
   kudosCap: 'Elogios que pontuam por semana',
   kudosGiven: 'Pontos por elogiar',
   kudosReceived: 'Pontos por ser elogiado',
@@ -61,8 +76,20 @@ export function LigaSettingsForm({ settings }: Props) {
   const [streak, setStreak] = useState(String(settings.liga_points_streak_week))
   const [entry, setEntry] = useState(String(settings.liga_points_tournament_entry))
   const [win, setWin] = useState(String(settings.liga_points_tournament_win))
-  const [promote, setPromote] = useState(String(settings.liga_promote_count))
-  const [demote, setDemote] = useState(String(settings.liga_demote_count))
+  // Cortes por divisão num estado só, indexado pela divisão: quatro trios de useState
+  // seriam o mesmo dado escrito quatro vezes.
+  const [cuts, setCuts] = useState<Record<Division, CutForm>>(() => {
+    const inicial = {} as Record<Division, CutForm>
+    for (const division of DIVISION_ORDER) {
+      const c = settings.cuts[division]
+      inicial[division] = {
+        promote: String(c.promote),
+        demote: String(c.demote),
+        demoteMode: c.demoteMode,
+      }
+    }
+    return inicial
+  })
   const [kudosCap, setKudosCap] = useState(String(settings.liga_kudos_weekly_cap))
   const [kudosGiven, setKudosGiven] = useState(String(settings.liga_points_kudos_given))
   const [kudosReceived, setKudosReceived] = useState(String(settings.liga_points_kudos_received))
@@ -85,7 +112,7 @@ export function LigaSettingsForm({ settings }: Props) {
     setSuccess(null)
 
     const nums = {
-      attendance, streak, entry, win, promote, demote,
+      attendance, streak, entry, win,
       kudosCap, kudosGiven, kudosReceived, ...extras,
     }
     for (const [key, raw] of Object.entries(nums)) {
@@ -96,6 +123,25 @@ export function LigaSettingsForm({ settings }: Props) {
       }
     }
 
+    for (const division of DIVISION_ORDER) {
+      const c = cuts[division]
+      for (const raw of [c.promote, c.demote]) {
+        const n = parseInt(raw, 10)
+        if (isNaN(n) || n < 0) {
+          setError(
+            `Corte inválido em "${DIVISION_LABEL[division]}": use um inteiro não-negativo.`,
+          )
+          return
+        }
+      }
+    }
+
+    const cut = (division: Division) => ({
+      promote: parseInt(cuts[division].promote, 10),
+      demote: parseInt(cuts[division].demote, 10),
+      mode: cuts[division].demoteMode,
+    })
+
     startTransition(async () => {
       const result = await updateSystemSettings({
         liga_enabled: enabled,
@@ -103,8 +149,15 @@ export function LigaSettingsForm({ settings }: Props) {
         liga_points_streak_week: parseInt(streak, 10),
         liga_points_tournament_entry: parseInt(entry, 10),
         liga_points_tournament_win: parseInt(win, 10),
-        liga_promote_count: parseInt(promote, 10),
-        liga_demote_count: parseInt(demote, 10),
+        liga_promote_bronze: cut('bronze').promote,
+        liga_promote_prata: cut('prata').promote,
+        liga_promote_ouro: cut('ouro').promote,
+        liga_demote_prata: cut('prata').demote,
+        liga_demote_ouro: cut('ouro').demote,
+        liga_demote_diamante: cut('diamante').demote,
+        liga_demote_mode_prata: cut('prata').mode,
+        liga_demote_mode_ouro: cut('ouro').mode,
+        liga_demote_mode_diamante: cut('diamante').mode,
         liga_kudos_weekly_cap: parseInt(kudosCap, 10),
         liga_points_kudos_given: parseInt(kudosGiven, 10),
         liga_points_kudos_received: parseInt(kudosReceived, 10),
@@ -177,29 +230,110 @@ export function LigaSettingsForm({ settings }: Props) {
             <label className="text-sm text-slate-300 font-medium">{FIELD_LABEL.win}</label>
             <Input type="number" min="0" value={win} onChange={(e) => setWin(e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <label className="text-sm text-slate-300 font-medium">{FIELD_LABEL.promote}</label>
-            <Input
-              type="number"
-              min="0"
-              value={promote}
-              onChange={(e) => setPromote(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm text-slate-300 font-medium">{FIELD_LABEL.demote}</label>
-            <Input
-              type="number"
-              min="0"
-              value={demote}
-              onChange={(e) => setDemote(e.target.value)}
-            />
-          </div>
         </div>
         <p className="text-xs text-slate-400">
           O bônus de sequência cresce até 4x e estabiliza, para que quem começou agora ainda tenha
           chance na temporada.
         </p>
+
+        <div className="border-t border-surface-border pt-4">
+          <p className="text-sm font-medium text-slate-300">Escada de divisões</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Quantos classificados cada divisão manda para cima no fim do mês, e quem cai. Aperte o
+            funil conforme sobe: 10 no Bronze, 5 na Prata, 3 no Ouro. No topo, escolha
+            &quot;só permanecem os primeiros&quot; com 1 para o modelo de campeão único — todo o
+            resto desce.
+          </p>
+
+          <div className="mt-3 space-y-3">
+            {DIVISION_ORDER.map((division) => {
+              const promove = division !== TOPO
+              const rebaixa = division !== PISO
+              return (
+                <div
+                  key={division}
+                  className="rounded-lg border border-surface-border bg-surface/40 p-3"
+                >
+                  <p className="text-xs font-semibold text-slate-200">
+                    {DIVISION_LABEL[division]}
+                    {!promove && (
+                      <span className="ml-1 font-normal text-slate-500">· topo da escada</span>
+                    )}
+                    {!rebaixa && (
+                      <span className="ml-1 font-normal text-slate-500">· nunca rebaixa</span>
+                    )}
+                  </p>
+
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    {promove && (
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-slate-400">Sobem de divisão</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={cuts[division].promote}
+                          onChange={(e) =>
+                            setCuts((prev) => ({
+                              ...prev,
+                              [division]: { ...prev[division], promote: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {rebaixa && (
+                      <>
+                        <div className="space-y-1">
+                          <label className="text-[11px] text-slate-400">
+                            {cuts[division].demoteMode === 'ultimos'
+                              ? 'Quantos descem'
+                              : 'Quantos permanecem'}
+                          </label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={cuts[division].demote}
+                            onChange={(e) =>
+                              setCuts((prev) => ({
+                                ...prev,
+                                [division]: { ...prev[division], demote: e.target.value },
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-1">
+                          <label className="text-[11px] text-slate-400">
+                            Como contar o rebaixamento
+                          </label>
+                          <select
+                            value={cuts[division].demoteMode}
+                            onChange={(e) =>
+                              setCuts((prev) => ({
+                                ...prev,
+                                [division]: {
+                                  ...prev[division],
+                                  demoteMode: e.target.value as DemoteMode,
+                                },
+                              }))
+                            }
+                            className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-white"
+                          >
+                            {(Object.keys(DEMOTE_MODE_LABEL) as DemoteMode[]).map((mode) => (
+                              <option key={mode} value={mode}>
+                                {DEMOTE_MODE_LABEL[mode]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
 
         <div className="border-t border-surface-border pt-4">
           <p className="text-sm font-medium text-slate-300">Elogios entre alunos</p>

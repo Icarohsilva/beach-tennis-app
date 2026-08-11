@@ -113,7 +113,7 @@ export async function closeLigaSeason(
       points: r.points,
       division: r.division,
     }))
-    for (const move of computeDivisionMoves(input, settings.promoteCount, settings.demoteCount)) {
+    for (const move of computeDivisionMoves(input, settings.cuts)) {
       nextDivision.set(`${move.studentId}::${sport}`, move.to)
       // Comparar pelo índice da escada, não pelas strings: a ordem alfabética de
       // Division não reflete a hierarquia ('bronze' < 'diamante' < 'ouro' < 'prata').

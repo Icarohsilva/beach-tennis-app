@@ -178,8 +178,18 @@ divergiriam permanentemente.
 | `liga_points_streak_week` | `5` | Base do bônus semanal de sequência |
 | `liga_points_tournament_entry` | `30` | Por se inscrever num torneio |
 | `liga_points_tournament_win` | `50` | Bônus do 1º lugar (2º e 3º recebem fração) |
-| `liga_promote_count` | `5` | Quantos sobem de divisão por temporada |
-| `liga_demote_count` | `3` | Quantos descem |
+| `liga_promote_<divisão>` | `10 / 5 / 3` | Quantos sobem daquela divisão (bronze, prata, ouro) |
+| `liga_demote_<divisão>` | `3` | Corte de baixo daquela divisão (prata, ouro, diamante) |
+| `liga_demote_mode_<divisão>` | `ultimos` | `ultimos` (descem os N últimos) ou `permanecem` (só os N primeiros ficam) |
+
+O corte é **por divisão**, não por academia: o funil aperta conforme se sobe, e o topo
+aceita o modelo "só o campeão permanece" — que `ultimos` não consegue escrever, porque
+lá o número que importa é quem fica, e não quantos caem.
+
+As chaves antigas `liga_promote_count` / `liga_demote_count`, de quando o corte era um
+número só para a escada inteira, continuam sendo lidas como fallback de todas as
+divisões. Academia que já tinha configurado não muda de comportamento até distribuir os
+cortes nas Configurações.
 
 ## Regra pura (com teste Vitest)
 
@@ -224,16 +234,27 @@ export type Division = 'bronze' | 'prata' | 'ouro' | 'diamante'
 export interface StandingRow { studentId: string; points: number; division: Division }
 export interface DivisionMove { studentId: string; from: Division; to: Division }
 
-// Ordena por pontos desc dentro de cada divisão; os `promoteCount` primeiros sobem, os
-// `demoteCount` últimos descem. Diamante não promove, bronze não rebaixa. Aluno com 0 ponto
-// nunca é promovido (senão divisão vazia promoveria quem não jogou).
-export function computeDivisionMoves(
-  rows: StandingRow[], promoteCount: number, demoteCount: number,
-): DivisionMove[]
+export type DemoteMode = 'ultimos' | 'permanecem'
+export interface DivisionCut { promote: number; demoteMode: DemoteMode; demote: number }
+export type DivisionCuts = Record<Division, DivisionCut>
+
+// Ordena por pontos desc dentro de cada divisão e aplica o corte DAQUELA divisão.
+// Diamante não promove, bronze não rebaixa. Aluno com 0 ponto nunca é promovido (senão
+// divisão vazia promoveria quem não jogou).
+export function computeDivisionMoves(rows: StandingRow[], cuts: DivisionCuts): DivisionMove[]
+
+// Cortes já resolvidos pela posição na escada — é o que as telas desenham.
+export function promoteLimit(cuts: DivisionCuts, division: Division): number
+export function firstDemotedPosition(cuts: DivisionCuts, division: Division, size: number): number
 ```
 
-Casos de teste obrigatórios: divisão com menos gente que `promoteCount`; empate em pontos
-(desempate estável por `studentId`); todos com 0 ponto; Diamante no topo; Bronze na base.
+No modo `permanecem` o corte é medido de cima e soma o `promoteLimit`: sobem os N, ficam
+os K seguintes, o resto desce. É isso que impede o corte de morder quem acabou de subir —
+e no topo, onde ninguém sobe, a conta vira "só os K primeiros ficam".
+
+Casos de teste obrigatórios: divisão com menos gente que o corte; empate em pontos
+(desempate estável por `studentId`); todos com 0 ponto; Diamante no topo; Bronze na base;
+cortes diferentes por divisão; modo `permanecem` com e sem promoção na mesma divisão.
 
 ## Onde os pontos entram
 
