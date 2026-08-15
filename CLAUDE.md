@@ -148,6 +148,26 @@ Gradiente de marca: bg-gradient-to-br from-brand-600 to-brand-800 (headers/CTAs 
 
 UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge`, `Input`, `BottomNav`. Always use these rather than raw HTML elements for consistency.
 
+### Versão do app e sessão
+
+Este app **não tem cache de service worker**: o `@ducanh2912/next-pwa` está nas
+dependências mas nunca foi ligado no `next.config.js`, e [public/sw.js](public/sw.js) é
+escrito à mão só para push — o handler de `fetch` é um no-op presente apenas para o Chrome
+considerar o app instalável. Então deploy novo já chega em qualquer carregamento de página;
+o que segura código antigo é a janela do PWA aberta há dias.
+
+[components/pwa/VersionGate.tsx](components/pwa/VersionGate.tsx) (montado no layout raiz)
+compara a build inlinada no bundle com a de `/api/version`. Voltou de mais de 30 min em
+segundo plano → recarrega sozinho; em uso → mostra o aviso, porque recarregar por cima de
+uma chamada ou de um formulário meio preenchido destruiria trabalho do professor.
+
+**Para exigir que todos entrem de novo**, bumpe `SESSION_EPOCH` em
+[lib/version.ts](lib/version.ts). O `middleware.ts` limpa os cookies de sessão e manda para
+o `/login` — no middleware, e não no cliente, para valer também para quem está rodando um
+bundle antigo. Deploy de rotina **não** mexe nesse número: subi-lo derruba a base inteira.
+Cookie de época ausente é tratado como "em dia", nunca como "precisa reautenticar" — senão o
+próprio deploy que introduziu o mecanismo teria expulsado todo mundo.
+
 ### Responsividade
 
 O app é usado em celular, e o piso é **320px** (iPhone SE), não 375. Há um breakpoint

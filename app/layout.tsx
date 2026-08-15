@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Sora } from 'next/font/google'
 import './globals.css'
 import { CookieBanner } from '@/components/ui/CookieBanner'
+import { VersionGate } from '@/components/pwa/VersionGate'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const sora = Sora({ subsets: ['latin'], weight: ['400', '600', '700', '800'], variable: '--font-sora' })
@@ -64,6 +65,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         {children}
         <CookieBanner />
+        {/* No layout raiz porque é o único ponto que cobre os quatro grupos de rota
+            (aluno, admin, público e super-admin) de uma vez. */}
+        <VersionGate />
       </body>
     </html>
   )
