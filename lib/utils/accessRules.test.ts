@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveClassAccess } from './accessRules'
+import { resolveClassAccess, exceedsDailyCap } from './accessRules'
 
 const base = {
   archived: false,
@@ -13,6 +13,7 @@ const base = {
   quotaRemaining: null,
   bookingsOnDate: 0,
   maxClassesPerDay: 2,
+  preferCredit: false,
 }
 
 describe('resolveClassAccess', () => {
@@ -150,6 +151,93 @@ describe('resolveClassAccess — cota', () => {
     expect(
       resolveClassAccess({ ...base, quotaEnforced: true, quotaRemaining: null }),
     ).toEqual({ grant: 'debt' })
+  })
+})
+
+// Teto 0 = "sem limite diário". A academia que não quer limitar grava 0; antes isso
+// caía num default de 2 e não havia como desligar a regra.
+describe('resolveClassAccess — teto diário 0 é sem limite', () => {
+  it('teto 0 não nega, por mais reservas que o aluno tenha no dia', () => {
+    expect(
+      resolveClassAccess({
+        ...base,
+        quotaEnforced: true,
+        hasActivePlan: true,
+        quotaRemaining: 5,
+        bookingsOnDate: 9,
+        maxClassesPerDay: 0,
+      }),
+    ).toEqual({ grant: 'plan' })
+  })
+
+  it('teto negativo (dado torto) também não nega', () => {
+    expect(exceedsDailyCap(9, -1)).toBe(false)
+  })
+
+  it('teto positivo segue valendo', () => {
+    expect(exceedsDailyCap(1, 2)).toBe(false)
+    expect(exceedsDailyCap(2, 2)).toBe(true)
+  })
+})
+
+// Escolher o crédito é comprar a aula de novo. Os dois limites que ele fura são os
+// do plano; as negações de acesso continuam de pé.
+describe('resolveClassAccess — aluno escolhe pagar com crédito', () => {
+  const comCota = { ...base, quotaEnforced: true, hasActivePlan: true, preferCredit: true }
+
+  it('usa crédito mesmo com cota do plano sobrando', () => {
+    expect(
+      resolveClassAccess({ ...comCota, quotaRemaining: 5, creditsBalance: 1 }),
+    ).toEqual({ grant: 'credit' })
+  })
+
+  it('fura a cota esgotada', () => {
+    expect(
+      resolveClassAccess({ ...comCota, quotaRemaining: 0, creditsBalance: 1 }),
+    ).toEqual({ grant: 'credit' })
+  })
+
+  it('fura o teto diário', () => {
+    expect(
+      resolveClassAccess({
+        ...comCota, quotaRemaining: 5, creditsBalance: 1, bookingsOnDate: 9,
+      }),
+    ).toEqual({ grant: 'credit' })
+  })
+
+  it('sem saldo, a preferência é ignorada e a regra normal volta a valer', () => {
+    expect(
+      resolveClassAccess({ ...comCota, quotaRemaining: 5, creditsBalance: 0 }),
+    ).toEqual({ grant: 'plan' })
+    expect(
+      resolveClassAccess({
+        ...comCota, quotaRemaining: 5, creditsBalance: 0, bookingsOnDate: 2,
+      }),
+    ).toEqual({ denied: 'daily_cap' })
+  })
+
+  it('não compra dívida, cadastro inativo nem pendência de check-in', () => {
+    expect(
+      resolveClassAccess({ ...comCota, creditsBalance: 5, hasOpenDebt: true }),
+    ).toEqual({ denied: 'blocked_by_debt' })
+    expect(
+      resolveClassAccess({ ...comCota, creditsBalance: 5, archived: true }),
+    ).toEqual({ denied: 'archived' })
+    expect(
+      resolveClassAccess({
+        ...comCota,
+        creditsBalance: 5,
+        partner: 'wellhub',
+        openMissedCheckins: 3,
+        missedCheckinBlockLimit: 2,
+      }),
+    ).toEqual({ denied: 'blocked_by_missed_checkins' })
+  })
+
+  it('parceiro continua entrando de graça, sem gastar crédito à toa', () => {
+    expect(
+      resolveClassAccess({ ...comCota, creditsBalance: 5, partner: 'wellhub' }),
+    ).toEqual({ grant: 'partner' })
   })
 })
 

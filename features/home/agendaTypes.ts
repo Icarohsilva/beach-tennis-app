@@ -4,6 +4,20 @@
 // deles importar o outro só pelo tipo criaria ciclo.
 import type { SelfCheckinView } from '@/features/checkin/selfCheckinQueries'
 
+/**
+ * Um dependente do responsável, com o que ele já tem NESTA sessão.
+ *
+ * `bookingId` presente = já está na aula (o botão é "Sair"); `waitlistEntryId`
+ * presente = está na fila. Os dois ausentes = ainda pode entrar. Sem esses ids a
+ * ficha só saberia dizer "entrar" e nunca desfazer.
+ */
+export interface GuardianOption {
+  id: string
+  name: string
+  bookingId?: string
+  waitlistEntryId?: string
+}
+
 export interface AgendaSession {
   id: string
   /** 'YYYY-MM-DD' */
@@ -36,4 +50,23 @@ export interface AgendaSession {
    * academia não habilitou o recurso ou a aula não é do aluno.
    */
   selfCheckin?: SelfCheckinView
+  /**
+   * Dependentes do responsável logado, quando ele tem algum. É o que permite ao
+   * pai inscrever o filho na turma kids — o dependente não tem login, então sem
+   * esta lista a aula dele apareceria na agenda sem nenhuma ação possível.
+   */
+  guardianOptions?: GuardianOption[]
+  /**
+   * O aluno tem plano com cota E crédito avulso, então pode escolher com o que
+   * paga. Ausente quando só existe um caminho — perguntar seria ruído.
+   */
+  canChoosePayment?: boolean
+  /** Saldo de crédito avulso do aluno, para a ficha explicar o que ele gasta. */
+  creditsBalance?: number
+  /**
+   * A academia alterou esta data (horário, quadra ou capacidade) em relação à
+   * turma. A ficha marca isso: sem o aviso, o aluno vê um horário diferente do
+   * que combinou e não sabe se é mudança ou engano dele.
+   */
+  rescheduled?: boolean
 }

@@ -17,6 +17,20 @@ export type AccessDenial =
 
 export type AccessDecision = { grant: AccessGrant } | { denied: AccessDenial }
 
+/**
+ * O aluno estourou o teto de aulas no dia?
+ *
+ * `cap <= 0` é "sem teto", não "teto zero": a academia que não quer limite diário
+ * grava 0, e ler isso como limite bloquearia todo mundo. Exportada porque as
+ * checagens inline de `bookSession` e `addStudentToSession` precisam da MESMA
+ * leitura — foi a divergência entre elas que fez 0 virar 2 num lugar e travar tudo
+ * no outro.
+ */
+export function exceedsDailyCap(bookingsOnDate: number, cap: number): boolean {
+  if (cap <= 0) return false
+  return bookingsOnDate >= cap
+}
+
 export interface AccessInput {
   /**
    * Cadastro inativado nesta academia (memberships.archived_at).
@@ -47,8 +61,22 @@ export interface AccessInput {
   quotaRemaining: number | null
   /** Reservas confirmadas do aluno na data da sessão pedida. */
   bookingsOnDate: number
-  /** Teto do plano, ou o default da academia para quem não tem plano. */
+  /**
+   * Teto do plano, ou o default da academia para quem não tem plano.
+   *
+   * **0 = sem teto.** É a forma de a academia dizer "pode fazer quantas aulas
+   * quiser no dia" sem precisar inventar um número grande. Antes 0 caía num
+   * default de 2 e o desligamento era impossível de expressar.
+   */
   maxClassesPerDay: number
+  /**
+   * O aluno escolheu pagar esta aula com crédito avulso, em vez de gastar o plano.
+   *
+   * Crédito é aula comprada, então ele passa por cima dos dois limites que o plano
+   * impõe — a cota do ciclo e o teto diário. Quem paga de novo não está ocupando a
+   * vaga que o plano dele já vendeu.
+   */
+  preferCredit: boolean
 }
 
 /**
@@ -63,9 +91,10 @@ export interface AccessInput {
  * ficasse lá embaixo ela nunca rodaria para quem gera a pendência — e é justamente o
  * aluno de parceiro que a gera. Regra desligada por padrão (limite 0).
  *
- * O teto diário é avaliado ANTES da cota porque é um limite absoluto — nem
- * crédito comprado o compra. Sem essa ordem os eixos se sobreporiam quando o
- * teto estoura com cota ainda disponível.
+ * O teto diário é avaliado ANTES da cota porque, dentro do caminho do plano, é um
+ * limite absoluto: com cota sobrando e teto estourado os dois eixos se sobreporiam.
+ * Quem escolhe pagar com crédito (`preferCredit`) sai desse caminho antes, porque
+ * cota e teto medem consumo de plano e ele não está consumindo plano nenhum.
  *
  * `addStudentToSession` (admin adiciona aluno manualmente numa sessão) passa
  * por aqui como qualquer outro caller — dívida continua sempre ignorada
@@ -83,8 +112,16 @@ export function resolveClassAccess(input: AccessInput): AccessDecision {
   }
   if (input.partner) return { grant: 'partner' }
 
+  // Pagar com crédito é comprar a aula de novo: nem a cota do ciclo nem o teto
+  // diário se aplicam, porque os dois medem o consumo do PLANO. Fica depois das
+  // negações de acesso (dívida, inativo, pendência) de propósito — aquelas não são
+  // sobre quanto o aluno já usou, e crédito não as compra.
+  if (input.preferCredit && input.creditsBalance >= 1) return { grant: 'credit' }
+
   if (input.quotaEnforced) {
-    if (input.bookingsOnDate >= input.maxClassesPerDay) return { denied: 'daily_cap' }
+    if (exceedsDailyCap(input.bookingsOnDate, input.maxClassesPerDay)) {
+      return { denied: 'daily_cap' }
+    }
     if (input.hasActivePlan && (input.quotaRemaining ?? 0) > 0) return { grant: 'plan' }
     if (input.creditsBalance >= 1) return { grant: 'credit' }
     // Plano exausto não vira dívida: cobrar avulsa de quem tem plano não é o

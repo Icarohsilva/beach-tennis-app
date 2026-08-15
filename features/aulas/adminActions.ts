@@ -10,7 +10,7 @@ import { getActivePlan, hasActiveSubscriptionPlan } from '@/lib/billing/planElig
 import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
 import { computeQuotaBudget } from './quotaBudget'
 import { getQuotaSnapshot } from './quotaUsage'
-import { resolveClassAccess } from '@/lib/utils/accessRules'
+import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
 import type { AddStudentReason, CheckinPartner } from '@/types'
 import * as Sentry from '@sentry/nextjs'
@@ -24,7 +24,7 @@ import {
 } from '@/features/checkin/missedCheckinSettings'
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
-import { checkProfileComplete } from '@/features/liga/extraPoints'
+import { checkProfileComplete, revokeLigaExtra, ENTRY_REASONS } from '@/features/liga/extraPoints'
 import { notifyWaitlistSpotOpen } from './waitlistActions'
 
 // ---------------------------------------------------------------------------
@@ -715,28 +715,32 @@ export async function addStudentToSession(
   // mecanismo de bookSession (features/aulas/actions.ts). Sem isto, um aluno
   // sem plano ativo nunca esbarra em limite nenhum aqui, porque o eixo de
   // cota do resolveClassAccess só olha bookingsOnDate quando há plano.
+  // 0 = sem teto (exceedsDailyCap). Com teto desligado nem a contagem do dia
+  // precisa rodar — é uma query por adição de aluno.
   const dailyCap = plan?.maxClassesPerDay ?? orgDailyCap
 
-  const { count: dailyCount } = await adminClient
-    .from('session_bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('student_id', studentId)
-    .eq('status', 'confirmed')
-    .in(
-      'session_id',
-      (
-        await adminClient
-          .from('class_sessions')
-          .select('id')
-          .eq('organization_id', orgId)
-          .eq('session_date', sessionDate)
-      ).data?.map((s: { id: string }) => s.id) ?? [],
-    )
+  if (dailyCap > 0 && !force) {
+    const { count: dailyCount } = await adminClient
+      .from('session_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId)
+      .eq('status', 'confirmed')
+      .in(
+        'session_id',
+        (
+          await adminClient
+            .from('class_sessions')
+            .select('id')
+            .eq('organization_id', orgId)
+            .eq('session_date', sessionDate)
+        ).data?.map((s: { id: string }) => s.id) ?? [],
+      )
 
-  if ((dailyCount ?? 0) >= dailyCap && !force) {
-    return {
-      error: `Esse aluno já tem ${dailyCap} aulas neste dia. É o limite do plano dele.`,
-      quotaBlocked: true,
+    if (exceedsDailyCap(dailyCount ?? 0, dailyCap)) {
+      return {
+        error: `Esse aluno já tem ${dailyCap} aulas neste dia. É o limite do plano dele.`,
+        quotaBlocked: true,
+      }
     }
   }
 
@@ -769,6 +773,9 @@ export async function addStudentToSession(
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
     maxClassesPerDay: dailyCap,
+    // O admin não escolhe forma de pagamento: quem decide é a precedência normal
+    // (plano antes de crédito). Para furar limite ele tem o `force`.
+    preferCredit: false,
   })
 
   if ('denied' in decision) {
@@ -1008,11 +1015,14 @@ export async function removeStudentFromSession(
 
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, class_id')
+    .select('id, class_id, class:classes(sport)')
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!session) return { error: 'Sessão não encontrada.' }
+
+  const removeClsRaw = Array.isArray(session.class) ? session.class[0] : session.class
+  const removeSport = (removeClsRaw as { sport: string | null } | null)?.sport ?? null
 
   const { data: existingBooking } = await adminClient
     .from('session_bookings')
@@ -1088,6 +1098,18 @@ export async function removeStudentFromSession(
 
   // Vaga liberada: avisa a fila de espera desta sessão.
   await notifyWaitlistSpotOpen(sessionId)
+
+  // Liga: o aluno saiu da aula, então o ponto de ter entrado com antecedência (ou
+  // de ter pego vaga na fila) deixa de valer. Mesma simetria das saídas do aluno.
+  for (const reason of ENTRY_REASONS) {
+    await revokeLigaExtra(adminClient, {
+      orgId,
+      studentId,
+      reason,
+      sourceId: sessionId,
+      sport: removeSport,
+    })
+  }
 
   revalidatePath(`/admin/grade/${sessionId}`)
   revalidatePath('/admin/grade')
@@ -1209,5 +1231,185 @@ export async function adminUnskipEnrollmentDate(
 
   revalidatePath('/admin/grade')
   if (session) revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateSessionOverride / cancelSession — editar UMA data
+// ---------------------------------------------------------------------------
+
+/**
+ * Muda horário, quadra ou lotação de UMA data, sem tocar na turma.
+ *
+ * Existe porque a aula gerada era imutável: remarcar a terça significava mudar a
+ * turma e, com ela, todas as terças seguintes. Na prática a academia cancelava a
+ * data e avisava por WhatsApp — o app ficava com o horário errado.
+ *
+ * Campo nulo = "volta a herdar a turma", que é como o botão de desfazer funciona.
+ * A validação de par de horários e de lotação positiva também está no banco
+ * (CHECK em 20260815000000_class_session_overrides.sql); aqui ela existe para dar
+ * mensagem em português em vez de erro de constraint.
+ */
+export async function updateSessionOverride(
+  sessionId: string,
+  patch: {
+    start_time: string | null
+    end_time: string | null
+    court: number | null
+    max_students: number | null
+  },
+): Promise<{ error?: string; warning?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, session_date, class:classes(name, start_time, end_time, court, max_students)')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!session) return { error: 'Aula não encontrada.' }
+
+  const hasStart = !!patch.start_time
+  const hasEnd = !!patch.end_time
+  if (hasStart !== hasEnd) {
+    return { error: 'Informe o horário de início E de fim, ou deixe os dois em branco.' }
+  }
+  if (hasStart && patch.end_time! <= patch.start_time!) {
+    return { error: 'O fim da aula tem de ser depois do início.' }
+  }
+  if (patch.max_students !== null && patch.max_students < 1) {
+    return { error: 'A lotação da aula tem de ser pelo menos 1.' }
+  }
+  if (patch.court !== null && patch.court < 1) {
+    return { error: 'A quadra tem de ser um número positivo.' }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('class_sessions')
+    .update({
+      start_time: patch.start_time,
+      end_time: patch.end_time,
+      court: patch.court,
+      max_students: patch.max_students,
+    })
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+
+  if (updateErr) return { error: `Erro ao salvar: ${updateErr.message}` }
+
+  // Reduzir a lotação abaixo de quem já reservou AVISA e não corta ninguém: tirar
+  // aluno de aula é decisão do professor, com estorno, e tem tela própria
+  // (removeStudentFromSession). Fazer isso em silêncio aqui seria pior que o
+  // excesso de lotação de um dia.
+  let warning: string | undefined
+  if (patch.max_students !== null) {
+    const { count } = await adminClient
+      .from('session_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('session_id', sessionId)
+      .eq('status', 'confirmed')
+    if ((count ?? 0) > patch.max_students) {
+      warning = `Esta aula já tem ${count} alunos reservados, acima da nova lotação de ${patch.max_students}. Ninguém foi removido — tire quem precisar pela chamada.`
+    }
+  }
+
+  // Vaga pode ter aberto (lotação aumentada): avisa a fila de espera.
+  await notifyWaitlistSpotOpen(sessionId)
+
+  revalidatePath(`/admin/grade/${sessionId}`)
+  revalidatePath('/admin/grade')
+  revalidatePath('/home')
+  return warning ? { warning } : {}
+}
+
+/**
+ * Cancela (ou reabre) UMA data.
+ *
+ * Cancelar a data não mexe nas reservas: a aula não aconteceu, então ninguém
+ * levou falta e ninguém perdeu crédito — quem tinha reserva continua com ela e,
+ * se a academia reabrir o dia, volta tudo como estava. O que muda é que a sessão
+ * sai da agenda do aluno e ninguém mais entra.
+ */
+export async function setSessionCancelled(
+  sessionId: string,
+  cancelled: boolean,
+  reason?: string | null,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+
+  const { data: session } = await adminClient
+    .from('class_sessions')
+    .select('id, status, session_date, class:classes(name)')
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!session) return { error: 'Aula não encontrada.' }
+
+  // Aula já encerrada tem chamada feita: reabrir ou cancelar reescreveria um
+  // fato passado, e presença/pendência já foram gravadas em cima dela.
+  if ((session as { status: string }).status === 'completed') {
+    return { error: 'Esta aula já foi encerrada. Não dá para cancelar depois da chamada.' }
+  }
+
+  const { error: updateErr } = await adminClient
+    .from('class_sessions')
+    .update({
+      status: cancelled ? 'cancelled' : 'scheduled',
+      cancelled_reason: cancelled ? (reason?.trim() || null) : null,
+    })
+    .eq('id', sessionId)
+    .eq('organization_id', orgId)
+
+  if (updateErr) return { error: `Erro ao salvar: ${updateErr.message}` }
+
+  // Avisar quem tinha reserva é a razão de o motivo existir: a aula cancelada
+  // some da agenda do aluno (só sessões 'scheduled' aparecem), então sem a
+  // notificação ele descobriria na quadra. Best-effort — a aula já está
+  // cancelada e uma falha de envio não pode desfazer isso.
+  try {
+    const { data: bookedRaw } = await adminClient
+      .from('session_bookings')
+      .select('student_id')
+      .eq('session_id', sessionId)
+      .eq('status', 'confirmed')
+
+    const studentIds = ((bookedRaw ?? []) as { student_id: string }[]).map((b) => b.student_id)
+    if (studentIds.length > 0) {
+      const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class
+      const className = (clsRaw as { name: string } | null)?.name ?? 'sua aula'
+      const sessionDate = (session as { session_date: string }).session_date
+      const motivo = reason?.trim()
+
+      await notifyUsers(adminClient, {
+        orgId,
+        recipients: studentIds.map((id) => ({ userId: id })),
+        type: 'class_cancelled',
+        title: cancelled ? 'Aula cancelada' : 'Aula reaberta',
+        body: cancelled
+          ? `A aula de ${className} do dia ${sessionDate} foi cancelada.${motivo ? ` Motivo: ${motivo}.` : ''} Você não perdeu crédito nem levou falta.`
+          : `A aula de ${className} do dia ${sessionDate} voltou a acontecer. Sua reserva continua valendo.`,
+        channels: ['inapp', 'push'],
+      })
+    }
+  } catch (err) {
+    console.error('[setSessionCancelled] notifyUsers falhou', {
+      sessionId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { channel: 'dispatch', notificationType: 'class_cancelled' },
+      extra: { sessionId },
+    })
+  }
+
+  revalidatePath(`/admin/grade/${sessionId}`)
+  revalidatePath('/admin/grade')
+  revalidatePath('/home')
   return {}
 }

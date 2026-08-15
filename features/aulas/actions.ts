@@ -5,14 +5,20 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
+import { resolveSession, type SessionOverrides } from '@/lib/aulas/sessionOverride'
 import { notifyWaitlistSpotOpen, clearWaitlistEntry } from './waitlistActions'
-import { awardLigaExtra } from '@/features/liga/extraPoints'
+import {
+  awardLigaExtra,
+  revokeLigaExtra,
+  ENTRY_REASONS,
+  EXIT_REASON,
+} from '@/features/liga/extraPoints'
 import { isEarlyBooking } from '@/lib/liga/points'
 import { brtToday, nextDateForDayOfWeek } from '@/lib/utils/gridSchedule'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
-import { resolveClassAccess } from '@/lib/utils/accessRules'
+import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
@@ -27,7 +33,14 @@ import {
   countOpenMissedCheckins,
   getMissedCheckinSettings,
 } from '@/features/checkin/missedCheckinSettings'
-import type { StudentLevel, ClassType, BookingStatus, SessionStatus } from '@/types'
+import type {
+  StudentLevel,
+  ClassType,
+  BookingStatus,
+  SessionStatus,
+  Membership,
+  PayWith,
+} from '@/types'
 import * as Sentry from '@sentry/nextjs'
 
 // A próxima ocorrência de um dia-da-semana saiu daqui para
@@ -99,38 +112,103 @@ export async function bookNextSession(classId: string): Promise<{ error?: string
 // ---------------------------------------------------------------------------
 
 /**
+ * Devolve à Liga os pontos que a ENTRADA na aula creditou.
+ *
+ * Chamado por toda saída (cancelar, faltar numa fixa, ser removido pelo
+ * professor). Best-effort como o resto da Liga: nunca derruba o cancelamento.
+ */
+async function revokeEntryPoints(
+  adminClient: ReturnType<typeof createAdminClient>,
+  input: { orgId: string; studentId: string; sessionId: string; sport: string | null },
+): Promise<void> {
+  for (const reason of ENTRY_REASONS) {
+    await revokeLigaExtra(adminClient, {
+      orgId: input.orgId,
+      studentId: input.studentId,
+      reason,
+      sourceId: input.sessionId,
+      sport: input.sport,
+    })
+  }
+}
+
+/**
+ * Membership do aluno na academia, por id explícito.
+ *
+ * `getActiveMembership()` só serve para o próprio usuário logado; o responsável
+ * que inscreve o filho precisa da membership DO FILHO — é ela que tem o crédito,
+ * o plano e o `is_dependent` que a turma kids exige.
+ */
+async function getMembershipFor(
+  adminClient: ReturnType<typeof createAdminClient>,
+  studentId: string,
+  orgId: string,
+): Promise<Membership | null> {
+  const { data } = await adminClient
+    .from('memberships')
+    .select('*')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  return (data as Membership) ?? null
+}
+
+/**
  * Books a class session for the current authenticated student.
  *
- * Validations (in order):
- *   1. Student exists
- *   2. Session exists and is scheduled
- *   3. Kids check: turma kids → student must be a dependent
- *   4. Daily limit: confirmed bookings on the same date must stay under the
- *      student's plan cap (max_classes_per_day), falling back to the org's
- *      configured daily cap when there's no active plan
- *   5. No duplicate confirmed booking on the same session
- *   6. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
+ * Casca fina sobre `bookSessionAs`: o aluno é o próprio usuário logado. O
+ * responsável que inscreve um dependente entra pela mesma porta, com outro
+ * `studentId` (features/aulas/guardianActions.ts).
  */
-export async function bookSession(sessionId: string): Promise<{ error?: string }> {
+export async function bookSession(
+  sessionId: string,
+  payWith?: PayWith,
+): Promise<{ error?: string }> {
   const supabase = createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
+  return bookSessionAs(user.id, sessionId, { payWith })
+}
 
+/**
+ * Reserva uma sessão PARA `studentId`. Toda a regra de acesso, cota, crédito e
+ * dívida é resolvida na membership DELE — é o que faz o mesmo caminho servir para
+ * o aluno adulto e para o dependente inscrito pelo responsável, que tem plano e
+ * saldo próprios.
+ *
+ * Quem chama é responsável pela autorização (o aluno é você, ou você é o
+ * responsável dele). Aqui só se confere o que a academia decide.
+ *
+ * Validações, em ordem:
+ *   1. Membership do aluno na academia ativa
+ *   2. Sessão existe e está agendada
+ *   3. Kids: turma kids só recebe dependente
+ *   4. Teto diário (0 = sem teto; ignorado quando o aluno paga com crédito)
+ *   5. Sem reserva confirmada duplicada
+ *   6. Capacidade e inserção atômicas via RPC book_session_atomic; débito via adjust_credits
+ */
+export async function bookSessionAs(
+  studentId: string,
+  sessionId: string,
+  opts: { payWith?: PayWith } = {},
+): Promise<{ error?: string }> {
   const adminClient = createAdminClient()
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
   // 1. Campos por-academia (level, is_dependent, credits_balance, payment_type)
   //    vêm da membership da academia ativa.
-  const profile = await getActiveMembership()
+  const profile = await getMembershipFor(adminClient, studentId, orgId)
   if (!profile) return { error: 'Perfil não encontrado.' }
 
   // 2. Fetch session + class (escopado pela academia ativa)
   const { data: session, error: sessionErr } = await adminClient
     .from('class_sessions')
-    .select('id, class_id, session_date, status, class:classes(id, level, type, max_students, name, sport)')
+    .select(
+      'id, class_id, session_date, status, start_time, end_time, court, max_students, class:classes(id, level, type, max_students, name, sport, start_time, end_time, court)',
+    )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .single()
@@ -149,60 +227,89 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     max_students: number
     name: string
     sport: string | null
+    start_time: string
+    end_time: string
+    court: number | null
   }
 
-  // 3. Kids check
+  // Capacidade DESTA data: a aula remarcada pode ter mais ou menos vagas que a
+  // turma. Ler classes.max_students direto era o furo — o override existiria no
+  // banco e o agendamento continuaria usando o teto antigo.
+  const resolved = resolveSession(session as SessionOverrides, cls)
+
+  // 3. Kids check. A turma kids passou a APARECER para o adulto (ele precisa ver a
+  //    aula do filho na agenda da arena), mas continua fechada para ele — quem entra
+  //    é o dependente, pela porta do responsável.
   if (cls.type === 'kids' && !profile.is_dependent) {
-    return { error: 'Esta turma é exclusiva para alunos kids (dependentes).' }
+    return {
+      error:
+        'Turma exclusiva para alunos kids. Se você é responsável, inscreva o seu dependente na ficha da aula.',
+    }
   }
 
   // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
   // da reconciliação (spec §1).
   // getActivePlan devolve a configuração de cota, não só o sim/não — a cota
   // precisa de classes_per_week, cycle e max_classes_per_day.
-  const plan = await getActivePlan(adminClient, user.id, orgId)
+  const plan = await getActivePlan(adminClient, studentId, orgId)
   const hasActivePlan = plan !== null
 
   const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
   const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
 
-  // Só paga o custo das duas queries da cota quando a academia ligou a regra.
+  // Aula paga com crédito não gasta plano, então nem cota nem teto diário valem
+  // para ela. A preferência só existe de fato se houver saldo — sem crédito, o
+  // pedido é ignorado e a regra normal volta a decidir.
+  const preferCredit = opts.payWith === 'credit' && profile.credits_balance >= 1
+
+  // Só paga o custo das duas queries da cota quando a academia ligou a regra e a
+  // cota ainda importa para esta reserva.
   const snapshot =
-    quotaEnforced && plan
-      ? await getQuotaSnapshot(adminClient, user.id, orgId, plan, session.session_date)
+    quotaEnforced && plan && !preferCredit
+      ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, session.session_date)
       : null
 
   // Teto diário efetivo: o do plano do aluno, ou o padrão da academia quando
   // não há plano ativo. Usado tanto no check inline abaixo quanto no
   // resolveClassAccess mais adiante — nunca recalculado duas vezes.
+  // 0 = sem teto (ver exceedsDailyCap).
   const dailyCap = plan?.maxClassesPerDay ?? orgDailyCap
 
-  // 4. Daily limit
-  const { count: dailyCount } = await adminClient
-    .from('session_bookings')
-    .select('id', { count: 'exact', head: true })
-    .eq('student_id', user.id)
-    .eq('status', 'confirmed')
-    .in(
-      'session_id',
-      (
-        await adminClient
-          .from('class_sessions')
-          .select('id')
-          .eq('organization_id', orgId)
-          .eq('session_date', session.session_date)
-      ).data?.map((s: { id: string }) => s.id) ?? [],
-    )
+  // 4. Daily limit. Esta checagem roda mesmo com a cota desligada, então ela também
+  //    precisa respeitar o teto 0 e a escolha do crédito — senão o aluno seria
+  //    barrado aqui, antes de resolveClassAccess sequer opinar.
+  if (!preferCredit && dailyCap > 0) {
+    const { count: dailyCount } = await adminClient
+      .from('session_bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId)
+      .eq('status', 'confirmed')
+      .in(
+        'session_id',
+        (
+          await adminClient
+            .from('class_sessions')
+            .select('id')
+            .eq('organization_id', orgId)
+            .eq('session_date', session.session_date)
+        ).data?.map((s: { id: string }) => s.id) ?? [],
+      )
 
-  if ((dailyCount ?? 0) >= dailyCap) {
-    return { error: `Você já atingiu o limite de ${dailyCap} aulas por dia nessa data.` }
+    if (exceedsDailyCap(dailyCount ?? 0, dailyCap)) {
+      return {
+        error:
+          profile.credits_balance >= 1
+            ? `Limite de ${dailyCap} aulas por dia atingido. Você pode entrar usando 1 crédito avulso.`
+            : `Você já atingiu o limite de ${dailyCap} aulas por dia nessa data.`,
+      }
+    }
   }
 
   // 5. Duplicate check
   const { count: dupCount } = await adminClient
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
-    .eq('student_id', user.id)
+    .eq('student_id', studentId)
     .eq('session_id', sessionId)
     .eq('status', 'confirmed')
 
@@ -219,7 +326,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
   const { data: debtRows } = await adminClient
     .from('payments')
     .select('id, amount, created_at, receipt_url')
-    .eq('student_id', user.id)
+    .eq('student_id', studentId)
     .eq('organization_id', orgId)
     .eq('status', 'pending')
     .not('session_id', 'is', null)
@@ -243,7 +350,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     : { blockLimit: 0 }
   const openMissedCheckins =
     profile.partner && missedCheckinBlockLimit > 0
-      ? await countOpenMissedCheckins(adminClient, user.id, orgId)
+      ? await countOpenMissedCheckins(adminClient, studentId, orgId)
       : 0
 
   const decision = resolveClassAccess({
@@ -258,16 +365,26 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
     maxClassesPerDay: dailyCap,
+    preferCredit,
   })
 
   if ('denied' in decision) {
+    // As duas negações de cota deixam de ser beco sem saída quando o aluno tem
+    // crédito comprado: dizer só "acabou" esconde o caminho que existe.
+    const comCredito = profile.credits_balance >= 1
     if (decision.denied === 'daily_cap') {
-      return { error: `Você já tem ${dailyCap} aulas reservadas neste dia. É o limite do seu plano.` }
+      return {
+        error: comCredito
+          ? `Você já tem ${dailyCap} aulas reservadas neste dia. Pode entrar usando 1 crédito avulso.`
+          : `Você já tem ${dailyCap} aulas reservadas neste dia. É o limite do seu plano.`,
+      }
     }
     if (decision.denied === 'quota_exhausted') {
       const periodo = plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'
       return {
-        error: `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
+        error: comCredito
+          ? `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Pode entrar usando 1 crédito avulso.`
+          : `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
       }
     }
     if (decision.denied === 'archived') {
@@ -289,9 +406,9 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
 
   // Capacity check + insert na mesma transação (sem overbooking)
   const { data: bookingId, error: bookErr } = await adminClient.rpc('book_session_atomic', {
-    p_student_id: user.id,
+    p_student_id: studentId,
     p_session_id: sessionId,
-    p_max_students: cls.max_students,
+    p_max_students: resolved.maxStudents,
     p_credit_used: useCredit,
   })
 
@@ -304,7 +421,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
         .from('waitlists')
         .select('id', { count: 'exact', head: true })
         .eq('session_id', sessionId)
-        .eq('student_id', user.id)
+        .eq('student_id', studentId)
         .in('status', ['waiting', 'offered'])
 
       return {
@@ -321,7 +438,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
   // Débito atômico (transação + saldo juntos)
   if (useCredit) {
     const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-      p_student_id: user.id,
+      p_student_id: studentId,
       p_org: orgId,
       p_delta: -1,
       p_type: 'used',
@@ -350,20 +467,31 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     }
 
     // Aviso de credito baixo (best-effort; a funcao nunca lança).
-    await checkLowCreditThreshold(adminClient, user.id, orgId, -1)
+    await checkLowCreditThreshold(adminClient, studentId, orgId, -1)
   }
 
   // Entrou na aula: sai da fila de espera. Vale para qualquer porta de entrada —
   // o botão da fila e o agendamento normal passam os dois por aqui.
-  const veioDaFila = await clearWaitlistEntry(sessionId, user.id)
+  const veioDaFila = await clearWaitlistEntry(sessionId, studentId)
 
   // Liga: pegar vaga da fila e agendar com antecedência são coisas diferentes, e o
   // aluno recebe uma OU outra. Somar as duas premiaria duas vezes a mesma reserva.
   if (orgId) {
+    // Voltar para a aula devolve o ponto de tê-la liberado. Sem isto, sair e
+    // entrar de novo era lucro: o crédito da saída ficava, e a entrada creditava
+    // por cima.
+    await revokeLigaExtra(adminClient, {
+      orgId,
+      studentId,
+      reason: EXIT_REASON,
+      sourceId: sessionId,
+      sport: cls.sport ?? null,
+    })
+
     if (veioDaFila) {
       await awardLigaExtra(adminClient, {
         orgId,
-        studentId: user.id,
+        studentId: studentId,
         reason: 'waitlist_accept',
         sourceId: sessionId,
         sport: cls.sport ?? null,
@@ -371,7 +499,7 @@ export async function bookSession(sessionId: string): Promise<{ error?: string }
     } else if (isEarlyBooking(brtToday(new Date()), session.session_date)) {
       await awardLigaExtra(adminClient, {
         orgId,
-        studentId: user.id,
+        studentId: studentId,
         reason: 'early_booking',
         sourceId: sessionId,
         sport: cls.sport ?? null,
@@ -440,6 +568,21 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
 
   // Open spot for next person on waitlist
   await notifyWaitlistSpotOpen(booking.session_id)
+
+  // Liga: sair da aula devolve o ponto que a entrada rendeu, por qualquer porta.
+  // O esporte vem da turma para casar com o que a entrada creditou.
+  const { data: skipSession } = await adminClient
+    .from('class_sessions')
+    .select('class:classes(sport)')
+    .eq('id', booking.session_id)
+    .single()
+  const skipCls = Array.isArray(skipSession?.class) ? skipSession!.class[0] : skipSession?.class
+  await revokeEntryPoints(adminClient, {
+    orgId: booking.organization_id as string,
+    studentId: user.id,
+    sessionId: booking.session_id as string,
+    sport: (skipCls as { sport: string | null } | null)?.sport ?? null,
+  })
 
   revalidatePath('/home')
   revalidatePath('/agendar')
@@ -629,34 +772,80 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
 
+  return cancelBookingAs(bookingId, [user.id])
+}
+
+/**
+ * Cancela a reserva de alguém que o caller já autorizou.
+ *
+ * `allowedStudentIds` é a lista de alunos em nome de quem o caller pode agir: o
+ * próprio usuário, ou os dependentes do responsável. Uma lista, e não um callback,
+ * porque toda função exportada de um arquivo `'use server'` é um endpoint — e
+ * endpoint só recebe dado serializável.
+ *
+ * É o único ponto em que o aluno e o responsável divergem: a regra de estorno, de
+ * falta e de Liga é a mesma para os dois, e duplicá-la era o caminho certo para as
+ * duas versões desandarem.
+ */
+export async function cancelBookingAs(
+  bookingId: string,
+  allowedStudentIds: string[],
+): Promise<{ error?: string }> {
   const adminClient = createAdminClient()
 
   // Fetch booking
   const { data: booking, error: bookingErr } = await adminClient
     .from('session_bookings')
-    .select('id, student_id, session_id, status, credit_used, from_enrollment, organization_id')
+    .select(
+      'id, student_id, session_id, status, credit_used, from_enrollment, organization_id, booked_at',
+    )
     .eq('id', bookingId)
     .single()
 
   if (bookingErr || !booking) return { error: 'Agendamento não encontrado.' }
-  if (booking.student_id !== user.id) return { error: 'Sem permissão.' }
+  if (!allowedStudentIds.includes(booking.student_id as string)) {
+    return { error: 'Sem permissão.' }
+  }
   if (booking.status !== 'confirmed') return { error: 'Este agendamento já foi cancelado.' }
+
+  const studentId = booking.student_id as string
 
   // Fetch session + class for start time
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, session_date, class:classes(start_time)')
+    .select(
+      'id, session_date, start_time, end_time, court, max_students, class:classes(start_time, end_time, court, max_students, sport)',
+    )
     .eq('id', booking.session_id)
     .single()
 
   if (!session) return { error: 'Sessão não encontrada.' }
 
   const clsCancel = Array.isArray(session.class) ? session.class[0] : session.class
-  const cls = clsCancel as { start_time: string }
-  const sessionStart = sessionStartIso(session.session_date, cls.start_time)
+  const cls = clsCancel as {
+    start_time: string
+    end_time: string
+    court: number | null
+    max_students: number
+    sport: string | null
+  }
+  // Janela de cancelamento contra o horário DESTA data: a aula adiantada encurta
+  // a janela e a adiada alarga. Usar o horário da turma perdoaria (ou puniria)
+  // quem cancelou olhando o horário que o app mostrou.
+  const sessionStart = sessionStartIso(
+    session.session_date,
+    resolveSession(session as SessionOverrides, cls).startTime,
+  )
 
   const now = new Date().toISOString()
-  const refundEligible = canCancelWithRefund(sessionStart, now)
+  // A janela de arrependimento entra aqui junto da regra das 5h: quem acabou de
+  // entrar tem 1h para desistir sem perder o crédito nem levar falta.
+  const refundEligible = canCancelWithRefund(
+    sessionStart,
+    now,
+    undefined,
+    (booking.booked_at as string | null) ?? undefined,
+  )
 
   // Cancel booking
   const { error: cancelErr } = await adminClient
@@ -676,7 +865,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
     const { data: profile } = await adminClient
       .from('memberships')
       .select('payment_type')
-      .eq('user_id', user.id)
+      .eq('user_id', studentId)
       .eq('organization_id', booking.organization_id)
       .single()
 
@@ -684,7 +873,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
       if (booking.from_enrollment && booking.credit_used && profile.payment_type === 'subscriber') {
         // Crédito extra: não expira enquanto o contrato estiver ativo
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-          p_student_id: user.id,
+          p_student_id: studentId,
           p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
@@ -710,7 +899,7 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
 
         const expiry = getMakeupCreditExpiry(new Date(), expiryDays)
         const { error: creditErr } = await adminClient.rpc('adjust_credits', {
-          p_student_id: user.id,
+          p_student_id: studentId,
           p_org: booking.organization_id,
           p_delta: 1,
           p_type: 'refunded',
@@ -731,14 +920,26 @@ export async function cancelBooking(bookingId: string): Promise<{ error?: string
   // Notify next person on waitlist if any
   await notifyWaitlistSpotOpen(booking.session_id)
 
-  // Liga: cancelar DENTRO da janela é o que libera a vaga a tempo de outro aluno
-  // pegar. Cancelar em cima da hora não pontua — seria premiar o furo.
+  // Liga. Sair da aula devolve o ponto que a ENTRADA rendeu — a antecedência que
+  // foi premiada deixou de existir. Isso vale sempre, dentro ou fora da janela.
+  await revokeEntryPoints(adminClient, {
+    orgId: booking.organization_id as string,
+    studentId,
+    sessionId: booking.session_id as string,
+    sport: cls.sport ?? null,
+  })
+
+  // Cancelar DENTRO da janela é o que libera a vaga a tempo de outro aluno pegar.
+  // Cancelar em cima da hora não pontua — seria premiar o furo. O `sport` vai
+  // explícito: sem ele isto caía no esporte principal do aluno e podia creditar
+  // num ranking diferente do que a entrada usou, deixando a revogação sem alvo.
   if (refundEligible) {
     await awardLigaExtra(adminClient, {
       orgId: booking.organization_id,
-      studentId: user.id,
+      studentId: studentId,
       reason: 'cancel_in_time',
       sourceId: booking.session_id,
+      sport: cls.sport ?? null,
     })
   }
 

@@ -63,8 +63,14 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
     if (data.cycle !== 'weekly' && data.cycle !== 'monthly') {
       return { error: 'Ciclo da cota inválido.' }
     }
-    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day <= 0) {
-      return { error: 'Máximo de aulas por dia deve ser um número inteiro positivo.' }
+    // 0 = sem teto diário, e é um valor que a academia escolhe de propósito.
+    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day < 0) {
+      return { error: 'Máximo de aulas por dia deve ser 0 (sem limite) ou um número positivo.' }
+    }
+    // classes_per_week não era validado: um 0 gravado aqui zerava a cota do ciclo
+    // e o aluno via "você já usou suas 0 aulas deste mês".
+    if (!Number.isInteger(data.classes_per_week) || data.classes_per_week < 1) {
+      return { error: 'Aulas por semana deve ser um número inteiro de pelo menos 1.' }
     }
 
     const { data: plan, error } = await adminClient
@@ -102,8 +108,14 @@ export async function updatePlan(data: UpdatePlanData): Promise<{ error?: string
     if (data.cycle !== 'weekly' && data.cycle !== 'monthly') {
       return { error: 'Ciclo da cota inválido.' }
     }
-    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day <= 0) {
-      return { error: 'Máximo de aulas por dia deve ser um número inteiro positivo.' }
+    // 0 = sem teto diário, e é um valor que a academia escolhe de propósito.
+    if (!Number.isInteger(data.max_classes_per_day) || data.max_classes_per_day < 0) {
+      return { error: 'Máximo de aulas por dia deve ser 0 (sem limite) ou um número positivo.' }
+    }
+    // classes_per_week não era validado: um 0 gravado aqui zerava a cota do ciclo
+    // e o aluno via "você já usou suas 0 aulas deste mês".
+    if (!Number.isInteger(data.classes_per_week) || data.classes_per_week < 1) {
+      return { error: 'Aulas por semana deve ser um número inteiro de pelo menos 1.' }
     }
 
     const { error } = await adminClient

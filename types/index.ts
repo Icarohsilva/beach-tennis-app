@@ -16,6 +16,15 @@ export type ClassType = 'kids' | 'adult'
  * incompatível — e um alias esconderia que são duas decisões diferentes.
  */
 export type AgeGroup = 'kids' | 'adult'
+/**
+ * Como o aluno quer pagar uma aula quando as duas formas estão disponíveis.
+ *
+ * `undefined` = não escolheu, e a precedência de sempre decide (plano antes de
+ * crédito). `'credit'` é escolha explícita e fura os limites do plano — cota do
+ * ciclo e teto diário —, porque crédito é aula comprada à parte. Ver
+ * `preferCredit` em lib/utils/accessRules.ts.
+ */
+export type PayWith = 'plan' | 'credit'
 export type BookingStatus = 'confirmed' | 'cancelled'
 export type BookingType = 'extra' | 'makeup'
 export type AttendanceStatus = 'present' | 'absent' | 'late'
@@ -214,6 +223,20 @@ export interface ClassSession {
   notes: string | null
   /** Quando o professor iniciou a aula. Null = chamada ainda só leitura. */
   started_at: string | null
+  /**
+   * Overrides DESTA data sobre a turma. Nulo = herda `classes`.
+   *
+   * Existem para editar uma aula já gerada (remarcar a terça, trocar a quadra,
+   * reduzir a lotação num dia de chuva) sem mudar a turma recorrente e, com ela,
+   * todas as semanas seguintes. Nunca leia `classes.start_time` para uma sessão:
+   * o resolvedor é `resolveSession` (lib/aulas/sessionOverride.ts).
+   */
+  start_time: string | null
+  end_time: string | null
+  court: number | null
+  max_students: number | null
+  /** Motivo do cancelamento desta data, mostrado ao aluno. */
+  cancelled_reason: string | null
 }
 
 export interface Enrollment {

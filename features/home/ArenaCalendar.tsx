@@ -22,7 +22,9 @@ import {
   type ArenaEvent,
 } from '@/lib/home/arenaAgenda'
 import { eventTone } from './eventTone'
-import { loadArenaMonth } from './calendarActions'
+import { loadArenaMonth, loadSessionDetail } from './calendarActions'
+import { SessionModal } from './SessionModal'
+import type { AgendaSession } from './agendaTypes'
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
@@ -41,6 +43,21 @@ export function ArenaCalendar({ todayISO, initialMonth, initialEvents }: ArenaCa
   })
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  // Aula tocada no dia: a ficha (quem vai, fila, entrar/sair) é buscada sob
+  // demanda. Carregar isso para o mês inteiro seria caro e quase tudo iria fora.
+  const [openSession, setOpenSession] = useState<AgendaSession | null>(null)
+  const [loadingSession, setLoadingSession] = useState<string | null>(null)
+
+  function openAula(sessionId: string) {
+    setLoadingSession(sessionId)
+    startTransition(async () => {
+      const detail = await loadSessionDetail(sessionId)
+      setLoadingSession(null)
+      if (!detail) return
+      setOpenDay(null)
+      setOpenSession(detail)
+    })
+  }
 
   const events = cache[month]
   const byDate = useMemo(() => groupByDate(events ?? []), [events])
@@ -168,7 +185,25 @@ export function ArenaCalendar({ todayISO, initialMonth, initialEvents }: ArenaCa
         ))}
       </div>
 
-      {openDay && <DayModal date={openDay} events={dayEvents} onClose={() => setOpenDay(null)} />}
+      {openDay && (
+        <DayModal
+          date={openDay}
+          events={dayEvents}
+          onClose={() => setOpenDay(null)}
+          onOpenAula={openAula}
+          loadingSession={loadingSession}
+        />
+      )}
+
+      {/* A MESMA ficha da faixa da semana. O calendário levava para /agendar, que
+          é outra tela e não mostra nem quem vai nem a fila de espera. */}
+      {openSession && (
+        <SessionModal
+          session={openSession}
+          isToday={openSession.date === todayISO}
+          onClose={() => setOpenSession(null)}
+        />
+      )}
     </div>
   )
 }
@@ -177,10 +212,14 @@ function DayModal({
   date,
   events,
   onClose,
+  onOpenAula,
+  loadingSession,
 }: {
   date: string
   events: ArenaEvent[]
   onClose: () => void
+  onOpenAula: (sessionId: string) => void
+  loadingSession: string | null
 }) {
   const [mounted, setMounted] = useState(false)
 
@@ -242,7 +281,12 @@ function DayModal({
         <ul className="mt-4 space-y-2">
           {events.map((event) => (
             <li key={`${event.kind}-${event.id}`}>
-              <DayRow event={event} onNavigate={onClose} />
+              <DayRow
+                event={event}
+                onNavigate={onClose}
+                onOpenAula={onOpenAula}
+                loading={loadingSession === event.id}
+              />
             </li>
           ))}
         </ul>
@@ -252,7 +296,17 @@ function DayModal({
   )
 }
 
-function DayRow({ event, onNavigate }: { event: ArenaEvent; onNavigate: () => void }) {
+function DayRow({
+  event,
+  onNavigate,
+  onOpenAula,
+  loading,
+}: {
+  event: ArenaEvent
+  onNavigate: () => void
+  onOpenAula: (sessionId: string) => void
+  loading: boolean
+}) {
   const tone = eventTone(event.kind)
   const Icon = event.kind === 'torneio' ? Trophy : event.kind === 'dayuse' ? Sun : Users
 
@@ -293,10 +347,33 @@ function DayRow({ event, onNavigate }: { event: ArenaEvent; onNavigate: () => vo
       </div>
 
       <span className={cn('shrink-0 text-[11px] font-bold', tone.text)}>
-        {event.mine ? 'Ver' : event.kind === 'aula' ? 'Entrar' : 'Ver e entrar'}
+        {loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : event.mine ? (
+          'Ver'
+        ) : event.kind === 'aula' ? (
+          'Entrar'
+        ) : (
+          'Ver e entrar'
+        )}
       </span>
     </div>
   )
+
+  // Aula abre a ficha aqui mesmo; torneio e day use continuam levando para a
+  // página deles, que é onde a inscrição de verdade acontece.
+  if (event.kind === 'aula') {
+    return (
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => onOpenAula(event.id)}
+        className="block w-full text-left disabled:opacity-70"
+      >
+        {body}
+      </button>
+    )
+  }
 
   if (!event.href) return body
   return (

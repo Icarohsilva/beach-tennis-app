@@ -15,6 +15,7 @@ import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { resolveSession, hasOverride } from '@/lib/aulas/sessionOverride'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const DAY_ABBR = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -138,9 +139,12 @@ export default async function GradePage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {sessionsToday.map((session) => {
               const confirmed = bookingCountMap.get(session.id) ?? 0
-              const max = session.class.max_students
-              const isFull = confirmed >= max
               const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class
+              // Horário e capacidade DESTA data: a aula remarcada tem de sair
+              // remarcada também na grade de hoje do professor.
+              const horario = resolveSession(session, clsRaw)
+              const max = horario.maxStudents
+              const isFull = confirmed >= max
 
               return (
                 <Link key={session.id} href={`/admin/grade/${session.id}`}>
@@ -150,7 +154,12 @@ export default async function GradePage() {
                       {clsRaw.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
                     </div>
                     <p className="text-xs text-slate-400 mb-2">
-                      {formatTime(clsRaw.start_time)} – {formatTime(clsRaw.end_time)}
+                      {formatTime(horario.startTime)} – {formatTime(horario.endTime)}
+                      {hasOverride(session) && (
+                        <span className="ml-1.5 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+                          alterada
+                        </span>
+                      )}
                     </p>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-sm font-extrabold text-brand-500">{confirmed}/{max}</span>
