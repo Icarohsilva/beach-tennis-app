@@ -26,6 +26,8 @@ import type {
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { resolveSession } from '@/lib/aulas/sessionOverride'
+import { SessionOverrideForm } from '@/features/aulas/SessionOverrideForm'
 
 interface Props {
   params: { sessionId: string }
@@ -49,9 +51,23 @@ export default async function SessionDetailPage({ params }: Props) {
   if (!session) notFound()
 
   const typedSession = session as ClassSession & {
-    class: { id: string; name: string; level: string; type: string; start_time: string; end_time: string; max_students: number }
+    class: {
+      id: string
+      name: string
+      level: string
+      type: string
+      start_time: string
+      end_time: string
+      max_students: number
+      court: number | null
+    }
   }
   const cls = Array.isArray(typedSession.class) ? typedSession.class[0] : typedSession.class
+
+  // Horário, quadra e lotação DESTA data: podem ter sido alterados só para hoje
+  // (lib/aulas/sessionOverride). Ler o da turma mostraria o horário velho na
+  // própria tela em que o professor acabou de remarcar.
+  const horario = resolveSession(typedSession, cls)
 
   // Quem a aula toca: reservas confirmadas + alunos fixos da turma, menos quem
   // avisou que não vem. Mesma regra da agenda do aluno — sem isso o fixo sem
@@ -307,10 +323,34 @@ export default async function SessionDetailPage({ params }: Props) {
           {formatDate(typedSession.session_date)} ·{' '}
           {/* nowrap: divide a linha com a data, e o ` – ` quebraria o horário. */}
           <span className="whitespace-nowrap">
-            {formatTime(cls.start_time)} – {formatTime(cls.end_time)}
+            {formatTime(horario.startTime)} – {formatTime(horario.endTime)}
           </span>
+          {horario.court !== null && <> · Quadra {horario.court}</>}
         </p>
       </div>
+
+      {/* Editar só ESTA data — remarcar, trocar de quadra, mudar a lotação ou
+          cancelar o dia — sem mexer na turma e, com ela, em todas as semanas
+          seguintes. Editar a turma continua em /admin/grade/[classId]/editar. */}
+      <SessionOverrideForm
+        sessionId={params.sessionId}
+        sessionDate={typedSession.session_date}
+        status={typedSession.status}
+        cancelledReason={typedSession.cancelled_reason}
+        booked={students.length}
+        current={{
+          start_time: typedSession.start_time,
+          end_time: typedSession.end_time,
+          court: typedSession.court,
+          max_students: typedSession.max_students,
+        }}
+        classDefaults={{
+          start_time: cls.start_time,
+          end_time: cls.end_time,
+          court: cls.court ?? null,
+          max_students: cls.max_students,
+        }}
+      />
 
       <AddStudentToSession
         sessionId={params.sessionId}
@@ -324,7 +364,7 @@ export default async function SessionDetailPage({ params }: Props) {
         orgName={orgName}
         className={cls.name}
         sessionDate={typedSession.session_date}
-        startTime={cls.start_time}
+        startTime={horario.startTime}
       />
 
       {students.length === 0 && typedSession.status !== 'completed' ? (

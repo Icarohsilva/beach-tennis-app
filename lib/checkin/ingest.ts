@@ -37,7 +37,7 @@ export async function findLinkedSession(
 
   const { data: sessionsRaw } = await client
     .from('class_sessions')
-    .select('id, session_date, class:classes(start_time)')
+    .select('id, session_date, start_time, class:classes(start_time)')
     .eq('organization_id', orgId)
     .eq('status', 'scheduled')
     .in('session_date', [dayBefore, day, dayAfter])
@@ -45,6 +45,8 @@ export async function findLinkedSession(
   type Row = {
     id: string
     session_date: string
+    /** Override do horário naquela data; nulo herda a turma. */
+    start_time: string | null
     class: { start_time: string } | { start_time: string }[] | null
   }
   const rows = (sessionsRaw ?? []) as unknown as Row[]
@@ -68,8 +70,11 @@ export async function findLinkedSession(
     .map((r) => {
       const cls = Array.isArray(r.class) ? r.class[0] : r.class
       if (!cls?.start_time) return null
+      // Horário DESTA data: a catraca do parceiro casa o check-in com a aula
+      // mais próxima, e a aula remarcada tem de ser comparada no horário novo.
       // sessionStartIso ancora em -03:00. Sem isso a janela erra por 3h.
-      return { id: r.id, startsAt: sessionStartIso(r.session_date, cls.start_time) }
+      const startTime = r.start_time ?? cls.start_time
+      return { id: r.id, startsAt: sessionStartIso(r.session_date, startTime) }
     })
     .filter((c): c is { id: string; startsAt: string } => c !== null)
 

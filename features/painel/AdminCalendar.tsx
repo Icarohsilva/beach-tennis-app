@@ -397,7 +397,10 @@ function DayRow({ event, onNavigate }: { event: AdminEvent; onNavigate: () => vo
                   'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase',
                   event.flag === 'rascunho'
                     ? 'bg-slate-500/20 text-slate-300'
-                    : 'bg-red-500/15 text-red-300',
+                    : // Alterada não é problema, é informação: âmbar, não vermelho.
+                      event.flag === 'alterada'
+                      ? 'bg-amber-500/15 text-amber-300'
+                      : 'bg-red-500/15 text-red-300',
                 )}
               >
                 {event.flag}

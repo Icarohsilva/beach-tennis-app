@@ -51,9 +51,10 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
       setError('Meta mensal de check-ins deve ser um número inteiro não-negativo.')
       return
     }
+    // 0 é válido e significa "sem limite" — é como a academia desliga a regra.
     const perDay = parseInt(maxPerDay, 10)
-    if (isNaN(perDay) || perDay < 1) {
-      setError('Máximo de aulas por dia deve ser um número inteiro positivo.')
+    if (isNaN(perDay) || perDay < 0) {
+      setError('Máximo de aulas por dia deve ser 0 (sem limite) ou um número positivo.')
       return
     }
 
@@ -154,11 +155,13 @@ export function SystemSettingsForm({ settings }: SystemSettingsFormProps) {
             Máximo de aulas por dia (alunos sem plano)
           </label>
           <p className="text-xs text-slate-400">
-            Teto diário de aulas para quem não tem plano com cota. Padrão: 2
+            Teto diário de aulas para quem não tem plano com cota. Padrão: 2.
+            <strong className="text-slate-300"> 0 = sem limite</strong> (pode fazer
+            quantas aulas quiser no dia).
           </p>
           <Input
             type="number"
-            min="1"
+            min="0"
             value={maxPerDay}
             onChange={(e) => setMaxPerDay(e.target.value)}
           />

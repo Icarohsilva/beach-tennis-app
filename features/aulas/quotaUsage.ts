@@ -14,6 +14,13 @@ import { sessionStartIso } from '@/lib/utils/sessionTime'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
+interface SessionJoin {
+  session_date: string
+  /** Override do horário naquela data; nulo herda a turma. */
+  start_time: string | null
+  classes: { start_time: string } | { start_time: string }[]
+}
+
 export interface QuotaSnapshot {
   limit: number
   used: number
@@ -48,7 +55,7 @@ export async function getQuotaSnapshot(
   const { data: bookingsRaw } = await client
     .from('session_bookings')
     .select(
-      'status, cancelled_at, admin_waived, class_sessions!inner(session_date, classes!inner(start_time))',
+      'status, cancelled_at, admin_waived, booked_at, class_sessions!inner(session_date, start_time, classes!inner(start_time))',
     )
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
@@ -60,23 +67,30 @@ export async function getQuotaSnapshot(
       status: string
       cancelled_at: string | null
       admin_waived: boolean | null
+      booked_at: string | null
       class_sessions:
-        | { session_date: string; classes: { start_time: string } | { start_time: string }[] }
-        | { session_date: string; classes: { start_time: string } | { start_time: string }[] }[]
+        | SessionJoin
+        | SessionJoin[]
     }[]
   ).map((b) => {
     const sess = Array.isArray(b.class_sessions) ? b.class_sessions[0] : b.class_sessions
     const cls = Array.isArray(sess.classes) ? sess.classes[0] : sess.classes
     const confirmed = b.status === 'confirmed'
 
-    const startIso = sessionStartIso(sess.session_date, cls.start_time)
+    // Horário DESTA data: a aula remarcada move a janela de cancelamento, e a
+    // cota classifica "cancelou tarde" pela mesma janela que devolve o crédito.
+    const startIso = sessionStartIso(sess.session_date, sess.start_time ?? cls.start_time)
 
     return {
       sessionDate: sess.session_date,
       status: confirmed ? ('confirmed' as const) : ('cancelled' as const),
+      // A janela de arrependimento vale aqui também: quem entrou e saiu em
+      // seguida não gastou aula do plano, então não pode consumir cota. Sem
+      // passar `booked_at` a cota puniria justamente o cancelamento que o
+      // estorno acabou de perdoar.
       cancelledLate:
         !confirmed && b.cancelled_at !== null
-          ? !canCancelWithRefund(startIso, b.cancelled_at)
+          ? !canCancelWithRefund(startIso, b.cancelled_at, undefined, b.booked_at)
           : false,
       adminWaived: b.admin_waived === true,
     }

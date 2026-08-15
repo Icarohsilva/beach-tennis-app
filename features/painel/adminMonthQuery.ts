@@ -15,6 +15,7 @@ import {
 } from '@/lib/painel/gradeStatus'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { sportChip } from '@/lib/torneios/sportProfile'
+import { resolveSession, hasOverride } from '@/lib/aulas/sessionOverride'
 
 type Page<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 
@@ -23,7 +24,7 @@ export interface AdminEvent extends ArenaEvent {
   /** Segunda ação do item: editar a aula, gerenciar o torneio. Nulo = só ver. */
   editHref: string | null
   /** Selo de estado quando ele muda o que o admin deve fazer. */
-  flag: 'cancelada' | 'rascunho' | null
+  flag: 'cancelada' | 'rascunho' | 'alterada' | null
 }
 
 export interface AdminMonth {
@@ -49,7 +50,9 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       (a, b) =>
         admin
           .from('class_sessions')
-          .select('id, session_date, class_id, status, classes(name, start_time, end_time, type, sport, max_students)')
+          .select(
+            'id, session_date, class_id, status, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+          )
           .eq('organization_id', orgId)
           .gte('session_date', from)
           .lte('session_date', to)
@@ -106,12 +109,14 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
     const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
     if (!cls) continue
     const cancelled = row.status === 'cancelled'
+    // Horário e capacidade DESTA data (lib/aulas/sessionOverride).
+    const horario = resolveSession(row, cls)
     events.push({
       id: row.id,
       kind: 'aula',
       date: row.session_date,
-      start: cls.start_time,
-      end: cls.end_time,
+      start: horario.startTime,
+      end: horario.endTime,
       title: cls.name,
       subtitle: cls.sport ? sportChip(cls.sport).label : null,
       sport: cls.sport,
@@ -120,9 +125,9 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       mine: cancelled,
       href: `/admin/grade/${row.id}`,
       editHref: `/admin/grade/${row.id}/editar`,
-      flag: cancelled ? 'cancelada' : null,
+      flag: cancelled ? 'cancelada' : hasOverride(row) ? 'alterada' : null,
       booked: bookedBySession.get(row.id) ?? 0,
-      capacity: cls.max_students,
+      capacity: horario.maxStudents,
     })
   }
 
@@ -279,6 +284,11 @@ interface SessionRow {
   session_date: string
   class_id: string
   status: string
+  /** Overrides daquela data; nulos herdam a turma (lib/aulas/sessionOverride). */
+  start_time: string | null
+  end_time: string | null
+  court: number | null
+  max_students: number | null
   classes: ClassRef | ClassRef[] | null
 }
 

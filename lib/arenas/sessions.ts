@@ -6,6 +6,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import type { ClassSession, Class } from '@/types'
 import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
+import { resolveSession } from '@/lib/aulas/sessionOverride'
 
 export interface TrialSessionOption {
   id: string
@@ -27,7 +28,7 @@ export async function getOpenTrialSessions(orgId: string): Promise<TrialSessionO
   const { data: sessions } = await admin
     .from('class_sessions')
     .select(
-      'id, session_date, status, class:classes(id, name, level, type, start_time, end_time, max_students, is_active)',
+      'id, session_date, status, start_time, end_time, court, max_students, class:classes(id, name, level, type, start_time, end_time, max_students, court, is_active)',
     )
     .eq('organization_id', orgId)
     .eq('status', 'scheduled')
@@ -70,14 +71,18 @@ export async function getOpenTrialSessions(orgId: string): Promise<TrialSessionO
     const cls = Array.isArray(s.class) ? s.class[0] : s.class
     if (!cls || !cls.is_active || cls.type === 'kids') continue
     const occupied = (bookingCountMap.get(s.id) ?? 0) + (trialCountMap.get(s.id) ?? 0)
-    const spotsLeft = cls.max_students - occupied
+    // Horário e vagas DESTA data: a vitrine da arena é o que o visitante usa
+    // para escolher a aula experimental — o horário errado aqui é o visitante
+    // aparecendo na hora errada.
+    const horario = resolveSession(s, cls)
+    const spotsLeft = horario.maxStudents - occupied
     if (spotsLeft <= 0) continue
     options.push({
       id: s.id,
       session_date: s.session_date,
       class_name: cls.name,
-      start_time: cls.start_time,
-      end_time: cls.end_time,
+      start_time: horario.startTime,
+      end_time: horario.endTime,
       level: cls.level,
       spots_left: spotsLeft,
     })

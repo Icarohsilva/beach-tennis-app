@@ -1,6 +1,6 @@
 // lib/utils/creditRules.test.ts
 import { describe, it, expect } from 'vitest'
-import { canCancelWithRefund, getMakeupCreditExpiry } from './creditRules'
+import { canCancelWithRefund, getMakeupCreditExpiry, withinBookingGrace } from './creditRules'
 
 describe('canCancelWithRefund', () => {
   it('allows cancellation 6 hours before', () => {
@@ -25,6 +25,49 @@ describe('canCancelWithRefund', () => {
     expect(
       canCancelWithRefund('2026-06-11T18:00:00-03:00', '2026-06-11T13:00:01-03:00'),
     ).toBe(false)
+  })
+})
+
+// Janela de arrependimento: 1h a contar da RESERVA. É o que separa desistir
+// (entrou por engano, saiu na hora) de furar (some em cima do horário).
+describe('canCancelWithRefund — janela de arrependimento', () => {
+  // Aula às 18h, aluno reserva às 16h: a regra das 5h já nasce fechada para ele.
+  const aula = '2026-06-11T18:00:00-03:00'
+  const reservou = '2026-06-11T16:00:00-03:00'
+
+  it('devolve crédito quando o aluno sai logo depois de entrar', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T16:05:00-03:00', undefined, reservou)).toBe(true)
+  })
+
+  it('devolve crédito no limite exato de 60 minutos', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T17:00:00-03:00', undefined, reservou)).toBe(true)
+  })
+
+  it('volta a penalizar passado 1 minuto do limite', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T17:01:00-03:00', undefined, reservou)).toBe(false)
+  })
+
+  it('sem booked_at, só a regra das 5h vale (comportamento histórico)', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T16:05:00-03:00')).toBe(false)
+    expect(canCancelWithRefund(aula, '2026-06-11T16:05:00-03:00', undefined, null)).toBe(false)
+  })
+
+  it('as duas regras são um OU: reserva antiga cancelada com folga segue valendo', () => {
+    expect(
+      canCancelWithRefund(aula, '2026-06-11T09:00:00-03:00', undefined, '2026-06-01T10:00:00-03:00'),
+    ).toBe(true)
+  })
+})
+
+describe('withinBookingGrace', () => {
+  it('data inválida não concede a graça', () => {
+    expect(withinBookingGrace('nao-e-data', '2026-06-11T16:05:00-03:00')).toBe(false)
+  })
+
+  it('reserva no futuro (relógio torto) conta como recém-feita', () => {
+    expect(
+      withinBookingGrace('2026-06-11T17:00:00-03:00', '2026-06-11T16:00:00-03:00'),
+    ).toBe(true)
   })
 })
 

@@ -55,16 +55,22 @@ export function PlanFormFields({ value, onChange }: PlanFormFieldsProps) {
           </select>
         </div>
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">Máximo de aulas por dia</label>
+          <label className="text-xs text-slate-400 mb-1 block">
+            Máximo de aulas por dia
+          </label>
           <Input
             type="number"
-            min="1"
+            min="0"
             step="1"
             value={value.max_classes_per_day}
-            onChange={(e) =>
-              onChange({ ...value, max_classes_per_day: Math.max(1, parseInt(e.target.value) || 1) })
-            }
+            onChange={(e) => {
+              // 0 é valor legítimo: significa "sem teto diário". O clamp em 1 que
+              // existia aqui tornava impossível liberar o dia para um plano.
+              const n = parseInt(e.target.value)
+              onChange({ ...value, max_classes_per_day: Number.isNaN(n) ? 0 : Math.max(0, n) })
+            }}
           />
+          <p className="mt-1 text-[10px] text-slate-500">0 = sem limite por dia</p>
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm text-slate-300">

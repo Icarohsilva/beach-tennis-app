@@ -10,6 +10,7 @@ import { IN_CHUNK_SIZE, chunk, fetchAllPages } from '@/lib/supabase/paginate'
 import { gridBounds, sortArenaEvents, type ArenaEvent } from '@/lib/home/arenaAgenda'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { sportChip } from '@/lib/torneios/sportProfile'
+import { resolveSession } from '@/lib/aulas/sessionOverride'
 
 type Page<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null }>
 
@@ -131,8 +132,6 @@ interface MonthArgs {
   userId: string
   /** 'YYYY-MM' */
   monthISO: string
-  /** Aluno vê turma kids? Só dependente vê — mesma regra da agenda da semana. */
-  includeKids: boolean
 }
 
 /** Tudo que acontece na arena na janela que o calendário do mês exibe. */
@@ -140,7 +139,6 @@ export async function getArenaMonth({
   orgId,
   userId,
   monthISO,
-  includeKids,
 }: MonthArgs): Promise<ArenaEvent[]> {
   const admin = createAdminClient()
   const { from, to } = gridBounds(monthISO)
@@ -150,7 +148,9 @@ export async function getArenaMonth({
       (a, b) =>
         admin
           .from('class_sessions')
-          .select('id, session_date, class_id, classes(name, start_time, end_time, type, sport, max_students)')
+          .select(
+            'id, session_date, class_id, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+          )
           .eq('organization_id', orgId)
           .eq('status', 'scheduled')
           .gte('session_date', from)
@@ -194,20 +194,30 @@ export async function getArenaMonth({
   for (const row of sessions) {
     const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
     if (!cls) continue
-    if (cls.type === 'kids' && !includeKids) continue
+    // Turma kids aparece para todo mundo. Esconder do adulto tirava da agenda da
+    // arena justamente a aula do filho dele — e o responsável precisa vê-la para
+    // inscrever o dependente. Quem não pode entrar continua sem poder entrar
+    // (bookSessionAs), só que agora sabe que a aula existe.
+    //
+    // Horário e capacidade DESTA data. O calendário é onde o aluno confere se a
+    // aula mudou de hora — mostrar o da turma seria mostrar o horário errado.
+    const resolved = resolveSession(row, cls)
     events.push({
       id: row.id,
       kind: 'aula',
       date: row.session_date,
-      start: cls.start_time,
-      end: cls.end_time,
+      start: resolved.startTime,
+      end: resolved.endTime,
       title: cls.name,
       subtitle: cls.sport ? sportChip(cls.sport).label : null,
       sport: cls.sport,
       mine: myBookings.has(row.id) || fixedClassIds.has(row.class_id),
-      href: '/agendar',
+      // Nulo de propósito: a aula abre a ficha em modal, a mesma da lista da
+      // semana, em vez de levar para uma segunda tela de grade. `id` é o
+      // session_id, que é o que o modal precisa para se carregar.
+      href: null,
       booked: null,
-      capacity: cls.max_students,
+      capacity: resolved.maxStudents,
     })
   }
 
@@ -235,12 +245,18 @@ type ClassRef = {
   type: string
   sport: string | null
   max_students: number
+  court: number | null
 }
 
 interface SessionRow {
   id: string
   session_date: string
   class_id: string
+  /** Overrides daquela data; nulos herdam a turma (lib/aulas/sessionOverride). */
+  start_time: string | null
+  end_time: string | null
+  court: number | null
+  max_students: number | null
   classes: ClassRef | ClassRef[] | null
 }
 

@@ -10,8 +10,56 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { bookSession, cancelBooking, skipEnrollmentSession, skipEnrollmentForSession } from '@/features/aulas/actions'
 import { joinWaitlist, leaveWaitlist } from '@/features/aulas/waitlistActions'
+import {
+  bookSessionForDependent,
+  cancelBookingForDependent,
+  joinWaitlistForDependent,
+  leaveWaitlistForDependent,
+} from '@/features/aulas/guardianActions'
 import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
-import type { AgendaSession } from './agendaTypes'
+import type { AgendaSession, GuardianOption } from './agendaTypes'
+import type { PayWith } from '@/types'
+
+/** Primeiro nome: a ficha fala com o pai sobre o filho, não sobre um cadastro. */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name
+}
+
+/** Um dos dois cartões de forma de pagamento. */
+function PaymentChoice({
+  active,
+  onClick,
+  label,
+  hint,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  hint: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        'min-w-0 flex-1 rounded-2xl border p-2.5 text-left transition-colors ' +
+        (active
+          ? 'border-brand-500/50 bg-brand-500/10'
+          : 'border-white/10 bg-white/[0.03] hover:border-white/20')
+      }
+    >
+      <span
+        className={
+          'block text-xs font-bold ' + (active ? 'text-brand-300' : 'text-slate-200')
+        }
+      >
+        {label}
+      </span>
+      <span className="mt-0.5 block text-[10px] text-slate-400">{hint}</span>
+    </button>
+  )
+}
 
 /**
  * Ficha da aula sobre a agenda: horário, quem já está confirmado e a ação de
@@ -29,6 +77,10 @@ export function SessionModal({
   const [mounted, setMounted] = useState(false)
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'erro'; text: string } | null>(null)
   const [isPending, startTransition] = useTransition()
+  // Forma de pagamento escolhida. `undefined` = não escolheu, e o servidor
+  // aplica a precedência de sempre (plano antes de crédito). Só vira pergunta
+  // quando as duas formas existem de fato.
+  const [payWith, setPayWith] = useState<PayWith | undefined>(undefined)
 
   useEffect(() => setMounted(true), [])
 
@@ -67,7 +119,52 @@ export function SessionModal({
   }
 
   function handleJoin() {
-    run(() => bookSession(session.id), 'Presença confirmada!')
+    run(() => bookSession(session.id, payWith), 'Presença confirmada!')
+  }
+
+  // ── Responsável agindo pelo dependente ────────────────────────────────────
+  // O dependente não tem login: se o pai não puder entrar por ele daqui, a aula
+  // do filho aparece na agenda sem nenhuma ação possível.
+  // Sem `payWith`: a escolha "plano ou crédito" exibida acima é calculada com o
+  // plano e o saldo do RESPONSÁVEL, e quem paga esta aula é o dependente, que tem
+  // os seus. Aplicar a escolha do pai aqui gastaria crédito do filho por um botão
+  // que falava do saldo do pai. Para o dependente vale a precedência normal.
+  function handleDependentJoin(dep: GuardianOption) {
+    run(
+      () => bookSessionForDependent(session.id, dep.id),
+      `${firstName(dep.name)} está na aula!`,
+    )
+  }
+
+  function handleDependentLeave(dep: GuardianOption) {
+    if (!dep.bookingId) return
+    run(
+      () => cancelBookingForDependent(dep.bookingId!),
+      `${firstName(dep.name)} saiu da aula.`,
+    )
+  }
+
+  function handleDependentJoinWaitlist(dep: GuardianOption) {
+    setFeedback(null)
+    startTransition(async () => {
+      const result = await joinWaitlistForDependent(session.id, dep.id)
+      if (result.error) {
+        setFeedback({ kind: 'erro', text: result.error })
+        return
+      }
+      setFeedback({
+        kind: 'ok',
+        text: `${firstName(dep.name)} entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}.`,
+      })
+    })
+  }
+
+  function handleDependentLeaveWaitlist(dep: GuardianOption) {
+    if (!dep.waitlistEntryId) return
+    run(
+      () => leaveWaitlistForDependent(dep.waitlistEntryId!),
+      `${firstName(dep.name)} saiu da fila.`,
+    )
   }
 
   // Turma lotada: entra na fila daqui mesmo. Antes a ficha só dizia "entre pela
@@ -136,9 +233,14 @@ export function SessionModal({
                 </span>
               )}
             </div>
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
-              <CalendarDays className="h-3.5 w-3.5" />
+            <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
               {isToday ? 'Hoje' : formatDate(session.date, "EEEE, d 'de' MMMM")}
+              {session.rescheduled && (
+                <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+                  Alterada
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -257,7 +359,98 @@ export function SessionModal({
           </p>
         )}
 
-        <div className="mt-5">
+        {/* Escolher com o que paga. Só aparece quando as duas formas existem de
+            verdade: com uma só, perguntar é ruído. Crédito não gasta a cota do
+            plano nem esbarra no teto diário — é aula comprada à parte. */}
+        {session.canChoosePayment && !isIn && !session.kids && (
+          <div className="mt-4">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Como quer usar esta aula
+            </p>
+            <div className="mt-2 flex gap-2">
+              <PaymentChoice
+                active={payWith !== 'credit'}
+                onClick={() => setPayWith('plan')}
+                label="Aula do plano"
+                hint="Conta na sua cota"
+              />
+              <PaymentChoice
+                active={payWith === 'credit'}
+                onClick={() => setPayWith('credit')}
+                label="1 crédito avulso"
+                hint={
+                  session.creditsBalance !== undefined
+                    ? `Você tem ${session.creditsBalance}`
+                    : 'Não conta na cota'
+                }
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Turma kids: quem entra é o dependente. O adulto vê a aula (é a aula do
+            filho dele, tem de estar na agenda), mas a ação é por criança. */}
+        {session.kids && (
+          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Turma kids
+            </p>
+            {session.guardianOptions && session.guardianOptions.length > 0 ? (
+              <ul className="mt-2 space-y-2">
+                {session.guardianOptions.map((dep) => (
+                  <li key={dep.id} className="flex flex-col gap-2 xs:flex-row xs:items-center xs:justify-between">
+                    <span className="min-w-0 truncate text-sm font-semibold text-white">
+                      {dep.name}
+                    </span>
+                    <span className="shrink-0">
+                      {dep.bookingId ? (
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => handleDependentLeave(dep)}
+                          className="text-xs font-semibold text-red-400 underline underline-offset-2 transition-colors hover:text-red-300 disabled:opacity-50"
+                        >
+                          Tirar da aula
+                        </button>
+                      ) : dep.waitlistEntryId ? (
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => handleDependentLeaveWaitlist(dep)}
+                          className="text-xs font-semibold text-red-400 underline underline-offset-2 transition-colors hover:text-red-300 disabled:opacity-50"
+                        >
+                          Sair da fila
+                        </button>
+                      ) : (
+                        <Button
+                          variant={isFull ? 'secondary' : 'primary'}
+                          loading={isPending}
+                          disabled={isPending}
+                          onClick={() =>
+                            isFull ? handleDependentJoinWaitlist(dep) : handleDependentJoin(dep)
+                          }
+                          className="w-full xs:w-auto"
+                        >
+                          {isFull ? 'Entrar na fila' : 'Colocar na aula'}
+                        </Button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-slate-400">
+                Turma exclusiva para alunos kids. Se você é responsável por
+                alguma criança, cadastre o dependente no seu perfil para poder
+                inscrevê-lo aqui.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* O adulto não entra em turma kids: a ação abaixo é só para as turmas
+            dele. Sem este corte a ficha ofereceria um botão que o servidor nega. */}
+        <div className={session.kids ? 'hidden' : 'mt-5'}>
           {isIn ? (
             <div className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-1.5 text-sm font-semibold text-brand-300">

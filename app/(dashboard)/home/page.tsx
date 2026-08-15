@@ -10,7 +10,6 @@ import { createClient, createAdminClient, getActiveMembership, getActiveOrgId, g
 import { hasStudentAccess } from '@/lib/org/activeOrg'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { addDaysISO } from '@/lib/utils/agenda'
-import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { HeroHeader } from '@/features/home/HeroHeader'
 import { SpotlightRow } from '@/features/home/SpotlightRow'
 import { ArenaWeek } from '@/features/home/ArenaWeek'
@@ -20,7 +19,7 @@ import { monthOf } from '@/lib/home/arenaAgenda'
 import type { AgendaSession } from '@/features/home/agendaTypes'
 import { SelfCheckinCard, type SelfCheckinCandidate } from '@/features/home/SelfCheckinCard'
 import { SelfCheckinModal } from '@/features/home/SelfCheckinModal'
-import { getSelfCheckinViews } from '@/features/checkin/selfCheckinQueries'
+import { buildAgendaSessions, type SessionRowWithClass } from '@/features/home/sessionDetailQuery'
 import { Reveal } from '@/components/ui/Reveal'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -178,132 +177,18 @@ export default async function HomePage() {
   const weekEnd = addDaysISO(today, 6)
   const { data: weekSessionsRaw } = await adminClient
     .from('class_sessions')
-    .select('id, session_date, class_id, classes(name, start_time, end_time, type, sport, max_students)')
+    .select(
+      'id, session_date, class_id, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+    )
     .eq('organization_id', orgId)
     .gte('session_date', today)
     .lte('session_date', weekEnd)
     .eq('status', 'scheduled')
     .order('session_date', { ascending: true })
 
-  type WeekSessionRow = {
-    id: string
-    session_date: string
-    class_id: string
-    classes:
-      | { name: string; start_time: string; end_time: string; type: string; sport: string | null; max_students: number }
-      | { name: string; start_time: string; end_time: string; type: string; sport: string | null; max_students: number }[]
-      | null
-  }
-  const weekSessionRows = (weekSessionsRaw ?? []) as unknown as WeekSessionRow[]
-  const weekSessionIds = weekSessionRows.map((s) => s.id)
-
-  // Reservas da janela em confirmed E cancelled: a cancelada é o opt-out do
-  // aluno fixo ("não venho nesta data") e precisa tirá-lo da lista de presentes.
-  const { data: weekBookingsRaw } = weekSessionIds.length > 0
-    ? await adminClient
-        .from('session_bookings')
-        .select('id, session_id, student_id, status, from_enrollment, profiles(full_name)')
-        .in('session_id', weekSessionIds)
-        .in('status', ['confirmed', 'cancelled'])
-    : { data: [] }
-
-  type BookingRow = {
-    id: string
-    session_id: string
-    student_id: string
-    status: string
-    from_enrollment: boolean
-    profiles: { full_name: string } | { full_name: string }[] | null
-  }
-
-  const bookedBySession = new Map<string, AttendeeRef[]>()
-  const optedOutBySession = new Map<string, Set<string>>()
-  const myBookingBySession = new Map<string, { id: string; fromEnrollment: boolean }>()
-  const weekBookedCount = new Map<string, number>()
-
-  for (const b of (weekBookingsRaw ?? []) as unknown as BookingRow[]) {
-    if (b.status === 'confirmed') {
-      const p = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
-      bookedBySession.set(b.session_id, [
-        ...(bookedBySession.get(b.session_id) ?? []),
-        { id: b.student_id, name: p?.full_name ?? 'Aluno' },
-      ])
-      weekBookedCount.set(b.session_id, (weekBookedCount.get(b.session_id) ?? 0) + 1)
-      if (b.student_id === user.id) {
-        myBookingBySession.set(b.session_id, { id: b.id, fromEnrollment: b.from_enrollment })
-      }
-    } else if (b.status === 'cancelled') {
-      const set = optedOutBySession.get(b.session_id) ?? new Set<string>()
-      set.add(b.student_id)
-      optedOutBySession.set(b.session_id, set)
-    }
-  }
-
-  // Alunos fixos das turmas que aparecem na agenda da semana.
-  const rosterClassIds = Array.from(new Set(weekSessionRows.map((s) => s.class_id)))
-
-  const { data: rosterRaw } = rosterClassIds.length > 0
-    ? await adminClient
-        .from('enrollments')
-        .select('class_id, student_id, profiles(full_name)')
-        .in('class_id', rosterClassIds)
-        .eq('is_active', true)
-    : { data: [] }
-
-  const enrolledByClass = new Map<string, AttendeeRef[]>()
-  for (const e of (rosterRaw ?? []) as unknown as {
-    class_id: string
-    student_id: string
-    profiles: { full_name: string } | { full_name: string }[] | null
-  }[]) {
-    const p = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
-    enrolledByClass.set(e.class_id, [
-      ...(enrolledByClass.get(e.class_id) ?? []),
-      { id: e.student_id, name: p?.full_name ?? 'Aluno' },
-    ])
-  }
-
-  // Fila de espera das sessões da semana, em ordem de chegada. A ordem vem de
-  // joined_at (a coluna `position` nunca é recalculada, então fica defasada).
-  // Erro aqui degrada para fila vazia de propósito: em ambiente sem a tabela
-  // `waitlists` a agenda inteira não pode quebrar por causa disso.
-  const { data: weekWaitlistRaw } = weekSessionIds.length > 0
-    ? await adminClient
-        .from('waitlists')
-        .select('id, session_id, student_id, joined_at, profiles(full_name)')
-        .in('session_id', weekSessionIds)
-        .in('status', ['waiting', 'offered'])
-        .order('joined_at', { ascending: true })
-    : { data: [] }
-
-  const waitlistBySession = new Map<string, string[]>()
-  // sessionId → id da MINHA entrada na fila, para conseguir sair pela ficha.
-  const myWaitlistBySession = new Map<string, string>()
-  for (const w of (weekWaitlistRaw ?? []) as unknown as {
-    id: string
-    session_id: string
-    student_id: string
-    profiles: { full_name: string } | { full_name: string }[] | null
-  }[]) {
-    const p = Array.isArray(w.profiles) ? w.profiles[0] : w.profiles
-    waitlistBySession.set(w.session_id, [
-      ...(waitlistBySession.get(w.session_id) ?? []),
-      p?.full_name ?? 'Aluno',
-    ])
-    if (w.student_id === user.id) myWaitlistBySession.set(w.session_id, w.id)
-  }
-
-  /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram. */
-  function attendeesOf(sessionId: string, classId: string): string[] {
-    return mergeSessionAttendees({
-      booked: bookedBySession.get(sessionId) ?? [],
-      enrolled: enrolledByClass.get(classId) ?? [],
-      optedOut: optedOutBySession.get(sessionId) ?? new Set<string>(),
-    }).map((a) => a.name)
-  }
+  const weekSessionRows = (weekSessionsRaw ?? []) as unknown as SessionRowWithClass[]
 
   // ── Confirmação de presença pelo app ──────────────────────────────────────
-  // Só as aulas do próprio aluno interessam: é ele quem confirma.
   const { data: orgSelfCheckinRow } = orgId
     ? await adminClient
         .from('organizations')
@@ -315,61 +200,22 @@ export default async function HomePage() {
   const selfCheckinEnabled =
     (orgSelfCheckinRow as { self_checkin_enabled: boolean } | null)?.self_checkin_enabled ?? false
 
-  const mySessionRefs = weekSessionRows
-    .filter((row) => {
-      if (myBookingBySession.has(row.id)) return true
-      // Fixo sem reserva conta, a menos que tenha avisado que não vem —
-      // mesma regra de isStudentExpectedInSession, que a action reaplica.
-      if (!enrolledClassIds.has(row.class_id)) return false
-      return !optedOutBySession.get(row.id)?.has(user.id)
-    })
-    .map((row) => {
-      const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
-      return cls
-        ? { id: row.id, date: row.session_date, start: cls.start_time, end: cls.end_time }
-        : null
-    })
-    .filter((s): s is { id: string; date: string; start: string; end: string } => s !== null)
-
-  const selfCheckinViews = orgId
-    ? await getSelfCheckinViews(adminClient, {
-        orgId,
-        studentId: user.id,
-        partner: membership?.partner ?? null,
-        sessions: mySessionRefs,
-        enabled: selfCheckinEnabled,
-      })
-    : new Map()
-
-  const agendaSessions: AgendaSession[] = weekSessionRows
-    .map((row): AgendaSession | null => {
-      const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
-      if (!cls) return null
-      // Kids só aparece para dependentes — mesma regra das turmas de hoje.
-      if (cls.type === 'kids' && !membership?.is_dependent) return null
-      const myBooking = myBookingBySession.get(row.id)
-      return {
-        id: row.id,
-        date: row.session_date,
-        className: cls.name,
-        start: cls.start_time,
-        end: cls.end_time,
-        booked: weekBookedCount.get(row.id) ?? 0,
-        capacity: cls.max_students,
-        mine: !!myBooking,
-        fixed: enrolledClassIds.has(row.class_id),
-        kids: cls.type === 'kids',
-        sport: cls.sport ?? null,
-        attendees: attendeesOf(row.id, row.class_id),
-        waitlist: waitlistBySession.get(row.id) ?? [],
-        waitlistEntryId: myWaitlistBySession.get(row.id),
-        bookingId: myBooking?.id,
-        fromEnrollment: myBooking?.fromEnrollment,
-        selfCheckin: selfCheckinViews.get(row.id),
-      }
-    })
-    .filter((s): s is AgendaSession => s !== null)
-    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start))
+  // A ficha da aula (quem vai, fila, minha reserva, linhas dos dependentes) é
+  // montada em features/home/sessionDetailQuery.ts, e não aqui, porque o
+  // calendário do mês abre o MESMO modal por uma action — duas montagens
+  // separadas divergiriam.
+  const agendaSessions: AgendaSession[] = await buildAgendaSessions(adminClient, {
+    orgId: orgId!,
+    userId: user.id,
+    partner: membership?.partner ?? null,
+    selfCheckinEnabled,
+    enrolledClassIds,
+    rows: weekSessionRows,
+    creditsBalance: membership?.credits_balance ?? 0,
+    // Com a cota desligada o plano é ilimitado, então ele sempre é um caminho
+    // possível; com ela ligada, só enquanto sobrar cota.
+    hasPlanQuota: plan !== null && (!quotaOn || (quota?.remaining ?? 0) > 0),
+  })
 
   // Destaque: as aulas do aluno vêm primeiro; sem nenhuma, oferece as que ainda
   // têm vaga. O card final é escolhido no cliente, pelo relógio do aluno.
@@ -389,12 +235,7 @@ export default async function HomePage() {
   const [weekExtras, monthEvents] = orgId
     ? await Promise.all([
         getArenaExtras({ orgId, userId: user.id, from: today, to: weekEnd }),
-        getArenaMonth({
-          orgId,
-          userId: user.id,
-          monthISO: currentMonth,
-          includeKids: membership?.is_dependent ?? false,
-        }),
+        getArenaMonth({ orgId, userId: user.id, monthISO: currentMonth }),
       ])
     : [[], []]
 
@@ -550,7 +391,7 @@ export default async function HomePage() {
           torneio e day use levam para a página deles. */}
       {(agendaSessions.length > 0 || weekExtras.length > 0) && (
         <Reveal step={3} as="section">
-          <SectionHeader title="Agenda da academia" href="/agendar" linkLabel="agendar" />
+          <SectionHeader title="Agenda da academia" />
           <ArenaWeek todayISO={today} sessions={agendaSessions} events={weekExtras} />
         </Reveal>
       )}
@@ -558,14 +399,12 @@ export default async function HomePage() {
       {/* Calendário do mês — o que a arena tem, não só o que o aluno marcou.
           Tocar num dia abre o que há nele, com o caminho para entrar. */}
       <Reveal step={4} as="section">
-        <SectionHeader title="Calendário da arena" href="/agendar" linkLabel="agendar" />
+        <SectionHeader title="Calendário da arena" />
         {monthEvents.length === 0 ? (
           <EmptyState
             icon={CalendarDays}
             title="Nada marcado neste mês"
             description="Quando a academia abrir turmas, torneios ou day use, eles aparecem aqui."
-            ctaHref="/agendar"
-            ctaLabel="Ver a grade"
           />
         ) : (
           <ArenaCalendar

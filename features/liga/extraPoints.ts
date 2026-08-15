@@ -10,7 +10,7 @@ import type { LigaWeights } from '@/lib/liga/points'
 import type { LigaPointReason } from '@/types'
 import { getLigaSettings } from './settings'
 import { getOrCreateActiveSeason } from './season'
-import { awardLigaPoints } from './awardPoints'
+import { awardLigaPoints, revokeLigaPoints } from './awardPoints'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -105,6 +105,63 @@ export async function awardLigaExtra(
     })
   }
 }
+
+/**
+ * Desfaz uma fonte extra. Nunca lança. Espelho exato de `awardLigaExtra`.
+ *
+ * Existe porque entrar e sair de aula é um par, e só o crédito estava
+ * implementado: entrar rendia `early_booking`, sair rendia `cancel_in_time`, e
+ * nada era revogado — quem entrava e saía somava os dois numa aula que nunca
+ * aconteceu, e repetia a manobra em toda sessão. Agora cada lado revoga o do
+ * outro, e o extrato de quem entra e sai fica igual ao de quem nunca saiu.
+ *
+ * A resolução de esporte precisa ser a MESMA do crédito, senão a revogação
+ * procura a linha no ranking errado e não acha nada. Por isso `sport` é opcional
+ * aqui também: quem creditou sem esporte explícito revoga sem esporte explícito.
+ */
+export async function revokeLigaExtra(
+  admin: AdminClient,
+  input: Omit<ExtraPointInput, 'note'>,
+): Promise<void> {
+  try {
+    const settings = await getLigaSettings(input.orgId)
+    if (!settings.enabled) return
+
+    const sport =
+      input.sport ?? (await resolvePrimarySport(admin, input.orgId, input.studentId))
+    if (!sport) return
+
+    const season = await getOrCreateActiveSeason(input.orgId)
+    if (!season) return
+
+    await revokeLigaPoints(admin, {
+      seasonId: season.id,
+      studentId: input.studentId,
+      sport,
+      reason: input.reason,
+      sourceId: input.sourceId ?? null,
+    })
+  } catch (err) {
+    console.error('[liga] revokeLigaExtra falhou', {
+      reason: input.reason,
+      studentId: input.studentId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+/**
+ * Pontos que a ENTRADA numa aula credita. Sair da aula revoga os dois: o aluno
+ * recebeu um OU outro (ver bookSessionAs), e tentar revogar o que não existe é
+ * barato — `liga_revoke_points` não acha linha e não faz nada.
+ */
+export const ENTRY_REASONS: ExtraReason[] = ['waitlist_accept', 'early_booking']
+
+/**
+ * Ponto que a SAÍDA da aula credita. Entrar de novo revoga: senão o ciclo
+ * sair→entrar deixaria o prêmio de ter liberado a vaga que o aluno retomou.
+ */
+export const EXIT_REASON: ExtraReason = 'cancel_in_time'
 
 /**
  * Ponto de cadastro completo. Uma vez na vida, não uma por temporada.

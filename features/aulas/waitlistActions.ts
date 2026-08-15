@@ -2,10 +2,11 @@
 // features/aulas/waitlistActions.ts
 
 import { revalidatePath } from 'next/cache'
-import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
+import { resolveSession, type SessionOverrides } from '@/lib/aulas/sessionOverride'
 
 // ---------------------------------------------------------------------------
 // notifyWaitlistSpotOpen — avisa a fila inteira quando uma vaga abre
@@ -151,7 +152,20 @@ export async function joinWaitlist(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
+  return joinWaitlistAs(user.id, sessionId)
+}
 
+/**
+ * Entra na fila PARA `studentId`. Casca de `joinWaitlist` e porta do responsável
+ * que põe o dependente na fila de uma turma kids lotada — mesma razão de
+ * `bookSessionAs`: a regra é do aluno, não de quem apertou o botão.
+ *
+ * Autorização é do caller (features/aulas/guardianActions.ts).
+ */
+export async function joinWaitlistAs(
+  studentId: string,
+  sessionId: string,
+): Promise<{ error?: string; position?: number }> {
   const adminClient = createAdminClient()
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
@@ -159,7 +173,9 @@ export async function joinWaitlist(
   // Fetch session + class (escopado pela academia ativa)
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, status, class:classes(max_students, level, type)')
+    .select(
+      'id, status, max_students, start_time, end_time, court, class:classes(max_students, level, type, start_time, end_time, court)',
+    )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .single()
@@ -171,18 +187,33 @@ export async function joinWaitlist(
     max_students: number
     level: StudentLevel
     type: ClassType
+    start_time: string
+    end_time: string
+    court: number | null
   } | null
   if (!clsInfo) return { error: 'Turma não encontrada.' }
 
-  // Nível/dependente/pagamento (por-academia) vêm da membership da academia ativa.
-  const joinProfile = await getActiveMembership()
+  // Nível/dependente/pagamento (por-academia) vêm da membership do ALUNO na
+  // academia ativa — que pode ser o dependente, não quem está logado.
+  const { data: joinProfileRaw } = await adminClient
+    .from('memberships')
+    .select('is_dependent')
+    .eq('user_id', studentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  const joinProfile = joinProfileRaw as { is_dependent: boolean } | null
   if (!joinProfile) return { error: 'Perfil não encontrado.' }
 
   if (clsInfo.type === 'kids' && !joinProfile.is_dependent) {
-    return { error: 'Esta turma é exclusiva para alunos kids (dependentes).' }
+    return {
+      error:
+        'Turma exclusiva para alunos kids. Se você é responsável, coloque o seu dependente na fila.',
+    }
   }
 
-  const maxStudents = clsInfo.max_students
+  // Capacidade DESTA data. A fila usa o mesmo teto do agendamento: se a aula do
+  // dia foi reduzida para 4, "está cheia" e "a fila está cheia" mudam junto.
+  const maxStudents = resolveSession(session as SessionOverrides, clsInfo).maxStudents
 
   // Confirm session is actually full
   const { count: bookedCount } = await adminClient
@@ -200,7 +231,7 @@ export async function joinWaitlist(
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
     .eq('session_id', sessionId)
-    .eq('student_id', user.id)
+    .eq('student_id', studentId)
     .eq('status', 'confirmed')
 
   if ((existingBooking ?? 0) > 0) {
@@ -212,7 +243,7 @@ export async function joinWaitlist(
     .from('waitlists')
     .select('id', { count: 'exact', head: true })
     .eq('session_id', sessionId)
-    .eq('student_id', user.id)
+    .eq('student_id', studentId)
     .in('status', ['waiting', 'offered'])
 
   if ((existingWaitlist ?? 0) > 0) {
@@ -226,7 +257,7 @@ export async function joinWaitlist(
     .from('waitlists')
     .delete()
     .eq('session_id', sessionId)
-    .eq('student_id', user.id)
+    .eq('student_id', studentId)
     .in('status', ['cancelled', 'expired'])
 
   // Calculate position (count of active waitlist entries + 1)
@@ -246,7 +277,7 @@ export async function joinWaitlist(
   const { error: insertErr } = await adminClient.from('waitlists').insert({
     organization_id: orgId,
     session_id: sessionId,
-    student_id: user.id,
+    student_id: studentId,
     position,
   })
 
@@ -266,7 +297,7 @@ export async function joinWaitlist(
 
     await notifyUsers(adminClient, {
       orgId,
-      recipients: [{ userId: user.id }],
+      recipients: [{ userId: studentId }],
       type: 'waitlist_joined',
       title: 'Você entrou na lista de espera',
       body:
@@ -276,12 +307,12 @@ export async function joinWaitlist(
     })
   } catch (err) {
     console.error('[joinWaitlist] notifyUsers falhou', {
-      sessionId, studentId: user.id,
+      sessionId, studentId: studentId,
       error: err instanceof Error ? err.message : String(err),
     })
     Sentry.captureException(err, {
       tags: { channel: 'dispatch', notificationType: 'waitlist_joined' },
-      extra: { sessionId, studentId: user.id },
+      extra: { sessionId, studentId: studentId },
     })
   }
 
@@ -300,7 +331,18 @@ export async function leaveWaitlist(waitlistId: string): Promise<{ error?: strin
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
+  return leaveWaitlistAs(waitlistId, [user.id])
+}
 
+/**
+ * Sai da fila em nome de alguém que o caller já autorizou — mesmo contrato de
+ * `cancelBookingAs`: uma lista de ids permitidos, porque export de `'use server'`
+ * é endpoint e endpoint só recebe dado serializável.
+ */
+export async function leaveWaitlistAs(
+  waitlistId: string,
+  allowedStudentIds: string[],
+): Promise<{ error?: string }> {
   const adminClient = createAdminClient()
 
   const { data: entry } = await adminClient
@@ -310,7 +352,9 @@ export async function leaveWaitlist(waitlistId: string): Promise<{ error?: strin
     .single()
 
   if (!entry) return { error: 'Entrada não encontrada.' }
-  if (entry.student_id !== user.id) return { error: 'Sem permissão.' }
+  if (!allowedStudentIds.includes(entry.student_id as string)) {
+    return { error: 'Sem permissão.' }
+  }
   if (!['waiting', 'offered'].includes(entry.status)) {
     return { error: 'Você não está mais na lista de espera.' }
   }

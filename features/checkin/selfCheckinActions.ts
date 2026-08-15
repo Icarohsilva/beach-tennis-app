@@ -14,6 +14,7 @@ import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { isStudentExpectedInSession } from '@/features/aulas/sessionUtils'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
+import { resolveSession } from '@/lib/aulas/sessionOverride'
 import {
   resolveSelfCheckinStatus,
   selfCheckinWindow,
@@ -171,7 +172,9 @@ export async function confirmSelfAttendance(
   // 2. Sessão + turma.
   const { data: sessionRow } = await adminClient
     .from('class_sessions')
-    .select('id, class_id, session_date, status, classes(start_time, end_time)')
+    .select(
+      'id, class_id, session_date, status, start_time, end_time, classes(start_time, end_time)',
+    )
     .eq('id', input.sessionId)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -181,6 +184,8 @@ export async function confirmSelfAttendance(
     class_id: string
     session_date: string
     status: string
+    start_time: string | null
+    end_time: string | null
     classes:
       | { start_time: string; end_time: string }
       | { start_time: string; end_time: string }[]
@@ -207,10 +212,17 @@ export async function confirmSelfAttendance(
   })
   if (!expected) return { error: 'Você não está nesta aula. Entre na aula antes de confirmar.' }
 
-  // 4. Janela, pelo relógio do servidor.
+  // 4. Janela, pelo relógio do servidor e pelo horário DESTA data — a aula
+  //    remarcada move a janela junto, senão o aluno chega no horário novo e o
+  //    app diz que está fora da janela.
+  const horario = resolveSession(session, {
+    start_time: cls.start_time,
+    end_time: cls.end_time,
+    max_students: 0,
+  })
   const window = selfCheckinWindow(
-    sessionStartIso(session.session_date, cls.start_time),
-    sessionStartIso(session.session_date, cls.end_time),
+    sessionStartIso(session.session_date, horario.startTime),
+    sessionStartIso(session.session_date, horario.endTime),
   )
   if (!isWithinSelfCheckinWindow(window, new Date())) {
     return { error: 'Fora da janela de confirmação desta aula.' }
