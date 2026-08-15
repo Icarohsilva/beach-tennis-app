@@ -24,6 +24,7 @@ import { StatCard } from '@/components/ui/StatCard'
 import { DivisionRanking } from '@/features/liga/DivisionRanking'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { UpdateBanner } from '@/components/pwa/UpdateBanner'
 import type { Class, StandingRow } from '@/types'
 
 export const dynamic = 'force-static'
@@ -164,6 +165,16 @@ export default function BancadaResponsiva() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="Perdido no mês" value="R$ 12.345,67" hint="no mês, incluindo perdoadas" />
             <StatCard label="Receita parceiro" value="R$ 1.234,56" hint="sem valor configurado" />
+          </div>
+        </Bloco>
+
+        {/* O aviso de versão nova é fixo no rodapé e some da tela na maior parte do
+            tempo, então é justamente o tipo de componente que ninguém revisa em
+            320px. Aqui ele é renderizado em fluxo (o `fixed` não muda a largura
+            medida) e passa pelas mesmas asserções. */}
+        <Bloco nome="update-banner">
+          <div className="relative h-24">
+            <UpdateBanner />
           </div>
         </Bloco>
 

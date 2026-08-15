@@ -26,6 +26,7 @@ const BLOCOS = [
   'division-ranking',
   'event-stats',
   'stat-cards-moeda',
+  'update-banner',
   'linha-rotulo-chip',
 ] as const
 
