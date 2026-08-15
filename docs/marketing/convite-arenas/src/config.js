@@ -20,7 +20,18 @@ module.exports = {
   // --- Oferta ---
   preco: 'R$ 49,90',
   precoUnidade: '/mês',
-  garantias: ['alunos ilimitados', 'sem taxa por aluno', '1º mês grátis'],
+  garantias: ['alunos ilimitados', 'sem taxa por aluno', '1º mês grátis', 'suporte vitalício no WhatsApp'],
+
+  // --- Arenas do lote atual ---
+  // O nome vai impresso na capa. Gera-se sob demanda, em lotes pequenos, para
+  // imprimir só o que vai ser entregue naquela semana.
+  arenas: [
+    'Aloha Beach',
+    'Varandas Beach',
+    'Arena Numar',
+    'Arena Fahel',
+    'Arena Meritus',
+  ],
 
   // --- Fichas de produção geradas para a gráfica ---
   // A prova pequena sai sem soft touch e sem verniz localizado: são acabamentos
@@ -31,10 +42,6 @@ module.exports = {
     { nome: 'ArenaHub-Ficha-Grafica-150un.png', tiragem: 150, acabamentoCompleto: true },
   ],
 
-  // --- Numeração do convite ---
-  // Deixe `null` para imprimir a linha em branco e escrever à mão (recomendado:
-  // manuscrito converte mais em outbound 1-a-1 e não exige dado variável).
-  totalConvites: 60,
 
   // --- Paleta (idêntica ao app) ---
   cor: {

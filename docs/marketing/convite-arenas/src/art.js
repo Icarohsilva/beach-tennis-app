@@ -131,8 +131,22 @@ body{background:#5b6478;font-family:Inter,sans-serif;-webkit-font-smoothing:anti
 
 // ------------------------------------------------------------- painéis 150mm
 
-function capa(cfg) {
+function capa(cfg, arena) {
   const c = cfg.cor
+  // Nome longo não pode quebrar o desenho: o corpo cai por faixa de tamanho.
+  const n = (arena || '').length
+  const corpoNome = n === 0 ? 0 : n <= 16 ? 13.5 : n <= 22 ? 11 : n <= 28 ? 9 : 7.5
+
+  const destinatario = arena
+    ? `<div style="margin-top:2mm">
+         <div style="font-family:Playfair;font-weight:500;font-size:${corpoNome}mm;line-height:1.12;color:${c.texto};letter-spacing:-0.005em">${arena}</div>
+         <div style="margin-top:3mm;width:34mm;height:.4mm;background:${c.laranja}"></div>
+       </div>`
+    : `<div>
+         <div style="margin-top:2mm;width:100mm;border-bottom:.35mm dashed rgba(148,163,184,.55);height:9.5mm"></div>
+         <div style="margin-top:1.4mm;font-family:Inter;font-size:2.3mm;color:rgba(148,163,184,.6)">escreva aqui o nome da arena</div>
+       </div>`
+
   return `
 <div class="painel capa" style="position:relative;overflow:hidden">
   <!-- Sem véu por cima do painel: qualquer overlay que cubra só metade da folha
@@ -140,31 +154,20 @@ function capa(cfg) {
   <div style="position:absolute;left:-10mm;right:-10mm;bottom:15mm;height:31mm">${quadra(0.36, false, 'larga')}</div>
 
   <div style="position:relative;height:100%;padding:12mm 13mm 11mm;display:flex;flex-direction:column">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between">
-      ${logo(7.4)}
-      <div style="text-align:right;border:.25mm solid ${c.borda};border-radius:1.6mm;padding:1.5mm 2.4mm">
-        <div style="font-family:Inter;font-weight:600;font-size:1.9mm;letter-spacing:.18em;color:${c.suave}">CONVITE</div>
-        <div style="font-family:Sora;font-weight:700;font-size:3.6mm;color:${c.texto};line-height:1.15;margin-top:.4mm">
-          Nº <span style="display:inline-block;width:8mm;border-bottom:.3mm solid ${c.laranja}">&nbsp;</span>${
-            cfg.totalConvites ? `<span style="color:${c.suave};font-weight:400"> / ${cfg.totalConvites}</span>` : ''
-          }
-        </div>
-      </div>
-    </div>
+    ${logo(7.4)}
 
     <!-- A metade direita, na altura do meio, fica livre: é onde o selo adesivo
          de 40 mm lacra a peça. -->
-    <div style="margin-top:10mm">
+    <div style="margin-top:13mm">
       <div style="display:flex;align-items:center;gap:3mm">
         <span style="font-family:Inter;font-weight:700;font-size:2.7mm;letter-spacing:.42em;color:${c.laranja}">CONVITE</span>
         <span class="filete" style="width:24mm"></span>
       </div>
 
-      <div style="margin-top:7mm;font-family:Inter;font-weight:400;font-size:4.2mm;color:${c.suave}">Para a</div>
-      <div style="margin-top:2mm;width:100mm;border-bottom:.35mm dashed rgba(148,163,184,.55);height:9.5mm"></div>
-      <div style="margin-top:1.4mm;font-family:Inter;font-size:2.3mm;color:rgba(148,163,184,.6)">escreva aqui o nome da arena</div>
+      <div style="margin-top:8mm;font-family:Inter;font-weight:400;font-size:4.2mm;color:${c.suave}">Para a</div>
+      ${destinatario}
 
-      <h1 style="margin-top:7.5mm;width:112mm;font-family:Sora;font-weight:800;font-size:8.8mm;line-height:1.14;letter-spacing:-.03em;color:${c.texto}">
+      <h1 style="margin-top:8mm;width:112mm;font-family:Sora;font-weight:800;font-size:8.2mm;line-height:1.15;letter-spacing:-0.03em;color:${c.texto}">
         ser uma das primeiras arenas de ${cfg.cidade} no <span style="color:${c.laranja}">ArenaHub</span>.
       </h1>
     </div>
@@ -218,94 +221,125 @@ function contracapa(cfg, qrInstagram) {
 </div>`
 }
 
-const CARTA = (cfg) => [
-  `Eu construí o ArenaHub sozinho, linha por linha, depois de ver de perto o caos que é tocar uma arena no caderno e no grupo de WhatsApp lotado.`,
-  `Hoje ele já roda numa arena de verdade aqui em ${cfg.cidade}. Agora eu quero as próximas, e queria muito que a sua fosse uma delas.`,
-  `Isto não é um panfleto. É um convite: abra sua conta, monte sua grade em 5 minutos e use o primeiro mês por minha conta. Se não fizer sentido pra você, me diz e a gente encerra ali, sem drama.`,
+// As três dores vêm da própria landing (seção "Você reconhece isso?"), que já é
+// copy testada. A peça fala do problema do dono, não da história de quem fez.
+const DORES = [
+  [
+    '“Sobrou vaga? Posso ir?”',
+    'Você passa o dia respondendo a mesma pergunta no WhatsApp. E ainda perde o aluno que ia repor a aula.',
+  ],
+  [
+    'O caderno vira caos.',
+    'Quem pagou, quem deve, quem tem crédito. A planilha trava, o caderno some e a recepção pira.',
+  ],
+  [
+    'A inadimplência fica invisível.',
+    'Cobrar mensalidade é desconfortável. Sem ferramenta, vira “depois eu te mando” que nunca vem.',
+  ],
 ]
 
 const RECURSOS = [
-  ['grade', 'Grade e reposição', 'O aluno reserva, cancela e repõe sozinho. Fila de espera preenche a vaga automaticamente.'],
-  ['parceiro', 'Wellhub e TotalPass', 'O check-in do parceiro cai direto no sistema. Sem fila e sem planilha na recepção.'],
-  ['financeiro', 'Financeiro sem climão', 'Mensalidade, avulsa, crédito: quem pagou e quem deve, sem você ter que cobrar na mão.'],
-  ['torneio', 'Torneios e comunidade', 'Do chaveamento ao PIX da inscrição, e o feed que mantém o aluno grudado na arena.'],
+  ['grade', 'Grade e reposição', 'O aluno reserva, cancela e repõe sozinho. A fila de espera preenche a vaga.'],
+  ['parceiro', 'Wellhub e TotalPass', 'O check-in do parceiro cai direto no sistema, sem fila na recepção.'],
+  ['financeiro', 'Financeiro sem climão', 'Mensalidade, avulsa e crédito: quem pagou e quem deve, sem cobrar na mão.'],
+  ['torneio', 'Torneios e comunidade', 'Do chaveamento ao PIX da inscrição, e o feed que segura o aluno.'],
 ]
 
 function interna(cfg, qrCriar) {
   const c = cfg.cor
+
+  const dores = DORES.map(
+    ([titulo, texto]) => `
+    <div style="border-left:.6mm solid ${c.laranja};padding-left:4.5mm">
+      <div style="font-family:Sora;font-weight:700;font-size:4.1mm;line-height:1.22;color:${c.texto};letter-spacing:-0.02em">${titulo}</div>
+      <div style="margin-top:1.6mm;font-family:Inter;font-size:2.95mm;line-height:1.45;color:#cbd5e1">${texto}</div>
+    </div>`
+  ).join('')
+
   const cards = RECURSOS.map(
     ([ic, titulo, texto]) => `
-    <div style="background:${c.card};border:.25mm solid ${c.borda};border-radius:3.4mm;padding:4.6mm 4.4mm">
+    <div style="background:${c.card};border:.25mm solid ${c.borda};border-radius:3.4mm;padding:4mm 4.2mm">
       <div style="display:flex;align-items:center;gap:2.2mm">
-        ${cardIcone(ic)}
-        <div style="font-family:Sora;font-weight:700;font-size:3.5mm;color:${c.texto};letter-spacing:-.01em">${titulo}</div>
+        ${cardIcone(ic, 4.8)}
+        <div style="font-family:Sora;font-weight:700;font-size:3.4mm;color:${c.texto};letter-spacing:-0.01em">${titulo}</div>
       </div>
-      <div style="margin-top:2.4mm;font-family:Inter;font-size:2.75mm;line-height:1.5;color:${c.suave}">${texto}</div>
+      <div style="margin-top:2mm;font-family:Inter;font-size:2.7mm;line-height:1.45;color:${c.suave}">${texto}</div>
     </div>`
   ).join('')
 
   return `
 <div class="painel" style="position:relative;overflow:hidden;width:300mm">
   <!-- Sem quadra aqui de propósito: esticada na abertura inteira ela vira um
-       risco diagonal atravessando a carta. A parte de dentro é texto, e texto
-       pede fundo quieto. A quadra fica na capa e nas peças digitais. -->
+       risco diagonal atravessando o texto. A parte de dentro é leitura, e
+       leitura pede fundo quieto. -->
 
-  <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:14mm 15mm 11mm">
+  <div style="position:relative;height:100%;display:flex;flex-direction:column;padding:13mm 15mm 11mm">
     <div style="display:flex;gap:36mm;flex:1">
 
-      <!-- CARTA (abre à esquerda) -->
+      <!-- AS DORES (abre à esquerda) -->
       <div style="width:117mm;display:flex;flex-direction:column">
-        <div class="manuscrito" style="font-size:9mm;line-height:1">Oi! Aqui é o ${cfg.primeiroNome}.</div>
-        <div style="margin-top:5.5mm;display:flex;flex-direction:column;gap:3.6mm">
-          ${CARTA(cfg)
-            .map(
-              (p) =>
-                `<p style="font-family:Inter;font-size:3.35mm;line-height:1.62;color:#cbd5e1">${p}</p>`
-            )
-            .join('')}
+        <div style="display:flex;align-items:center;gap:3mm">
+          <span style="font-family:Inter;font-weight:700;font-size:2.5mm;letter-spacing:.3em;color:${c.laranja}">VOCÊ RECONHECE ISSO?</span>
         </div>
-        <div style="margin-top:auto;padding-top:6mm">
-          <div class="manuscrito" style="font-size:11mm;line-height:.9">${cfg.primeiroNome}</div>
-          <div style="margin-top:2.6mm;font-family:Inter;font-weight:600;font-size:2.7mm;color:${c.suave}">
-            ${cfg.fundador} · fundador do ArenaHub
-          </div>
+        <h2 style="margin-top:4mm;font-family:Sora;font-weight:800;font-size:6.2mm;line-height:1.14;letter-spacing:-0.03em;color:${c.texto}">
+          Toda arena perde aluno<br>pelo mesmo motivo.
+        </h2>
+        <div style="margin-top:5.5mm;display:flex;flex-direction:column;gap:4mm">${dores}</div>
+        <div style="margin-top:auto;padding-top:4mm;font-family:Inter;font-weight:600;font-size:3.1mm;line-height:1.45;color:${c.suave}">
+          Não é desorganização sua. <span style="color:${c.texto}">É falta de ferramenta feita para arena.</span>
         </div>
       </div>
 
-      <!-- PROVA (abre à direita) -->
+      <!-- A SOLUÇÃO (abre à direita) -->
       <div style="width:117mm;display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;gap:3mm">
-          <span style="font-family:Inter;font-weight:700;font-size:2.5mm;letter-spacing:.3em;color:${c.laranja}">NO LUGAR DO CADERNO</span>
+          <span style="font-family:Inter;font-weight:700;font-size:2.5mm;letter-spacing:.3em;color:${c.laranja}">O QUE ENTRA NO LUGAR</span>
           <span class="filete" style="flex:1"></span>
         </div>
-        <div style="margin-top:5mm;display:grid;grid-template-columns:1fr 1fr;gap:3.4mm">${cards}</div>
+        <div style="margin-top:4.5mm;display:grid;grid-template-columns:1fr 1fr;gap:3mm">${cards}</div>
+
+        <!-- O suporte tem card próprio, atravessando as duas colunas: é a
+             objeção número um de quem nunca usou sistema nenhum. -->
+        <div style="margin-top:3mm;background:rgba(249,115,22,.1);border:.3mm solid rgba(249,115,22,.55);border-radius:3.4mm;padding:4mm 4.6mm">
+          <div style="display:flex;align-items:center;gap:2.2mm">
+            <svg width="4.8mm" height="4.8mm" viewBox="0 0 24 24" fill="none" stroke="${c.laranja}" stroke-width="1.7"
+                 stroke-linecap="round" stroke-linejoin="round" style="display:block">
+              <path d="M21 11.5a8.4 8.4 0 0 1-12.1 7.5L3 20.5l1.6-5.7A8.4 8.4 0 1 1 21 11.5z"/>
+            </svg>
+            <div style="font-family:Sora;font-weight:700;font-size:3.4mm;color:${c.texto};letter-spacing:-0.01em">Você não vai fazer isso sozinho</div>
+          </div>
+          <div style="margin-top:2mm;font-family:Inter;font-size:2.7mm;line-height:1.45;color:#e2e8f0">
+            A gente configura suas turmas e cadastra seus alunos com você nos primeiros acessos.
+            E o suporte no WhatsApp é <b style="color:${c.laranja}">vitalício</b>, sempre que precisar.
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- FAIXA DE PREÇO: atravessa a peça, mas o vão de 36 mm garante que nada
          caia em cima do vinco (x = 150 mm). -->
-    <div style="margin-top:8mm;display:flex;align-items:stretch;gap:36mm">
-      <div style="width:117mm;background:linear-gradient(135deg,${c.laranjaEscuro},${c.laranjaProfundo});border-radius:3.6mm;padding:4.6mm 5.4mm;display:flex;flex-direction:column;justify-content:center">
+    <div style="margin-top:6mm;display:flex;align-items:stretch;gap:36mm">
+      <div style="width:117mm;background:linear-gradient(135deg,${c.laranjaEscuro},${c.laranjaProfundo});border-radius:3.6mm;padding:3.6mm 4.6mm;display:flex;flex-direction:column;justify-content:center">
         <div style="display:flex;align-items:baseline;gap:2.4mm">
-          <span style="font-family:Sora;font-weight:800;font-size:12mm;letter-spacing:-.035em;color:#fff;line-height:1">${cfg.preco}</span>
-          <span style="font-family:Sora;font-weight:700;font-size:4.6mm;color:rgba(255,255,255,.82)">${cfg.precoUnidade}</span>
+          <span style="font-family:Sora;font-weight:800;font-size:10mm;letter-spacing:-0.035em;color:#fff;line-height:1">${cfg.preco}</span>
+          <span style="font-family:Sora;font-weight:700;font-size:4.4mm;color:rgba(255,255,255,.82)">${cfg.precoUnidade}</span>
         </div>
-        <div style="margin-top:3mm;display:flex;flex-wrap:wrap;gap:1.6mm 2.2mm">
+        <div style="margin-top:2.2mm;display:flex;flex-wrap:wrap;gap:1.2mm 1.8mm">
           ${cfg.garantias
             .map(
               (g) =>
-                `<span style="font-family:Inter;font-weight:600;font-size:2.6mm;color:#fff;border:.22mm solid rgba(255,255,255,.42);border-radius:9mm;padding:1.1mm 2.8mm;background:rgba(255,255,255,.12)">${g}</span>`
+                `<span style="font-family:Inter;font-weight:600;font-size:2.5mm;color:#fff;border:.22mm solid rgba(255,255,255,.42);border-radius:9mm;padding:1mm 2.6mm;background:rgba(255,255,255,.12)">${g}</span>`
             )
             .join('')}
         </div>
       </div>
 
-      <div style="width:117mm;display:flex;align-items:center;gap:5mm;background:${c.card};border:.25mm solid ${c.borda};border-radius:3.6mm;padding:4.6mm 5mm">
+      <div style="width:117mm;display:flex;align-items:center;gap:5mm;background:${c.card};border:.25mm solid ${c.borda};border-radius:3.6mm;padding:3.6mm 4.6mm">
         <div style="flex:1">
-          <div style="font-family:Sora;font-weight:700;font-size:4.4mm;color:${c.texto};line-height:1.24;letter-spacing:-.015em">
+          <div style="font-family:Sora;font-weight:700;font-size:4.4mm;color:${c.texto};line-height:1.24;letter-spacing:-0.015em">
             Crie sua conta<br>em 5 minutos
           </div>
-          <div style="margin-top:2.2mm;font-family:Inter;font-size:2.6mm;color:${c.suave}">
+          <div style="margin-top:2mm;font-family:Inter;font-size:2.6mm;color:${c.suave}">
             ${cfg.site}<span style="color:${c.laranja}">/criar-academia</span>
           </div>
         </div>
@@ -316,7 +350,7 @@ function interna(cfg, qrCriar) {
 </div>`
 }
 
-// ------------------------------------------------------------ folhas gráficas
+// ------------------------------------------------------ folhas gráficas
 
 /**
  * Monta uma folha de impressão: área de arte com sangria e, opcionalmente,
@@ -384,11 +418,34 @@ function folha({ cfg, conteudo, comMarcas, rotulo }) {
 </div>`
 }
 
-function documentoPrint({ cfg, qrInstagram, qrCriar, comMarcas }) {
+function documentoPrint({ cfg, qrInstagram, qrCriar, comMarcas, arenas = [null] }) {
   const { aberto, altura, sangria, marcaFolga } = cfg.print
   const pgW = aberto + sangria * 2 + (comMarcas ? marcaFolga * 2 : 0)
   const pgH = altura + sangria * 2 + (comMarcas ? marcaFolga * 2 : 0)
   const painelCss = `.painel{width:150mm;height:150mm;flex:none}`
+
+  // Cada arena vira duas páginas. Um único PDF com o lote inteiro é o que a
+  // gráfica quer receber; o nome vai no rótulo de cada folha para não trocarem
+  // a ordem na hora de casar frente e verso.
+  const folhas = arenas
+    .map((arena) => {
+      const quem = arena ? ` · ${arena}` : ''
+      return (
+        folha({
+          cfg,
+          comMarcas,
+          rotulo: `PÁG. 1 · EXTERNA (capa à direita)${quem}`,
+          conteudo: contracapa(cfg, qrInstagram) + capa(cfg, arena),
+        }) +
+        folha({
+          cfg,
+          comMarcas,
+          rotulo: `PÁG. 2 · INTERNA (dores à esquerda)${quem}`,
+          conteudo: interna(cfg, qrCriar),
+        })
+      )
+    })
+    .join('')
 
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>ArenaHub · Convite</title>
 <style>
@@ -399,8 +456,7 @@ body{background:#fff}
 .pagina{break-after:page}
 .pagina:last-child{break-after:auto}
 </style></head><body>
-${folha({ cfg, comMarcas, rotulo: 'PÁG. 1 · EXTERNA (capa à direita)', conteudo: contracapa(cfg, qrInstagram) + capa(cfg) })}
-${folha({ cfg, comMarcas, rotulo: 'PÁG. 2 · INTERNA (carta à esquerda)', conteudo: interna(cfg, qrCriar) })}
+${folhas}
 </body></html>`
 }
 
@@ -555,7 +611,7 @@ function selo(cfg) {
  * @param {string[]} p.miniaturas   data URIs das duas páginas, para a gráfica ver
  *                                  o que está imprimindo sem abrir o PDF
  */
-function fichaProducao(cfg, { tiragem, acabamentoCompleto = true, miniaturas = [] }) {
+function fichaProducao(cfg, { tiragem, acabamentoCompleto = true, miniaturas = [], personalizado = false }) {
   const T = '#0f172a'
   const S = '#5b6b82'
   const L = '#d8dee8'
@@ -594,6 +650,15 @@ h1{font-family:Sora;font-weight:800;letter-spacing:-0.03em;line-height:1.1}
     Aberto <b style="color:${T}">300 × 150 mm</b> · fechado <b style="color:${T}">150 × 150 mm</b> ·
     tiragem <b style="color:${A}">${tiragem} ${tiragem === 1 ? 'unidade' : 'unidades'}</b>
   </div>
+  ${
+    personalizado
+      ? `<div style="margin-top:14px;border:2px solid ${A};border-radius:8px;padding:12px 16px;font-size:15px;line-height:1.5;color:${T}">
+           <b style="color:${A}">Atenção:</b> cada convite tem arte diferente (o nome da arena vai impresso na capa).
+           O PDF tem <b>${tiragem * 2} páginas</b>, e <b>cada par de páginas é um convite</b>:
+           a página ímpar é a externa e a página par seguinte é a interna correspondente. Não embaralhe a ordem ao casar frente e verso.
+         </div>`
+      : ''
+  }
 
   <!-- Esquema com as cotas. Vale mais que qualquer parágrafo: a gráfica lê
        formato, dobra e sangria de uma vez. -->
