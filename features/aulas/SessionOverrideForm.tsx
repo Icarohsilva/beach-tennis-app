@@ -256,8 +256,11 @@ export function SessionOverrideForm({
               {cancelled ? 'Reabrir esta aula' : 'Cancelar esta aula'}
             </button>
             <p className="mt-1 text-xs text-slate-500">
-              Cancelar tira a aula da agenda do aluno. Ninguém leva falta nem perde
-              crédito, e reabrir devolve tudo como estava.
+              Cancelar devolve a aula: quem pagou com crédito recebe de volta, quem
+              é de plano não gasta cota, e ninguém leva falta. Todo mundo que era
+              esperado é avisado, com o motivo. Reabrir libera a vaga de novo — as
+              reservas anteriores não voltam sozinhas, porque o crédito já foi
+              devolvido.
             </p>
           </div>
 

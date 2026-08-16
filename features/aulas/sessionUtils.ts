@@ -62,3 +62,54 @@ export async function isStudentExpectedInSession(
 
   return !!enrollment
 }
+
+/**
+ * Todos os alunos esperados numa sessão, de uma vez.
+ *
+ * Mesma regra de `isStudentExpectedInSession`, no plural, e pelo mesmo motivo de
+ * `mergeSessionAttendees` existir: as duas fontes são PARCIAIS. O aluno fixo só
+ * ganha linha em `session_bookings` quando a reconciliação roda e ele está
+ * elegível, então uma turma convive normalmente com fixos sem reserva.
+ *
+ * Avisar de aula cancelada olhando só `session_bookings` deixava justamente esse
+ * aluno de fora — ele é esperado na quadra e não recebia nada.
+ */
+export async function expectedStudentIds(
+  client: AdminClient,
+  input: { orgId: string; sessionId: string; classId: string },
+): Promise<string[]> {
+  const { orgId, sessionId, classId } = input
+
+  const [{ data: bookingsRaw }, { data: enrollRaw }] = await Promise.all([
+    client
+      .from('session_bookings')
+      .select('student_id, status')
+      .eq('organization_id', orgId)
+      .eq('session_id', sessionId)
+      .in('status', ['confirmed', 'cancelled']),
+    client
+      .from('enrollments')
+      .select('student_id')
+      .eq('organization_id', orgId)
+      .eq('class_id', classId)
+      .eq('is_active', true),
+  ])
+
+  const bookings = (bookingsRaw ?? []) as { student_id: string; status: string }[]
+
+  const confirmed = new Set<string>()
+  const optedOut = new Set<string>()
+  for (const b of bookings) {
+    if (b.status === 'confirmed') confirmed.add(b.student_id)
+    else optedOut.add(b.student_id)
+  }
+
+  const ids = new Set(confirmed)
+  for (const e of (enrollRaw ?? []) as { student_id: string }[]) {
+    // Reserva confirmada vence o opt-out (mesma precedência de mergeSessionAttendees).
+    if (confirmed.has(e.student_id) || optedOut.has(e.student_id)) continue
+    ids.add(e.student_id)
+  }
+
+  return Array.from(ids)
+}

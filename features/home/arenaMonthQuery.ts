@@ -149,10 +149,11 @@ export async function getArenaMonth({
         admin
           .from('class_sessions')
           .select(
-            'id, session_date, class_id, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+            'id, session_date, class_id, status, cancelled_reason, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
           )
           .eq('organization_id', orgId)
-          .eq('status', 'scheduled')
+          // Cancelada aparece marcada; ver nota em app/(dashboard)/home/page.tsx.
+          .in('status', ['scheduled', 'cancelled'])
           .gte('session_date', from)
           .lte('session_date', to)
           .order('id', { ascending: true })
@@ -216,6 +217,7 @@ export async function getArenaMonth({
       // semana, em vez de levar para uma segunda tela de grade. `id` é o
       // session_id, que é o que o modal precisa para se carregar.
       href: null,
+      cancelled: row.status === 'cancelled' || undefined,
       booked: null,
       capacity: resolved.maxStudents,
     })
@@ -252,6 +254,8 @@ interface SessionRow {
   id: string
   session_date: string
   class_id: string
+  status: string
+  cancelled_reason: string | null
   /** Overrides daquela data; nulos herdam a turma (lib/aulas/sessionOverride). */
   start_time: string | null
   end_time: string | null

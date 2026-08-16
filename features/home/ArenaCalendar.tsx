@@ -314,9 +314,11 @@ function DayRow({
     <div
       className={cn(
         'flex items-center gap-3 rounded-2xl border p-3 transition-colors',
-        event.mine
-          ? 'border-brand-500/40 bg-brand-500/[0.06]'
-          : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.14]',
+        event.cancelled
+          ? 'border-red-500/25 bg-red-500/[0.05] opacity-70'
+          : event.mine
+            ? 'border-brand-500/40 bg-brand-500/[0.06]'
+            : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.14]',
       )}
     >
       <span
@@ -338,7 +340,14 @@ function DayRow({
           >
             {KIND_LABEL[event.kind]}
           </span>
-          <p className="truncate text-sm font-semibold text-white">{event.title}</p>
+          <p
+            className={cn(
+              'truncate text-sm font-semibold text-white',
+              event.cancelled && 'line-through decoration-red-400/70',
+            )}
+          >
+            {event.title}
+          </p>
         </div>
         <p className="mt-0.5 truncate text-xs text-slate-400">
           {event.start ? `${event.start.slice(0, 5)}${event.end ? ` – ${event.end.slice(0, 5)}` : ''}` : 'Dia todo'}
@@ -346,9 +355,16 @@ function DayRow({
         </p>
       </div>
 
-      <span className={cn('shrink-0 text-[11px] font-bold', tone.text)}>
+      <span
+        className={cn(
+          'shrink-0 text-[11px] font-bold',
+          event.cancelled ? 'text-red-300' : tone.text,
+        )}
+      >
         {loading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : event.cancelled ? (
+          'Cancelada'
         ) : event.mine ? (
           'Ver'
         ) : event.kind === 'aula' ? (

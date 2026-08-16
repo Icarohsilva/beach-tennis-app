@@ -196,16 +196,20 @@ function SessionRow({
   onOpen: () => void
 }) {
   const isFull = session.booked >= session.capacity
-  const isMine = session.mine || session.fixed
+  // Aula cancelada não é "sua" nem "lotada": ela não vai acontecer. O realce de
+  // dono some para não competir com o aviso, e o card fica apagado.
+  const isMine = (session.mine || session.fixed) && !session.cancelled
 
   return (
     <button type="button" onClick={onOpen} className="group block w-full text-left">
       <div
         className={cn(
           'glass relative overflow-hidden rounded-2xl border p-3.5 transition-all duration-200 group-hover:-translate-y-0.5',
-          isMine
-            ? 'border-brand-500/40 shadow-[0_14px_34px_-26px_rgb(var(--brand-500)/0.9)]'
-            : 'border-white/[0.07] group-hover:border-white/[0.14]',
+          session.cancelled
+            ? 'border-red-500/25 opacity-70'
+            : isMine
+              ? 'border-brand-500/40 shadow-[0_14px_34px_-26px_rgb(var(--brand-500)/0.9)]'
+              : 'border-white/[0.07] group-hover:border-white/[0.14]',
         )}
       >
         {isMine && (
@@ -231,7 +235,14 @@ function SessionRow({
             {/* Modalidade na segunda linha, não ao lado do nome: no celular ela
                 comia a largura e "Segunda de Teste" virava "Segunda de T…". */}
             <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-semibold text-white">{session.className}</p>
+              <p
+                className={cn(
+                  'truncate text-sm font-semibold text-white',
+                  session.cancelled && 'line-through decoration-red-400/70',
+                )}
+              >
+                {session.className}
+              </p>
               {session.kids && <Badge variant="kids">KIDS</Badge>}
             </div>
 
@@ -258,7 +269,11 @@ function SessionRow({
           </div>
 
           <div className="flex shrink-0 flex-col items-end gap-1.5 self-center">
-            {isMine ? (
+            {session.cancelled ? (
+              <span className="whitespace-nowrap rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                Cancelada
+              </span>
+            ) : isMine ? (
               <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
                 <Check className="h-3 w-3" />
                 {session.fixed && !session.mine ? 'Fixa' : 'Sua'}
@@ -266,12 +281,14 @@ function SessionRow({
             ) : (
               isFull && <Badge variant="danger">Lotada</Badge>
             )}
+            {!session.cancelled && (
             <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-gradient-to-r from-brand-500 to-brand-600 px-2 py-1 text-[10px] font-bold text-white shadow-sm shadow-brand-600/30 transition-transform group-hover:scale-105 xs:px-2.5">
               {/* "Ver / Entrar" custa ~90px de uma linha que não os tem em 320px. */}
               {isMine ? 'Ver' : <span className="hidden xs:inline">Ver / </span>}
               {!isMine && 'Entrar'}
               <ArrowRight className="h-3 w-3 shrink-0" />
             </span>
+            )}
           </div>
         </div>
       </div>

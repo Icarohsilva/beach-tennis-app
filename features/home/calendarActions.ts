@@ -59,11 +59,11 @@ export async function loadSessionDetail(sessionId: string): Promise<AgendaSessio
   const { data: row } = await adminClient
     .from('class_sessions')
     .select(
-      'id, session_date, class_id, classes(name, start_time, end_time, type, sport, max_students)',
+      'id, session_date, class_id, status, cancelled_reason, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
     )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'cancelled'])
     .maybeSingle()
 
   if (!row) return null

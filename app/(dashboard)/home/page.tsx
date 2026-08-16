@@ -178,12 +178,14 @@ export default async function HomePage() {
   const { data: weekSessionsRaw } = await adminClient
     .from('class_sessions')
     .select(
-      'id, session_date, class_id, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+      'id, session_date, class_id, status, cancelled_reason, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
     )
     .eq('organization_id', orgId)
     .gte('session_date', today)
     .lte('session_date', weekEnd)
-    .eq('status', 'scheduled')
+    // Cancelada entra junto, marcada: some da agenda era o que fazia o aluno
+    // descobrir na quadra quando o aviso não chegava.
+    .in('status', ['scheduled', 'cancelled'])
     .order('session_date', { ascending: true })
 
   const weekSessionRows = (weekSessionsRaw ?? []) as unknown as SessionRowWithClass[]
@@ -224,8 +226,13 @@ export default async function HomePage() {
   // ela precisa de quem vai, fila de espera e a reserva do aluno para poder
   // oferecer entrar ou sair.
   const mySessions = agendaSessions.filter((s) => s.mine || s.fixed)
+  // Aula cancelada nunca vai para o destaque: a home existe para dizer "é aqui
+  // que você vai agora", e apontar para uma aula que não vai acontecer é o
+  // oposto do objetivo. Ela continua visível na faixa da semana, marcada.
   const spotlightCandidates: AgendaSession[] = (
-    mySessions.length > 0 ? mySessions : agendaSessions.filter((s) => s.booked < s.capacity)
+    mySessions.length > 0
+      ? mySessions.filter((s) => !s.cancelled)
+      : agendaSessions.filter((s) => !s.cancelled && s.booked < s.capacity)
   ).slice(0, 6)
 
   // ── Torneio e day use ─────────────────────────────────────────────────────
