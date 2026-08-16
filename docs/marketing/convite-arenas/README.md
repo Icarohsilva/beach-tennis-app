@@ -14,7 +14,20 @@ Para trocar qualquer um deles, edite [`src/config.js`](src/config.js) e rode `np
 
 ---
 
-## 1. Por que convite dobrado e não flyer
+## 1. O que a peça diz
+
+A parte de dentro fala **das dores do dono da arena**, não de quem fez o sistema:
+a pergunta "sobrou vaga?" que não para, o caderno que vira caos e a inadimplência
+que fica invisível. Do outro lado, o que entra no lugar, com destaque para o que
+mais trava a decisão de quem nunca usou sistema nenhum: **a configuração das turmas
+e dos alunos é feita junto nos primeiros acessos, e o suporte no WhatsApp é vitalício.**
+
+O fundador aparece só na contracapa, como assinatura de contato. A peça convida em
+nome do produto, não conta a história de ninguém.
+
+---
+
+## 2. Por que convite dobrado e não flyer
 
 A pesquisa é consistente em três pontos, e os três empurram para a mesma peça:
 
@@ -30,15 +43,15 @@ Três estados, três funções:
 
 | Estado | O que é | Para quê |
 |---|---|---|
-| **Fechado e lacrado** | Capa escura, nome da arena escrito à mão, selo laranja | O momento da entrega. Quebrar o lacre é o gesto que separa convite de panfleto |
-| **Aberto** | Carta sua à esquerda, prova à direita, preço em destaque | A leitura única, feita com calma depois que você saiu |
+| **Fechado e lacrado** | Capa escura, nome da arena impresso, selo laranja | O momento da entrega. Quebrar o lacre é o gesto que separa convite de panfleto |
+| **Aberto** | As três dores à esquerda, o que entra no lugar à direita, preço em destaque | A leitura única, feita com calma depois que você saiu |
 | **Aberto em pé no balcão** | Vira display: capa de um lado, QR grande do outro | O rabo longo. O aluno da arena também escaneia |
 
 Esse terceiro estado é o motivo do quadrado e da gramatura alta: **300 g dobrado em 150 × 150 fica em pé sozinho no balcão da recepção.** Um A5 plano não fica. Você não entrega um impresso, você instala um display.
 
 ---
 
-## 2. O que tem no kit
+## 3. O que tem no kit
 
 Tudo em [`out/`](out/), gerado por código. Não tem arquivo de Canva ou Photoshop no meio.
 
@@ -50,6 +63,43 @@ Tudo em [`out/`](out/), gerado por código. Não tem arquivo de Canva ou Photosh
 | `ArenaHub-Convite-SANGRIA-3mm.pdf` | 2 páginas, 306 × 156 mm. Só arte + sangria, sem marcas. Para gráfica que impõe sozinha e pede o arquivo limpo. |
 | `ArenaHub-Selo-Adesivo-40mm.pdf` | Selo redondo Ø 40 mm com 3 mm de sangria. |
 | `preview-300dpi-1-externa.png` · `-2-interna.png` | A mesma arte rasterizada a 300 dpi (3616 × 1844 px). Reserva, caso o pré‑impressão prefira imagem achatada ao vetor. |
+| `ArenaHub-Ficha-Grafica-PROVA-3un.png` · `-150un.png` | Ficha de produção em A4, clara e legível no celular. Mande junto com o PDF: a gráfica lê formato, dobra e sangria de uma vez, em vez de garimpar num parágrafo. |
+
+### Convites do lote (personalizados)
+
+Ficam em [`out/convites/`](out/convites/), gerados por `npm run convites`. Um PDF por arena
+mais um PDF com o lote inteiro, além da ficha da gráfica já com a contagem certa.
+
+---
+
+## 4. O fluxo de lote
+
+O nome da arena vai **impresso na capa**, em Playfair Display. Isso muda a economia da
+coisa: em vez de rodar cem peças em branco e escrever à mão, você gera só os convites
+da semana e imprime esse punhado.
+
+```bash
+npm run convites -- "Aloha Beach" "Arena Fahel"
+```
+
+Sem argumentos, usa a lista de `arenas` em [`src/config.js`](src/config.js). Sai:
+
+| Arquivo | Para quê |
+|---|---|
+| `ArenaHub-Convite-<Arena>.pdf` | Um por arena, para reimprimir uma sozinha |
+| `ArenaHub-Convites-LOTE-<n>un.pdf` | O lote inteiro num arquivo, que é o que a gráfica prefere |
+| `ArenaHub-Ficha-Grafica-LOTE-<n>un.png` | Ficha com a contagem do lote e o aviso de arte variável |
+| `preview-capa.png` | Confira o nome antes de mandar imprimir |
+
+**O aviso que a gráfica precisa ler:** cada convite tem arte diferente. No PDF do lote,
+cada par de páginas é um convite (ímpar = externa, par seguinte = interna correspondente).
+Embaralhar a ordem casa a capa de uma arena com o miolo de outra. A ficha já traz isso
+em destaque.
+
+Nomes longos não quebram o desenho: o corpo do nome cai por faixa de tamanho, de 13,5 mm
+até 7,5 mm.
+
+---
 
 ### Para o WhatsApp
 
@@ -61,7 +111,7 @@ Tudo em [`out/`](out/), gerado por código. Não tem arquivo de Canva ou Photosh
 
 ---
 
-## 3. Especificação técnica para copiar e mandar para a gráfica
+## 5. Especificação técnica para copiar e mandar para a gráfica
 
 ### Peça 1 · Convite
 
@@ -73,6 +123,7 @@ Tudo em [`out/`](out/), gerado por código. Não tem arquivo de Canva ou Photosh
 | **Papel** | Couché fosco **300 g/m²** (alternativa mais rígida: 350 g/m²) |
 | **Impressão** | 4/4 (colorido frente e verso) |
 | **Acabamento** | Laminação **soft touch fosca** frente e verso + **verniz localizado (UV)** sobre os elementos laranja e o logo |
+| **Acabamento opcional** | **Foil digital** (hot stamping digital, sem clichê) sobre o nome da arena e o logo. É o que a pesquisa aponta como o que faz o destinatário guardar a peça, e por ser digital funciona em tiragem pequena. Pergunte se a gráfica tem. |
 | **Sangria** | 3 mm em todos os lados |
 | **Arquivo** | PDF vetorial, fontes embutidas, 2 páginas (pág. 1 = externa, pág. 2 = interna) |
 | **Aproveitamento** | 2 peças por folha SRA3 (32 × 45 cm) |
@@ -107,11 +158,11 @@ Os hexadecimais são os do app. **Não converta por conta própria.** Deixe a gr
 
 ### Fontes
 
-Sora (títulos) e Inter (corpo), mais Caveat na assinatura manuscrita. Vão **embutidas no PDF como Type 3**, ou seja, os contornos viajam dentro do arquivo. Não existe risco de substituição de fonte. Se o pré‑impressão pedir "fontes convertidas em curvas", pode responder que já estão.
+Sora (títulos), Inter (corpo) e Playfair Display (o nome da arena e o gancho da capa). Vão **embutidas no PDF como Type 3**, ou seja, os contornos viajam dentro do arquivo. Não existe risco de substituição de fonte. Se o pré‑impressão pedir "fontes convertidas em curvas", pode responder que já estão.
 
 ---
 
-## 4. Três coisas que dão errado nesse tipo de peça
+## 6. Três coisas que dão errado nesse tipo de peça
 
 Vale conferir na hora de fechar o pedido:
 
@@ -121,7 +172,7 @@ Vale conferir na hora de fechar o pedido:
 
 ---
 
-## 5. Texto pronto para pedir orçamento
+## 7. Texto pronto para pedir orçamento
 
 > Olá! Preciso de orçamento para duas peças:
 >
@@ -130,6 +181,31 @@ Vale conferir na hora de fechar o pedido:
 > **2) Adesivo redondo.** Ø 40 mm, couché adesivo brilho, impressão 4/0, corte circular, sangria 3 mm. Tiragem: 200 unidades.
 >
 > Preciso de **prova de cor** antes da tiragem, porque a peça tem chapada escura e um laranja de marca que preciso conferir. Podem me passar prazo e valor com e sem o soft touch?
+
+### Antes da tiragem cheia: a prova de 3 unidades
+
+Vale imprimir 3 antes de rodar 150. Em quantidade pequena, **soft touch e verniz
+localizado não compensam** (são acabamentos com custo de preparação, e em 3 peças
+custam mais que a tiragem inteira da versão simples), então a prova sai só com
+laminação fosca. Isso ainda valida o que importa: a profundidade do fundo escuro,
+se a dobra racha, se a peça fica em pé no balcão e se o QR lê no papel.
+
+O que a prova **não** valida: o toque do soft touch, o brilho do verniz, e a cor
+caso a tiragem cheia vá para offset em vez de digital.
+
+Use a ficha `ArenaHub-Ficha-Grafica-PROVA-3un.png` e este texto:
+
+> Oi! Preciso de uma prova de **3 unidades** antes de rodar a tiragem cheia (150).
+>
+> Convite dobrado ao meio: aberto **300 × 150 mm**, fechado **150 × 150 mm**, 1 dobra vertical no centro **com vinco antes de dobrar**. Couché fosco 300 g, impressão 4/4 digital, laminação fosca frente e verso (se tiverem filme soft touch, prefiro soft touch). Sangria 3 mm. Mando o PDF fechado com marcas de corte, 2 páginas.
+>
+> **Nesta prova de 3 não precisa de verniz localizado**, sei que não compensa em quantidade pequena. Quero validar a cor do fundo, a dobra e a leitura do QR code.
+>
+> Dois pontos: **(1)** o fundo é uma chapada quase preta, precisa ser preto rico nos quatro canais, senão sai cinza lavado; **(2)** nada de verniz brilhante sobre o QR code, ele precisa ficar fosco ou o reflexo atrapalha a leitura no celular.
+>
+> Me passa valor e prazo dessas 3, e também o valor de 150 unidades com laminação soft touch e verniz localizado só nos elementos laranja?
+
+---
 
 **Ordem de grandeza para você não ser surpreendido** (estimativa para calibrar expectativa; peça 3 orçamentos, o valor varia muito entre gráficas):
 
@@ -143,22 +219,19 @@ Vale conferir na hora de fechar o pedido:
 
 ---
 
-## 6. Como entregar, que é onde vira convite
+## 8. Como entregar, que é onde vira convite
 
 A peça sozinha não converte. O ritual converte:
 
-1. **Escreva o nome da arena à mão** na linha da capa. Manuscrito é o que faz a arena entender que a peça foi feita para ela, e não impressa aos milhares.
-2. **Numere** (`Nº 07 / 60`). O número é verdade: você mapeou ~60 arenas em BH. Escassez real não precisa de invenção.
-3. **Feche e cole o selo** por cima da abertura, do lado direito.
-4. **Entregue na mão do dono.** Se ele não estiver, volte. Convite deixado na recepção vira panfleto.
-5. **Fale uma frase e vá embora:** *"Não vim vender nada, vim te deixar um convite. Abre com calma depois."* Não fique esperando reação, a peça trabalha sozinha.
-6. **Follow‑up em 48 h no WhatsApp:** *"Passei aí na terça e deixei um convite pra você. Conseguiu abrir?"* O convite físico te dá o direito de mandar essa mensagem, que é o ponto todo.
-
-**Caneta:** em laminação soft touch, caneta comum borra. Use **gel branco (uni‑ball Signo Broad) ou Posca PC‑3M branca**, e deixe secar ~30 s. Teste em uma peça antes de escrever nas 150.
+1. **Confira o nome na capa** antes de sair. O convite é nominal, e entregar o da arena errada é pior que não entregar.
+2. **Feche e cole o selo** por cima da abertura, na borda direita da capa.
+3. **Entregue na mão do dono.** Se ele não estiver, volte outro dia. Convite deixado na recepção vira panfleto.
+4. **Fale uma frase e vá embora:** *"Não vim vender nada, vim te deixar um convite. Abre com calma depois."* Não fique esperando reação, a peça trabalha sozinha.
+5. **Follow-up em 48 h no WhatsApp:** *"Passei aí na terça e deixei um convite pra você. Conseguiu abrir?"* O convite físico é o que te dá direito a essa mensagem, e esse é o ponto todo.
 
 ---
 
-## 7. Peça digital e mensagem pronta
+## 9. Peça digital e mensagem pronta
 
 O QR no WhatsApp é para quando a imagem for mostrada na tela para outra pessoa, ou impressa. **Na conversa, o link vai no texto**, porque ninguém escaneia a própria tela.
 
@@ -174,11 +247,26 @@ Mande a imagem `ArenaHub-Convite-WhatsApp-1080x1350.png` junto.
 
 ---
 
-## 8. Decisões técnicas que valem saber
+## 10. Decisões técnicas que valem saber
 
-**Os dois QR fazem trabalhos diferentes.** O da contracapa (56 mm) vai para o **Instagram**: é descoberta, serve para o dono e para o aluno que passar pelo balcão. O de dentro (25 mm) vai para **`arenahub.website/criar-academia`**: é conversão, para quem já leu e decidiu. Um QR só teria que servir aos dois momentos e serviria mal a ambos.
+**São três QR, com trabalhos diferentes.** Na contracapa ficam dois lado a lado, de
+tamanhos diferentes de propósito: o maior vai para o **Instagram** (curiosidade, ver
+antes de falar, e serve também para o aluno que passar pelo balcão) e o menor abre o
+**WhatsApp**. Dentro da peça, um terceiro aponta para `arenahub.website/criar-academia`,
+que é a ação de quem já decidiu. Empilhar os dois da contracapa não cabia no painel, e
+deixá-los do mesmo tamanho daria paralisia de escolha.
 
-**Os dois apontam direto para o destino final, sem encurtador.** É o que você pediu, e tem uma vantagem: link direto passa mais confiança que um `bit.ly` e não depende de serviço de terceiro que pode sair do ar com a peça já impressa. **O custo é que você não mede escaneamento nenhum.** Se quiser medir, o caminho limpo é criar uma rota própria (`arenahub.website/ig` redirecionando para o Instagram) e apontar o QR para ela. Mas decida **antes** de imprimir, porque papel não tem deploy.
+**O QR do WhatsApp é personalizado por arena e abre a conversa já escrita.** O destino é
+um `wa.me` com a mensagem pré-preenchida: *"Oi! Aqui é da Aloha Beach. Recebi o convite."*
+Isso resolve duas coisas de uma vez. Tira o atrito de quem abriu o WhatsApp e não sabe o
+que escrever, e te diz **exatamente qual convite gerou o contato**, que é a medição que o
+link direto do Instagram não dá. A mensagem é curta de propósito: cada caractere vira
+módulo no código, e módulo pequeno demais não lê no papel. Por isso esse código usa
+correção Q em vez de H, e mesmo assim fica em 0,70 mm de módulo.
+
+**O número e o @ continuam impressos como texto**, ao lado dos códigos. Quem prefere
+digitar, digita; quem quer salvar o contato, salva; e se um QR falhar, a peça continua
+funcionando.
 
 **Correção de erro em nível H.** Os códigos recuperam 30% de área danificada, que é o que autoriza o furo do logo no centro e o que dá margem para papel amassado ou marcado.
 
@@ -186,13 +274,14 @@ Mande a imagem `ArenaHub-Convite-WhatsApp-1080x1350.png` junto.
 
 ---
 
-## 9. Regerar os arquivos
+## 11. Regerar os arquivos
 
 ```bash
 cd docs/marketing/convite-arenas/src
 npm install
 npm run build     # gera tudo em ../out
 npm run verify    # QA dos QR codes
+npm run convites  # gera o lote com os nomes das arenas
 ```
 
 Precisa de Node 18+. O Chromium vem do Playwright; se o binário estiver em outro lugar, aponte com `PLAYWRIGHT_CHROMIUM=/caminho/para/chrome`.
@@ -204,6 +293,7 @@ Precisa de Node 18+. O Chromium vem do Playwright; se o binário estiver em outr
 | [`src/qr.js`](src/qr.js) | Gerador de QR com módulos arredondados e logo central |
 | [`src/build.js`](src/build.js) | Renderiza PDFs e PNGs pelo Chromium |
 | [`src/verify.js`](src/verify.js) | QA dos QR codes |
+| [`src/convites.js`](src/convites.js) | Gera o lote personalizado, um PDF por arena |
 
 Uma observação de precisão: o PDF sai com 305,8 × 156 mm em vez de 306 × 156 mm, porque o renderizador arredonda para pontos inteiros. São 0,2 mm dentro de uma sangria de 3 mm, e não afeta o corte, que continua em 300 × 150 mm.
 

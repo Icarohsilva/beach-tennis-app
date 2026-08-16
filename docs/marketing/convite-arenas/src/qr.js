@@ -17,9 +17,12 @@ const LOGO_MARCA = `
  * @param {string} opts.bg    cor do fundo (claro)
  * @param {boolean} opts.logo furo central com a raquete
  * @param {number} opts.quiet zona de silêncio, em módulos (mínimo 4 pela norma)
+ * @param {string} opts.ecc   nível de correção. H é o padrão e é o que autoriza o
+ *                            furo do logo; Q encolhe o código quando a URL é longa
+ *                            e o espaço na peça é pequeno.
  */
-function qrSvg(url, { fg = '#0c1220', bg = '#ffffff', logo = true, quiet = 4 } = {}) {
-  const qr = QRCode.create(url, { errorCorrectionLevel: 'H' })
+function qrSvg(url, { fg = '#0c1220', bg = '#ffffff', logo = true, quiet = 4, ecc = 'H' } = {}) {
+  const qr = QRCode.create(url, { errorCorrectionLevel: ecc })
   const n = qr.modules.size
   const bits = qr.modules.data
   const at = (r, c) => bits[r * n + c]

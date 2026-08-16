@@ -8,3 +8,6 @@
 @font-face{font-family:'Sora';font-style:normal;font-weight:800;font-display:block;src:url('./assets/fonts/Sora-800.woff2') format('woff2');}
 @font-face{font-family:'Caveat';font-style:normal;font-weight:600;font-display:block;src:url('./assets/fonts/Caveat-600.woff2') format('woff2');}
 @font-face{font-family:'Caveat';font-style:normal;font-weight:700;font-display:block;src:url('./assets/fonts/Caveat-700.woff2') format('woff2');}
+@font-face{font-family:'Playfair';font-style:italic;font-weight:500;font-display:block;src:url('./fonts/Playfair-500i.woff2') format('woff2');}
+@font-face{font-family:'Playfair';font-style:normal;font-weight:500;font-display:block;src:url('./fonts/Playfair-500.woff2') format('woff2');}
+@font-face{font-family:'Playfair';font-style:normal;font-weight:600;font-display:block;src:url('./fonts/Playfair-600.woff2') format('woff2');}

@@ -5,7 +5,8 @@
   "description": "Kit do convite impresso e digital para prospecção de arenas",
   "scripts": {
     "build": "node build.js",
-    "verify": "node verify.js"
+    "verify": "node verify.js",
+    "convites": "node convites.js"
   },
   "dependencies": {
     "jsqr": "^1.4.0",
