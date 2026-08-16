@@ -84,3 +84,31 @@ describe('getMakeupCreditExpiry', () => {
     expect(expiry.toISOString().startsWith('2026-06-16')).toBe(true)
   })
 })
+
+// A janela é configurável por academia (system_settings.cancellation_window_hours).
+// Até 2026-08 ela existia na tela do admin e NENHUM caminho a passava — o default
+// de 5h sempre vencia, e quem gravou 3h achou por meses que tinha mudado a regra.
+describe('canCancelWithRefund — janela configurada pela academia', () => {
+  const aula = '2026-06-11T18:00:00-03:00'
+
+  it('janela de 3h: cancelar com 4h de antecedência devolve', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T14:00:00-03:00', 3)).toBe(true)
+    // Com o default de 5h isto seria false — é exatamente o furo consertado.
+  })
+
+  it('janela de 8h: cancelar com 6h de antecedência NÃO devolve', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T12:00:00-03:00', 8)).toBe(false)
+  })
+
+  it('a borda exata da janela configurada devolve', () => {
+    expect(canCancelWithRefund(aula, '2026-06-11T15:00:00-03:00', 3)).toBe(true)
+    expect(canCancelWithRefund(aula, '2026-06-11T15:00:01-03:00', 3)).toBe(false)
+  })
+
+  // As duas janelas convivem: a de arrependimento não depende da configurada.
+  it('o arrependimento de 1h vale mesmo com janela longa', () => {
+    expect(
+      canCancelWithRefund(aula, '2026-06-11T17:30:00-03:00', 8, '2026-06-11T17:00:00-03:00'),
+    ).toBe(true)
+  })
+})

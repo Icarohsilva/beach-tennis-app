@@ -11,6 +11,7 @@ import {
 import { addDaysStr } from '@/lib/utils/gridSchedule'
 import { canCancelWithRefund } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
+import { getOrgClassSettings } from './orgClassSettings'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -59,6 +60,10 @@ export async function getQuotaSnapshot(
 ): Promise<QuotaSnapshot> {
   const window = cycleWindow(targetDate, plan.cycle)
 
+  // Uma vez, antes do laço: a cota classifica "cancelou tarde" pela MESMA janela
+  // que devolve o crédito, e buscar por reserva seria uma consulta por linha.
+  const { cancellationWindowHours } = await getOrgClassSettings(client, orgId)
+
   const { data: bookingsRaw } = await client
     .from('session_bookings')
     .select(
@@ -97,7 +102,7 @@ export async function getQuotaSnapshot(
       // estorno acabou de perdoar.
       cancelledLate:
         !confirmed && b.cancelled_at !== null
-          ? !canCancelWithRefund(startIso, b.cancelled_at, undefined, b.booked_at)
+          ? !canCancelWithRefund(startIso, b.cancelled_at, cancellationWindowHours, b.booked_at)
           : false,
       adminWaived: b.admin_waived === true,
     }

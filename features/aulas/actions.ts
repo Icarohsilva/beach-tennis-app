@@ -26,6 +26,7 @@ import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
 import { getQuotaSnapshot } from './quotaUsage'
 import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
+import { getOrgClassSettings } from './orgClassSettings'
 import {
   ensureMissedCheckin,
   clearMissedCheckin,
@@ -851,12 +852,19 @@ export async function cancelBookingAs(
   )
 
   const now = new Date().toISOString()
-  // A janela de arrependimento entra aqui junto da regra das 5h: quem acabou de
-  // entrar tem 1h para desistir sem perder o crédito nem levar falta.
+  // Janela DA ACADEMIA, não o default de 5h: a configuração existia em
+  // Configurações e o admin editava, mas nenhum caminho a lia — quem gravou 3h
+  // achou por meses que tinha mudado a regra.
+  const { cancellationWindowHours } = await getOrgClassSettings(
+    adminClient,
+    booking.organization_id as string,
+  )
+  // A janela de arrependimento entra aqui junto: quem acabou de entrar tem 1h
+  // para desistir sem perder o crédito nem levar falta.
   const refundEligible = canCancelWithRefund(
     sessionStart,
     now,
-    undefined,
+    cancellationWindowHours,
     (booking.booked_at as string | null) ?? undefined,
   )
 
