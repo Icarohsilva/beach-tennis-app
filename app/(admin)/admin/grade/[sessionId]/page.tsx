@@ -331,7 +331,7 @@ export default async function SessionDetailPage({ params }: Props) {
 
       {/* Editar só ESTA data — remarcar, trocar de quadra, mudar a lotação ou
           cancelar o dia — sem mexer na turma e, com ela, em todas as semanas
-          seguintes. Editar a turma continua em /admin/grade/[classId]/editar. */}
+          seguintes. Editar a turma inteira fica em /admin/grade/turma/[classId]/editar. */}
       <SessionOverrideForm
         sessionId={params.sessionId}
         sessionDate={typedSession.session_date}

@@ -21,8 +21,6 @@ type Page<T> = PromiseLike<{ data: T[] | null; error: { message: string } | null
 
 /** O evento da agenda com o que só o painel usa. */
 export interface AdminEvent extends ArenaEvent {
-  /** Segunda ação do item: editar a aula, gerenciar o torneio. Nulo = só ver. */
-  editHref: string | null
   /** Selo de estado quando ele muda o que o admin deve fazer. */
   flag: 'cancelada' | 'rascunho' | 'alterada' | null
 }
@@ -123,8 +121,10 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       // `mine` no painel quer dizer "precisa de olho": aula cancelada é o que o
       // admin procura quando abre o dia.
       mine: cancelled,
+      // Só "ver": a ficha da aula é onde se edita a data, cancela e reabre. O
+      // botão "Editar" que existia aqui montava /admin/grade/<sessionId>/editar
+      // e caía em 404 — aquela rota espera um id de TURMA, não de sessão.
       href: `/admin/grade/${row.id}`,
-      editHref: `/admin/grade/${row.id}/editar`,
       flag: cancelled ? 'cancelada' : hasOverride(row) ? 'alterada' : null,
       booked: bookedBySession.get(row.id) ?? 0,
       capacity: horario.maxStudents,
@@ -143,7 +143,6 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       sport: t.sport,
       mine: t.status === 'draft',
       href: `/admin/torneios/${t.id}`,
-      editHref: null,
       flag: t.status === 'draft' ? 'rascunho' : null,
       booked: entrantsByTournament.get(t.id) ?? 0,
       capacity: null,
@@ -162,7 +161,6 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       sport: null,
       mine: !d.is_active,
       href: '/admin/grade/dayuse',
-      editHref: null,
       flag: d.is_active ? null : 'cancelada',
       booked: dayUseBySlot.get(d.id) ?? 0,
       capacity: d.capacity,

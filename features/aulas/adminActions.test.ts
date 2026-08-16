@@ -212,7 +212,7 @@ describe('adminSkipEnrollmentDate', () => {
     await adminSkipEnrollmentDate('stu-1', 'sess-1')
 
     expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/class-1/editar', 'page')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/turma/class-1/editar', 'page')
   })
 })
 
@@ -230,7 +230,7 @@ describe('adminUnskipEnrollmentDate', () => {
 
     expect(result).toEqual({})
     expect(revalidatePath).toHaveBeenCalledWith('/admin/grade')
-    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/class-1/editar', 'page')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/grade/turma/class-1/editar', 'page')
   })
 
   it('não quebra e revalida só a listagem quando a sessão não é encontrada', async () => {

@@ -96,7 +96,7 @@ export async function updateClass(
     .eq('organization_id', orgId)
   if (error) return { error: error.message }
   revalidatePath('/admin/grade')
-  revalidatePath(`/admin/grade/${classId}/editar`, 'page')
+  revalidatePath(`/admin/grade/turma/${classId}/editar`, 'page')
   return {}
 }
 
