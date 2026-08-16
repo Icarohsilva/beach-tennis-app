@@ -35,6 +35,13 @@ export async function reconcileEnrollmentCredits(
   to: string,
   injectedClient?: ReturnType<typeof createAdminClient>,
   quotaBudget: number | null = null,
+  /**
+   * Datas em que o aluno está de férias. Sessão nessas datas é pulada: ele
+   * avisou que não vem, e reservá-lo prenderia uma vaga que a fila poderia usar.
+   * Conjunto pronto (`vacationDatesInWindow`) em vez de reavaliar os períodos
+   * por sessão.
+   */
+  vacationDates: Set<string> = new Set(),
 ): Promise<ReconcileResult> {
   const adminClient = injectedClient ?? createAdminClient()
   const result: ReconcileResult = { ...EMPTY }
@@ -75,6 +82,9 @@ export async function reconcileEnrollmentCredits(
   const ops = buildReconciliationOps(sessions, bookedSessionIds)
 
   for (const op of ops) {
+    // Férias vem antes da cota: não é limite atingido, é aluno ausente. Contar
+    // como quotaSkipped mandaria o sinal errado para o relatório da geração.
+    if (vacationDates.has(op.sessionDate)) continue
     if (quotaBudget !== null && result.booked >= quotaBudget) {
       result.quotaSkipped++
       continue

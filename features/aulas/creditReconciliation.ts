@@ -8,6 +8,8 @@ import { isQuotaEnforced } from './quotaSettings'
 import { notifyQuotaSkips, type QuotaSkip } from './quotaSkipNotify'
 import { notifyMissedCheckinSkips, type MissedCheckinSkip } from './missedCheckinSkipNotify'
 import { computeQuotaBudget } from './quotaBudget'
+import { getOrgVacationsInWindow } from './vacationQueries'
+import { vacationDatesInWindow } from '@/lib/aulas/vacation'
 import {
   getMissedCheckinSettings,
   countOpenMissedCheckinsByStudent,
@@ -82,6 +84,10 @@ export async function reconcileAllActiveEnrollments(
         [`${m.user_id}:${m.organization_id}`, m.partner],
     ),
   )
+
+  // Férias aprovadas que cruzam a janela, para a academia inteira numa consulta
+  // só. Uma por aluno seria 300 queries numa arena de 300 alunos.
+  const vacationsByStudent = await getOrgVacationsInWindow(adminClient, orgId, from, to)
 
   // Alunos com assinatura ativa E em dia (por-academia). Assinatura MP com
   // período vencido NÃO renova créditos (spec §3.3) — volta a renovar quando
@@ -218,9 +224,19 @@ export async function reconcileAllActiveEnrollments(
       return a.dayOfWeek - b.dayOfWeek || a.startTime.localeCompare(b.startTime)
     })
 
+    // Datas de férias do aluno dentro da janela. Calculado uma vez por aluno,
+    // não por matrícula: as férias são dele, não da turma.
+    const vacationDates = vacationDatesInWindow(
+      vacationsByStudent.get(studentId) ?? [],
+      from,
+      to,
+    )
+
     for (const e of ordered) {
       try {
-        const r = await reconcileEnrollmentCredits(e.studentId, e.classId, from, to, adminClient, budget)
+        const r = await reconcileEnrollmentCredits(
+          e.studentId, e.classId, from, to, adminClient, budget, vacationDates,
+        )
         totals.booked += r.booked
         totals.skipped += r.skipped
         totals.quotaSkipped += r.quotaSkipped

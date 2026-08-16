@@ -316,6 +316,17 @@ export default async function HomePage() {
         </Reveal>
       )}
 
+      {/* Saldo acumulado: sem esta linha o total cresce sem explicação ("por que
+          tenho 13 aulas se meu plano é de 8?") e vira dúvida no grupo. */}
+      {!!quota?.carriedIn && !isPartner && (
+        <Reveal step={1}>
+          <p className="-mt-2 text-xs text-slate-400">
+            Inclui {quota.carriedIn} {quota.carriedIn === 1 ? 'aula guardada' : 'aulas guardadas'}{' '}
+            {plan?.cycle === 'weekly' ? 'da semana anterior' : 'do mês anterior'}.
+          </p>
+        </Reveal>
+      )}
+
       {selfCheckinCandidates.length > 0 && (
         <Reveal step={1}>
           <SelfCheckinCard candidates={selfCheckinCandidates} />

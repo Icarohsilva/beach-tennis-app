@@ -388,6 +388,15 @@ export interface SubscriptionPlan {
   cycle: PlanCycle
   max_classes_per_day: number
   refund_on_late_cancel: boolean
+  /**
+   * Aula do plano não usada no ciclo vira saldo para o ciclo seguinte.
+   *
+   * Por plano, não por academia: a arena pode vender um plano em que a sobra
+   * acumula e outro em que ela zera todo mês. Não afeta crédito avulso — o
+   * saldo acumulado vive em plan_cycle_balances, escrito pelo cron
+   * plan-cycle-close.
+   */
+  rollover_unused: boolean
   is_active: boolean
 }
 

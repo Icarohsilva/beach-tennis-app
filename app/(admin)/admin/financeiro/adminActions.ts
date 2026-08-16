@@ -53,6 +53,7 @@ export interface CreatePlanData {
   cycle: 'weekly' | 'monthly'
   max_classes_per_day: number
   refund_on_late_cancel: boolean
+  rollover_unused: boolean
 }
 
 export async function createPlan(data: CreatePlanData): Promise<{ error?: string; planId?: string }> {
@@ -82,6 +83,7 @@ export async function createPlan(data: CreatePlanData): Promise<{ error?: string
         cycle: data.cycle,
         max_classes_per_day: data.max_classes_per_day,
         refund_on_late_cancel: data.refund_on_late_cancel,
+        rollover_unused: data.rollover_unused,
         is_active: true,
         organization_id: orgId,
       })
@@ -127,6 +129,7 @@ export async function updatePlan(data: UpdatePlanData): Promise<{ error?: string
         cycle: data.cycle,
         max_classes_per_day: data.max_classes_per_day,
         refund_on_late_cancel: data.refund_on_late_cancel,
+        rollover_unused: data.rollover_unused,
       })
       .eq('id', data.id)
       .eq('organization_id', orgId)

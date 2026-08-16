@@ -14,6 +14,8 @@ import { AccountSecurityForm } from '@/features/perfil/AccountSecurityForm'
 import { LogoutButton } from '@/components/ui/LogoutButton'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 import { DependentsSection } from '@/features/aulas/DependentsSection'
+import { VacationPanel } from '@/features/aulas/VacationPanel'
+import { listStudentVacations } from '@/features/aulas/vacationQueries'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { NotificationToggle } from '@/features/perfil/NotificationToggle'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -53,6 +55,8 @@ export default async function PerfilPage() {
         is_dependent: membership.is_dependent,
       }
     : null
+
+  const vacations = orgId ? await listStudentVacations(adminClient, user.id, orgId) : []
 
   // Fetch dependents (only for non-dependent guardians). Os dependentes têm
   // membership na MESMA academia ativa — filtra por organization_id.
@@ -321,6 +325,11 @@ export default async function PerfilPage() {
           <PaymentHistory payments={payments} />
         </section>
       )}
+
+      {/* Férias — pedido do aluno, que a academia aprova. */}
+      <section>
+        <VacationPanel mode="student" vacations={vacations} />
+      </section>
 
       {/* Dependentes (apenas para responsáveis não-dependentes) */}
       {!profile?.is_dependent && (

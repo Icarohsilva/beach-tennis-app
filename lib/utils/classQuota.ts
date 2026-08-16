@@ -54,6 +54,14 @@ export interface PlanQuota {
   cycle: PlanCycle
   maxClassesPerDay: number
   refundOnLateCancel: boolean
+  /**
+   * Aula não usada no ciclo vira saldo para o ciclo seguinte.
+   *
+   * Por plano, não por academia: a arena pode vender um plano em que a sobra
+   * acumula e outro em que ela zera todo mês. Não afeta crédito avulso, que
+   * segue as regras dele.
+   */
+  rolloverUnused: boolean
 }
 
 export interface QuotaBooking {
@@ -81,16 +89,27 @@ export interface QuotaResult {
  * tem 10 sessões fixas contra uma cota de 8 — sem o max() ele seria barrado na
  * própria aula que assinou. O primeiro termo cobre o caso oposto: aluno com
  * plano e nenhuma fixa, que só reserva avulso.
+ *
+ * `carriedIn` (saldo vindo do ciclo anterior, quando o plano acumula) entra
+ * DENTRO do max, somado ao que o plano deu: ele aumenta o que o aluno pode
+ * usar, e o piso da matrícula fixa continua valendo por baixo. Somar por fora
+ * (`max(...) + carriedIn`) daria saldo em dobro para quem tem mais sessões
+ * fixas do que o plano vende — o caso do mês com 5 sábados.
  */
 export function resolveQuota(input: {
   plan: PlanQuota
   cycleWeeks: number
   bookings: QuotaBooking[]
   fixedSessionsInCycle: number
+  /** Sobra do ciclo anterior. 0 quando o plano não acumula ou é o primeiro ciclo. */
+  carriedIn?: number
 }): QuotaResult {
   const { plan, cycleWeeks, bookings, fixedSessionsInCycle } = input
+  // Defensivo: saldo negativo não existe (carried_out é clampado na origem), e
+  // um valor torto vindo do banco não pode reduzir a cota de quem paga.
+  const carriedIn = Math.max(0, input.carriedIn ?? 0)
 
-  const limit = Math.max(plan.classesPerWeek * cycleWeeks, fixedSessionsInCycle)
+  const limit = Math.max(plan.classesPerWeek * cycleWeeks + carriedIn, fixedSessionsInCycle)
 
   // A isenção do professor vence a regra de cancelamento tardio: ele viu o
   // caso concreto e decidiu devolver a aula. Só vale para reserva cancelada —
@@ -105,6 +124,36 @@ export function resolveQuota(input: {
   ).length
 
   return { limit, used, remaining: Math.max(0, limit - used) }
+}
+
+/**
+ * O saldo que sai do ciclo: o que entrou, mais o que o plano deu, menos o usado.
+ *
+ * Clampado em 0 na origem — é o que garante que `carriedIn` nunca chegue
+ * negativo do banco. Usar mais do que a cota (o admin adiciona o aluno com
+ * `force`, a fixa fura o limite pelo max()) não vira dívida para o mês seguinte:
+ * o aluno não deve aula à academia.
+ */
+export function carryOut(input: {
+  carriedIn: number
+  granted: number
+  used: number
+}): number {
+  return Math.max(0, input.carriedIn + input.granted - input.used)
+}
+
+/**
+ * A janela do ciclo seguinte a `window`.
+ *
+ * Serve ao fechamento, que avança ciclo a ciclo do último fechado até o último
+ * já encerrado. Deriva de `cycleWindow` sobre o dia seguinte ao fim — assim a
+ * regra de fronteira (semana seg–dom, mês calendário) mora num lugar só.
+ */
+export function nextCycleWindow(
+  window: { from: string; to: string },
+  cycle: PlanCycle,
+): { from: string; to: string } {
+  return cycleWindow(addDaysStr(window.to, 1), cycle)
 }
 
 /** Reservas confirmadas do aluno numa data — insumo do teto diário. */

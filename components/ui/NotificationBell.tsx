@@ -26,6 +26,8 @@ const typeIcon: Record<string, string> = {
   // Aula cancelada é a notificação que o aluno mais precisa achar na lista —
   // sem ícone próprio ela se perdia entre os sinos genéricos.
   class_cancelled: '🚫',
+  vacation: '🏖️',
+  vacation_request: '🏖️',
 }
 
 export function NotificationBell({ initialNotifications, orgName }: NotificationBellProps) {

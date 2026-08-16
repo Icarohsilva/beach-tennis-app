@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { cycleWindow, countCycleWeeks, resolveQuota, countOnDate } from './classQuota'
+import {
+  cycleWindow,
+  countCycleWeeks,
+  resolveQuota,
+  countOnDate,
+  carryOut,
+  nextCycleWindow,
+} from './classQuota'
 import type { PlanQuota, QuotaBooking } from './classQuota'
 
 describe('cycleWindow', () => {
@@ -66,6 +73,7 @@ const PLANO_2X: PlanQuota = {
   cycle: 'monthly',
   maxClassesPerDay: 2,
   refundOnLateCancel: true,
+  rolloverUnused: false,
 }
 
 function confirmada(sessionDate: string): QuotaBooking {
@@ -183,5 +191,110 @@ describe('countOnDate', () => {
       { sessionDate: '2026-07-28', status: 'cancelled', cancelledLate: false, adminWaived: false },
     ]
     expect(countOnDate(bookings, '2026-07-28')).toBe(2)
+  })
+})
+
+// Acúmulo de aulas não usadas. O ponto de atenção é ONDE o saldo entra: dentro
+// do max(), somado ao que o plano deu. Somar por fora daria saldo em dobro para
+// quem tem mais sessões fixas do que o plano vende (o mês com 5 sábados).
+describe('resolveQuota — saldo do ciclo anterior', () => {
+  it('sem carriedIn, o comportamento é o de sempre', () => {
+    const semSaldo = resolveQuota({
+      plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 0,
+    })
+    const comZero = resolveQuota({
+      plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 0, carriedIn: 0,
+    })
+    expect(semSaldo).toEqual({ limit: 8, used: 0, remaining: 8 })
+    expect(comZero).toEqual(semSaldo)
+  })
+
+  it('saldo soma ao que o plano deu', () => {
+    expect(
+      resolveQuota({
+        plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 0, carriedIn: 5,
+      }),
+    ).toEqual({ limit: 13, used: 0, remaining: 13 })
+  })
+
+  it('saldo desconta o que já foi usado no ciclo novo', () => {
+    expect(
+      resolveQuota({
+        plan: PLANO_2X,
+        cycleWeeks: 4,
+        bookings: [confirmada('2026-08-03'), confirmada('2026-08-05')],
+        fixedSessionsInCycle: 0,
+        carriedIn: 5,
+      }),
+    ).toEqual({ limit: 13, used: 2, remaining: 11 })
+  })
+
+  // O piso da fixa continua por baixo, mas não SOMA com o saldo: 10 fixas com
+  // 5 de saldo dá 13 (8+5), não 15. O aluno tem direito ao que o plano vende
+  // mais o que guardou — não ao número de sessões que o calendário produziu.
+  it('o piso da matrícula fixa continua valendo, sem dobrar o saldo', () => {
+    expect(
+      resolveQuota({
+        plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 10, carriedIn: 5,
+      }).limit,
+    ).toBe(13)
+    // Sem saldo suficiente para passar do piso, o piso vence.
+    expect(
+      resolveQuota({
+        plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 10, carriedIn: 1,
+      }).limit,
+    ).toBe(10)
+  })
+
+  it('saldo negativo (dado torto) é tratado como zero, nunca reduz a cota', () => {
+    expect(
+      resolveQuota({
+        plan: PLANO_2X, cycleWeeks: 4, bookings: [], fixedSessionsInCycle: 0, carriedIn: -3,
+      }).limit,
+    ).toBe(8)
+  })
+})
+
+describe('carryOut', () => {
+  it('o que sobrou vira saldo', () => {
+    expect(carryOut({ carriedIn: 0, granted: 8, used: 3 })).toBe(5)
+  })
+
+  it('o saldo que entrou também sobra quando não é usado', () => {
+    expect(carryOut({ carriedIn: 5, granted: 8, used: 3 })).toBe(10)
+  })
+
+  // Usar mais do que a cota acontece de verdade: o admin adiciona com `force` e
+  // a matrícula fixa fura o limite pelo max(). Isso não pode virar dívida.
+  it('usar mais do que tinha não gera saldo negativo', () => {
+    expect(carryOut({ carriedIn: 0, granted: 8, used: 12 })).toBe(0)
+    expect(carryOut({ carriedIn: 2, granted: 8, used: 30 })).toBe(0)
+  })
+
+  it('ciclo sem uso nenhum (férias) devolve tudo', () => {
+    expect(carryOut({ carriedIn: 4, granted: 8, used: 0 })).toBe(12)
+  })
+})
+
+describe('nextCycleWindow', () => {
+  it('mensal avança para o mês seguinte', () => {
+    expect(nextCycleWindow({ from: '2026-08-01', to: '2026-08-31' }, 'monthly')).toEqual({
+      from: '2026-09-01',
+      to: '2026-09-30',
+    })
+  })
+
+  it('mensal atravessa a virada do ano', () => {
+    expect(nextCycleWindow({ from: '2026-12-01', to: '2026-12-31' }, 'monthly')).toEqual({
+      from: '2027-01-01',
+      to: '2027-01-31',
+    })
+  })
+
+  it('semanal avança para a segunda seguinte', () => {
+    expect(nextCycleWindow({ from: '2026-08-10', to: '2026-08-16' }, 'weekly')).toEqual({
+      from: '2026-08-17',
+      to: '2026-08-23',
+    })
   })
 })

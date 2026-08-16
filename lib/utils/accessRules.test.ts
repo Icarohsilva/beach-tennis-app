@@ -3,6 +3,7 @@ import { resolveClassAccess, exceedsDailyCap } from './accessRules'
 
 const base = {
   archived: false,
+  onVacation: false,
   partner: null,
   hasActivePlan: false,
   creditsBalance: 0,
@@ -296,5 +297,50 @@ describe('resolveClassAccess — pendência de check-in', () => {
         missedCheckinBlockLimit: 2,
       }),
     ).toEqual({ denied: 'blocked_by_missed_checkins' })
+  })
+})
+
+// Férias é ausência DECLARADA: o aluno avisou que não vem, a grade foi gerada
+// sem ele, e a vaga já foi para a fila. Nenhuma forma de pagamento compra isso
+// de volta — senão ele entraria sozinho pelo app no dia seguinte ao pedido.
+describe('resolveClassAccess — férias', () => {
+  it('de férias, não entra', () => {
+    expect(resolveClassAccess({ ...base, onVacation: true })).toEqual({
+      denied: 'on_vacation',
+    })
+  })
+
+  it('nem com plano, crédito ou parceiro', () => {
+    expect(
+      resolveClassAccess({ ...base, onVacation: true, hasActivePlan: true }),
+    ).toEqual({ denied: 'on_vacation' })
+    expect(
+      resolveClassAccess({ ...base, onVacation: true, creditsBalance: 10 }),
+    ).toEqual({ denied: 'on_vacation' })
+    expect(
+      resolveClassAccess({ ...base, onVacation: true, partner: 'wellhub' }),
+    ).toEqual({ denied: 'on_vacation' })
+  })
+
+  it('nem escolhendo pagar com crédito', () => {
+    expect(
+      resolveClassAccess({
+        ...base, onVacation: true, preferCredit: true, creditsBalance: 5,
+      }),
+    ).toEqual({ denied: 'on_vacation' })
+  })
+
+  // Cadastro inativo é o estado mais forte: quem saiu da academia não está
+  // "de férias", está fora.
+  it('cadastro inativo tem precedência sobre férias', () => {
+    expect(
+      resolveClassAccess({ ...base, archived: true, onVacation: true }),
+    ).toEqual({ denied: 'archived' })
+  })
+
+  it('fora do período, nada muda', () => {
+    expect(resolveClassAccess({ ...base, onVacation: false, hasActivePlan: true })).toEqual({
+      grant: 'plan',
+    })
   })
 })

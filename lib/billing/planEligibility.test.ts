@@ -93,6 +93,7 @@ describe('getActivePlan', () => {
       cycle: 'monthly',
       maxClassesPerDay: 2,
       refundOnLateCancel: true,
+      rolloverUnused: false,
     })
   })
 

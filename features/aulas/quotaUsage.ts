@@ -25,6 +25,13 @@ export interface QuotaSnapshot {
   limit: number
   used: number
   remaining: number
+  /**
+   * Aulas que vieram de sobra do ciclo anterior, já embutidas em `limit`.
+   *
+   * A tela precisa deste número separado: sem ele o total cresce sem explicação
+   * ("por que tenho 13 aulas se meu plano é de 8?") e vira dúvida no grupo.
+   */
+  carriedIn: number
   /** Reservas confirmadas do aluno na data pedida — insumo do teto diário. */
   bookingsOnDate: number
   /** Janela do ciclo, para exibir na UI ("neste mês" / "nesta semana"). */
@@ -120,16 +127,52 @@ export async function getQuotaSnapshot(
       return acc + occurrencesOfDay(window.from, window.to, cls.day_of_week)
     }, 0)
 
+  // Saldo do ciclo anterior. Só é buscado quando o plano acumula — para os
+  // outros a consulta seria puro custo, e o rollover nasce desligado.
+  const carriedIn = plan.rolloverUnused
+    ? await readCarriedIn(client, studentId, orgId, window.from)
+    : 0
+
   const quota = resolveQuota({
     plan,
     cycleWeeks: countCycleWeeks(window.from, window.to),
     bookings,
     fixedSessionsInCycle,
+    carriedIn,
   })
 
   return {
     ...quota,
+    carriedIn,
     bookingsOnDate: countOnDate(bookings, targetDate),
     window,
   }
+}
+
+/**
+ * O `carried_out` do último ciclo fechado antes de `cycleStart`.
+ *
+ * "O último antes", e não "o imediatamente anterior": aluno que ficou meses sem
+ * plano, ou cujo fechamento atrasou, teria buraco na sequência, e exigir o ciclo
+ * exatamente anterior zeraria um saldo que existe. A linha mais recente já
+ * carrega o acumulado inteiro, porque cada fechamento soma o `carried_in` do
+ * anterior.
+ */
+async function readCarriedIn(
+  client: AdminClient,
+  studentId: string,
+  orgId: string,
+  cycleStart: string,
+): Promise<number> {
+  const { data } = await client
+    .from('plan_cycle_balances')
+    .select('carried_out')
+    .eq('student_id', studentId)
+    .eq('organization_id', orgId)
+    .lt('cycle_start', cycleStart)
+    .order('cycle_start', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return Math.max(0, (data as { carried_out: number } | null)?.carried_out ?? 0)
 }

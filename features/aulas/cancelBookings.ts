@@ -30,6 +30,12 @@ export interface CancelFutureBookingsInput {
    * logo depois de ser marcado como ausente.
    */
   from?: string
+  /**
+   * Última data a cancelar (yyyy-MM-dd), inclusiva. Ausente = sem teto, que é o
+   * caso de sair da turma ou ser bloqueado. As férias usam o teto: só o período
+   * viajado sai, o resto da agenda do aluno continua de pé.
+   */
+  to?: string
   /** Texto do estorno no extrato de créditos. */
   refundReason: string
 }
@@ -60,6 +66,7 @@ export async function cancelFutureBookings(
     .select('id')
     .eq('organization_id', orgId)
     .gte('session_date', from)
+  if (input.to) sessionQuery = sessionQuery.lte('session_date', input.to)
   if (classId) sessionQuery = sessionQuery.eq('class_id', classId)
 
   const { data: futureSessions } = await sessionQuery
@@ -80,9 +87,14 @@ export async function cancelFutureBookings(
   const freedSessionIds: string[] = []
 
   for (const b of bookings) {
+    // admin_waived: quem cancelou foi o SISTEMA, não o aluno — saiu da turma,
+    // foi bloqueado, entrou de férias. Em nenhum desses casos a aula pode
+    // consumir a cota do ciclo dele. Para quem usa crédito o estorno abaixo
+    // resolve; para quem é de plano ou parceiro, o que precisa voltar é a
+    // contagem, e é exatamente isso que a flag diz (ver 20260807000300).
     const { error: cancelErr } = await client
       .from('session_bookings')
-      .update({ status: 'cancelled', cancelled_at: now })
+      .update({ status: 'cancelled', cancelled_at: now, admin_waived: true })
       .eq('id', b.id)
 
     if (cancelErr) {

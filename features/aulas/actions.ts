@@ -19,6 +19,8 @@ import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
 import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
+import { getApprovedVacations } from './vacationQueries'
+import { isOnVacation } from '@/lib/aulas/vacation'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
@@ -353,8 +355,13 @@ export async function bookSessionAs(
       ? await countOpenMissedCheckins(adminClient, studentId, orgId)
       : 0
 
+  // Férias aprovadas cobrindo a data: o aluno declarou ausência, e a grade já
+  // foi gerada sem ele. Deixar entrar aqui contradiria o próprio pedido dele.
+  const vacations = await getApprovedVacations(adminClient, studentId, orgId, session.session_date)
+
   const decision = resolveClassAccess({
     archived: Boolean(profile.archived_at),
+    onVacation: isOnVacation(vacations, session.session_date),
     partner: profile.partner,
     hasActivePlan,
     creditsBalance: profile.credits_balance,
@@ -389,6 +396,12 @@ export async function bookSessionAs(
     }
     if (decision.denied === 'archived') {
       return { error: 'Seu cadastro nesta academia está inativo. Fale com a academia para voltar a agendar.' }
+    }
+    if (decision.denied === 'on_vacation') {
+      return {
+        error:
+          'Você está de férias nesta data. Cancele as férias no seu perfil, ou fale com a academia, para voltar a agendar.',
+      }
     }
     if (decision.denied === 'blocked_by_missed_checkins') {
       return {

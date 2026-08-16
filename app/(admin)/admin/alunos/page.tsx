@@ -4,6 +4,7 @@ import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate } from '@/lib/utils/dateHelpers'
+import { listPendingVacations } from '@/features/aulas/vacationQueries'
 import { OccupancyBar } from '@/components/ui/OccupancyBar'
 import { Users } from 'lucide-react'
 import { computeProgress } from '@/lib/checkin/progress'
@@ -40,6 +41,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
+  const pendingVacations = orgId ? await listPendingVacations(adminClient, orgId) : []
 
   const query = searchParams.q?.trim() ?? ''
   const levelFilter = searchParams.level ?? ''
@@ -242,6 +244,34 @@ export default async function AlunosPage({ searchParams }: Props) {
           {!showArchived && <CriarAlunoButton orgSports={orgSports} />}
         </div>
       </div>
+
+      {/* Pedidos de férias esperando resposta. Sem esta faixa o pedido do aluno
+          só apareceria se alguém abrisse a ficha dele por acaso — o que é o
+          mesmo que não ter aprovação nenhuma. */}
+      {pendingVacations.length > 0 && !showArchived && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.07] p-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-200">
+            {pendingVacations.length === 1
+              ? '1 pedido de férias aguardando'
+              : `${pendingVacations.length} pedidos de férias aguardando`}
+          </p>
+          <ul className="mt-2 space-y-1">
+            {pendingVacations.map((v) => (
+              <li key={v.id}>
+                <Link
+                  href={`/admin/alunos/${v.studentId}`}
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm text-white hover:underline"
+                >
+                  <span className="font-semibold">{v.studentName}</span>
+                  <span className="text-xs text-amber-200/90">
+                    {formatDate(v.startsOn)} a {formatDate(v.endsOn)} →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Alternância ativos/inativos. Preserva os filtros já aplicados: o admin que
           buscou um nome e não achou quer justamente conferir se saiu da academia. */}
