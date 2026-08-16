@@ -48,6 +48,11 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true })
   const ig = qrSvg(cfg.qrInstagram, { logo: true })
   const criar = qrSvg(cfg.qrCriar, { logo: true })
+  const qrWhatsappDe = (arena) =>
+    qrSvg(`https://wa.me/${cfg.whatsappE164}?text=${encodeURIComponent(cfg.mensagemConvite(arena))}`, {
+      logo: false,
+      ecc: 'Q', // a URL com a mensagem é longa; H estouraria o módulo mínimo em 30 mm
+    }).svg
 
   const navegador = await chromium.launch({
     executablePath: EXECUTABLE,
@@ -55,7 +60,7 @@ async function main() {
   })
 
   const gerar = async (nomeArquivo, lote, tag) => {
-    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, comMarcas: true, arenas: lote })
+    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, qrWhatsappDe, comMarcas: true, arenas: lote })
     const p = await navegador.newPage()
     await p.goto(escrever(tag, html), { waitUntil: 'networkidle' })
     await p.evaluate(() => document.fonts.ready)
@@ -80,6 +85,7 @@ async function main() {
       cfg,
       qrInstagram: ig.svg,
       qrCriar: criar.svg,
+      qrWhatsappDe,
       comMarcas: false,
       arenas: [arenas[0]],
     })

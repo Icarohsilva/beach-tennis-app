@@ -40,6 +40,11 @@ async function main() {
 
   const ig = qrSvg(cfg.qrInstagram, { logo: true })
   const criar = qrSvg(cfg.qrCriar, { logo: true })
+  const qrWhatsappDe = (arena) =>
+    qrSvg(`https://wa.me/${cfg.whatsappE164}?text=${encodeURIComponent(cfg.mensagemConvite(arena))}`, {
+      logo: false,
+      ecc: 'Q', // a URL com a mensagem é longa; H estouraria o módulo mínimo em 30 mm
+    }).svg
   console.log(`QR Instagram  v${ig.versao} · ${ig.modulos}×${ig.modulos} módulos · ECC H`)
   console.log(`QR Criar      v${criar.versao} · ${criar.modulos}×${criar.modulos} módulos · ECC H`)
   fs.writeFileSync(path.join(SRC, 'assets/qr-instagram.svg'), ig.svg)
@@ -61,7 +66,7 @@ async function main() {
     [true, 'ArenaHub-Convite-COM-MARCAS.pdf'],
     [false, 'ArenaHub-Convite-SANGRIA-3mm.pdf'],
   ]) {
-    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, comMarcas })
+    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, qrWhatsappDe, comMarcas })
     const p = await navegador.newPage()
     await p.goto(escrever(comMarcas ? 'print-marcas' : 'print-sangria', html), { waitUntil: 'networkidle' })
     await p.evaluate(() => document.fonts.ready)
@@ -109,8 +114,9 @@ async function main() {
     const qa = path.join(OUT, 'qa')
     fs.mkdirSync(qa, { recursive: true })
     const alvos = [
-      ['qa-qr-instagram-56mm.png', ig.svg, QR_IMPRESSO.contracapa.utilMm],
-      ['qa-qr-criar-25mm.png', criar.svg, QR_IMPRESSO.interna.utilMm],
+      ['qa-qr-instagram.png', ig.svg, QR_IMPRESSO.contracapa.utilMm],
+      ['qa-qr-whatsapp.png', qrWhatsappDe(cfg.arenas[0]), QR_IMPRESSO.whatsapp.utilMm],
+      ['qa-qr-criar.png', criar.svg, QR_IMPRESSO.interna.utilMm],
     ]
     for (const [nome, svg, mm] of alvos) {
       const px = Math.round((mm / 25.4) * 300) // 300 dpi
@@ -127,7 +133,7 @@ async function main() {
   // Serve para conferir na tela e como arquivo de reserva, caso a gráfica prefira
   // receber a peça achatada em imagem em vez do PDF vetorial.
   {
-    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, comMarcas: false })
+    const html = documentoPrint({ cfg, qrInstagram: ig.svg, qrCriar: criar.svg, qrWhatsappDe, comMarcas: false })
     const p = await navegador.newPage({ viewport: { width: 1160, height: 600 }, deviceScaleFactor: 300 / 96 })
     await p.goto(escrever('preview', html), { waitUntil: 'networkidle' })
     await p.evaluate(() => document.fonts.ready)

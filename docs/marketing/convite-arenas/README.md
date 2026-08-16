@@ -123,6 +123,7 @@ até 7,5 mm.
 | **Papel** | Couché fosco **300 g/m²** (alternativa mais rígida: 350 g/m²) |
 | **Impressão** | 4/4 (colorido frente e verso) |
 | **Acabamento** | Laminação **soft touch fosca** frente e verso + **verniz localizado (UV)** sobre os elementos laranja e o logo |
+| **Acabamento opcional** | **Foil digital** (hot stamping digital, sem clichê) sobre o nome da arena e o logo. É o que a pesquisa aponta como o que faz o destinatário guardar a peça, e por ser digital funciona em tiragem pequena. Pergunte se a gráfica tem. |
 | **Sangria** | 3 mm em todos os lados |
 | **Arquivo** | PDF vetorial, fontes embutidas, 2 páginas (pág. 1 = externa, pág. 2 = interna) |
 | **Aproveitamento** | 2 peças por folha SRA3 (32 × 45 cm) |
@@ -157,7 +158,7 @@ Os hexadecimais são os do app. **Não converta por conta própria.** Deixe a gr
 
 ### Fontes
 
-Sora (títulos), Inter (corpo) e Playfair Display (o nome da arena na capa). Vão **embutidas no PDF como Type 3**, ou seja, os contornos viajam dentro do arquivo. Não existe risco de substituição de fonte. Se o pré‑impressão pedir "fontes convertidas em curvas", pode responder que já estão.
+Sora (títulos), Inter (corpo) e Playfair Display (o nome da arena e o gancho da capa). Vão **embutidas no PDF como Type 3**, ou seja, os contornos viajam dentro do arquivo. Não existe risco de substituição de fonte. Se o pré‑impressão pedir "fontes convertidas em curvas", pode responder que já estão.
 
 ---
 
@@ -248,9 +249,24 @@ Mande a imagem `ArenaHub-Convite-WhatsApp-1080x1350.png` junto.
 
 ## 10. Decisões técnicas que valem saber
 
-**Os dois QR fazem trabalhos diferentes.** O da contracapa (56 mm) vai para o **Instagram**: é descoberta, serve para o dono e para o aluno que passar pelo balcão. O de dentro (25 mm) vai para **`arenahub.website/criar-academia`**: é conversão, para quem já leu e decidiu. Um QR só teria que servir aos dois momentos e serviria mal a ambos.
+**São três QR, com trabalhos diferentes.** Na contracapa ficam dois lado a lado, de
+tamanhos diferentes de propósito: o maior vai para o **Instagram** (curiosidade, ver
+antes de falar, e serve também para o aluno que passar pelo balcão) e o menor abre o
+**WhatsApp**. Dentro da peça, um terceiro aponta para `arenahub.website/criar-academia`,
+que é a ação de quem já decidiu. Empilhar os dois da contracapa não cabia no painel, e
+deixá-los do mesmo tamanho daria paralisia de escolha.
 
-**Os dois apontam direto para o destino final, sem encurtador.** É o que você pediu, e tem uma vantagem: link direto passa mais confiança que um `bit.ly` e não depende de serviço de terceiro que pode sair do ar com a peça já impressa. **O custo é que você não mede escaneamento nenhum.** Se quiser medir, o caminho limpo é criar uma rota própria (`arenahub.website/ig` redirecionando para o Instagram) e apontar o QR para ela. Mas decida **antes** de imprimir, porque papel não tem deploy.
+**O QR do WhatsApp é personalizado por arena e abre a conversa já escrita.** O destino é
+um `wa.me` com a mensagem pré-preenchida: *"Oi! Aqui é da Aloha Beach. Recebi o convite."*
+Isso resolve duas coisas de uma vez. Tira o atrito de quem abriu o WhatsApp e não sabe o
+que escrever, e te diz **exatamente qual convite gerou o contato**, que é a medição que o
+link direto do Instagram não dá. A mensagem é curta de propósito: cada caractere vira
+módulo no código, e módulo pequeno demais não lê no papel. Por isso esse código usa
+correção Q em vez de H, e mesmo assim fica em 0,70 mm de módulo.
+
+**O número e o @ continuam impressos como texto**, ao lado dos códigos. Quem prefere
+digitar, digita; quem quer salvar o contato, salva; e se um QR falhar, a peça continua
+funcionando.
 
 **Correção de erro em nível H.** Os códigos recuperam 30% de área danificada, que é o que autoriza o furo do logo no centro e o que dá margem para papel amassado ou marcado.
 

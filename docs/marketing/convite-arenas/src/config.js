@@ -15,6 +15,16 @@ module.exports = {
   // qrInstagram fica na contracapa (o que a galera escaneia no balcão).
   // qrCriar fica na parte interna (a ação de quem decidiu).
   qrInstagram: 'https://www.instagram.com/arenahub.app/',
+
+  // O QR do WhatsApp abre a conversa com a mensagem JÁ ESCRITA, dizendo de qual
+  // arena veio. Resolve duas coisas de uma vez: tira o atrito de quem não sabe o
+  // que escrever, e diz para você exatamente qual convite gerou o contato, que é
+  // a medição que o link direto do Instagram não dá.
+  whatsappE164: '5531996313913',
+  // Curta de propósito: cada caractere aqui vira módulo no QR, e módulo pequeno
+  // demais não lê no papel.
+  mensagemConvite: (arena) =>
+    arena ? `Oi! Aqui é da ${arena}. Recebi o convite.` : 'Oi! Recebi o convite do ArenaHub.',
   qrCriar: 'https://arenahub.website/criar-academia',
 
   // --- Oferta ---

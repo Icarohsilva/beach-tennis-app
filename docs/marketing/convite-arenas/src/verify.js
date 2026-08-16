@@ -21,11 +21,19 @@ const OUT = path.join(__dirname, '..', 'out')
 const QUIET = 4 // módulos de zona de silêncio de cada lado (mínimo da norma)
 const MODULO_MIN_MM = 0.4
 
-const modulosTotais = (url) => qrSvg(url).modulos + QUIET * 2
+const modulosTotais = (url, ecc = 'H') => qrSvg(url, { ecc }).modulos + QUIET * 2
 
 const PECAS = [
   {
-    arquivo: 'qa/qa-qr-instagram-56mm.png',
+    arquivo: 'qa/qa-qr-whatsapp.png',
+    onde: 'QR do WhatsApp',
+    esperado: `https://wa.me/${cfg.whatsappE164}?text=${encodeURIComponent(cfg.mensagemConvite(cfg.arenas[0]))}`,
+    utilMm: QR_IMPRESSO.whatsapp.utilMm,
+    ecc: 'Q',
+    larguras: [120, 200, 320],
+  },
+  {
+    arquivo: 'qa/qa-qr-instagram.png',
     onde: 'QR da contracapa',
     esperado: cfg.qrInstagram,
     utilMm: QR_IMPRESSO.contracapa.utilMm,
@@ -34,7 +42,7 @@ const PECAS = [
     larguras: [120, 200, 400],
   },
   {
-    arquivo: 'qa/qa-qr-criar-25mm.png',
+    arquivo: 'qa/qa-qr-criar.png',
     onde: 'QR da parte interna',
     esperado: cfg.qrCriar,
     utilMm: QR_IMPRESSO.interna.utilMm,
@@ -92,7 +100,7 @@ for (const p of PECAS) {
 
   // 1. Tamanho do módulo impresso
   if (p.utilMm) {
-    const mod = p.utilMm / modulosTotais(p.esperado)
+    const mod = p.utilMm / modulosTotais(p.esperado, p.ecc)
     const ok = mod >= MODULO_MIN_MM
     if (!ok) falhas++
     console.log(

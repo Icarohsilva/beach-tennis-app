@@ -90,10 +90,12 @@ const quadra = (opacidade = 0.22, esmaecer = true, forma = 'normal') => {
 // números para calcular o tamanho do módulo. Mudar o layout sem mudar isto
 // faria o QA validar uma peça que não existe mais.
 const QR_IMPRESSO = {
-  contracapa: { painelMm: 66, padMm: 5 },
+  contracapa: { painelMm: 64, padMm: 4.4 },
+  whatsapp: { caixaMm: 48, padMm: 4 },
   interna: { caixaMm: 28, padMm: 1.4 },
 }
 QR_IMPRESSO.contracapa.utilMm = QR_IMPRESSO.contracapa.painelMm - QR_IMPRESSO.contracapa.padMm * 2
+QR_IMPRESSO.whatsapp.utilMm = QR_IMPRESSO.whatsapp.caixaMm - QR_IMPRESSO.whatsapp.padMm * 2
 QR_IMPRESSO.interna.utilMm = QR_IMPRESSO.interna.caixaMm - QR_IMPRESSO.interna.padMm * 2
 
 const icone = {
@@ -133,17 +135,18 @@ body{background:#5b6478;font-family:Inter,sans-serif;-webkit-font-smoothing:anti
 
 function capa(cfg, arena) {
   const c = cfg.cor
-  // Nome longo não pode quebrar o desenho: o corpo cai por faixa de tamanho.
+  // O nome é o herói da capa, então o corpo é calculado para ocupar ~100 mm de
+  // largura em vez de cair em degraus: nome de 11 e de 14 letras saem parecidos.
   const n = (arena || '').length
-  const corpoNome = n === 0 ? 0 : n <= 16 ? 13.5 : n <= 22 ? 11 : n <= 28 ? 9 : 7.5
+  const corpoNome = n === 0 ? 0 : Math.max(7, Math.min(17, 100 / (n * 0.5)))
 
   const destinatario = arena
-    ? `<div style="margin-top:2mm">
-         <div style="font-family:Playfair;font-weight:500;font-size:${corpoNome}mm;line-height:1.12;color:${c.texto};letter-spacing:-0.005em">${arena}</div>
-         <div style="margin-top:3mm;width:34mm;height:.4mm;background:${c.laranja}"></div>
+    ? `<div style="margin-top:1.5mm">
+         <div style="font-family:Playfair;font-weight:500;font-size:${corpoNome.toFixed(2)}mm;line-height:1.08;color:${c.texto};letter-spacing:-0.008em">${arena}</div>
+         <div style="margin-top:4mm;width:40mm;height:.5mm;background:${c.laranja}"></div>
        </div>`
     : `<div>
-         <div style="margin-top:2mm;width:100mm;border-bottom:.35mm dashed rgba(148,163,184,.55);height:9.5mm"></div>
+         <div style="margin-top:2mm;width:100mm;border-bottom:.35mm dashed rgba(148,163,184,.55);height:13mm"></div>
          <div style="margin-top:1.4mm;font-family:Inter;font-size:2.3mm;color:rgba(148,163,184,.6)">escreva aqui o nome da arena</div>
        </div>`
 
@@ -151,28 +154,35 @@ function capa(cfg, arena) {
 <div class="painel capa" style="position:relative;overflow:hidden">
   <!-- Sem véu por cima do painel: qualquer overlay que cubra só metade da folha
        aparece como uma emenda visível na linha do vinco. -->
-  <div style="position:absolute;left:-10mm;right:-10mm;bottom:15mm;height:31mm">${quadra(0.36, false, 'larga')}</div>
+  <div style="position:absolute;left:-10mm;right:-10mm;bottom:13mm;height:30mm">${quadra(0.34, false, 'larga')}</div>
 
   <div style="position:relative;height:100%;padding:12mm 13mm 11mm;display:flex;flex-direction:column">
     ${logo(7.4)}
 
     <!-- A metade direita, na altura do meio, fica livre: é onde o selo adesivo
          de 40 mm lacra a peça. -->
-    <div style="margin-top:13mm">
+    <div style="margin-top:11mm">
       <div style="display:flex;align-items:center;gap:3mm">
         <span style="font-family:Inter;font-weight:700;font-size:2.7mm;letter-spacing:.42em;color:${c.laranja}">CONVITE</span>
         <span class="filete" style="width:24mm"></span>
       </div>
 
-      <div style="margin-top:8mm;font-family:Inter;font-weight:400;font-size:4.2mm;color:${c.suave}">Para a</div>
+      <div style="margin-top:7mm;font-family:Inter;font-weight:400;font-size:4mm;color:${c.suave}">Para a</div>
       ${destinatario}
 
-      <h1 style="margin-top:8mm;width:112mm;font-family:Sora;font-weight:800;font-size:8.2mm;line-height:1.15;letter-spacing:-0.03em;color:${c.texto}">
-        ser uma das primeiras arenas de ${cfg.cidade} no <span style="color:${c.laranja}">ArenaHub</span>.
-      </h1>
+      <div style="margin-top:5mm;width:96mm;font-family:Inter;font-size:3mm;line-height:1.5;color:${c.suave}">
+        Um convite para ser uma das primeiras arenas de ${cfg.cidade}
+        no <span style="color:${c.texto};font-weight:600">ArenaHub</span>.
+      </div>
     </div>
 
-    <div style="margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between">
+    <!-- O gancho é a única frase que a capa vende. Ela aponta direto para a
+         primeira dor do miolo, então quem abre já chega no assunto. -->
+    <div style="margin-top:auto;font-family:Playfair;font-style:italic;font-weight:500;font-size:4.6mm;line-height:1.35;color:${c.texto};width:104mm">
+      Tem uma pergunta aqui dentro<br>que você já ouviu hoje.
+    </div>
+
+    <div style="margin-top:7mm;display:flex;align-items:flex-end;justify-content:space-between">
       <div style="font-family:Inter;font-weight:500;font-size:2.7mm;color:${c.suave};letter-spacing:.02em">
         ${cfg.cidade} · ${cfg.ano}
       </div>
@@ -182,39 +192,53 @@ function capa(cfg, arena) {
 </div>`
 }
 
-function contracapa(cfg, qrInstagram) {
+function contracapa(cfg, qrInstagram, qrWhatsapp) {
   const c = cfg.cor
+  const G = QR_IMPRESSO
+
+  // Dois códigos lado a lado, de tamanhos diferentes de propósito: o maior é o
+  // caminho da curiosidade (ver antes de falar), o menor é o de quem já decidiu.
+  // Empilhados eles não cabem no painel, e iguais dariam paralisia de escolha.
+  const painel = (qr, larguraMm, padMm, titulo, sub, destaque) => `
+    <div style="width:${larguraMm}mm;background:${c.claro};border-radius:4mm;padding:${padMm}mm ${padMm}mm 3.4mm;text-align:center;flex:none;
+                box-shadow:0 0 0 .5mm ${destaque ? 'rgba(249,115,22,.6)' : 'rgba(148,163,184,.35)'}">
+      <div style="width:100%;aspect-ratio:1/1">${qr}</div>
+      <div style="margin-top:2.2mm;font-family:Sora;font-weight:700;font-size:3.3mm;line-height:1.2;color:${c.fundo};letter-spacing:-0.01em">${titulo}</div>
+      <div style="margin-top:.8mm;font-family:Inter;font-weight:500;font-size:2.3mm;color:#64748b">${sub}</div>
+    </div>`
+
   return `
 <div class="painel contracapa" style="position:relative;overflow:hidden">
-  <div style="position:relative;height:100%;padding:13mm 13mm 11mm;display:flex;flex-direction:column;align-items:center">
+  <div style="position:relative;height:100%;padding:12mm 13mm 11mm;display:flex;flex-direction:column;align-items:center">
     <div style="align-self:flex-start">${logo(6.2)}</div>
 
-    <div style="margin-top:9mm;text-align:center">
-      <div style="font-family:Sora;font-weight:700;font-size:5.2mm;line-height:1.2;color:${c.texto};letter-spacing:-.02em">
+    <div style="margin-top:6mm;text-align:center">
+      <div style="font-family:Sora;font-weight:700;font-size:5mm;line-height:1.2;color:${c.texto};letter-spacing:-0.02em">
         Aponte a câmera
       </div>
-      <div style="margin-top:1.6mm;font-family:Inter;font-weight:600;font-size:2.5mm;letter-spacing:.24em;color:${c.laranja}">VEJA O SISTEMA POR DENTRO</div>
+      <div style="margin-top:1.4mm;font-family:Inter;font-weight:600;font-size:2.4mm;letter-spacing:.22em;color:${c.laranja}">DOIS CAMINHOS, ESCOLHA O SEU</div>
     </div>
 
     <!-- Painel claro: QR escuro sobre fundo claro é a combinação mais confiável
          de leitura. Nunca inverta para o dark do app. -->
-    <div style="margin-top:5.5mm;width:${QR_IMPRESSO.contracapa.painelMm}mm;background:${c.claro};border-radius:4.4mm;padding:${QR_IMPRESSO.contracapa.padMm}mm ${QR_IMPRESSO.contracapa.padMm}mm 4mm;text-align:center;box-shadow:0 0 0 .5mm rgba(249,115,22,.55)">
-      <div style="width:100%;aspect-ratio:1/1">${qrInstagram}</div>
-      <div style="margin-top:2.6mm;font-family:Sora;font-weight:700;font-size:4mm;color:${c.fundo};letter-spacing:-.01em">${cfg.instagram}</div>
-      <div style="margin-top:.8mm;font-family:Inter;font-weight:500;font-size:2.3mm;color:#64748b">telas reais, sem enfeite</div>
+    <div style="margin-top:5mm;display:flex;gap:6mm;align-items:flex-start">
+      ${painel(qrInstagram, G.contracapa.painelMm, G.contracapa.padMm, 'Ver por dentro', cfg.instagram, true)}
+      ${painel(qrWhatsapp, G.whatsapp.caixaMm, G.whatsapp.padMm, 'Falar agora', 'WhatsApp', false)}
+    </div>
+
+    <div style="margin-top:4mm;font-family:Inter;font-size:2.7mm;line-height:1.45;color:${c.suave};text-align:center">
+      A conversa abre <span style="color:${c.texto};font-weight:600">já escrita</span>, dizendo que é da sua arena.<br>
+      Se preferir digitar: <span style="color:${c.texto};font-weight:600">${cfg.whatsapp}</span>
     </div>
 
     <div style="margin-top:auto;width:100%">
-      <div style="height:.25mm;background:${c.borda};margin-bottom:4.5mm"></div>
+      <div style="height:.25mm;background:${c.borda};margin-bottom:3.6mm"></div>
       <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:4mm">
         <div>
-          <div style="font-family:Sora;font-weight:700;font-size:3.4mm;color:${c.texto}">${cfg.fundador}</div>
-          <div style="font-family:Inter;font-size:2.6mm;color:${c.suave};margin-top:.8mm">fundador do ArenaHub</div>
+          <div style="font-family:Sora;font-weight:700;font-size:3.2mm;color:${c.texto}">${cfg.fundador}</div>
+          <div style="font-family:Inter;font-size:2.5mm;color:${c.suave};margin-top:.6mm">fundador do ArenaHub</div>
         </div>
-        <div style="text-align:right;font-family:Inter;font-size:2.8mm;line-height:1.55;color:${c.suave}">
-          <div style="color:${c.laranja};font-weight:600">${cfg.site}</div>
-          <div>WhatsApp ${cfg.whatsapp}</div>
-        </div>
+        <div style="font-family:Inter;font-weight:600;font-size:2.7mm;color:${c.laranja}">${cfg.site}</div>
       </div>
     </div>
   </div>
@@ -418,7 +442,7 @@ function folha({ cfg, conteudo, comMarcas, rotulo }) {
 </div>`
 }
 
-function documentoPrint({ cfg, qrInstagram, qrCriar, comMarcas, arenas = [null] }) {
+function documentoPrint({ cfg, qrInstagram, qrCriar, qrWhatsappDe, comMarcas, arenas = [null] }) {
   const { aberto, altura, sangria, marcaFolga } = cfg.print
   const pgW = aberto + sangria * 2 + (comMarcas ? marcaFolga * 2 : 0)
   const pgH = altura + sangria * 2 + (comMarcas ? marcaFolga * 2 : 0)
@@ -435,7 +459,7 @@ function documentoPrint({ cfg, qrInstagram, qrCriar, comMarcas, arenas = [null] 
           cfg,
           comMarcas,
           rotulo: `PÁG. 1 · EXTERNA (capa à direita)${quem}`,
-          conteudo: contracapa(cfg, qrInstagram) + capa(cfg, arena),
+          conteudo: contracapa(cfg, qrInstagram, qrWhatsappDe(arena)) + capa(cfg, arena),
         }) +
         folha({
           cfg,
