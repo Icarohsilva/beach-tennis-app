@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Um PR que recebe vários pushes seguidos só precisa do resultado do último.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Testes, lint e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # O build do Next avalia módulos que leem estas variáveis. Valores fictícios
+      # bastam: nenhuma requisição de verdade sai durante o build — as páginas do
+      # app são todas dinâmicas (force-dynamic) ou renderizadas sob demanda.
+      NEXT_PUBLIC_SUPABASE_URL: https://exemplo.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: chave-anon-de-ci
+      SUPABASE_SERVICE_ROLE_KEY: chave-service-role-de-ci
+      # Desliga o upload de source map do Sentry (precisaria de token real).
+      SENTRY_SUPPRESS_GLOBAL_ERROR_HANDLER_FILE_WARNING: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Testes
+        run: npm run test:run
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

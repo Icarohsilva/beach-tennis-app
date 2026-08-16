@@ -30,7 +30,12 @@ import {
   tenantHealth,
   type SubStatus,
 } from '@/lib/superAdmin/metrics'
-import { getPlatformSnapshot } from '@/features/super-admin/platformQueries'
+import { mrrMovement, measuringSince } from '@/lib/superAdmin/mrrMovement'
+import {
+  getPlatformSnapshot,
+  getSubscriptionEvents,
+} from '@/features/super-admin/platformQueries'
+import { MrrMovementTable } from '@/features/super-admin/MrrMovementTable'
 import { AttentionQueue } from '@/features/super-admin/AttentionQueue'
 import { StatusFunnel } from '@/features/super-admin/StatusFunnel'
 import { BarSeries } from '@/features/super-admin/BarSeries'
@@ -42,9 +47,14 @@ import { BRAND_FILL } from '@/features/super-admin/chartPalette'
 export default async function SuperAdminHome() {
   const now = new Date()
   const price = PLATFORM_PLAN.priceMonthly
-  const { tenants, queues } = await getPlatformSnapshot()
+  const [{ tenants, queues }, events] = await Promise.all([
+    getPlatformSnapshot(),
+    getSubscriptionEvents(),
+  ])
 
   const s = platformSummary(tenants, price, now)
+  const movement = mrrMovement(events, 6, now)
+  const movementSince = measuringSince(events)
   const alerts = attentionQueue(tenants, queues, now)
   const growth = growthSeries(tenants, 12, now)
   const cohorts = cohortRetention(tenants, 6, now)
@@ -118,6 +128,14 @@ export default async function SuperAdminHome() {
             MRR — acesso liberado sem cobrança.
           </p>
         )}
+      </section>
+
+      {/* 2b. Movimento de MRR — de onde a receita veio e para onde foi. */}
+      <section>
+        <SectionHeader title="Movimento de MRR" />
+        <div className="glass rounded-2xl border border-white/[0.07] p-4">
+          <MrrMovementTable rows={movement} since={movementSince} />
+        </div>
       </section>
 
       {/* 3. Retenção e conversão. */}

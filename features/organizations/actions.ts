@@ -6,6 +6,7 @@ import { generateUniqueSlug, generateUniqueInviteCode } from '@/lib/org/identifi
 import { normalizeSports, normalizeSportsForOrg, sportOptionsForOrg } from '@/lib/arenas/sports'
 import { onlyDigits, isValidDocument } from '@/lib/validation/documento'
 import { generateTempPassword } from '@/lib/auth/tempPassword'
+import { recordSubscriptionEvent } from '@/lib/billing/subscriptionEvents'
 import { setStudentType } from '@/features/checkin/actions'
 import { acceptLegalDocuments } from '@/features/legal/actions'
 import { OWNER_REQUIRED_SLUGS } from '@/lib/legal/documents'
@@ -84,6 +85,14 @@ export async function createAcademy(input: CreateAcademyInput): Promise<CreateAc
     organization_id: org.id,
     status: 'trialing',
     trial_ends_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+  })
+
+  // Marca o início do trial no histórico de assinatura (sem from_status: é o
+  // primeiro estado da conta). Best-effort, como o insert acima.
+  await recordSubscriptionEvent({
+    organizationId: org.id,
+    toStatus: 'trialing',
+    source: 'signup',
   })
 
   // 2. Cria o usuário no Auth. O trigger handle_new_user lê org_invite_code e

@@ -5,6 +5,10 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { mapPreapprovalStatus } from '@/lib/billing/mpStatus'
 import { isValidSignature } from '@/lib/billing/webhookSignature'
 import {
+  recordSubscriptionEvent,
+  currentSubscriptionState,
+} from '@/lib/billing/subscriptionEvents'
+import {
   handleStudentPreapprovalEvent,
   handleStudentRecurringPayment,
 } from './studentHandlers'
@@ -228,10 +232,22 @@ async function handlePlatformSubscription(
     const mapped = mapPreapprovalStatus(pre.status)
     if (!mapped || !pre.external_reference) return NextResponse.json({ received: true })
 
+    // Estado ANTES do update: é o from_status do histórico.
+    const before = await currentSubscriptionState(pre.external_reference)
+
     await admin
       .from('platform_subscriptions')
       .update({ status: mapped, mp_preapproval_id: resourceId, updated_at: nowIso })
       .eq('organization_id', pre.external_reference)
+
+    await recordSubscriptionEvent({
+      organizationId: pre.external_reference,
+      fromStatus: before?.status ?? null,
+      toStatus: mapped,
+      isComped: before?.isComped ?? false,
+      source: 'webhook',
+      details: { mp_status: pre.status, preapproval_id: resourceId },
+    })
 
     return NextResponse.json({ received: true })
   }
@@ -253,10 +269,33 @@ async function handlePlatformSubscription(
   // Empurra o período pago em +1 mês a partir de agora e marca ativa. Idempotente o
   // suficiente para o smoke test (reprocessar empurra o período de novo; aceitável).
   const periodEnd = new Date(Date.now() + 30 * 86400000).toISOString()
+
+  // Resolve a org pelo id da assinatura no MP — o histórico é por organização,
+  // e este evento só conhece o preapproval.
+  const { data: subBefore } = await admin
+    .from('platform_subscriptions')
+    .select('organization_id, status, is_comped')
+    .eq('mp_preapproval_id', pay.preapproval_id)
+    .maybeSingle()
+
   await admin
     .from('platform_subscriptions')
     .update({ status: 'active', current_period_end: periodEnd, updated_at: nowIso })
     .eq('mp_preapproval_id', pay.preapproval_id)
+
+  if (subBefore) {
+    // Renovação de conta que já estava ativa não move o MRR: recordSubscription
+    // Event é no-op quando o status não muda, então só a recuperação de um
+    // past_due (ou a 1ª cobrança) vira linha no histórico.
+    await recordSubscriptionEvent({
+      organizationId: subBefore.organization_id,
+      fromStatus: subBefore.status,
+      toStatus: 'active',
+      isComped: (subBefore as { is_comped?: boolean }).is_comped ?? false,
+      source: 'webhook',
+      details: { preapproval_id: pay.preapproval_id, current_period_end: periodEnd },
+    })
+  }
 
   return NextResponse.json({ received: true })
 }
