@@ -9,7 +9,7 @@ import { getQuotaSnapshot } from './quotaUsage'
 import type { PlanQuota } from '@/lib/utils/classQuota'
 
 const PLANO: PlanQuota = {
-  classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true,
+  classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
 }
 const CLIENT = {} as never
 
@@ -20,7 +20,7 @@ describe('computeQuotaBudget', () => {
 
   it('devolve o remaining do getQuotaSnapshot quando cota ligada, sem parceiro, com plano', async () => {
     vi.mocked(getQuotaSnapshot).mockResolvedValue({
-      limit: 8, used: 5, remaining: 3, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
+      limit: 8, used: 5, remaining: 3, carriedIn: 0, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
     })
 
     const budget = await computeQuotaBudget(CLIENT, 'stu-1', 'org-1', true, PLANO, null, '2026-07-15')

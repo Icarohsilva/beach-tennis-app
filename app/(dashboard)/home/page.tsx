@@ -39,6 +39,8 @@ import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
+import { getClassRules } from '@/features/aulas/classRulesQuery'
+import { RulesCard } from '@/features/home/RulesCard'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import type { Profile, Periodicity, MissedCheckinStatus } from '@/types'
 
@@ -202,6 +204,18 @@ export default async function HomePage() {
   const selfCheckinEnabled =
     (orgSelfCheckinRow as { self_checkin_enabled: boolean } | null)?.self_checkin_enabled ?? false
 
+  // Regras do sistema para o modal do dashboard — derivadas da MESMA
+  // configuração usada acima (lib/aulas/classRules.ts), nunca texto fixo.
+  const ruleSections = orgId
+    ? await getClassRules(adminClient, {
+        orgId,
+        plan,
+        quotaEnforced: quotaOn,
+        isPartner,
+        selfCheckinEnabled,
+      })
+    : []
+
   // A ficha da aula (quem vai, fila, minha reserva, linhas dos dependentes) é
   // montada em features/home/sessionDetailQuery.ts, e não aqui, porque o
   // calendário do mês abre o MESMO modal por uma action — duas montagens
@@ -315,6 +329,21 @@ export default async function HomePage() {
           </p>
         </Reveal>
       )}
+
+      {/* Saldo acumulado: sem esta linha o total cresce sem explicação ("por que
+          tenho 13 aulas se meu plano é de 8?") e vira dúvida no grupo. */}
+      {!!quota?.carriedIn && !isPartner && (
+        <Reveal step={1}>
+          <p className="-mt-2 text-xs text-slate-400">
+            Inclui {quota.carriedIn} {quota.carriedIn === 1 ? 'aula guardada' : 'aulas guardadas'}{' '}
+            {plan?.cycle === 'weekly' ? 'da semana anterior' : 'do mês anterior'}.
+          </p>
+        </Reveal>
+      )}
+
+      <Reveal step={1}>
+        <RulesCard sections={ruleSections} />
+      </Reveal>
 
       {selfCheckinCandidates.length > 0 && (
         <Reveal step={1}>

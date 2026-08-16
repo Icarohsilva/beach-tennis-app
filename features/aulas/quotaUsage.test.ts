@@ -7,6 +7,7 @@ const PLANO: PlanQuota = {
   cycle: 'monthly',
   maxClassesPerDay: 2,
   refundOnLateCancel: true,
+  rolloverUnused: false,
 }
 
 /**

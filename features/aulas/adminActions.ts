@@ -28,6 +28,8 @@ import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 import { checkProfileComplete, revokeLigaExtra, ENTRY_REASONS } from '@/features/liga/extraPoints'
 import { notifyWaitlistSpotOpen } from './waitlistActions'
 import { refundSessionBookings } from './cancelSessionBookings'
+import { getApprovedVacations } from './vacationQueries'
+import { isOnVacation } from '@/lib/aulas/vacation'
 import { expectedStudentIds } from './sessionUtils'
 
 // ---------------------------------------------------------------------------
@@ -778,6 +780,13 @@ export async function addStudentToSession(
   const decision = resolveClassAccess({
     // Já barrado acima com mensagem própria; aqui é só para satisfazer o tipo.
     archived: false,
+    // Férias é ausência declarada pelo aluno, mas o admin vê o caso concreto
+    // (o aluno voltou antes e apareceu na quadra) — por isso entra na negação
+    // normal, que o `force` fura, em vez de virar bloqueio absoluto.
+    onVacation: isOnVacation(
+      await getApprovedVacations(adminClient, studentId, orgId, sessionDate),
+      sessionDate,
+    ),
     partner: mem.partner as CheckinPartner | null,
     hasActivePlan,
     creditsBalance: mem.credits_balance,
@@ -802,6 +811,12 @@ export async function addStudentToSession(
         return {
           error: `Esse aluno tem ${openMissedCheckins} pendência(s) de check-in em aberto.`,
           missedBlocked: true,
+        }
+      }
+      if (decision.denied === 'on_vacation') {
+        return {
+          error: 'Esse aluno está de férias nesta data.',
+          quotaBlocked: true,
         }
       }
       const message =

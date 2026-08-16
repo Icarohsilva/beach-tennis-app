@@ -328,7 +328,15 @@ describe('cancelEnrollment', () => {
     const cancelled = calls.filter((c) => c.table === 'session_bookings' && c.op === 'update')
     expect(cancelled.map((c) => c.filters.id)).toEqual(['bk-1', 'bk-2'])
     for (const c of cancelled) {
-      expect(c.payload).toEqual({ status: 'cancelled', cancelled_at: expect.any(String) })
+      // admin_waived: quem cancelou foi o sistema (o aluno saiu da turma), não
+      // ele. A aula não pode consumir a cota do ciclo — para quem paga com
+      // crédito o estorno resolve, para quem é de plano o que precisa voltar é
+      // a contagem.
+      expect(c.payload).toEqual({
+        status: 'cancelled',
+        cancelled_at: expect.any(String),
+        admin_waived: true,
+      })
     }
   })
 
@@ -508,7 +516,7 @@ describe('enrollStudentInClass — cota de fixas', () => {
   it('rejeita a fixa que ultrapassa classes_per_week do plano', async () => {
     // Plano 2x/semana, aluno já com 2 matrículas fixas ativas (em OUTRAS turmas).
     const client = makeEnrollClient({
-      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false },
       activeEnrollments: 2,
       quotaEnforced: true,
     })
@@ -521,7 +529,7 @@ describe('enrollStudentInClass — cota de fixas', () => {
 
   it('aceita a fixa que bate no limite exato', async () => {
     const client = makeEnrollClient({
-      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      plan: { classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false },
       activeEnrollments: 1,
       quotaEnforced: true,
     })
@@ -532,7 +540,7 @@ describe('enrollStudentInClass — cota de fixas', () => {
 
   it('não valida nada quando a cota está desligada', async () => {
     const client = makeEnrollClient({
-      plan: { classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true },
+      plan: { classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false },
       activeEnrollments: 5,
       quotaEnforced: false,
     })
@@ -556,7 +564,7 @@ describe('enrollStudentInClass — orçamento de cota na reconciliação', () =>
 
   it('passa o orçamento restante da cota pra reconciliação, em vez de reservar sem limite', async () => {
     const planoSemanal: PlanQuota = {
-      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
     }
     const client = makeEnrollClient({
       plan: planoSemanal,
@@ -583,7 +591,7 @@ describe('enrollStudentInClass — orçamento de cota na reconciliação', () =>
 
   it('cota desligada continua reservando sem limite (comportamento de hoje)', async () => {
     const plano: PlanQuota = {
-      classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true,
+      classesPerWeek: 1, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
     }
     const client = makeEnrollClient({
       plan: plano,
@@ -704,7 +712,7 @@ describe('addStudentToSession — cota e teto diário', () => {
 
   it('bloqueia sem force quando o teto diário já foi atingido, e libera com force', async () => {
     const plano: PlanQuota = {
-      classesPerWeek: 2, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+      classesPerWeek: 2, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
     }
     const { client, rpc } = makeAddStudentClient({
       session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
@@ -730,7 +738,7 @@ describe('addStudentToSession — cota e teto diário', () => {
 
   it('bloqueia sem force quando a cota do ciclo está esgotada, e libera com force', async () => {
     const plano: PlanQuota = {
-      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true,
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
     }
     const { client, rpc } = makeAddStudentClient({
       session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
@@ -761,7 +769,7 @@ describe('addStudentToSession — cota e teto diário', () => {
 
   it('cota desligada não bloqueia (comportamento de hoje)', async () => {
     const plano: PlanQuota = {
-      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 1, refundOnLateCancel: true,
+      classesPerWeek: 1, cycle: 'weekly', maxClassesPerDay: 1, refundOnLateCancel: true, rolloverUnused: false,
     }
     const { client, rpc } = makeAddStudentClient({
       session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },

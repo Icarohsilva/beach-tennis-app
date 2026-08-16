@@ -19,11 +19,14 @@ import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
 import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
+import { getApprovedVacations } from './vacationQueries'
+import { isOnVacation } from '@/lib/aulas/vacation'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
 import { getQuotaSnapshot } from './quotaUsage'
 import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
+import { getOrgClassSettings } from './orgClassSettings'
 import {
   ensureMissedCheckin,
   clearMissedCheckin,
@@ -353,8 +356,13 @@ export async function bookSessionAs(
       ? await countOpenMissedCheckins(adminClient, studentId, orgId)
       : 0
 
+  // Férias aprovadas cobrindo a data: o aluno declarou ausência, e a grade já
+  // foi gerada sem ele. Deixar entrar aqui contradiria o próprio pedido dele.
+  const vacations = await getApprovedVacations(adminClient, studentId, orgId, session.session_date)
+
   const decision = resolveClassAccess({
     archived: Boolean(profile.archived_at),
+    onVacation: isOnVacation(vacations, session.session_date),
     partner: profile.partner,
     hasActivePlan,
     creditsBalance: profile.credits_balance,
@@ -389,6 +397,12 @@ export async function bookSessionAs(
     }
     if (decision.denied === 'archived') {
       return { error: 'Seu cadastro nesta academia está inativo. Fale com a academia para voltar a agendar.' }
+    }
+    if (decision.denied === 'on_vacation') {
+      return {
+        error:
+          'Você está de férias nesta data. Cancele as férias no seu perfil, ou fale com a academia, para voltar a agendar.',
+      }
     }
     if (decision.denied === 'blocked_by_missed_checkins') {
       return {
@@ -838,12 +852,19 @@ export async function cancelBookingAs(
   )
 
   const now = new Date().toISOString()
-  // A janela de arrependimento entra aqui junto da regra das 5h: quem acabou de
-  // entrar tem 1h para desistir sem perder o crédito nem levar falta.
+  // Janela DA ACADEMIA, não o default de 5h: a configuração existia em
+  // Configurações e o admin editava, mas nenhum caminho a lia — quem gravou 3h
+  // achou por meses que tinha mudado a regra.
+  const { cancellationWindowHours } = await getOrgClassSettings(
+    adminClient,
+    booking.organization_id as string,
+  )
+  // A janela de arrependimento entra aqui junto: quem acabou de entrar tem 1h
+  // para desistir sem perder o crédito nem levar falta.
   const refundEligible = canCancelWithRefund(
     sessionStart,
     now,
-    undefined,
+    cancellationWindowHours,
     (booking.booked_at as string | null) ?? undefined,
   )
 

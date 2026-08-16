@@ -26,6 +26,7 @@ const emptyCreateForm: CreatePlanData = {
   cycle: 'monthly',
   max_classes_per_day: 2,
   refund_on_late_cancel: true,
+  rollover_unused: false,
 }
 
 function formatCurrency(amount: number) {
@@ -192,6 +193,7 @@ export function PlansManager({ plans, options }: PlansManagerProps) {
                       cycle: plan.cycle,
                       max_classes_per_day: plan.max_classes_per_day,
                       refund_on_late_cancel: plan.refund_on_late_cancel,
+                      rollover_unused: plan.rollover_unused ?? false,
                     })
                   }}
                 >

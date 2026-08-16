@@ -12,6 +12,8 @@ import { getOrgSports } from '@/lib/arenas/orgSports'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { Profile, Membership, Enrollment, Class, StudentLevel, PlanBillingOption } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { VacationPanel } from '@/features/aulas/VacationPanel'
+import { listStudentVacations } from '@/features/aulas/vacationQueries'
 
 interface Props {
   params: { id: string }
@@ -68,6 +70,7 @@ export default async function StudentProfilePage({ params }: Props) {
 
   // Cardápio de modalidades da academia — domínio do seletor de esportes do aluno.
   const orgSports = await getOrgSports(orgId)
+  const vacations = await listStudentVacations(adminClient, params.id, orgId)
 
   // Meta mensal padrão da academia: pré-preenche o campo de meta quando o aluno
   // ainda não tem uma própria (ex.: recém-vinculado a parceiro).
@@ -347,6 +350,10 @@ export default async function StudentProfilePage({ params }: Props) {
           </p>
         </div>
       )}
+
+      {/* Férias: fica FORA do StudentProfileClient de propósito — aquele
+          componente já carrega 20 props, e férias é um assunto fechado em si. */}
+      <VacationPanel mode="admin" studentId={student.id} vacations={vacations} />
 
       {/* Interactive section (level, enrollments, dependents, subscription) */}
       <Card>

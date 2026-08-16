@@ -10,6 +10,7 @@ export type AccessGrant =
 
 export type AccessDenial =
   | 'archived'
+  | 'on_vacation'
   | 'blocked_by_debt'
   | 'blocked_by_missed_checkins'
   | 'quota_exhausted'
@@ -41,6 +42,15 @@ export interface AccessInput {
    * auth user), mas aluno adulto faz.
    */
   archived: boolean
+  /**
+   * O aluno tem férias APROVADAS cobrindo a data da aula.
+   *
+   * Bloqueia logo depois de `archived` e antes de `partner`: férias é ausência
+   * declarada, e nem parceiro nem crédito compram presença de quem avisou que
+   * não vem. Sem isto a geração da grade o pouparia e ele entraria sozinho pelo
+   * app no dia seguinte, contradizendo o próprio pedido dele.
+   */
+  onVacation: boolean
   partner: CheckinPartner | null
   /** status='active' E período vigente (isSubscriptionCurrent). Ver spec §1. */
   hasActivePlan: boolean
@@ -106,6 +116,7 @@ export function resolveClassAccess(input: AccessInput): AccessDecision {
   // Primeiro de todos, e antes mesmo de `partner`: quem saiu da academia não entra em
   // aula por nenhum caminho — nem por parceiro, nem por crédito que ficou guardado.
   if (input.archived) return { denied: 'archived' }
+  if (input.onVacation) return { denied: 'on_vacation' }
   if (input.hasOpenDebt) return { denied: 'blocked_by_debt' }
   if (isMissedCheckinBlocked(input.openMissedCheckins, input.missedCheckinBlockLimit)) {
     return { denied: 'blocked_by_missed_checkins' }

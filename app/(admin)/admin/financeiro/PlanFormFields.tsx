@@ -81,6 +81,21 @@ export function PlanFormFields({ value, onChange }: PlanFormFieldsProps) {
         />
         Cancelamento fora do prazo devolve a aula
       </label>
+      <label className="flex items-start gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={value.rollover_unused}
+          onChange={(e) => onChange({ ...value, rollover_unused: e.target.checked })}
+        />
+        <span>
+          Aula não usada acumula para o ciclo seguinte
+          <span className="block text-xs text-slate-500">
+            Desligado, a conta zera na virada. Vale só para aula do plano — crédito
+            avulso já fica com o aluno até ser usado.
+          </span>
+        </span>
+      </label>
     </div>
   )
 }

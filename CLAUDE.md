@@ -110,6 +110,7 @@ Crons varrem a base inteira: usam `fetchAllPages`, `mapWithConcurrency` ([lib/ut
 | [lib/utils/cn.ts](lib/utils/cn.ts) | `cn(...classes)` — clsx + tailwind-merge |
 | [lib/checkin/selfCheckin.ts](lib/checkin/selfCheckin.ts) | `resolveSelfCheckinStatus()`, `selfCheckinWindow()`, `haversineMeters()` — geofence e janela (1h antes do início → 1h depois do fim) da confirmação de presença pelo aluno |
 | [lib/liga/](lib/liga/) | `divisions.ts` (promoção/rebaixamento), `streak.ts` (semanas seguidas), `points.ts` (pesos), `sportForPoints.ts` (qual esporte a presença credita) e `medals.ts` (catálogo de medalhas) — regras puras da Liga |
+| [lib/aulas/classRules.ts](lib/aulas/classRules.ts) | `buildClassRules()` — **única fonte** das regras que o aluno lê no modal de `/home` (`features/home/RulesCard.tsx` + `RulesModal.tsx`, montado por `features/aulas/classRulesQuery.ts`). Derivado da configuração real da academia, nunca texto fixo — o mesmo motivo do `RulesCard` da Liga. **Regra nova ou alterada no sistema de aulas (cota, teto diário, cancelamento, crédito, férias, acúmulo, check-in, kids) tem de atualizar este arquivo**, senão o modal passa a prometer o que o app não faz mais |
 
 These have Vitest unit tests co-located (`.test.ts` files).
 

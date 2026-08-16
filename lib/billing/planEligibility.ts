@@ -14,6 +14,7 @@ interface PlanRow {
   cycle: 'weekly' | 'monthly'
   max_classes_per_day: number
   refund_on_late_cancel: boolean
+  rollover_unused: boolean
 }
 
 /**
@@ -29,7 +30,7 @@ export async function getActivePlan(
   const { data: sub } = await client
     .from('student_subscriptions')
     .select(
-      'gateway, current_period_end, subscription_plans(classes_per_week, cycle, max_classes_per_day, refund_on_late_cancel)',
+      'gateway, current_period_end, subscription_plans(classes_per_week, cycle, max_classes_per_day, refund_on_late_cancel, rollover_unused)',
     )
     .eq('student_id', studentId)
     .eq('organization_id', orgId)
@@ -56,6 +57,7 @@ export async function getActivePlan(
     cycle: plan.cycle,
     maxClassesPerDay: plan.max_classes_per_day,
     refundOnLateCancel: plan.refund_on_late_cancel,
+    rolloverUnused: plan.rollover_unused ?? false,
   }
 }
 
