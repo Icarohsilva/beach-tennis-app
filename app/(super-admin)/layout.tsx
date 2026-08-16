@@ -31,6 +31,7 @@ export default async function SuperAdminLayout({ children }: { children: React.R
   const items: NavItem[] = [
     { href: '/super-admin', label: 'Visão geral' },
     { href: '/super-admin/academias', label: 'Academias' },
+    { href: '/super-admin/capacidade', label: 'Capacidade' },
     { href: '/super-admin/reembolsos', label: 'Reembolsos', badge: queues.pendingRefunds },
     { href: '/super-admin/exclusoes', label: 'Exclusões', badge: queues.pendingDeletions },
     { href: '/super-admin/feedback', label: 'Feedback', badge: queues.unreadFeedback },

@@ -6,39 +6,15 @@
 // Nota de escala: as contagens por academia são feitas em memória a partir de
 // leituras paginadas, não com um count por org (que seria N+1 de rede). O
 // PostgREST corta em 1000 linhas por request, então toda leitura de volume
-// passa por fetchAllRows, que pagina até acabar.
+// passa por fetchAllPages (lib/supabase/paginate.ts). Todas ordenam por `id`:
+// sem ordem estável entre páginas o Postgres pode repetir ou pular linha.
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/server'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 import type { SubStatus, TenantSnapshot } from '@/lib/superAdmin/metrics'
 import type { SubscriptionEvent } from '@/lib/superAdmin/mrrMovement'
 
-const PAGE_SIZE = 1000
-/** Teto de segurança: 200 páginas = 200k linhas por tabela. */
-const MAX_PAGES = 200
-
 type Admin = ReturnType<typeof createAdminClient>
-
-/**
- * Lê uma tabela inteira em páginas de 1000. `build` recebe a query base já
- * paginada para aplicar select/filtros. Para quando a página vem incompleta.
- */
-async function fetchAllRows<T>(
-  build: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>,
-): Promise<T[]> {
-  const out: T[] = []
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const from = page * PAGE_SIZE
-    const { data, error } = await build(from, from + PAGE_SIZE - 1)
-    if (error) {
-      console.error('[super-admin] leitura paginada falhou', error)
-      break
-    }
-    const rows = (data ?? []) as T[]
-    out.push(...rows)
-    if (rows.length < PAGE_SIZE) break
-  }
-  return out
-}
 
 /** Soma +1 no bucket da org. Ignora linhas órfãs (organization_id nulo). */
 function tally(map: Map<string, number>, orgId: string | null): void {
@@ -63,14 +39,23 @@ const SUB_COLUMNS = 'organization_id, status, trial_ends_at, current_period_end,
  * que parece verdade. Na segunda tentativa a cortesia cai para is_default.
  */
 async function fetchSubscriptions(admin: Admin): Promise<SubRow[]> {
-  const withComped = await fetchAllRows<SubRow>((from, to) =>
-    admin.from('platform_subscriptions').select(`${SUB_COLUMNS}, is_comped`).range(from, to),
-  )
-  if (withComped.length > 0) return withComped
-
-  return fetchAllRows<SubRow>((from, to) =>
-    admin.from('platform_subscriptions').select(SUB_COLUMNS).range(from, to),
-  )
+  try {
+    return await fetchAllPages<SubRow>(
+      (from, to) =>
+        admin
+          .from('platform_subscriptions')
+          .select(`${SUB_COLUMNS}, is_comped`)
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/platform_subscriptions' },
+    )
+  } catch {
+    return fetchAllPages<SubRow>(
+      (from, to) =>
+        admin.from('platform_subscriptions').select(SUB_COLUMNS).order('id').range(from, to),
+      { label: 'super-admin/platform_subscriptions(sem is_comped)' },
+    )
+  }
 }
 
 export interface PlatformQueueCounts {
@@ -109,32 +94,46 @@ export const getPlatformSnapshot = cache(async function getPlatformSnapshot(
     deletions,
     feedback,
   ] = await Promise.all([
-    fetchAllRows<OrgRow>((from, to) =>
-      admin
-        .from('organizations')
-        .select('id, name, slug, city, state, owner_id, status, created_at, onboarding_completed, is_default')
-        .order('created_at', { ascending: false })
-        .range(from, to),
+    fetchAllPages<OrgRow>(
+      (from, to) =>
+        admin
+          .from('organizations')
+          .select('id, name, slug, city, state, owner_id, status, created_at, onboarding_completed, is_default')
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/organizations' },
     ),
     fetchSubscriptions(admin),
-    fetchAllRows<MembershipRow>((from, to) =>
-      admin.from('memberships').select('organization_id, role, contract_active').range(from, to),
+    fetchAllPages<MembershipRow>(
+      (from, to) =>
+        admin
+          .from('memberships')
+          .select('organization_id, role, contract_active')
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/memberships' },
     ),
     // session_date (não created_at): interessa a aula que ACONTECEU na janela.
-    fetchAllRows<SessionRow>((from, to) =>
-      admin
-        .from('class_sessions')
-        .select('organization_id, session_date')
-        .gte('session_date', sinceDate)
-        .neq('status', 'cancelled')
-        .range(from, to),
+    fetchAllPages<SessionRow>(
+      (from, to) =>
+        admin
+          .from('class_sessions')
+          .select('organization_id, session_date')
+          .gte('session_date', sinceDate)
+          .neq('status', 'cancelled')
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/class_sessions' },
     ),
-    fetchAllRows<AttendanceRow>((from, to) =>
-      admin
-        .from('attendance')
-        .select('organization_id, checked_in_at')
-        .gte('checked_in_at', since)
-        .range(from, to),
+    fetchAllPages<AttendanceRow>(
+      (from, to) =>
+        admin
+          .from('attendance')
+          .select('organization_id, checked_in_at')
+          .gte('checked_in_at', since)
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/attendance' },
     ),
     admin
       .from('platform_refund_requests')
@@ -248,13 +247,25 @@ export const getSubscriptionEvents = cache(async function getSubscriptionEvents(
   // estabelece o MRR de PARTIDA de cada conta. Cortar por data faria uma
   // academia que assinou há um ano aparecer com MRR zero no início da série.
   // O volume é uma linha por mudança de assinatura — cresce devagar.
-  const rows = await fetchAllRows<EventRow>((from, to) =>
-    admin
-      .from('platform_subscription_events')
-      .select('organization_id, to_status, mrr_cents, source, occurred_at')
-      .order('occurred_at', { ascending: true })
-      .range(from, to),
-  )
+  // Tolerante de propósito: se a migration 20260807000000 ainda não rodou, a
+  // tabela não existe e o painel mostra "histórico ainda não iniciado" em vez
+  // de quebrar. As demais leituras deixam estourar — ali um erro silencioso
+  // viraria número errado com cara de certo.
+  let rows: EventRow[] = []
+  try {
+    rows = await fetchAllPages<EventRow>(
+      (from, to) =>
+        admin
+          .from('platform_subscription_events')
+          .select('organization_id, to_status, mrr_cents, source, occurred_at')
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/platform_subscription_events' },
+    )
+  } catch (e) {
+    console.error('[super-admin] histórico de assinatura indisponível', e)
+    return []
+  }
 
   return rows.map((r) => ({
     organizationId: r.organization_id,
@@ -295,22 +306,28 @@ export async function getTenantUsageSeries(
   const startIso = windowStart.toISOString()
 
   const [sessions, checkins] = await Promise.all([
-    fetchAllRows<SessionRow>((from, to) =>
-      admin
-        .from('class_sessions')
-        .select('organization_id, session_date')
-        .eq('organization_id', orgId)
-        .gte('session_date', startIso.slice(0, 10))
-        .neq('status', 'cancelled')
-        .range(from, to),
+    fetchAllPages<SessionRow>(
+      (from, to) =>
+        admin
+          .from('class_sessions')
+          .select('organization_id, session_date')
+          .eq('organization_id', orgId)
+          .gte('session_date', startIso.slice(0, 10))
+          .neq('status', 'cancelled')
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/uso-semanal/class_sessions' },
     ),
-    fetchAllRows<AttendanceRow>((from, to) =>
-      admin
-        .from('attendance')
-        .select('organization_id, checked_in_at')
-        .eq('organization_id', orgId)
-        .gte('checked_in_at', startIso)
-        .range(from, to),
+    fetchAllPages<AttendanceRow>(
+      (from, to) =>
+        admin
+          .from('attendance')
+          .select('organization_id, checked_in_at')
+          .eq('organization_id', orgId)
+          .gte('checked_in_at', startIso)
+          .order('id')
+          .range(from, to),
+      { label: 'super-admin/uso-semanal/attendance' },
     ),
   ])
 
@@ -368,7 +385,8 @@ interface SubRow {
   trial_ends_at: string | null
   current_period_end: string | null
   updated_at: string | null
-  is_comped: boolean | null
+  /** Ausente no fallback de quando a coluna ainda não existe no banco. */
+  is_comped?: boolean | null
 }
 
 interface MembershipRow {
