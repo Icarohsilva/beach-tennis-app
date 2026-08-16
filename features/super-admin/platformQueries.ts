@@ -10,6 +10,7 @@
 import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/server'
 import type { SubStatus, TenantSnapshot } from '@/lib/superAdmin/metrics'
+import type { SubscriptionEvent } from '@/lib/superAdmin/mrrMovement'
 
 const PAGE_SIZE = 1000
 /** Teto de segurança: 200 páginas = 200k linhas por tabela. */
@@ -233,6 +234,37 @@ export const getPlatformSnapshot = cache(async function getPlatformSnapshot(
   }
 })
 
+/**
+ * Histórico de assinatura para a série de movimento de MRR. Tolerante: se a
+ * migration 20260807000000 ainda não rodou, devolve lista vazia e o painel
+ * mostra o estado "ainda não há histórico" em vez de quebrar.
+ */
+export const getSubscriptionEvents = cache(async function getSubscriptionEvents(): Promise<
+  SubscriptionEvent[]
+> {
+  const admin = createAdminClient()
+
+  // Sem recorte de data: eventos anteriores à janela do gráfico são o que
+  // estabelece o MRR de PARTIDA de cada conta. Cortar por data faria uma
+  // academia que assinou há um ano aparecer com MRR zero no início da série.
+  // O volume é uma linha por mudança de assinatura — cresce devagar.
+  const rows = await fetchAllRows<EventRow>((from, to) =>
+    admin
+      .from('platform_subscription_events')
+      .select('organization_id, to_status, mrr_cents, source, occurred_at')
+      .order('occurred_at', { ascending: true })
+      .range(from, to),
+  )
+
+  return rows.map((r) => ({
+    organizationId: r.organization_id,
+    toStatus: r.to_status,
+    mrrCents: r.mrr_cents,
+    source: r.source,
+    occurredAt: r.occurred_at,
+  }))
+})
+
 /** Uma academia do retrato — para a página de detalhe reusar a mesma métrica. */
 export async function getTenantSnapshot(orgId: string): Promise<TenantSnapshot | null> {
   const { tenants } = await getPlatformSnapshot()
@@ -353,4 +385,12 @@ interface SessionRow {
 interface AttendanceRow {
   organization_id: string | null
   checked_in_at: string | null
+}
+
+interface EventRow {
+  organization_id: string
+  to_status: string
+  mrr_cents: number
+  source: string
+  occurred_at: string
 }

@@ -5,6 +5,11 @@
 // CROSS-ORG é intencional aqui (é o ponto do painel); seguro porque gateado.
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import {
+  recordSubscriptionEvent,
+  currentSubscriptionState,
+} from '@/lib/billing/subscriptionEvents'
+import type { PlatformStatus } from '@/lib/billing/platformAccess'
 
 // Lê o usuário logado + is_platform_admin. Retorna { userId } ou { error }.
 export async function requirePlatformAdmin(): Promise<{ userId: string } | { error: string }> {
@@ -210,6 +215,16 @@ export async function extendTrial(
     { days, from: sub.trial_ends_at, to: newTrialEndsAt },
     note,
   )
+  // Só vira linha no histórico se o status mudou de fato (ex.: past_due que
+  // volta a trialing). Estender um trial que já era trial não move o MRR.
+  await recordSubscriptionEvent({
+    organizationId: orgId,
+    fromStatus: sub.status as PlatformStatus,
+    toStatus: 'trialing',
+    source: 'platform_admin',
+    actorId: gate.userId,
+    details: { days, to: newTrialEndsAt },
+  })
   revalidateOrg(orgId)
   return { newTrialEndsAt }
 }
@@ -228,6 +243,8 @@ export async function setCompedStatus(
   const gate = await requirePlatformAdmin()
   if ('error' in gate) return { error: gate.error }
   const admin = createAdminClient()
+
+  const before = await currentSubscriptionState(orgId)
 
   const now = new Date()
   const patch = comped
@@ -252,6 +269,17 @@ export async function setCompedStatus(
   if (error) return { error: 'Não foi possível atualizar a cortesia.' }
 
   await recordAudit(gate.userId, orgId, comped ? 'grant_comp' : 'revoke_comp', patch, note)
+  // Conceder cortesia leva a conta a 'active' com MRR zero (isComped) — é assim
+  // que ela ganha acesso sem inflar a receita. Revogar devolve para trial.
+  await recordSubscriptionEvent({
+    organizationId: orgId,
+    fromStatus: before?.status ?? null,
+    toStatus: comped ? 'active' : 'trialing',
+    isComped: comped,
+    source: 'platform_admin',
+    actorId: gate.userId,
+    details: { comped },
+  })
   revalidateOrg(orgId)
   return {}
 }
