@@ -28,6 +28,11 @@ export interface ArenaEvent {
   mine: boolean
   /** Para onde o toque leva. Nulo = o item abre no próprio modal (aula). */
   href: string | null
+  /**
+   * O item foi cancelado pela academia. Continua na agenda, marcado — sumir sem
+   * deixar rastro é o que faz o aluno descobrir na quadra.
+   */
+  cancelled?: boolean
   booked: number | null
   capacity: number | null
 }

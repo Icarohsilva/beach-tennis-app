@@ -27,6 +27,9 @@ export interface SessionRowWithClass {
   id: string
   session_date: string
   class_id: string
+  /** 'scheduled' | 'cancelled' | 'completed'. Cancelada entra na agenda marcada. */
+  status?: string
+  cancelled_reason?: string | null
   start_time?: string | null
   end_time?: string | null
   court?: number | null
@@ -202,6 +205,8 @@ export async function buildAgendaSessions(
   // Confirmação de presença pelo app: só as aulas do próprio aluno interessam.
   const myRefs = rows
     .filter((r) => {
+      // Aula cancelada não tem presença a confirmar.
+      if (r.status === 'cancelled') return false
       if (myBookingBySession.has(r.id)) return true
       // Fixo sem reserva conta, a menos que tenha avisado que não vem — mesma
       // regra de isStudentExpectedInSession, que a action reaplica.
@@ -271,6 +276,8 @@ export async function buildAgendaSessions(
         selfCheckin: selfCheckinViews.get(row.id),
         guardianOptions: guardianOptions.length > 0 ? guardianOptions : undefined,
         rescheduled: hasOverride(row) || undefined,
+        cancelled: row.status === 'cancelled' || undefined,
+        cancelledReason: row.status === 'cancelled' ? (row.cancelled_reason ?? null) : undefined,
         canChoosePayment: canChoosePayment || undefined,
         creditsBalance: input.creditsBalance,
       }

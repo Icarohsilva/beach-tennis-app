@@ -69,4 +69,15 @@ export interface AgendaSession {
    * que combinou e não sabe se é mudança ou engano dele.
    */
   rescheduled?: boolean
+  /**
+   * A academia cancelou esta data.
+   *
+   * A aula continua na agenda, marcada, em vez de desaparecer: notificação se
+   * perde, e sumir sem deixar rastro era o que fazia o aluno descobrir na quadra.
+   * Com isto verdadeiro a ficha não oferece ação nenhuma — entrar, sair, fila e
+   * confirmação de presença somem.
+   */
+  cancelled?: boolean
+  /** Por que foi cancelada, quando a academia informou. */
+  cancelledReason?: string | null
 }

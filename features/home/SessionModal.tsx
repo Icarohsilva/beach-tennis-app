@@ -236,10 +236,16 @@ export function SessionModal({
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
               <CalendarDays className="h-3.5 w-3.5 shrink-0" />
               {isToday ? 'Hoje' : formatDate(session.date, "EEEE, d 'de' MMMM")}
-              {session.rescheduled && (
-                <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
-                  Alterada
+              {session.cancelled ? (
+                <span className="shrink-0 rounded-md border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">
+                  Cancelada
                 </span>
+              ) : (
+                session.rescheduled && (
+                  <span className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+                    Alterada
+                  </span>
+                )
               )}
             </p>
           </div>
@@ -286,9 +292,25 @@ export function SessionModal({
           </div>
         </div>
 
+        {/* Aula cancelada: o aviso vem antes de tudo e nenhuma ação é oferecida.
+            A aula continua na agenda de propósito — sumir sem deixar rastro era
+            o que fazia o aluno descobrir na quadra. */}
+        {session.cancelled && (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
+            <p className="text-sm font-bold text-red-300">Esta aula foi cancelada</p>
+            {session.cancelledReason && (
+              <p className="mt-1 text-xs text-red-200/80">{session.cancelledReason}</p>
+            )}
+            <p className="mt-2 text-xs text-slate-300">
+              Você não levou falta. Quem tinha usado crédito recebeu de volta, e a
+              aula não conta na cota do seu plano.
+            </p>
+          </div>
+        )}
+
         {/* Confirmação de presença: só para quem está na aula, e o próprio
             painel se esconde fora da janela. */}
-        {isIn && session.selfCheckin && (
+        {!session.cancelled && isIn && session.selfCheckin && (
           <SelfCheckinPanel
             sessionId={session.id}
             view={session.selfCheckin}
@@ -362,7 +384,7 @@ export function SessionModal({
         {/* Escolher com o que paga. Só aparece quando as duas formas existem de
             verdade: com uma só, perguntar é ruído. Crédito não gasta a cota do
             plano nem esbarra no teto diário — é aula comprada à parte. */}
-        {session.canChoosePayment && !isIn && !session.kids && (
+        {session.canChoosePayment && !isIn && !session.kids && !session.cancelled && (
           <div className="mt-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Como quer usar esta aula
@@ -390,7 +412,7 @@ export function SessionModal({
 
         {/* Turma kids: quem entra é o dependente. O adulto vê a aula (é a aula do
             filho dele, tem de estar na agenda), mas a ação é por criança. */}
-        {session.kids && (
+        {session.kids && !session.cancelled && (
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Turma kids
@@ -450,7 +472,7 @@ export function SessionModal({
 
         {/* O adulto não entra em turma kids: a ação abaixo é só para as turmas
             dele. Sem este corte a ficha ofereceria um botão que o servidor nega. */}
-        <div className={session.kids ? 'hidden' : 'mt-5'}>
+        <div className={session.kids || session.cancelled ? 'hidden' : 'mt-5'}>
           {isIn ? (
             <div className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-1.5 text-sm font-semibold text-brand-300">

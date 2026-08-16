@@ -18,6 +18,7 @@ import { notifyUsers } from '@/lib/notifications/dispatch'
 import { requireAdmin } from './authGuards'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { cancelFutureBookings } from './cancelBookings'
+import { mapWithConcurrency } from '@/lib/utils/concurrency'
 import {
   countOpenMissedCheckins,
   getMissedCheckinSettings,
@@ -26,6 +27,8 @@ import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 import { checkProfileComplete, revokeLigaExtra, ENTRY_REASONS } from '@/features/liga/extraPoints'
 import { notifyWaitlistSpotOpen } from './waitlistActions'
+import { refundSessionBookings } from './cancelSessionBookings'
+import { expectedStudentIds } from './sessionUtils'
 
 // ---------------------------------------------------------------------------
 // updateStudentLevel
@@ -487,7 +490,7 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
   // para a mensagem da notificação.
   const { data: ownClass } = await adminClient
     .from('classes')
-    .select('id, name')
+    .select('id, name, sport')
     .eq('id', classId)
     .eq('organization_id', orgId)
     .single()
@@ -497,10 +500,11 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
   // os filtros (status='confirmed', is_active=true) que identificam os afetados.
   const { data: futureSessions } = await adminClient
     .from('class_sessions')
-    .select('id')
+    .select('id, session_date')
     .eq('class_id', classId)
     .gte('session_date', today)
-  const sessionIds = (futureSessions ?? []).map((s: { id: string }) => s.id)
+  const futureSessionRows = (futureSessions ?? []) as { id: string; session_date: string }[]
+  const sessionIds = futureSessionRows.map((s) => s.id)
 
   const affectedIds = new Set<string>()
   if (sessionIds.length > 0) {
@@ -526,13 +530,24 @@ export async function deleteClass(classId: string): Promise<{ error?: string }> 
     .gte('session_date', today)
     .neq('status', 'cancelled')
 
-  // Cancel bookings on those future sessions
+  // Encerra as reservas DEVOLVENDO a aula, data por data. Antes isto era um
+  // update em bloco que só virava o status: quem tinha pago a aula com crédito
+  // perdia o crédito, e para quem é de plano a aula seguia contando na cota. A
+  // academia fechava a turma e o aluno pagava a conta — em todas as datas
+  // futuras de uma vez, que é o que torna este o pior dos dois casos.
   if (sessionIds.length > 0) {
-    await adminClient
-      .from('session_bookings')
-      .update({ status: 'cancelled', cancelled_at: now })
-      .in('session_id', sessionIds)
-      .eq('status', 'confirmed')
+    await mapWithConcurrency(
+      futureSessionRows,
+      async (s) => {
+        await refundSessionBookings(adminClient, {
+          sessionId: s.id,
+          orgId,
+          reason: `Turma cancelada pela academia: ${(ownClass as { name: string }).name} (${s.session_date})`,
+          sport: (ownClass as { sport: string | null }).sport ?? null,
+        })
+      },
+      { concurrency: 4 },
+    )
   }
 
   // Cancel all active enrollments
@@ -1326,12 +1341,50 @@ export async function updateSessionOverride(
 }
 
 /**
+ * Quem precisa saber que a data foi REABERTA.
+ *
+ * Os fixos da turma (voltam a ser esperados) mais quem tinha reserva e foi tirado
+ * pelo cancelamento. Este segundo grupo é o que `expectedStudentIds` não pega:
+ * a reserva deles ficou `cancelled`, o que ali significa "avisou que não vem".
+ */
+async function reopenAudience(
+  adminClient: ReturnType<typeof createAdminClient>,
+  input: { orgId: string; sessionId: string; classId: string },
+): Promise<string[]> {
+  const [{ data: bookingsRaw }, { data: enrollRaw }] = await Promise.all([
+    adminClient
+      .from('session_bookings')
+      .select('student_id')
+      .eq('organization_id', input.orgId)
+      .eq('session_id', input.sessionId)
+      .eq('status', 'cancelled'),
+    adminClient
+      .from('enrollments')
+      .select('student_id')
+      .eq('organization_id', input.orgId)
+      .eq('class_id', input.classId)
+      .eq('is_active', true),
+  ])
+
+  return Array.from(
+    new Set([
+      ...((bookingsRaw ?? []) as { student_id: string }[]).map((b) => b.student_id),
+      ...((enrollRaw ?? []) as { student_id: string }[]).map((e) => e.student_id),
+    ]),
+  )
+}
+
+/**
  * Cancela (ou reabre) UMA data.
  *
- * Cancelar a data não mexe nas reservas: a aula não aconteceu, então ninguém
- * levou falta e ninguém perdeu crédito — quem tinha reserva continua com ela e,
- * se a academia reabrir o dia, volta tudo como estava. O que muda é que a sessão
- * sai da agenda do aluno e ninguém mais entra.
+ * Cancelar DEVOLVE a aula: quem pagou com crédito recebe de volta, quem é de
+ * plano fica com a aula isenta da cota, e ninguém leva falta. A academia é quem
+ * desmarcou — fazer o aluno pagar por isso seria o contrário do combinado.
+ *
+ * Reabrir NÃO ressuscita as reservas: o crédito já voltou para a mão do aluno, e
+ * re-debitar poderia falhar (ele pode ter gasto no meio tempo) ou passar por
+ * cima de uma escolha dele. A vaga fica aberta e quem quiser entra de novo — é
+ * o que o aviso de reabertura diz.
  */
 export async function setSessionCancelled(
   sessionId: string,
@@ -1345,7 +1398,7 @@ export async function setSessionCancelled(
 
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, status, session_date, class:classes(name)')
+    .select('id, status, session_date, class_id, class:classes(name, sport)')
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -1356,6 +1409,23 @@ export async function setSessionCancelled(
   if ((session as { status: string }).status === 'completed') {
     return { error: 'Esta aula já foi encerrada. Não dá para cancelar depois da chamada.' }
   }
+
+  const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class
+  const cls = clsRaw as { name: string; sport: string | null } | null
+  const className = cls?.name ?? 'sua aula'
+  const sessionDate = (session as { session_date: string }).session_date
+  const classId = (session as { class_id: string }).class_id
+
+  // Quem avisar tem de ser levantado ANTES de mexer nas reservas: o estorno
+  // cancela as confirmadas, e depois disso elas sumiriam da lista de esperados.
+  //
+  // Ao REABRIR o conjunto é outro: os esperados de agora não incluem quem foi
+  // tirado no cancelamento (a reserva cancelada conta como opt-out). Quem
+  // precisa saber que a vaga voltou é justamente essa gente — mais os fixos da
+  // turma, que voltam a ser esperados sozinhos.
+  const avisar = cancelled
+    ? await expectedStudentIds(adminClient, { orgId, sessionId, classId })
+    : await reopenAudience(adminClient, { orgId, sessionId, classId })
 
   const { error: updateErr } = await adminClient
     .from('class_sessions')
@@ -1368,33 +1438,62 @@ export async function setSessionCancelled(
 
   if (updateErr) return { error: `Erro ao salvar: ${updateErr.message}` }
 
-  // Avisar quem tinha reserva é a razão de o motivo existir: a aula cancelada
-  // some da agenda do aluno (só sessões 'scheduled' aparecem), então sem a
-  // notificação ele descobriria na quadra. Best-effort — a aula já está
-  // cancelada e uma falha de envio não pode desfazer isso.
-  try {
-    const { data: bookedRaw } = await adminClient
-      .from('session_bookings')
-      .select('student_id')
-      .eq('session_id', sessionId)
-      .eq('status', 'confirmed')
+  // Devolve a aula. Falha de estorno é logada lá dentro e não derruba o
+  // cancelamento, que já está gravado.
+  const devolucao = cancelled
+    ? await refundSessionBookings(adminClient, {
+        sessionId,
+        orgId,
+        reason: `Aula cancelada pela academia: ${className} (${sessionDate})`,
+        sport: cls?.sport ?? null,
+      })
+    : null
 
-    const studentIds = ((bookedRaw ?? []) as { student_id: string }[]).map((b) => b.student_id)
-    if (studentIds.length > 0) {
-      const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class
-      const className = (clsRaw as { name: string } | null)?.name ?? 'sua aula'
-      const sessionDate = (session as { session_date: string }).session_date
-      const motivo = reason?.trim()
+  // O aviso é a outra metade do conserto. A aula cancelada continua aparecendo na
+  // agenda com o selo, mas notificação é o que alcança quem não vai abrir o app
+  // antes de sair de casa — por isso vai pelos quatro canais, como a exclusão de
+  // turma. Best-effort: falha de envio não desfaz o cancelamento.
+  try {
+    // Fila de espera junto: quem esperava vaga numa aula que não vai existir
+    // precisa saber tanto quanto quem já estava dentro.
+    const destinatarios = Array.from(
+      new Set([...avisar, ...(devolucao?.waitlistStudentIds ?? [])]),
+    )
+
+    if (destinatarios.length > 0) {
+      const motivo = cancelled ? reason?.trim() : undefined
+      const { data: emailRows } = await adminClient
+        .from('user_emails')
+        .select('id, email')
+        .in('id', destinatarios)
+      const { data: profileRows } = await adminClient
+        .from('profiles')
+        .select('id, phone')
+        .in('id', destinatarios)
+      const emailById = new Map(
+        ((emailRows ?? []) as { id: string; email: string }[]).map((r) => [r.id, r.email]),
+      )
+      const phoneById = new Map(
+        ((profileRows ?? []) as { id: string; phone: string | null }[]).map((r) => [r.id, r.phone]),
+      )
 
       await notifyUsers(adminClient, {
         orgId,
-        recipients: studentIds.map((id) => ({ userId: id })),
+        recipients: destinatarios.map((id) => ({
+          userId: id,
+          email: emailById.get(id) ?? null,
+          phone: phoneById.get(id) ?? null,
+        })),
         type: 'class_cancelled',
         title: cancelled ? 'Aula cancelada' : 'Aula reaberta',
         body: cancelled
-          ? `A aula de ${className} do dia ${sessionDate} foi cancelada.${motivo ? ` Motivo: ${motivo}.` : ''} Você não perdeu crédito nem levou falta.`
-          : `A aula de ${className} do dia ${sessionDate} voltou a acontecer. Sua reserva continua valendo.`,
-        channels: ['inapp', 'push'],
+          ? `A aula de ${className} do dia ${sessionDate} foi cancelada.` +
+            (motivo ? ` Motivo: ${motivo}.` : '') +
+            ' Você não levou falta: quem usou crédito recebeu de volta, e a aula não conta na cota do plano.'
+          : // Dizer que a vaga voltou seria mentira: o crédito foi devolvido e as
+            // reservas não ressuscitam. O aviso convida a entrar de novo.
+            `A aula de ${className} do dia ${sessionDate} voltou a acontecer. Sua reserva anterior não foi restaurada — entre no app para garantir a vaga.`,
+        channels: ['inapp', 'email', 'whatsapp', 'push'],
       })
     }
   } catch (err) {
