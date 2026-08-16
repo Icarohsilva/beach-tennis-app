@@ -6,6 +6,7 @@ import { WhatsAppChat } from './_landing/WhatsAppChat'
 import { Reveal } from './_landing/Reveal'
 import { LiveDemo } from './_landing/LiveDemo'
 import { StickyCta } from './_landing/StickyCta'
+import { QuadraViva } from './_landing/QuadraViva'
 import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { CalendarClock, CreditCard, BadgeCheck, BarChart3, Trophy, MessagesSquare } from 'lucide-react'
 
@@ -61,6 +62,7 @@ export default function LandingPage() {
       {/* HERO */}
       <header className={s.hero}>
         <div className={s.heroBg} />
+        <QuadraViva className={s.heroQuadra} />
         <div className={s.heroNoise} />
         <div className={`${s.wrap} ${s.heroGrid}`}>
           <div>
