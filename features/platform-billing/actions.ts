@@ -5,6 +5,8 @@ import { PLATFORM_PLAN } from '@/lib/billing/platformPlan'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { mpCancelPreapproval } from '@/lib/billing/mpClient'
 import { sendEmail } from '@/lib/notifications/email'
+import { recordSubscriptionEvent } from '@/lib/billing/subscriptionEvents'
+import type { PlatformStatus } from '@/lib/billing/platformAccess'
 
 // Inicia a assinatura da plataforma (Preapproval no MercadoPago). Owner-only.
 // Devolve init_point (URL hospedada do MP) para o client redirecionar. Não tocamos no cartão.
@@ -99,6 +101,14 @@ export async function cancelPlatformSubscription(): Promise<{ error?: string }> 
     .update({ status: 'canceled', updated_at: new Date().toISOString() })
     .eq('organization_id', ctx.organizationId)
   if (error) return { error: 'Erro ao cancelar assinatura.' }
+
+  await recordSubscriptionEvent({
+    organizationId: ctx.organizationId,
+    fromStatus: sub.status as PlatformStatus,
+    toStatus: 'canceled',
+    source: 'owner',
+    actorId: ctx.userId,
+  })
 
   return {}
 }
