@@ -7,9 +7,17 @@ import type { Class } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 
-export default async function EditClassPage({ params }: { params: { sessionId: string } }) {
+// Edita a TURMA recorrente — nome, dia, horário, quadra, lotação — e vale para
+// todas as semanas seguintes. Para mexer numa data só (remarcar a terça,
+// cancelar por chuva) o lugar é a ficha da aula, /admin/grade/[sessionId].
+//
+// Esta página morava em /admin/grade/[sessionId]/editar e recebia um id de
+// TURMA no parâmetro chamado `sessionId`. Duas entidades no mesmo segmento da
+// URL: o calendário do painel montava o link com o id da sessão, batia aqui e
+// caía em 404. O caminho agora diz o que recebe.
+export default async function EditClassPage({ params }: { params: { classId: string } }) {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
-  const classId = params.sessionId
+  const { classId } = params
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
   const { data } = await adminClient.from('classes').select('*').eq('id', classId).eq('organization_id', orgId).single()

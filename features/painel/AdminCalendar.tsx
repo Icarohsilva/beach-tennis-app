@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Pencil,
   Sun,
   Trophy,
   Users,
@@ -422,24 +421,18 @@ function DayRow({ event, onNavigate }: { event: AdminEvent; onNavigate: () => vo
         </div>
       </div>
 
-      <div className="mt-2.5 flex gap-2">
+      {/* Uma ação só. O "Editar" que ficava ao lado levava para a edição da
+          TURMA INTEIRA a partir de uma data — e, pior, montava a URL com o id da
+          sessão, que aquela rota não entende (404). Editar a data, cancelar e
+          reabrir moram na ficha da aula, atrás deste mesmo botão. */}
+      <div className="mt-2.5">
         {event.href && (
           <Link
             href={event.href}
             onClick={onNavigate}
-            className="flex flex-1 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-brand-600/50"
+            className="flex items-center justify-center rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-3 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90"
           >
             {event.kind === 'aula' ? 'Ver aula' : event.kind === 'torneio' ? 'Gerenciar' : 'Abrir day use'}
-          </Link>
-        )}
-        {event.editHref && (
-          <Link
-            href={event.editHref}
-            onClick={onNavigate}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 px-3 py-1.5 text-xs font-bold text-white transition-opacity hover:opacity-90"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Editar
           </Link>
         )}
       </div>

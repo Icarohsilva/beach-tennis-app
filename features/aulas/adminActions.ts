@@ -1213,7 +1213,7 @@ export async function adminSkipEnrollmentDate(
   }
 
   revalidatePath('/admin/grade')
-  revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
+  revalidatePath(`/admin/grade/turma/${session.class_id}/editar`, 'page')
   return creditWarning ? { error: creditWarning } : {}
 }
 
@@ -1245,7 +1245,7 @@ export async function adminUnskipEnrollmentDate(
   if (error) return { error: `Erro ao desfazer: ${error.message}` }
 
   revalidatePath('/admin/grade')
-  if (session) revalidatePath(`/admin/grade/${session.class_id}/editar`, 'page')
+  if (session) revalidatePath(`/admin/grade/turma/${session.class_id}/editar`, 'page')
   return {}
 }
 

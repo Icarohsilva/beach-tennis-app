@@ -199,7 +199,7 @@ export default async function GradePage() {
                         <span className="text-white text-sm font-medium truncate">{c.name}</span>
                         <div className="flex items-center gap-1 shrink-0">
                           {c.type === 'kids' && <Badge variant="kids">KIDS</Badge>}
-                          <Link href={`/admin/grade/${c.id}/editar`} className="text-xs text-slate-400 hover:text-brand-500 ml-1">Editar</Link>
+                          <Link href={`/admin/grade/turma/${c.id}/editar`} className="text-xs text-slate-400 hover:text-brand-500 ml-1">Editar</Link>
                         </div>
                       </div>
                       <p className="text-xs text-slate-400 mb-1">
@@ -228,7 +228,7 @@ export default async function GradePage() {
                       </p>
 
                       <div className="flex items-center justify-between pt-2 border-t border-surface-border">
-                        <Link href={`/admin/grade/${c.id}/editar`} className="text-xs font-semibold text-brand-500 hover:underline">Ver alunos →</Link>
+                        <Link href={`/admin/grade/turma/${c.id}/editar`} className="text-xs font-semibold text-brand-500 hover:underline">Ver alunos →</Link>
                         <DeleteClassButton classId={c.id} className={c.name} />
                       </div>
                     </Card>
