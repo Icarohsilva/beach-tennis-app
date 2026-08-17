@@ -121,6 +121,24 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - `memberships.credits_balance` is a **cached** value — source of truth is the `credit_transactions` table (a coluna saiu de `profiles` em `20260624000100_drop_profiles_per_org_columns.sql`: crédito é por-academia)
 - Liga: `liga_points` é o extrato (verdade) e `liga_standings` é cache de posição, mesmo par ledger→cache do crédito. Escrita **só** pelas RPCs `liga_award_points` / `liga_revoke_points` (atômicas, `security definer`), nunca por update direto
 - `classes` = recurring schedule templates; `class_sessions` = specific dated instances of a class
+- Gerar a grade (`features/aulas/gridGeneration.ts`) tem **duas** metades: cria a
+  sessão que falta (upsert idempotente pelo índice único `class_id,session_date`) e
+  **reabre a que está cancelada**. A segunda existe porque índice não olha `status`,
+  então sessão cancelada era conflito, era pulada, e ficava cancelada para sempre.
+  Consequência que precisa estar clara: **cancelamento dentro da janela gerada não
+  sobrevive à geração seguinte** — feriado marcado com antecedência tem de ser
+  cancelado de novo depois que a grade rodar. Três travas seguram o resto: só toca
+  em `cancelled` (aula `completed` tem chamada feita), só nas turmas **ativas** do
+  escopo (senão "Gerar semana" desfaria `deleteClass`) e só nos pares (turma, data)
+  que a geração produziria.
+- Reabrir devolve a aula aos alunos **fixos** e só a eles, apagando as reservas
+  marcadas com `session_bookings.cancelled_by_session` para
+  `reconcileAllActiveEnrollments` recriá-las — é ele que revalida capacidade,
+  férias, cota e pendência de check-in. Quem pagou com crédito não volta (o crédito
+  já foi estornado; re-debitar pode falhar) e é convidado por notificação. O filtro
+  é `cancelled_by_session`, **nunca** `admin_waived`: essa coluna também marca o
+  aluno que o professor tirou daquela data, e ressuscitá-lo desfaria uma decisão da
+  academia
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment

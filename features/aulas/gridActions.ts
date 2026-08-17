@@ -11,6 +11,8 @@ import { brtToday, addDaysStr, nextDateForDayOfWeek } from '@/lib/utils/gridSche
 interface GridActionResult {
   error?: string
   sessionsCreated?: number
+  /** Aulas que estavam canceladas e voltaram. Aparece na resposta ao admin porque gerar agora pode DESFAZER um cancelamento. */
+  sessionsReopened?: number
   // reservados/aConfirmar/semPlano/semCota ficam em pt-BR de propósito: são o
   // shape direto do texto exibido ao admin, diferente do inglês interno de
   // enrollmentRoster.ts.
@@ -40,29 +42,38 @@ async function getRosterSafe(orgId: string, opts: { dayOfWeek?: number } = {}): 
   }
 }
 
-/** Roster (blindado) + notify (best-effort, gated) + revalidate + shape do retorno — cauda compartilhada pelas duas actions. */
+/**
+ * Roster (blindado) + notify (best-effort, gated) + revalidate + shape do retorno
+ * — cauda compartilhada pelas actions de geração.
+ *
+ * `notifyScope: null` desliga o push de "a grade está no ar". Serve para a
+ * geração de UMA turma: o escopo mais estreito de `notifyGridGenerated` é o dia
+ * inteiro da academia, e anunciar a grade da terça porque uma turma foi gerada
+ * avisaria muita gente sobre nada.
+ */
 async function finishGeneration(
   orgId: string,
-  sessionsCreated: number,
-  quotaSkipped: number,
-  missedCheckinSkipped: number,
+  counts: { sessionsCreated: number; sessionsReopened: number; quotaSkipped: number; missedCheckinSkipped: number },
   rosterOpts: { dayOfWeek?: number },
-  notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number },
+  notifyScope: { kind: 'week' } | { kind: 'day'; dayOfWeek: number } | null,
 ): Promise<GridActionResult> {
   const roster = await getRosterSafe(orgId, rosterOpts)
-  if (sessionsCreated > 0) await notifyGridGenerated(orgId, notifyScope)
+  if (counts.sessionsCreated > 0 && notifyScope) await notifyGridGenerated(orgId, notifyScope)
 
   revalidatePath('/admin/grade')
   // O calendário do painel mostra o "gerei / não gerei" e precisa refletir o
   // botão que o admin acabou de apertar.
   revalidatePath('/admin/dashboard')
+  // Aula reaberta volta para a agenda do aluno.
+  if (counts.sessionsReopened > 0) revalidatePath('/home')
   return {
-    sessionsCreated,
+    sessionsCreated: counts.sessionsCreated,
+    sessionsReopened: counts.sessionsReopened,
     reservados: roster.totals.eligible,
     aConfirmar: roster.totals.pendingConfirmation,
     semPlano: roster.totals.noPlan,
-    semCota: quotaSkipped,
-    comPendenciaCheckin: missedCheckinSkipped,
+    semCota: counts.quotaSkipped,
+    comPendenciaCheckin: counts.missedCheckinSkipped,
   }
 }
 
@@ -80,10 +91,7 @@ export async function generateGridDay(dayOfWeek: number): Promise<GridActionResu
   const r = await generateGrid(orgId, target, target, { dayOfWeek })
   if (r.error) return { error: r.error }
 
-  return finishGeneration(
-    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
-    { dayOfWeek }, { kind: 'day', dayOfWeek },
-  )
+  return finishGeneration(orgId, r, { dayOfWeek }, { kind: 'day', dayOfWeek })
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -108,10 +116,7 @@ export async function generateGridDate(dateISO: string): Promise<GridActionResul
   const r = await generateGrid(orgId, dateISO, dateISO)
   if (r.error) return { error: r.error }
 
-  return finishGeneration(
-    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
-    { dayOfWeek }, { kind: 'day', dayOfWeek },
-  )
+  return finishGeneration(orgId, r, { dayOfWeek }, { kind: 'day', dayOfWeek })
 }
 
 /** Gera a semana toda (7 datas a partir de hoje, todas as turmas). */
@@ -124,8 +129,42 @@ export async function generateGridWeek(): Promise<GridActionResult> {
   const r = await generateGrid(orgId, from, to)
   if (r.error) return { error: r.error }
 
-  return finishGeneration(
-    orgId, r.sessionsCreated, r.quotaSkipped, r.missedCheckinSkipped,
-    {}, { kind: 'week' },
-  )
+  return finishGeneration(orgId, r, {}, { kind: 'week' })
+}
+
+/**
+ * Gera a próxima aula de UMA turma — não o dia inteiro da academia.
+ *
+ * É o botão ao lado de "Excluir turma": o admin aponta para aquela turma e quer
+ * só ela. `generateGridDay` geraria todas as turmas daquele dia da semana, o que
+ * é mais do que ele pediu e dispara o push de grade para a academia inteira.
+ *
+ * Também é o caminho de volta de uma aula cancelada: como a geração agora reabre
+ * o que estava cancelado, este botão traz a aula (e os alunos fixos) de volta na
+ * hora, sem esperar a passada automática, que só roda uma vez por semana e só
+ * alcança os próximos 7 dias.
+ */
+export async function generateGridClass(classId: string): Promise<GridActionResult> {
+  const { orgId, error } = await requireAdmin()
+  if (error) return { error }
+
+  // O classId vem do cliente: confere posse antes de gerar, como deleteClass.
+  const { data: cls } = await createAdminClient()
+    .from('classes')
+    .select('id, day_of_week, is_active')
+    .eq('id', classId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  const turma = cls as { day_of_week: number; is_active: boolean } | null
+  if (!turma) return { error: 'Turma não encontrada.' }
+  // Turma excluída tem as aulas futuras canceladas de propósito. Gerar aqui
+  // seria desfazer a exclusão pela porta dos fundos.
+  if (!turma.is_active) return { error: 'Esta turma foi excluída. Crie a turma de novo para voltar a gerar aulas.' }
+
+  const target = nextDateForDayOfWeek(brtToday(new Date()), turma.day_of_week)
+  const r = await generateGrid(orgId, target, target, { classId })
+  if (r.error) return { error: r.error }
+
+  return finishGeneration(orgId, r, { dayOfWeek: turma.day_of_week }, null)
 }

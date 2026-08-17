@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
 
     let orgsProcessed = 0
     let sessionsCreated = 0
+    let sessionsReopened = 0
     let failed = 0
     let skipped = 0
 
@@ -88,6 +89,10 @@ export async function GET(req: NextRequest) {
           continue
         }
         sessionsCreated += r.sessionsCreated
+        // Aula que estava cancelada e voltou. Vai no corpo da resposta porque é
+        // a métrica que explica reclamação de aluno ("a aula tinha sido
+        // cancelada e voltou") sem precisar abrir o banco.
+        sessionsReopened += r.sessionsReopened
         orgsProcessed++
 
         // Marca d'água: grava DEPOIS de gerar, para o catch-up funcionar.
@@ -120,7 +125,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ orgs: byOrg.size, orgsProcessed, sessionsCreated, failed, skipped })
+    return NextResponse.json({ orgs: byOrg.size, orgsProcessed, sessionsCreated, sessionsReopened, failed, skipped })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'weekly-grid-generation' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })

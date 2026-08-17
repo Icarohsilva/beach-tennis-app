@@ -171,8 +171,13 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
   const dates: string[] = []
   for (let d = from; d <= to; d = nextDay(d)) dates.push(d)
 
+  // Sessão CANCELADA não conta como gerada: a geração hoje a reabre, então a
+  // data ainda tem trabalho pendente e o botão "Gerar aulas deste dia" precisa
+  // aparecer. Antes ela contava, e o calendário dizia "nada a fazer" justamente
+  // na data que o admin queria reconstruir.
   const byDate = new Map<string, Set<string>>()
   for (const s of sessions) {
+    if (s.status === 'cancelled') continue
     const set = byDate.get(s.session_date) ?? new Set<string>()
     set.add(s.class_id)
     byDate.set(s.session_date, set)
