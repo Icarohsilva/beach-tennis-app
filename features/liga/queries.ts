@@ -1,7 +1,10 @@
 // features/liga/queries.ts
 // Leituras da Liga para a tela do aluno. Tudo escopado por organization_id.
 import { createAdminClient } from '@/lib/supabase/server'
-import { promoteLimit, type DivisionCuts } from '@/lib/liga/divisions'
+import { DIVISION_ORDER, promoteLimit, type DivisionCuts } from '@/lib/liga/divisions'
+import { missingProfileFields } from '@/lib/liga/profileComplete'
+import { readProfileFields } from './extraPoints'
+import { getLigaSettings } from './settings'
 import type {
   LigaDivision,
   LigaMedal,
@@ -324,4 +327,180 @@ export async function getLigaPrizeView(
     prizes: (prizes ?? []) as LigaPrize[],
     myAwards: (awards ?? []) as LigaPrizeAward[],
   }
+}
+
+export interface SeasonHistoryRow {
+  seasonId: string
+  startsOn: string
+  endsOn: string
+  /** Onde o aluno terminou. null = ele não pontuou naquela temporada. */
+  me: { division: LigaDivision; position: number; points: number } | null
+  /** Campeão da temporada naquele esporte. null = ninguém pontuou. */
+  champion: { name: string; division: LigaDivision; points: number } | null
+}
+
+/**
+ * Temporadas já fechadas, das mais recentes para as mais antigas.
+ *
+ * Não existe tabela de histórico: `liga_standings` é escopado por `season_id` e o
+ * fechamento não apaga as linhas da temporada que fechou — cria linhas novas para a
+ * temporada nova. O passado já está gravado; isto aqui só o lê.
+ *
+ * "Campeão da temporada" é o 1º da **divisão mais alta que teve alguém com ponto**, e não
+ * o maior número de pontos da academia: o Bronze costuma ter mais gente e mais volume, e
+ * premiar volume em vez de patamar inverteria o sentido da escada.
+ */
+export async function getSeasonHistory(
+  orgId: string,
+  studentId: string | null,
+  sport: string,
+  limit = 6,
+): Promise<SeasonHistoryRow[]> {
+  const admin = createAdminClient()
+
+  const { data: seasonRows } = await admin
+    .from('liga_seasons')
+    .select('id, starts_on, ends_on')
+    .eq('organization_id', orgId)
+    .eq('status', 'closed')
+    .order('starts_on', { ascending: false })
+    .limit(limit)
+
+  const seasons = (seasonRows ?? []) as { id: string; starts_on: string; ends_on: string }[]
+  if (seasons.length === 0) return []
+
+  // Uma query para todas as temporadas da janela, não uma por temporada. O teto é
+  // natural (6 temporadas × alunos da academia), então não precisa de fetchAllPages.
+  const { data: standingRows } = await admin
+    .from('liga_standings')
+    .select('season_id, student_id, division, points')
+    .eq('sport', sport)
+    .in(
+      'season_id',
+      seasons.map((s) => s.id),
+    )
+
+  const rows = (standingRows ?? []) as {
+    season_id: string
+    student_id: string
+    division: LigaDivision
+    points: number
+  }[]
+
+  const bySeason = new Map<string, typeof rows>()
+  for (const r of rows) {
+    const list = bySeason.get(r.season_id) ?? []
+    list.push(r)
+    bySeason.set(r.season_id, list)
+  }
+
+  // Nomes dos campeões: resolvidos de uma vez, depois de saber quem são.
+  const championIds = new Set<string>()
+  const championBySeason = new Map<string, { studentId: string; division: LigaDivision; points: number }>()
+  for (const season of seasons) {
+    const lista = (bySeason.get(season.id) ?? []).filter((r) => r.points > 0)
+    if (lista.length === 0) continue
+    const topDivision = lista
+      .map((r) => r.division)
+      .sort((a, b) => DIVISION_ORDER.indexOf(b) - DIVISION_ORDER.indexOf(a))[0]
+    const champ = lista
+      .filter((r) => r.division === topDivision)
+      .sort((a, b) => b.points - a.points || a.student_id.localeCompare(b.student_id))[0]
+    if (!champ) continue
+    championIds.add(champ.student_id)
+    championBySeason.set(season.id, {
+      studentId: champ.student_id,
+      division: champ.division,
+      points: champ.points,
+    })
+  }
+
+  const ids = Array.from(championIds)
+  const { data: profiles } =
+    ids.length > 0
+      ? await admin.from('profiles').select('id, full_name').in('id', ids)
+      : { data: [] as { id: string; full_name: string }[] }
+  const nameById = new Map(
+    ((profiles ?? []) as { id: string; full_name: string }[]).map((p) => [p.id, p.full_name]),
+  )
+
+  return seasons.map((season) => {
+    const lista = bySeason.get(season.id) ?? []
+    const mine = studentId ? lista.find((r) => r.student_id === studentId) : undefined
+
+    // Posição dentro da divisão dele, que é a disputa que ele jogou — mesma ordenação
+    // (e mesmo desempate) do ranking ao vivo.
+    let me: SeasonHistoryRow['me'] = null
+    if (mine) {
+      const naDivisao = lista
+        .filter((r) => r.division === mine.division)
+        .sort((a, b) => b.points - a.points || a.student_id.localeCompare(b.student_id))
+      me = {
+        division: mine.division,
+        position: naDivisao.findIndex((r) => r.student_id === mine.student_id) + 1,
+        points: mine.points,
+      }
+    }
+
+    const champ = championBySeason.get(season.id)
+    return {
+      seasonId: season.id,
+      startsOn: season.starts_on,
+      endsOn: season.ends_on,
+      me,
+      champion: champ
+        ? {
+            name: nameById.get(champ.studentId) ?? 'Aluno',
+            division: champ.division,
+            points: champ.points,
+          }
+        : null,
+    }
+  })
+}
+
+export interface ProfileBonusStatus {
+  /** Quanto vale o bônus nesta academia. */
+  points: number
+  /** Campos que ainda faltam, já em rótulo de tela. Vazio = completo. */
+  missing: string[]
+}
+
+/**
+ * O que falta no cadastro do aluno para o bônus único da Liga.
+ *
+ * Devolve null quando não há nada a dizer: Liga desligada, fonte zerada pela academia,
+ * bônus já recebido ou cadastro já completo. A tela não decide isso — se decidisse,
+ * mostraria uma cobrança a quem já ganhou o ponto.
+ *
+ * A régua vem de `missingProfileFields`, a MESMA que `checkProfileComplete` usa para
+ * conceder. É esse compartilhamento que impede a tela de pedir um campo que o motor não
+ * exige (ou pior, calar sobre um que ele exige — o defeito que originou este bloco).
+ */
+export async function getProfileBonusStatus(
+  orgId: string | null,
+  studentId: string,
+): Promise<ProfileBonusStatus | null> {
+  if (!orgId) return null
+
+  const settings = await getLigaSettings(orgId)
+  if (!settings.enabled) return null
+
+  const points = settings.weights.profileComplete
+  if (!points || points <= 0) return null
+
+  const admin = createAdminClient()
+
+  const { count } = await admin
+    .from('liga_points')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('student_id', studentId)
+    .eq('reason', 'profile_complete')
+  if ((count ?? 0) > 0) return null
+
+  const missing = missingProfileFields(await readProfileFields(admin, orgId, studentId))
+  if (missing.length === 0) return null
+
+  return { points, missing }
 }
