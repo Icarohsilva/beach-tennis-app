@@ -139,11 +139,18 @@
 }
 .navInner {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: 8px;
   align-items: center;
   justify-content: space-between;
-  height: 68px;
+  min-height: 68px;
+  padding: 10px 0;
 }
 .logo {
+  /* Sem isto, o encolhimento padrão do flex empurrava "ArenaHub" (um bloco de
+     texto sem espaço, então indivisível) para um espaço menor que o conteúdo
+     — o texto vazava por cima do botão "Entrar" em vez de quebrar linha. */
+  flex-shrink: 0;
   font-weight: 800;
   font-size: 19px;
   display: flex;
@@ -167,8 +174,14 @@
 
 .navcta {
   display: flex;
+  flex-shrink: 0;
   gap: 10px;
   align-items: center;
+  /* Quando a linha não cabe mais, .navInner quebra este grupo para a segunda
+     linha (flex-wrap); margin-left:auto o mantém alinhado à direita nessa
+     linha, em vez de colar do lado esquerdo (default de space-between com um
+     item só por linha). */
+  margin-left: auto;
 }
 .iconBtn {
   display: inline-flex;
@@ -192,8 +205,13 @@
 @media (max-width: 780px) {
   .navlinks { display: none; }
 }
+/* Esconde só o ícone do Instagram para abrir espaço no nav — ele é decorativo
+   aqui e tem link duplicado no rodapé (footerSocials). "Entrar" e "Criar
+   grátis" continuam visíveis em qualquer largura: antes disso, "Entrar" era o
+   que sumia (.navHideMobile) e a landing ficava sem nenhum caminho para
+   /login em qualquer celular. */
 @media (max-width: 500px) {
-  .navcta .navHideMobile { display: none; }
+  .navcta .iconBtn { display: none; }
 }
 
 /* ============================================================
