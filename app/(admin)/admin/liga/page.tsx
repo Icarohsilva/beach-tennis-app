@@ -17,6 +17,7 @@ import { PrizesCard } from './PrizesCard'
 import { OverviewCards } from './OverviewCards'
 import { getSeasonPrizes, getSeasonAwards } from '@/features/liga/prizes'
 import { getOrgLigaOverview } from '@/features/liga/orgOverview'
+import { getSeasonHistory } from '@/features/liga/queries'
 import type { LigaDivision } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -112,6 +113,20 @@ export default async function AdminLigaPage() {
     bySport.set(row.sport, list)
   }
 
+  // Campeões das temporadas já fechadas. Sem isto o passado da academia sumia junto
+  // com a virada do mês: quem ganhou agosto não ficava registrado em lugar nenhum.
+  // `studentId: null` porque aqui não há "eu" — é a memória da academia.
+  const sportsParaHistorico =
+    orgSports.length > 0 ? orgSports : Array.from(bySport.keys())
+  const historico = (
+    await Promise.all(
+      sportsParaHistorico.map(async (sport) => ({
+        sport,
+        rows: await getSeasonHistory(orgId, null, sport),
+      })),
+    )
+  ).filter((h) => h.rows.some((r) => r.champion))
+
   return (
     <div className="space-y-8 max-w-lg">
       <div>
@@ -177,6 +192,44 @@ export default async function AdminLigaPage() {
             </ul>
           </Card>
         ))
+      )}
+
+      {historico.length > 0 && (
+        <>
+          <div>
+            <h2 className="text-lg font-bold text-white">Campeões</h2>
+            <p className="text-slate-400 text-sm mt-1">
+              Quem fechou cada temporada em 1º na divisão mais alta que teve disputa.
+            </p>
+          </div>
+          {historico.map(({ sport, rows }) => (
+            <Card key={`hist-${sport}`}>
+              <p className="text-xs text-slate-400 tracking-wide mb-3">
+                {sportLabel(sport).toUpperCase()}
+              </p>
+              <ul className="space-y-1.5">
+                {rows
+                  .filter((r) => r.champion)
+                  .map((r) => (
+                    <li key={r.seasonId} className="flex items-center gap-2 text-sm">
+                      <span className="w-24 shrink-0 text-xs text-slate-400">
+                        {formatDate(r.startsOn)}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-slate-200">
+                        🏆 {r.champion!.name}
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-500">
+                        {DIVISION_LABEL[r.champion!.division]}
+                      </span>
+                      <span className="w-10 shrink-0 text-right text-xs font-medium text-brand-500">
+                        {r.champion!.points}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </Card>
+          ))}
+        </>
       )}
     </div>
   )

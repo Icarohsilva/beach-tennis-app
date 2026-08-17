@@ -18,6 +18,8 @@ import { VacationPanel } from '@/features/aulas/VacationPanel'
 import { listStudentVacations } from '@/features/aulas/vacationQueries'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { NotificationToggle } from '@/features/perfil/NotificationToggle'
+import { ProfileBonusCard } from '@/features/perfil/ProfileBonusCard'
+import { getProfileBonusStatus } from '@/features/liga/queries'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { getStudentFrequency } from '@/features/relatorios/query'
@@ -57,6 +59,10 @@ export default async function PerfilPage() {
     : null
 
   const vacations = orgId ? await listStudentVacations(adminClient, user.id, orgId) : []
+
+  // O que falta para o bônus único da Liga. null quando não há o que cobrar — Liga
+  // desligada, fonte zerada, bônus já recebido ou cadastro já completo.
+  const profileBonus = await getProfileBonusStatus(orgId, user.id)
 
   // Fetch dependents (only for non-dependent guardians). Os dependentes têm
   // membership na MESMA academia ativa — filtra por organization_id.
@@ -191,6 +197,9 @@ export default async function PerfilPage() {
           <p className="text-slate-400 text-sm mt-0.5">{profile.full_name}</p>
         )}
       </div>
+
+      {/* Antes dos formulários, porque é o que explica por que preenchê-los. */}
+      <ProfileBonusCard status={profileBonus} />
 
       {/* Dados pessoais */}
       <section>

@@ -12,6 +12,7 @@ import { firstDemotedPosition, promoteLimit } from '@/lib/liga/divisions'
 import { getOrCreateActiveSeason } from '@/features/liga/season'
 import {
   getLigaView,
+  getSeasonHistory,
   getStudentLigaSports,
   getStudentMedals,
   getRecentKudos,
@@ -33,6 +34,7 @@ import { LigaHero } from '@/features/liga/LigaHero'
 import { Reveal } from '@/components/ui/Reveal'
 import { StreakCard } from '@/features/liga/StreakCard'
 import { DivisionRanking } from '@/features/liga/DivisionRanking'
+import { SeasonHistory } from '@/features/liga/SeasonHistory'
 import { PointsLedger } from '@/features/liga/PointsLedger'
 import { SportTabs } from '@/features/liga/SportTabs'
 import { VideoBlock } from './VideoBlock'
@@ -128,21 +130,23 @@ export default async function LigaPage({
     ? (searchParams.esporte as string)
     : sports[0]
 
-  const [view, medals, kudos, peers, feed, photos, prizeView, membershipRow] = await Promise.all([
-    getLigaView(orgId, user.id, season, activeSport, settings.cuts),
-    getStudentMedals(orgId, user.id),
-    getRecentKudos(orgId, user.id),
-    getKudosPeers(season.id, activeSport, user.id),
-    getFeedData(orgId, user.id),
-    getRecentOrgPhotos(orgId),
-    getLigaPrizeView(orgId, user.id, season.id),
-    createAdminClient()
-      .from('memberships')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', orgId)
-      .maybeSingle(),
-  ])
+  const [view, history, medals, kudos, peers, feed, photos, prizeView, membershipRow] =
+    await Promise.all([
+      getLigaView(orgId, user.id, season, activeSport, settings.cuts),
+      getSeasonHistory(orgId, user.id, activeSport),
+      getStudentMedals(orgId, user.id),
+      getRecentKudos(orgId, user.id),
+      getKudosPeers(season.id, activeSport, user.id),
+      getFeedData(orgId, user.id),
+      getRecentOrgPhotos(orgId),
+      getLigaPrizeView(orgId, user.id, season.id),
+      createAdminClient()
+        .from('memberships')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('organization_id', orgId)
+        .maybeSingle(),
+    ])
 
   // Só admin fixa post no mural. O papel é por-academia, então vem da membership.
   const isAdmin = (membershipRow.data as { role: string } | null)?.role === 'admin'
@@ -206,9 +210,12 @@ export default async function LigaPage({
               />
             </Reveal>
             <Reveal step={5}>
-              <MedalsCard medals={medals} sport={activeSport} />
+              <SeasonHistory rows={history} />
             </Reveal>
             <Reveal step={6}>
+              <MedalsCard medals={medals} sport={activeSport} />
+            </Reveal>
+            <Reveal step={7}>
               <KudosCard
                 peers={peers}
                 recent={kudos}
@@ -216,10 +223,10 @@ export default async function LigaPage({
                 weeklyCap={settings.kudosWeeklyCap}
               />
             </Reveal>
-            <Reveal step={7}>
+            <Reveal step={8}>
               <PhotoGallery photos={photos} title="FOTOS DOS TORNEIOS" />
             </Reveal>
-            <Reveal step={8}>
+            <Reveal step={9}>
               <ComunidadeSection
                 currentUserId={user.id}
                 activeOrgId={orgId}
@@ -230,11 +237,11 @@ export default async function LigaPage({
             </Reveal>
           </>
         )}
-        <Reveal step={9}>
+        <Reveal step={10}>
           <VideoBlock videoFeedUrl={videoFeedUrl} />
         </Reveal>
         {view && (
-          <Reveal step={10}>
+          <Reveal step={11}>
             <PointsLedger entries={view.ledger} />
           </Reveal>
         )}

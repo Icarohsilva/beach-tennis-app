@@ -6,6 +6,7 @@
 // A Liga falhando não pode impedir um aluno de cancelar uma aula.
 import { createAdminClient } from '@/lib/supabase/server'
 import { getOrgSports } from '@/lib/arenas/orgSports'
+import { isProfileComplete, type ProfileFieldsInput } from '@/lib/liga/profileComplete'
 import type { LigaWeights } from '@/lib/liga/points'
 import type { LigaPointReason } from '@/types'
 import { getLigaSettings } from './settings'
@@ -199,16 +200,54 @@ export async function awardProfileCompleteOnce(
 }
 
 /**
+ * Lê do banco o que a régua do cadastro completo precisa.
+ *
+ * Separada de `checkProfileComplete` porque a MESMA leitura alimenta a tela que diz ao
+ * aluno o que falta (`getProfileBonusStatus`). A régua em si mora em
+ * `lib/liga/profileComplete.ts`, pura — aqui só há I/O.
+ */
+export async function readProfileFields(
+  admin: AdminClient,
+  orgId: string,
+  studentId: string,
+): Promise<ProfileFieldsInput> {
+  const [{ data: profile }, { data: medical }, { data: membership }, orgSports] =
+    await Promise.all([
+      admin.from('profiles').select('phone').eq('id', studentId).maybeSingle(),
+      admin
+        .from('medical_profiles')
+        .select('emergency_name, emergency_phone')
+        .eq('profile_id', studentId)
+        .maybeSingle(),
+      admin
+        .from('memberships')
+        .select('sports')
+        .eq('organization_id', orgId)
+        .eq('user_id', studentId)
+        .maybeSingle(),
+      getOrgSports(orgId),
+    ])
+
+  const emergencia = medical as {
+    emergency_name: string | null
+    emergency_phone: string | null
+  } | null
+
+  return {
+    phone: (profile as { phone: string | null } | null)?.phone ?? null,
+    emergencyName: emergencia?.emergency_name ?? null,
+    emergencyPhone: emergencia?.emergency_phone ?? null,
+    declaredSports: (membership as { sports: string[] } | null)?.sports ?? [],
+    orgSportsCount: orgSports.length,
+  }
+}
+
+/**
  * Confere se o cadastro está completo e, se estiver, credita o bônus único.
  *
- * "Completo" é o mínimo que a academia precisa para operar: telefone para chamar e
- * contato de emergência para o caso de acidente na quadra. Nada de exigir foto ou
- * endereço, que a academia não usa — a régua tem que ser o que dói na operação.
- *
- * A modalidade é exigida só onde ela é uma escolha de verdade. Numa academia que
- * oferece uma modalidade só, pedir que o aluno a declare é burocracia: não há o que
- * escolher, e o ponto ia para esse mesmo esporte de qualquer jeito. Exigir isso fazia
- * quem preencheu tudo o que a tela pede ficar sem o bônus, sem entender por quê.
+ * A régua vem de `isProfileComplete` e não é reescrita aqui: a tela do Perfil que lista
+ * o que falta usa a mesma função, e duas cópias divergiriam — o app prometeria um ponto
+ * que o motor não paga.
  */
 export async function checkProfileComplete(
   admin: AdminClient,
@@ -216,35 +255,8 @@ export async function checkProfileComplete(
   studentId: string,
 ): Promise<void> {
   try {
-    const [{ data: profile }, { data: medical }, { data: membership }, orgSports] =
-      await Promise.all([
-        admin.from('profiles').select('phone').eq('id', studentId).maybeSingle(),
-        admin
-          .from('medical_profiles')
-          .select('emergency_name, emergency_phone')
-          .eq('profile_id', studentId)
-          .maybeSingle(),
-        admin
-          .from('memberships')
-          .select('sports')
-          .eq('organization_id', orgId)
-          .eq('user_id', studentId)
-          .maybeSingle(),
-        getOrgSports(orgId),
-      ])
-
-    const temTelefone = !!(profile as { phone: string | null } | null)?.phone?.trim()
-    const emergencia = medical as {
-      emergency_name: string | null
-      emergency_phone: string | null
-    } | null
-    const temEmergencia =
-      !!emergencia?.emergency_name?.trim() && !!emergencia?.emergency_phone?.trim()
-
-    const declarou = ((membership as { sports: string[] } | null)?.sports ?? []).length > 0
-    const temEsporte = declarou || orgSports.length === 1
-
-    if (!temTelefone || !temEmergencia || !temEsporte) return
+    const campos = await readProfileFields(admin, orgId, studentId)
+    if (!isProfileComplete(campos)) return
 
     await awardProfileCompleteOnce(admin, orgId, studentId)
   } catch (err) {
