@@ -39,6 +39,15 @@ describe('buildClassRules — o que sempre aparece', () => {
     )
   })
 
+  // A reabertura tem dois desfechos diferentes e o aluno precisa saber qual é o
+  // dele: o fixo não faz nada, o de crédito tem de entrar de novo.
+  it('explica que aula cancelada pode voltar, e para quem a vaga volta sozinha', () => {
+    const t = texto(BASE)
+    expect(t).toContain('Aula cancelada pode voltar')
+    expect(t).toContain('turma fixa recebe a vaga de volta')
+    expect(t).toContain('precisa entrar de novo')
+  })
+
   it('nenhuma seção sai vazia', () => {
     for (const s of buildClassRules(BASE)) {
       expect(s.items.length).toBeGreaterThan(0)

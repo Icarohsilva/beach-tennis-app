@@ -53,9 +53,13 @@ export interface DayGeneration {
 /**
  * O retrato de geração de cada data de uma janela.
  *
- * `sessionClassIdsByDate` vem do banco: para cada data, os `class_id` que já
- * têm sessão (inclusive cancelada — sessão cancelada FOI gerada, e gerar de
- * novo não a ressuscita).
+ * `sessionClassIdsByDate` vem do banco: para cada data, os `class_id` que já têm
+ * sessão **ativa** (`scheduled` ou `completed`).
+ *
+ * Cancelada fica de fora de propósito, e isso mudou: a geração hoje reabre a
+ * sessão cancelada (`generateGrid` → `reopenCancelledSessions`), então aquela
+ * data ainda tem trabalho a fazer. Contá-la como gerada apagava o botão de gerar
+ * exatamente na data que o admin queria reconstruir.
  */
 export function summarizeGeneration(
   classes: ActiveClass[],

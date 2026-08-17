@@ -75,16 +75,14 @@ describe('summarizeGeneration', () => {
     expect(s.get('2026-08-03')).toEqual({ expected: 2, generated: 0, pending: 0 })
   })
 
-  it('sessão cancelada conta como gerada', () => {
-    // Cancelada FOI gerada; apertar "gerar" de novo não a ressuscita, então
-    // acusar pendência mandaria o admin apertar um botão que não faz nada.
-    const s = summarizeGeneration(
-      TURMAS,
-      new Map([['2026-08-11', new Set(['ter-19'])]]),
-      ['2026-08-11'],
-      HOJE,
-    )
-    expect(s.get('2026-08-11')?.pending).toBe(0)
+  it('sessão cancelada acusa pendência — gerar de novo a reabre', () => {
+    // O contrato com o chamador (adminMonthQuery): o mapa traz só sessão ATIVA.
+    // Uma data cuja única sessão está cancelada chega aqui como não-gerada, e
+    // tem de acusar pendência, porque hoje a geração reabre o que foi cancelado.
+    // Enquanto ela contava como gerada, o calendário escondia o botão justamente
+    // na data que o admin queria reconstruir.
+    const s = summarizeGeneration(TURMAS, new Map(), ['2026-08-11'], HOJE)
+    expect(s.get('2026-08-11')?.pending).toBe(1)
   })
 
   it('janela vazia devolve mapa vazio', () => {

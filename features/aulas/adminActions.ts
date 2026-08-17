@@ -28,6 +28,8 @@ import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 import { checkProfileComplete, revokeLigaExtra, ENTRY_REASONS } from '@/features/liga/extraPoints'
 import { notifyWaitlistSpotOpen } from './waitlistActions'
 import { refundSessionBookings } from './cancelSessionBookings'
+import { restoreSessionBookings } from './reopenSessionBookings'
+import { reconcileAllActiveEnrollments } from './creditReconciliation'
 import { getApprovedVacations } from './vacationQueries'
 import { isOnVacation } from '@/lib/aulas/vacation'
 import { expectedStudentIds } from './sessionUtils'
@@ -1396,10 +1398,18 @@ async function reopenAudience(
  * plano fica com a aula isenta da cota, e ninguém leva falta. A academia é quem
  * desmarcou — fazer o aluno pagar por isso seria o contrário do combinado.
  *
- * Reabrir NÃO ressuscita as reservas: o crédito já voltou para a mão do aluno, e
- * re-debitar poderia falhar (ele pode ter gasto no meio tempo) ou passar por
- * cima de uma escolha dele. A vaga fica aberta e quem quiser entra de novo — é
- * o que o aviso de reabertura diz.
+ * Reabrir devolve a aula aos alunos FIXOS e só a eles. A reserva do fixo era
+ * isenta (nenhum crédito debitado), então recolocá-lo não custa nada a ninguém —
+ * e deixar a turma reabrir vazia fazia o aluno perder a vaga que era dele por
+ * causa de um cancelamento da academia.
+ *
+ * Quem pagou avulso com crédito NÃO volta: o crédito já está de volta na mão
+ * dele, e re-debitar poderia falhar (pode ter gasto no meio tempo) ou passar por
+ * cima de uma escolha dele. A vaga fica aberta e ele é convidado a entrar de
+ * novo — é o que o aviso de reabertura diz para esse grupo.
+ *
+ * Quem o professor tirou daquela data continua fora: `restoreSessionBookings`
+ * filtra por `cancelled_by_session`, não por `admin_waived`.
  */
 export async function setSessionCancelled(
   sessionId: string,
@@ -1464,27 +1474,70 @@ export async function setSessionCancelled(
       })
     : null
 
+  // Reabertura: libera as reservas que o cancelamento derrubou e deixa a
+  // reconciliação recriar as dos fixos — ela é quem revalida capacidade, férias,
+  // cota e pendência de check-in. Mesma sequência da geração da grade, para o
+  // botão "Reabrir" e o "Gerar aula" não terem semânticas diferentes.
+  let restauracao: { restoredStudentIds: string[]; creditStudentIds: string[] } | null = null
+  if (!cancelled) {
+    restauracao = await restoreSessionBookings(adminClient, { sessionIds: [sessionId], orgId })
+    if (restauracao.restoredStudentIds.length > 0) {
+      await reconcileAllActiveEnrollments(sessionDate, sessionDate, orgId)
+    }
+  }
+
   // O aviso é a outra metade do conserto. A aula cancelada continua aparecendo na
   // agenda com o selo, mas notificação é o que alcança quem não vai abrir o app
   // antes de sair de casa — por isso vai pelos quatro canais, como a exclusão de
   // turma. Best-effort: falha de envio não desfaz o cancelamento.
   try {
-    // Fila de espera junto: quem esperava vaga numa aula que não vai existir
-    // precisa saber tanto quanto quem já estava dentro.
-    const destinatarios = Array.from(
-      new Set([...avisar, ...(devolucao?.waitlistStudentIds ?? [])]),
-    )
+    const motivo = cancelled ? reason?.trim() : undefined
 
-    if (destinatarios.length > 0) {
-      const motivo = cancelled ? reason?.trim() : undefined
+    // A reabertura tem DOIS públicos, e mandar um texto só faria o aviso mentir
+    // para metade deles: quem é fixo já está de volta na aula, quem tinha pago
+    // com crédito recebeu o crédito e precisa entrar de novo.
+    const restaurados = new Set(restauracao?.restoredStudentIds ?? [])
+    const convidados = Array.from(
+      new Set([...avisar, ...(restauracao?.creditStudentIds ?? [])]),
+    ).filter((id) => !restaurados.has(id))
+
+    const mensagens: { ids: string[]; title: string; body: string }[] = cancelled
+      ? [
+          {
+            // Fila de espera junto: quem esperava vaga numa aula que não vai
+            // existir precisa saber tanto quanto quem já estava dentro.
+            ids: Array.from(new Set([...avisar, ...(devolucao?.waitlistStudentIds ?? [])])),
+            title: 'Aula cancelada',
+            body:
+              `A aula de ${className} do dia ${sessionDate} foi cancelada.` +
+              (motivo ? ` Motivo: ${motivo}.` : '') +
+              ' Você não levou falta: quem usou crédito recebeu de volta, e a aula não conta na cota do plano.',
+          },
+        ]
+      : [
+          {
+            ids: Array.from(restaurados),
+            title: 'Aula reaberta',
+            body: `A aula de ${className} do dia ${sessionDate} voltou a acontecer e sua vaga já está garantida. Se não puder ir, cancele pelo app para liberar o lugar.`,
+          },
+          {
+            ids: convidados,
+            title: 'Aula reaberta',
+            body: `A aula de ${className} do dia ${sessionDate} voltou a acontecer. O crédito que você havia usado foi devolvido, então entre no app para garantir a vaga.`,
+          },
+        ]
+
+    for (const msg of mensagens) {
+      if (msg.ids.length === 0) continue
+
       const { data: emailRows } = await adminClient
         .from('user_emails')
         .select('id, email')
-        .in('id', destinatarios)
+        .in('id', msg.ids)
       const { data: profileRows } = await adminClient
         .from('profiles')
         .select('id, phone')
-        .in('id', destinatarios)
+        .in('id', msg.ids)
       const emailById = new Map(
         ((emailRows ?? []) as { id: string; email: string }[]).map((r) => [r.id, r.email]),
       )
@@ -1494,20 +1547,14 @@ export async function setSessionCancelled(
 
       await notifyUsers(adminClient, {
         orgId,
-        recipients: destinatarios.map((id) => ({
+        recipients: msg.ids.map((id) => ({
           userId: id,
           email: emailById.get(id) ?? null,
           phone: phoneById.get(id) ?? null,
         })),
         type: 'class_cancelled',
-        title: cancelled ? 'Aula cancelada' : 'Aula reaberta',
-        body: cancelled
-          ? `A aula de ${className} do dia ${sessionDate} foi cancelada.` +
-            (motivo ? ` Motivo: ${motivo}.` : '') +
-            ' Você não levou falta: quem usou crédito recebeu de volta, e a aula não conta na cota do plano.'
-          : // Dizer que a vaga voltou seria mentira: o crédito foi devolvido e as
-            // reservas não ressuscitam. O aviso convida a entrar de novo.
-            `A aula de ${className} do dia ${sessionDate} voltou a acontecer. Sua reserva anterior não foi restaurada — entre no app para garantir a vaga.`,
+        title: msg.title,
+        body: msg.body,
         channels: ['inapp', 'email', 'whatsapp', 'push'],
       })
     }

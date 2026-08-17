@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { getClassRoster } from '@/features/aulas/enrollmentRoster'
-import { GenerateWeekButton, GenerateDayButton } from './GridGenerateButtons'
+import { GenerateWeekButton, GenerateDayButton, GenerateClassButton } from './GridGenerateButtons'
 import { DeleteClassButton } from './DeleteClassButton'
 import { CalendarDays } from 'lucide-react'
 import type { Class, ClassSession } from '@/types'
@@ -227,9 +227,16 @@ export default async function GradePage() {
                         {gen ? <>Próxima gerada: <span className="text-slate-400">{formatDate(gen.lastDate)}</span> · gerada {ago(gen.lastCreated)}</> : 'Ainda não gerada'}
                       </p>
 
-                      <div className="flex items-center justify-between pt-2 border-t border-surface-border">
+                      {/* Três ações numa linha: gap-x e shrink-0 no grupo da
+                          direita são obrigatórios aqui (CLAUDE.md → Responsividade),
+                          senão em 320px os links se encostam. flex-wrap deixa o
+                          grupo cair para a linha de baixo em vez de estourar. */}
+                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 pt-2 border-t border-surface-border">
                         <Link href={`/admin/grade/turma/${c.id}/editar`} className="text-xs font-semibold text-brand-500 hover:underline">Ver alunos →</Link>
-                        <DeleteClassButton classId={c.id} className={c.name} />
+                        <div className="flex shrink-0 items-start gap-3">
+                          <GenerateClassButton classId={c.id} />
+                          <DeleteClassButton classId={c.id} className={c.name} />
+                        </div>
                       </div>
                     </Card>
                   )

@@ -49,6 +49,11 @@ export interface RefundSessionResult {
  *   outro dia. É exatamente o que a coluna foi criada para dizer
  *   (20260807000300_booking_admin_waived.sql) e o que `resolveQuota` respeita.
  *
+ * Cada reserva encerrada aqui fica marcada com `cancelled_by_session = true`, e é
+ * essa marca que `restoreSessionBookings` reverte quando a aula volta. Sem ela a
+ * reabertura não teria como distinguir estas reservas das que o professor
+ * cancelou uma a uma.
+ *
  * Falha de estorno é logada e NÃO reverte o cancelamento, que já está gravado de
  * forma durável — mesmo contrato de `cancelFutureBookings`.
  */
@@ -84,6 +89,10 @@ export async function refundSessionBookings(
         // Isenta da cota do ciclo. Sem isto, a aula que a ACADEMIA cancelou
         // continuaria contando contra o plano do aluno.
         admin_waived: true,
+        // Assina QUEM derrubou esta reserva. É o que a reabertura da aula usa
+        // para saber quem trazer de volta: `admin_waived` sozinho também marca
+        // o aluno que o professor tirou da data, e esse não pode voltar.
+        cancelled_by_session: true,
       })
       .eq('id', b.id)
 

@@ -204,6 +204,11 @@ export function buildClassRules(input: ClassRulesInput): RuleSection[] {
           'Sem falta: quem usou crédito recebe de volta e a aula não conta na sua cota. Avisamos pelo app com o motivo, e ela fica marcada na agenda.',
       },
       {
+        text: 'Aula cancelada pode voltar',
+        detail:
+          'Se a academia reabrir a aula, quem é de turma fixa recebe a vaga de volta automaticamente. Quem tinha pago com crédito precisa entrar de novo, porque o crédito já voltou para você.',
+      },
+      {
         text: 'Horário alterado aparece marcado como "Alterada"',
         detail: 'Confira pelo app antes de sair de casa — a agenda mostra o horário novo.',
       },
