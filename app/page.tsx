@@ -49,7 +49,7 @@ export default function LandingPage() {
             >
               <InstagramIcon />
             </a>
-            <Link className={`${s.btn} ${s.btnGhost} ${s.navHideMobile}`} href="/login">
+            <Link className={`${s.btn} ${s.btnGhost}`} href="/login">
               Entrar
             </Link>
             <Link className={`${s.btn} ${s.btnPrimary}`} href="/criar-academia">
