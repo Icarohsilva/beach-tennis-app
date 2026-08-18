@@ -181,7 +181,7 @@
      linha (flex-wrap); margin-left:auto o mantém alinhado à direita nessa
      linha, em vez de colar do lado esquerdo (default de space-between com um
      item só por linha). */
-  margin-left: auto;
+  .navcta { margin-left: auto; }
 }
 .iconBtn {
   display: inline-flex;

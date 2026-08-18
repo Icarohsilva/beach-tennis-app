@@ -32,7 +32,7 @@ export default function LandingPage() {
             Arena<span className={s.dot}>Hub</span>
           </div>
           <div className={s.navlinks}>
-            <a href="#rec">  Recursos</a>
+            <a href="#rec">Recursos</a>
             <a href="#como">Como funciona</a>
             <a href="#alunos">Para alunos</a>
             <a href="#preco">Preço</a>
