@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/plan-cycle-close",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/complete-past-sessions",
+      "schedule": "0 9 * * *"
     }
   ]
 }

@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { AttendanceSheet } from '@/features/aulas/AttendanceSheet'
-import { StartClassClient } from '@/features/aulas/StartClassClient'
 import { markAttendance } from '@/features/aulas/actions'
 import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
 import { addStudentToSession, removeStudentFromSession } from '@/features/aulas/adminActions'
@@ -300,10 +299,6 @@ export default async function SessionDetailPage({ params }: Props) {
     .maybeSingle()
   const orgName = (orgRow as { name: string } | null)?.name ?? 'sua academia'
 
-  // Aula concluída também conta como iniciada: a chamada já foi feita e o
-  // professor ainda precisa poder corrigir uma marcação errada.
-  const classStarted = !!typedSession.started_at || typedSession.status === 'completed'
-
   const isToday = typedSession.session_date === brtToday(new Date())
 
   return (
@@ -382,25 +377,13 @@ export default async function SessionDetailPage({ params }: Props) {
           )}
         </div>
       ) : (
-        <>
-          {/* Iniciar vem ANTES da lista: é a ação que abre a chamada, e sem ela
-              presença/falta ficam travadas (ver AttendanceSheet). */}
-          <StartClassClient
-            sessionId={params.sessionId}
-            students={students}
-            isCompleted={typedSession.status === 'completed'}
-            startedAt={typedSession.started_at}
-          />
-
-          <AttendanceSheet
-            sessionId={params.sessionId}
-            students={students}
-            classStarted={classStarted}
-            onMark={markAttendance}
-            onRecordCheckin={recordCheckin}
-            onRemove={removeStudentFromSession}
-          />
-        </>
+        <AttendanceSheet
+          sessionId={params.sessionId}
+          students={students}
+          onMark={markAttendance}
+          onRecordCheckin={recordCheckin}
+          onRemove={removeStudentFromSession}
+        />
       )}
     </div>
   )

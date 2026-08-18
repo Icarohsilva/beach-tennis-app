@@ -915,109 +915,6 @@ export async function addStudentToSession(
   return {}
 }
 
-// ---------------------------------------------------------------------------
-// startClass — abre a chamada e dá presença a quem já tem check-in
-// ---------------------------------------------------------------------------
-
-/**
- * Marca a aula como iniciada e registra presença automática para quem já tem
- * check-in do dia (parceiro Wellhub/TotalPass ou confirmação validada no app).
- *
- * Antes disto a chamada é só leitura: presença e falta só passam a valer depois
- * que o professor inicia a aula, para não haver falta registrada em aula que
- * ainda nem começou. Idempotente — reiniciar não duplica presença nem
- * sobrescreve o que o professor já ajustou na mão.
- */
-export async function startClass(
-  sessionId: string,
-): Promise<{ error?: string; autoPresent?: number }> {
-  const { orgId, error: authErr } = await requireAdmin()
-  if (authErr) return { error: authErr }
-  const adminClient = createAdminClient()
-
-  const { data: session } = await adminClient
-    .from('class_sessions')
-    .select('id, session_date, started_at, status')
-    .eq('id', sessionId)
-    .eq('organization_id', orgId)
-    .maybeSingle()
-  if (!session) return { error: 'Sessão não encontrada.' }
-  if ((session as { status: string }).status === 'cancelled') {
-    return { error: 'Esta aula foi cancelada.' }
-  }
-
-  const sessionDate = (session as { session_date: string }).session_date
-
-  if (!(session as { started_at: string | null }).started_at) {
-    const { error: startErr } = await adminClient
-      .from('class_sessions')
-      .update({ started_at: new Date().toISOString() })
-      .eq('id', sessionId)
-      .eq('organization_id', orgId)
-    if (startErr) return { error: 'Erro ao iniciar a aula. Tente novamente.' }
-  }
-
-  // Quem está na aula: reservas confirmadas + fixos que não avisaram falta.
-  const { data: bookingRows } = await adminClient
-    .from('session_bookings')
-    .select('student_id, status')
-    .eq('session_id', sessionId)
-    .eq('organization_id', orgId)
-    .in('status', ['confirmed', 'cancelled'])
-
-  const rows = (bookingRows ?? []) as { student_id: string; status: string }[]
-  const expected = new Set(rows.filter((b) => b.status === 'confirmed').map((b) => b.student_id))
-
-  // Check-ins do dia (parceiro) e confirmações validadas pelo app. Ambos são
-  // presença de fato — o professor não deveria ter que remarcar na mão.
-  const [{ data: checkinRows }, { data: selfRows }] = await Promise.all([
-    adminClient
-      .from('checkins')
-      .select('student_id')
-      .eq('organization_id', orgId)
-      .eq('checkin_date', sessionDate),
-    adminClient
-      .from('self_checkins')
-      .select('student_id')
-      .eq('organization_id', orgId)
-      .eq('session_id', sessionId)
-      .eq('status', 'validated'),
-  ])
-
-  const checkedIn = new Set<string>()
-  for (const c of (checkinRows ?? []) as { student_id: string }[]) {
-    if (expected.has(c.student_id)) checkedIn.add(c.student_id)
-  }
-  for (const s of (selfRows ?? []) as { student_id: string }[]) {
-    if (expected.has(s.student_id)) checkedIn.add(s.student_id)
-  }
-
-  if (checkedIn.size === 0) {
-    revalidatePath(`/admin/grade/${sessionId}`)
-    return { autoPresent: 0 }
-  }
-
-  // Não sobrescreve presença já registrada (ignoreDuplicates): se o professor
-  // ou o webhook do parceiro já marcou, aquela marcação continua valendo.
-  const { error: attErr } = await adminClient.from('attendance').upsert(
-    Array.from(checkedIn).map((studentId) => ({
-      organization_id: orgId,
-      session_id: sessionId,
-      student_id: studentId,
-      status: 'present',
-      source: 'manual',
-    })),
-    { onConflict: 'session_id,student_id', ignoreDuplicates: true },
-  )
-  if (attErr) {
-    console.error('[startClass] presença automática falhou', {
-      sessionId, error: attErr.message,
-    })
-  }
-
-  revalidatePath(`/admin/grade/${sessionId}`)
-  return { autoPresent: checkedIn.size }
-}
 
 // ---------------------------------------------------------------------------
 // removeStudentFromSession — tira o aluno SÓ desta aula
@@ -1429,10 +1326,12 @@ export async function setSessionCancelled(
     .maybeSingle()
   if (!session) return { error: 'Aula não encontrada.' }
 
-  // Aula já encerrada tem chamada feita: reabrir ou cancelar reescreveria um
-  // fato passado, e presença/pendência já foram gravadas em cima dela.
+  // Aula de uma data que já passou (o cron complete-past-sessions fecha
+  // 'scheduled' -> 'completed' automaticamente): reabrir ou cancelar
+  // reescreveria um fato passado, e presença/pendência já podem ter sido
+  // gravadas em cima dela.
   if ((session as { status: string }).status === 'completed') {
-    return { error: 'Esta aula já foi encerrada. Não dá para cancelar depois da chamada.' }
+    return { error: 'Esta aula já foi encerrada. Não dá para cancelar uma aula de uma data que já passou.' }
   }
 
   const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class

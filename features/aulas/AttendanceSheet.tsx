@@ -43,11 +43,6 @@ export interface StudentAttendance {
 interface AttendanceSheetProps {
   sessionId: string
   students: StudentAttendance[]
-  /**
-   * A aula já foi iniciada. Enquanto for false a chamada é só leitura: presença
-   * e falta só passam a valer depois que o professor inicia a aula.
-   */
-  classStarted: boolean
   onMark: (
     sessionId: string,
     studentId: string,
@@ -93,7 +88,6 @@ const PARTNER_VARIANT: Record<CheckinPartner, 'success' | 'warning'> = {
 export function AttendanceSheet({
   sessionId,
   students,
-  classStarted,
   onMark,
   onRecordCheckin,
   onRemove,
@@ -159,6 +153,46 @@ export function AttendanceSheet({
     })
   }
 
+  /**
+   * Marca como presente todo mundo que ainda não tem marcação nenhuma.
+   *
+   * Não sobrescreve quem já foi marcado (presente ou ausente) — é o mesmo
+   * cuidado do "Marcar todos presentes" que existia antes na tela de iniciar
+   * aula: um clique não pode desfazer o ajuste que o professor já fez aluno a
+   * aluno. Chama `onMark` por aluno em paralelo, e não um endpoint em lote,
+   * porque a turma tem teto natural (poucas dezenas) e assim reaproveita a
+   * mesma action já usada pelo botão individual, sem endpoint novo.
+   */
+  function handleMarkAll() {
+    const targets = students
+      .map((s) => s.student.id)
+      .filter((id) => !attendanceMap.has(id))
+    if (targets.length === 0) return
+
+    setPendingStudent('__all__')
+    startTransition(async () => {
+      const results = await Promise.all(
+        targets.map((id) => onMark(sessionId, id, true).then((r) => [id, r] as const)),
+      )
+      setPendingStudent(null)
+      setAttendanceMap((prev) => {
+        const next = new Map(prev)
+        for (const [id, r] of results) {
+          if (!r.error) next.set(id, { status: 'present', source: 'manual' })
+        }
+        return next
+      })
+      setErrors((prev) => {
+        const next = new Map(prev)
+        for (const [id, r] of results) {
+          if (r.error) next.set(id, r.error)
+          else next.delete(id)
+        }
+        return next
+      })
+    })
+  }
+
   function handleRemove(studentId: string, giveBack: boolean) {
     setPendingStudent(studentId)
     startTransition(async () => {
@@ -219,19 +253,20 @@ export function AttendanceSheet({
     (s) => (reviewedNow.get(s.student.id) ?? s.selfCheckin?.status) === 'pending',
   ).length
 
+  const unmarkedCount = students.filter((s) => !attendanceMap.has(s.student.id)).length
+  const markingAll = isPending && pendingStudent === '__all__'
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm text-slate-400">
         <span>{students.length} alunos inscritos</span>
-        {classStarted && <span className="text-green-400">{presentCount} presentes</span>}
+        <span className="text-green-400">{presentCount} presentes</span>
       </div>
 
-      {!classStarted && (
-        <p className="rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-xs text-slate-400">
-          A chamada abre quando você iniciar a aula. Quem já fez check-in entra
-          como presente automaticamente. Até lá dá para remover quem avisou que
-          não vem e liberar a vaga.
-        </p>
+      {students.length > 0 && unmarkedCount > 0 && (
+        <Button variant="secondary" size="sm" loading={markingAll} onClick={handleMarkAll}>
+          Marcar todos presentes
+        </Button>
       )}
 
       {partnerStudents.length > 0 && (
@@ -387,33 +422,28 @@ export function AttendanceSheet({
 
                 {/* Dois botões explícitos: "marcar quem não veio" é uma ação, não a
                     ausência de outra. O toggle único deixava ausente e não-marcado
-                    indistinguíveis. Só ficam ativos com a aula iniciada. */}
+                    indistinguíveis. */}
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  {classStarted && (
-                    <div className="flex gap-1.5">
-                      <Button
-                        variant={isPresent ? 'primary' : 'secondary'}
-                        size="sm"
-                        loading={rowPending}
-                        onClick={() => handleMark(student.id, true)}
-                        aria-pressed={isPresent}
-                      >
-                        Presente
-                      </Button>
-                      <Button
-                        variant={isAbsent ? 'danger' : 'secondary'}
-                        size="sm"
-                        loading={rowPending}
-                        onClick={() => handleMark(student.id, false)}
-                        aria-pressed={isAbsent}
-                      >
-                        Faltou
-                      </Button>
-                    </div>
-                  )}
-                  {hasCheckin && !classStarted && (
-                    <span className="text-xs text-green-400">✓ check-in feito</span>
-                  )}
+                  <div className="flex gap-1.5">
+                    <Button
+                      variant={isPresent ? 'primary' : 'secondary'}
+                      size="sm"
+                      loading={rowPending}
+                      onClick={() => handleMark(student.id, true)}
+                      aria-pressed={isPresent}
+                    >
+                      Presente
+                    </Button>
+                    <Button
+                      variant={isAbsent ? 'danger' : 'secondary'}
+                      size="sm"
+                      loading={rowPending}
+                      onClick={() => handleMark(student.id, false)}
+                      aria-pressed={isAbsent}
+                    >
+                      Faltou
+                    </Button>
+                  </div>
                   <button
                     type="button"
                     disabled={rowPending}

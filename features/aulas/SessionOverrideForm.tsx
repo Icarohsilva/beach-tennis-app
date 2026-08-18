@@ -127,8 +127,8 @@ export function SessionOverrideForm({
     })
   }
 
-  // Aula encerrada tem chamada feita: mudar horário ou lotação depois reescreveria
-  // um fato passado. A tela diz isso em vez de oferecer botões que vão falhar.
+  // Aula de uma data que já passou: mudar horário ou lotação depois reescreveria
+  // um fato passado. A tela oculta o form em vez de oferecer botões que vão falhar.
   if (completed) return null
 
   return (

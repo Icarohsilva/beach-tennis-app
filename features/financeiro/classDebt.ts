@@ -1,8 +1,8 @@
 // features/financeiro/classDebt.ts
 // Ponto ÚNICO de criação da pendência de aula. Chamado por markAttendance,
-// markAttendanceBulk e recordResolvedCheckin — a dívida nasce na PRESENÇA, não
-// na reserva (spec §5): cancelamento e no-show nunca geram dívida, sem precisar
-// de regra para apagar.
+// recordResolvedCheckin e applyPresence (confirmação pelo app) — a dívida
+// nasce na PRESENÇA, não na reserva (spec §5): cancelamento e no-show nunca
+// geram dívida, sem precisar de regra para apagar.
 import { createAdminClient } from '@/lib/supabase/server'
 import { hasActiveSubscriptionPlan } from '@/lib/billing/planEligibility'
 
