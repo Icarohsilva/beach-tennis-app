@@ -384,7 +384,17 @@ export function SessionModal({
         {/* Escolher com o que paga. Só aparece quando as duas formas existem de
             verdade: com uma só, perguntar é ruído. Crédito não gasta a cota do
             plano nem esbarra no teto diário — é aula comprada à parte. */}
-        {session.canChoosePayment && !isIn && !session.kids && !session.cancelled && (
+        {/* A vaga da aula fixa continua sendo do aluno que avisou que falta: voltar
+            não gasta plano nem crédito. Dizer isso evita a leitura de que sair da
+            aula fixa custou a vaga — e é o que justifica não perguntar abaixo
+            como ele quer pagar. */}
+        {session.fixedOptedOut && !session.cancelled && !isFull && (
+          <p className="mt-4 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2 text-xs text-brand-200">
+            Sua vaga fixa continua sua. Voltar não gasta plano nem crédito.
+          </p>
+        )}
+
+        {session.canChoosePayment && !isIn && !session.fixedOptedOut && !session.kids && !session.cancelled && (
           <div className="mt-4">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Como quer usar esta aula

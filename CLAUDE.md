@@ -18,6 +18,23 @@ npm run test:responsive        # Playwright: 320/375/414px na bancada de fixture
 npm run test:responsive:rotas  # o mesmo nas rotas reais (precisa de .env.local)
 ```
 
+`scripts/excluir-academias.sql` apaga academia de teste (e os usuários que só existiam
+nela) pelo SQL Editor do Supabase. Seleção é por **UUID conferido na tela**, nunca por
+nome — existem várias academias homônimas, e um `ILIKE '%teste%'` levaria junto uma
+academia real chamada "Teste". Quem tem vínculo em outra academia é **preservado**: o app
+é multi-vínculo, e apagar esse usuário destruiria histórico de produção. O passo 5.2
+existe porque `profiles.organization_id` não tem `on delete cascade` — sem ele o
+`delete from organizations` falha.
+
+Rodar o passo 5 **sem confirmar é ensaio**: ele faz o trabalho, imprime o que faria e
+levanta exceção, desfazendo tudo. Só aplica depois de
+`update _exclusao_academias_alvo set confirmado = true`. O desenho é assim porque o SQL
+Editor usa conexão de pool: temp table não sobrevive entre execuções (daí a tabela real,
+derrubada no passo 6) e `begin` com `commit` comentado deixaria o editor decidir o destino
+da transação — apagar achando que não apagou, ou o contrário. Pelo mesmo motivo a trava de
+"academia com sinal de vida" é repetida dentro do passo 5: os passos rodam
+independentemente, então uma trava que só existisse no passo 4 seria pulável.
+
 ## Fluxo de trabalho (git)
 
 **Antes de qualquer push, confira se o PR da branch já foi mergeado.** A branch de

@@ -145,3 +145,30 @@ export function resolveClassAccess(input: AccessInput): AccessDecision {
   if (input.creditsBalance >= 1) return { grant: 'credit' }
   return { grant: 'debt' }
 }
+
+/**
+ * O que fazer com a volta do aluno fixo à aula da qual ele saiu.
+ *
+ * A vaga da aula fixa continua sendo dele, então voltar não passa pelos eixos de
+ * CUSTO (cota do ciclo, teto diário, débito de crédito) — a matrícula já pagou
+ * aquela vaga, e `reconcileEnrollment` reserva o fixo de graça pelo mesmo motivo.
+ * As negações de SITUAÇÃO (inativo, dívida, pendência de check-in) seguem valendo
+ * em `resolveClassAccess`: não são sobre quanto o aluno já usou.
+ *
+ *   'free'            → a saída não gerou crédito; a volta é grátis e pronto.
+ *   'clawback'        → a saída gerou crédito de reposição e o aluno ainda o tem;
+ *                       a volta é grátis e o crédito é retomado.
+ *   'price_normally'  → a saída gerou crédito e ele JÁ FOI GASTO. Voltar de graça
+ *                       daria duas aulas por um pagamento, então esta cobra como
+ *                       aula avulsa. Cobrar, e não recusar: recusar deixaria o
+ *                       aluno sem caminho de volta, que é o defeito de origem.
+ */
+export function resolveEnrollmentRejoin(input: {
+  /** A saída gerou crédito de reposição (a aula tinha sido paga com crédito). */
+  creditRefunded: boolean
+  /** Saldo de crédito avulso do aluno agora. */
+  creditsBalance: number
+}): 'free' | 'clawback' | 'price_normally' {
+  if (!input.creditRefunded) return 'free'
+  return input.creditsBalance >= 1 ? 'clawback' : 'price_normally'
+}

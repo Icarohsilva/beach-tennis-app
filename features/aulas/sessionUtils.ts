@@ -113,3 +113,54 @@ export async function expectedStudentIds(
 
   return Array.from(ids)
 }
+
+/**
+ * O aluno fixo saiu DESTA data e pode voltar?
+ *
+ * Devolve `null` quando não é esse caso (não é fixo da turma, ou não há saída
+ * registrada nesta sessão). Quando é, devolve a reserva cancelada que marca a
+ * saída — `creditRefunded` diz se aquela aula tinha sido paga com crédito, e
+ * portanto se a saída gerou crédito de reposição (`skipEnrollmentSession`).
+ *
+ * Existe porque a vaga da aula fixa continua sendo do aluno: voltar não é
+ * comprar aula nova, e precificar como avulsa cobraria duas vezes a mesma vaga.
+ * Quem decide o que fazer com o crédito é `resolveEnrollmentRejoin`
+ * (lib/utils/accessRules.ts) — aqui só se lê o banco.
+ */
+export async function findEnrollmentRejoin(
+  client: AdminClient,
+  input: { orgId: string; studentId: string; sessionId: string; classId: string },
+): Promise<{ bookingId: string; creditRefunded: boolean } | null> {
+  const { orgId, studentId, sessionId, classId } = input
+
+  const { data: booking } = await client
+    .from('session_bookings')
+    .select('id, status, from_enrollment, credit_used')
+    .eq('organization_id', orgId)
+    .eq('session_id', sessionId)
+    .eq('student_id', studentId)
+    .maybeSingle()
+
+  const row = booking as
+    | { id: string; status: string; from_enrollment: boolean; credit_used: boolean }
+    | null
+
+  // Só a saída de aula FIXA dá direito à volta de graça. Reserva avulsa
+  // cancelada é outra história: aquela vaga não era dele por matrícula.
+  if (!row || row.status !== 'cancelled' || !row.from_enrollment) return null
+
+  const { data: enrollment } = await client
+    .from('enrollments')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('class_id', classId)
+    .eq('student_id', studentId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  // Matrícula encerrada depois da saída: a vaga não é mais dele, então a volta
+  // é uma aula avulsa como qualquer outra.
+  if (!enrollment) return null
+
+  return { bookingId: row.id, creditRefunded: row.credit_used === true }
+}

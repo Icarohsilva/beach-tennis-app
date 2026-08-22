@@ -30,8 +30,23 @@ export interface AgendaSession {
   capacity: number
   /** O aluno já tem reserva confirmada nesta sessão. */
   mine: boolean
-  /** O aluno é aluno fixo da turma. */
+  /**
+   * Esta aula é do aluno por matrícula fixa: ele é fixo da turma **e** não
+   * avisou que falta nesta data.
+   *
+   * Não é "está matriculado na turma". A diferença importa: o fixo que sai de
+   * uma data continua matriculado, mas a aula deixa de ser dele — e quem
+   * consome este campo usa como "é minha" (`isIn`, o badge "Fixa", o filtro de
+   * "minhas aulas").
+   */
   fixed: boolean
+  /**
+   * Fixo da turma que avisou que NÃO vem nesta data — a vaga continua sendo
+   * dele, e voltar não custa plano nem crédito.
+   *
+   * A ficha usa isto para não perguntar como ele quer pagar por algo grátis.
+   */
+  fixedOptedOut?: boolean
   kids: boolean
   /** Modalidade da turma (slug). Rótulo — não restringe quem pode reservar. */
   sport: string | null

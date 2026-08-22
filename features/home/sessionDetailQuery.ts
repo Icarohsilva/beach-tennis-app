@@ -249,6 +249,15 @@ export async function buildAgendaSessions(
       const depBookings = depBookingBySession.get(row.id)
       const depWaitlist = depWaitlistBySession.get(row.id)
 
+      // Matriculado na turma é uma coisa; estar DENTRO desta data é outra. O
+      // aluno fixo que avisou que não vem tem reserva `cancelled` nesta sessão,
+      // e a partir daí a aula não é mais dele — mesma precedência de
+      // `mergeSessionAttendees`, que já tira o nome dele da lista de presentes.
+      // Sem este corte, `fixed` continuava true depois da saída e a ficha
+      // insistia em "Sua aula fixa", sem nunca oferecer entrar nem a fila.
+      const enrolledHere = input.enrolledClassIds.has(row.class_id)
+      const iOptedOut = optedOutBySession.get(row.id)?.has(userId) ?? false
+
       const guardianOptions: GuardianOption[] = dependents.map((d) => ({
         id: d.id,
         name: d.name,
@@ -265,7 +274,8 @@ export async function buildAgendaSessions(
         booked: bookedCount.get(row.id) ?? 0,
         capacity: resolved.maxStudents,
         mine: !!myBooking,
-        fixed: input.enrolledClassIds.has(row.class_id),
+        fixed: enrolledHere && !iOptedOut,
+        fixedOptedOut: (enrolledHere && !myBooking && iOptedOut) || undefined,
         kids: cls.type === 'kids',
         sport: cls.sport ?? null,
         attendees: attendeesOf(row.id, row.class_id),

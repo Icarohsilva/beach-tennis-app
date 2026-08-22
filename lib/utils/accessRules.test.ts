@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveClassAccess, exceedsDailyCap } from './accessRules'
+import { resolveClassAccess, exceedsDailyCap, resolveEnrollmentRejoin } from './accessRules'
 
 const base = {
   archived: false,
@@ -342,5 +342,22 @@ describe('resolveClassAccess — férias', () => {
     expect(resolveClassAccess({ ...base, onVacation: false, hasActivePlan: true })).toEqual({
       grant: 'plan',
     })
+  })
+})
+
+describe('resolveEnrollmentRejoin', () => {
+  it('saída que não gerou crédito: volta grátis', () => {
+    expect(resolveEnrollmentRejoin({ creditRefunded: false, creditsBalance: 0 })).toBe('free')
+    expect(resolveEnrollmentRejoin({ creditRefunded: false, creditsBalance: 7 })).toBe('free')
+  })
+
+  it('saída que gerou crédito e o aluno ainda tem: retoma o crédito', () => {
+    expect(resolveEnrollmentRejoin({ creditRefunded: true, creditsBalance: 1 })).toBe('clawback')
+  })
+
+  it('crédito de reposição já gasto: cobra como avulsa, não dá duas aulas por uma', () => {
+    expect(resolveEnrollmentRejoin({ creditRefunded: true, creditsBalance: 0 })).toBe(
+      'price_normally',
+    )
   })
 })
