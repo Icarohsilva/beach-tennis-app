@@ -18,9 +18,10 @@ import { brtToday, nextDateForDayOfWeek } from '@/lib/utils/gridSchedule'
 import { checkLowCreditThreshold } from './creditNotifications'
 import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
-import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
 import { getApprovedVacations } from './vacationQueries'
 import { isOnVacation } from '@/lib/aulas/vacation'
+import { resolveClassAccess, exceedsDailyCap, resolveEnrollmentRejoin } from '@/lib/utils/accessRules'
+import { findEnrollmentRejoin } from './sessionUtils'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
@@ -250,6 +251,31 @@ export async function bookSessionAs(
     }
   }
 
+  // Aluno fixo VOLTANDO para a aula da qual ele saiu. A vaga continua sendo dele
+  // — a matrícula já a pagou, e é por isso que a reconciliação reserva o fixo com
+  // `p_credit_used: false`. Precificar a volta como avulsa cobraria a mesma vaga
+  // duas vezes, e pior: cota esgotada ou teto diário RECUSARIAM o aluno da
+  // própria aula fixa.
+  //
+  // Só os eixos de CUSTO são pulados (cota, teto diário, débito de crédito). As
+  // negações de SITUAÇÃO — inativo, dívida, pendência de check-in — continuam
+  // valendo em resolveClassAccess: não são sobre quanto o aluno já usou.
+  const rejoin = await findEnrollmentRejoin(adminClient, {
+    orgId,
+    studentId,
+    sessionId,
+    classId: cls.id,
+  })
+  const rejoinMode = rejoin
+    ? resolveEnrollmentRejoin({
+        creditRefunded: rejoin.creditRefunded,
+        creditsBalance: profile.credits_balance,
+      })
+    : null
+  // 'price_normally' fica de fora de propósito: o crédito de reposição da saída
+  // já foi gasto, então a volta grátis daria duas aulas por um pagamento.
+  const freeRejoin = rejoinMode === 'free' || rejoinMode === 'clawback'
+
   // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
   // da reconciliação (spec §1).
   // getActivePlan devolve a configuração de cota, não só o sim/não — a cota
@@ -268,7 +294,7 @@ export async function bookSessionAs(
   // Só paga o custo das duas queries da cota quando a academia ligou a regra e a
   // cota ainda importa para esta reserva.
   const snapshot =
-    quotaEnforced && plan && !preferCredit
+    quotaEnforced && plan && !preferCredit && !freeRejoin
       ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, session.session_date)
       : null
 
@@ -281,7 +307,7 @@ export async function bookSessionAs(
   // 4. Daily limit. Esta checagem roda mesmo com a cota desligada, então ela também
   //    precisa respeitar o teto 0 e a escolha do crédito — senão o aluno seria
   //    barrado aqui, antes de resolveClassAccess sequer opinar.
-  if (!preferCredit && dailyCap > 0) {
+  if (!preferCredit && !freeRejoin && dailyCap > 0) {
     const { count: dailyCount } = await adminClient
       .from('session_bookings')
       .select('id', { count: 'exact', head: true })
@@ -369,10 +395,13 @@ export async function bookSessionAs(
     hasOpenDebt: debtSummary.isBlocked,
     openMissedCheckins,
     missedCheckinBlockLimit,
-    quotaEnforced,
+    // Volta à aula fixa não consome plano: desligar a cota aqui é o que faz
+    // `resolveClassAccess` pular 'quota_exhausted' e 'daily_cap' sem que eu
+    // precise reimplementar a ordem das negações fora dela.
+    quotaEnforced: freeRejoin ? false : quotaEnforced,
     quotaRemaining: snapshot?.remaining ?? null,
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
-    maxClassesPerDay: dailyCap,
+    maxClassesPerDay: freeRejoin ? 0 : dailyCap,
     preferCredit,
   })
 
@@ -416,13 +445,20 @@ export async function bookSessionAs(
 
   // Só 'credit' debita. 'partner' e 'plan' entram de graça; 'debt' entra e a
   // pendência nasce se houver presença (spec §5).
-  const useCredit = decision.grant === 'credit'
+  const useCredit = !freeRejoin && decision.grant === 'credit'
 
-  // Capacity check + insert na mesma transação (sem overbooking)
+  // Capacity check + insert na mesma transação (sem overbooking).
+  // `p_from_enrollment` volta a ser true na retomada da aula fixa: a reserva
+  // precisa nascer FIXA de novo, senão a próxima saída cairia no cancelamento de
+  // avulsa (janela de 5h) em vez do caminho da aula fixa. A RPC reaproveita a
+  // linha 'cancelled' que marcava a saída, então o unique (student, session) não
+  // atrapalha.
   const { data: bookingId, error: bookErr } = await adminClient.rpc('book_session_atomic', {
     p_student_id: studentId,
     p_session_id: sessionId,
     p_max_students: resolved.maxStudents,
+    p_type: 'extra',
+    p_from_enrollment: freeRejoin,
     p_credit_used: useCredit,
   })
 
@@ -482,6 +518,45 @@ export async function bookSessionAs(
 
     // Aviso de credito baixo (best-effort; a funcao nunca lança).
     await checkLowCreditThreshold(adminClient, studentId, orgId, -1)
+  }
+
+  // Retomada do crédito de reposição: a saída desta aula fixa gerou +1 crédito
+  // (`skipEnrollmentSession`), e voltar sem devolvê-lo transformaria sair-e-voltar
+  // numa fábrica de crédito. O saldo já foi conferido em resolveEnrollmentRejoin,
+  // então falha aqui é corrida — o aluno gastou o crédito no meio do caminho.
+  if (rejoinMode === 'clawback') {
+    const { error: clawErr } = await adminClient.rpc('adjust_credits', {
+      p_student_id: studentId,
+      p_org: orgId,
+      p_delta: -1,
+      p_type: 'used',
+      p_reason: `Retorno à aula fixa: crédito de reposição retomado (${cls.name}, ${session.session_date})`,
+      p_session_id: sessionId,
+    })
+
+    if (clawErr) {
+      // Volta a reserva para 'cancelled', que é exatamente o estado de saída.
+      // Isso deixa o aluno tentar de novo: sem o crédito em mãos ele cai em
+      // 'price_normally' e a volta passa a ser cobrada como avulsa — em vez de
+      // ficar com a aula E com o crédito.
+      const { error: rollbackErr } = await adminClient
+        .from('session_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId as string)
+
+      if (rollbackErr) {
+        console.error('[bookSession] rollback falhou após erro na retomada do crédito', {
+          bookingId,
+          clawErr: clawErr.message,
+          rollbackErr: rollbackErr.message,
+        })
+      }
+
+      return {
+        error:
+          'O crédito de reposição desta aula já foi usado em outra turma. Tente entrar novamente — a aula será cobrada como avulsa.',
+      }
+    }
   }
 
   // Entrou na aula: sai da fila de espera. Vale para qualquer porta de entrada —
