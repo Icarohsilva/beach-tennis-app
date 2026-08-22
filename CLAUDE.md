@@ -128,6 +128,7 @@ Crons varrem a base inteira: usam `fetchAllPages`, `mapWithConcurrency` ([lib/ut
 | [lib/checkin/selfCheckin.ts](lib/checkin/selfCheckin.ts) | `resolveSelfCheckinStatus()`, `selfCheckinWindow()`, `haversineMeters()` — geofence e janela (1h antes do início → 1h depois do fim) da confirmação de presença pelo aluno |
 | [lib/liga/](lib/liga/) | `divisions.ts` (promoção/rebaixamento), `streak.ts` (semanas seguidas), `points.ts` (pesos), `sportForPoints.ts` (qual esporte a presença credita) e `medals.ts` (catálogo de medalhas) — regras puras da Liga |
 | [lib/aulas/classRules.ts](lib/aulas/classRules.ts) | `buildClassRules()` — **única fonte** das regras que o aluno lê no modal de `/home` (`features/home/RulesCard.tsx` + `RulesModal.tsx`, montado por `features/aulas/classRulesQuery.ts`). Derivado da configuração real da academia, nunca texto fixo — o mesmo motivo do `RulesCard` da Liga. **Regra nova ou alterada no sistema de aulas (cota, teto diário, cancelamento, crédito, férias, acúmulo, check-in, kids) tem de atualizar este arquivo**, senão o modal passa a prometer o que o app não faz mais |
+| [lib/aulas/icsFeed.ts](lib/aulas/icsFeed.ts) | `buildIcsCalendar()` — gera o `.ics` da agenda externa do aluno (RFC 5545), consumido por `app/api/calendar/[token]/route.ts`. Ver "Agenda externa (.ics)" abaixo |
 
 These have Vitest unit tests co-located (`.test.ts` files).
 
@@ -186,6 +187,25 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
 - RLS: policy nenhuma chama `auth.uid()` cru nem `is_org_admin(coluna)` — as duas rodam **por linha**. A forma correta é `(select auth.uid())` e `organization_id in (select auth_admin_org_ids())`, que viram InitPlan (uma avaliação por statement). A migração `20260809000000_escala_rls_e_indices.sql` converteu as existentes e a verificação está no cabeçalho dela; policy nova já deve nascer assim. Medido em 300k linhas: 1.320ms → 44ms.
 
 Migrations live in `supabase/migrations/` and must be applied via `supabase db push`.
+
+### Agenda externa (.ics)
+
+O aluno pode assinar a própria agenda de aulas no Google/Outlook/Apple/Android
+Calendar via `/perfil` (`features/perfil/CalendarSyncForm.tsx`). Não é OAuth
+— é um link pessoal (`memberships.calendar_feed_token`, gerado só na primeira
+ativação) que qualquer app de calendário busca periodicamente
+(`app/api/calendar/[token]/route.ts`, rota pública, autenticada pelo próprio
+token). O `.ics` é remontado do zero a cada busca a partir do estado atual do
+banco (`features/aulas/calendarFeedQuery.ts` + `lib/aulas/icsFeed.ts`) — não
+existe fila nem evento disparado quando uma aula é criada/cancelada/remarcada:
+uma aula cancelada simplesmente some da próxima lista, e a maioria dos apps de
+calendário entende UID ausente como "remova este evento". Por isso a
+atualização nunca é instantânea (depende de o app do aluno decidir buscar de
+novo) e por isso NENHUM código de reserva/cancelamento/remarcação de aula
+precisa saber que este recurso existe. Token por `membership` (não por
+`profile`): aluno de duas academias tem dois links, um por academia. Aluno
+dependente (`is_dependent: true`) não tem login, então não ativa isto sozinho
+— o feed cobre só a própria matrícula do aluno logado, não a dos dependentes.
 
 ### Capacidade e limites de plano
 
