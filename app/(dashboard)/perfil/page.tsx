@@ -18,6 +18,8 @@ import { VacationPanel } from '@/features/aulas/VacationPanel'
 import { listStudentVacations } from '@/features/aulas/vacationQueries'
 import { SelfPartnerForm } from '@/features/checkin/SelfPartnerForm'
 import { NotificationToggle } from '@/features/perfil/NotificationToggle'
+import { CalendarSyncForm } from '@/features/perfil/CalendarSyncForm'
+import { calendarFeedUrl } from '@/lib/aulas/calendarFeedUrl'
 import { ProfileBonusCard } from '@/features/perfil/ProfileBonusCard'
 import { getProfileBonusStatus } from '@/features/liga/queries'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -232,6 +234,17 @@ export default async function PerfilPage() {
         <SectionHeader title="Notificações" />
         <div className="bg-surface-card border border-surface-border rounded-xl p-4">
           <NotificationToggle />
+        </div>
+      </section>
+
+      {/* Agenda externa */}
+      <section>
+        <SectionHeader title="Agenda externa" />
+        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
+          <CalendarSyncForm
+            enabled={membership?.calendar_sync_enabled ?? false}
+            url={membership?.calendar_feed_token ? calendarFeedUrl(membership.calendar_feed_token) : null}
+          />
         </div>
       </section>
 

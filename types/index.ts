@@ -192,6 +192,8 @@ export interface Membership {
   totalpass_id: string | null
   sports: string[] // esportes que a pessoa pratica NESTA academia; slugs de lib/arenas/sports.ts
   liga_opted_out: boolean // aluno escolheu não aparecer no ranking da Liga; continua pontuando
+  calendar_sync_enabled: boolean // aluno assina a agenda externa (.ics); ver lib/aulas/icsFeed.ts
+  calendar_feed_token: string | null // segredo do link de assinatura; nulo até ativar pela 1a vez
   // Exclusão lógica por academia: null = ativo. Não confundir com contract_active,
   // que é "assinatura ativa". Toda listagem de aluno filtra `archived_at is null`.
   archived_at: string | null
