@@ -177,11 +177,6 @@
   flex-shrink: 0;
   gap: 10px;
   align-items: center;
-  /* Quando a linha não cabe mais, .navInner quebra este grupo para a segunda
-     linha (flex-wrap); margin-left:auto o mantém alinhado à direita nessa
-     linha, em vez de colar do lado esquerdo (default de space-between com um
-     item só por linha). */
-  margin-left: auto;
 }
 .iconBtn {
   display: inline-flex;
@@ -204,6 +199,14 @@
 
 @media (max-width: 780px) {
   .navlinks { display: none; }
+  /* Com os links escondidos, .navInner sobra com só logo + navcta. Sem isto,
+     em telas MAIORES que 780px o auto-margin "roubaria" o espaço que
+     justify-content:space-between usa para separar a logo de .navlinks — foi
+     o que colou "ArenaHub" em "Recursos" quando a regra não tinha media query.
+     Aqui, com .navlinks fora, o auto-margin só empurra .navcta para a direita
+     (numa linha só) ou mantém alinhado à direita quando quebra para a segunda
+     linha (flex-wrap, abaixo de ~360px). */
+  .navcta { margin-left: auto; }
 }
 /* Esconde só o ícone do Instagram para abrir espaço no nav — ele é decorativo
    aqui e tem link duplicado no rodapé (footerSocials). "Entrar" e "Criar
