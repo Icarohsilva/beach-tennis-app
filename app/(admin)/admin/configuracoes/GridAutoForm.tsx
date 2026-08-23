@@ -3,12 +3,31 @@ import { useState, useTransition } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { updateSystemSettings } from '@/features/financeiro/actions'
+import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
+
+/** Última execução em horário de parede BRT, ou null quando nunca rodou. */
+function ultimaExecucaoBrt(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  // -03:00 fixo, igual ao resto do app (Brasília sem horário de verão).
+  const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000)
+  const dia = `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}-${String(brt.getUTCDate()).padStart(2, '0')}`
+  const hora = `${String(brt.getUTCHours()).padStart(2, '0')}:${String(brt.getUTCMinutes()).padStart(2, '0')}`
+  return `${formatDate(dia)} às ${formatTime(hora)}`
+}
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-sm text-white disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-brand-500'
 
 interface Props {
-  settings: { grid_auto_enabled: boolean; grid_auto_day: number; grid_auto_hour: number }
+  settings: {
+    grid_auto_enabled: boolean
+    grid_auto_day: number
+    grid_auto_hour: number
+    /** ISO da última geração automática concluída. null = nunca rodou. */
+    grid_auto_last_run?: string | null
+  }
 }
 
 export function GridAutoForm({ settings }: Props) {
@@ -18,6 +37,7 @@ export function GridAutoForm({ settings }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, start] = useTransition()
+  const ultima = ultimaExecucaoBrt(settings.grid_auto_last_run)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,7 +65,23 @@ export function GridAutoForm({ settings }: Props) {
           Gerar a grade da próxima semana automaticamente
         </label>
         <p className="text-xs text-slate-400">
-          Quando ligado, o sistema gera as sessões da semana e reserva os alunos fixos no dia e hora escolhidos. Desligado, use os botões “Gerar” na grade.
+          Quando ligado, o sistema gera as sessões dos <strong>próximos 7 dias</strong> (a
+          partir de amanhã) e reserva os alunos fixos. Desligado, use os botões “Gerar” na
+          grade.
+        </p>
+        {/* O dia e a hora são um ALVO, não um horário de execução: a checagem roda
+            uma vez por dia, então a geração sai na primeira passada depois do
+            alvo. Dizer isso evita a leitura de que "13h" significa 13h em ponto. */}
+        <p className="text-xs text-slate-400">
+          O dia e a hora são o alvo a partir do qual a geração pode acontecer — a checagem
+          roda uma vez por dia, então ela sai na primeira passada depois desse alvo, não no
+          minuto exato.
+        </p>
+        <p className="text-xs text-slate-400">
+          Última geração automática:{' '}
+          <strong className={ultima ? 'text-slate-200' : 'text-amber-400'}>
+            {ultima ?? 'nunca rodou'}
+          </strong>
         </p>
 
         <div className="grid grid-cols-2 gap-3">

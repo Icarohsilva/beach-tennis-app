@@ -76,3 +76,21 @@ export function shouldRunGridNow(
   if (!lastRunIso) return true
   return new Date(lastRunIso).getTime() < target.getTime()
 }
+
+/**
+ * Janela que a auto-geração cobre, a partir de "hoje" em BRT.
+ *
+ * **Amanhã até +7**, e não hoje até +6, por um motivo concreto: com a janela
+ * começando hoje, o dia-da-semana escolhido para gerar NUNCA alcança a sua
+ * própria próxima ocorrência. Configurar a geração no sábado dava a janela
+ * sábado→sexta, cujo único sábado é o de hoje — e o cron roda 14h BRT, então uma
+ * aula de sábado 13h ganhava sessão uma hora depois de já ter começado, e o
+ * sábado seguinte ficava de fora para sempre.
+ *
+ * Começar em amanhã também para de criar sessão para aula de hoje que já passou.
+ * O botão manual da grade continua cobrindo hoje de propósito: ali o admin está
+ * olhando a grade e quer incluir o dia corrente.
+ */
+export function autoGridWindow(todayStr: string): { from: string; to: string } {
+  return { from: addDaysStr(todayStr, 1), to: addDaysStr(todayStr, 7) }
+}
