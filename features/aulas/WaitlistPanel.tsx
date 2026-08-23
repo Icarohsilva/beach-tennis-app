@@ -1,7 +1,11 @@
 // features/aulas/WaitlistPanel.tsx
 // Fila de espera de uma sessão, na tela da chamada. Só leitura, mais o convite
-// por WhatsApp: quem entra e sai da fila é o aluno, e a vaga é de quem entrar
-// primeiro quando ela abre.
+// por WhatsApp: quem entra e sai da fila é o aluno, e abrindo vaga o primeiro da
+// fila é promovido automaticamente.
+//
+// O convite por WhatsApp continua aqui de propósito, mesmo com a promoção
+// automática: serve para quem foi barrado (dívida, cota) ou está fora do corte
+// de 1h, casos em que a automação não coloca ninguém.
 import { Badge } from '@/components/ui/Badge'
 import type { WaitlistRow } from './waitlistQueries'
 import { buildWaitlistInviteMessage, buildWaitlistInviteUrl } from '@/lib/aulas/waitlistInvite'
@@ -32,9 +36,10 @@ export function WaitlistPanel({
         <Badge variant="default">{entries.length}</Badge>
       </div>
       <p className="mb-4 text-xs text-slate-400">
-        Em ordem de chegada. Quando alguém cancela, todos aqui são avisados na
-        hora e a vaga fica com quem entrar primeiro. Use o WhatsApp para chamar
-        alguém direto.
+        Em ordem de chegada. Quando abre vaga, o 1º da fila entra na aula
+        automaticamente e é avisado — o 2º vira 1º e também recebe aviso.
+        Faltando menos de 1h para a aula, a entrada não é automática: use o
+        WhatsApp para chamar alguém direto.
       </p>
 
       <ul className="divide-y divide-surface-border">
@@ -60,7 +65,7 @@ export function WaitlistPanel({
                   <span className="block truncate text-sm text-white">{e.fullName}</span>
                   <span className="block text-[11px] text-slate-500">
                     Entrou {timeOnly(e.joinedAt)}
-                    {e.notifiedAt ? ` · avisado ${timeOnly(e.notifiedAt)}` : ''}
+                    {e.firstNotifiedAt ? ` · avisado que é o 1º ${timeOnly(e.firstNotifiedAt)}` : ''}
                   </span>
                 </span>
               </span>
