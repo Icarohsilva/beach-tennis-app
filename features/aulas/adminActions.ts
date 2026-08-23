@@ -26,7 +26,7 @@ import {
 import { isMissedCheckinBlocked } from '@/lib/checkin/missedCheckins'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 import { checkProfileComplete, revokeLigaExtra, ENTRY_REASONS } from '@/features/liga/extraPoints'
-import { notifyWaitlistSpotOpen } from './waitlistActions'
+import { promoteFromWaitlist } from './waitlistActions'
 import { refundSessionBookings } from './cancelSessionBookings'
 import { restoreSessionBookings } from './reopenSessionBookings'
 import { reconcileAllActiveEnrollments } from './creditReconciliation'
@@ -1026,7 +1026,7 @@ export async function removeStudentFromSession(
   }
 
   // Vaga liberada: avisa a fila de espera desta sessão.
-  await notifyWaitlistSpotOpen(sessionId)
+  await promoteFromWaitlist(sessionId)
 
   // Liga: o aluno saiu da aula, então o ponto de ter entrado com antecedência (ou
   // de ter pego vaga na fila) deixa de valer. Mesma simetria das saídas do aluno.
@@ -1246,7 +1246,7 @@ export async function updateSessionOverride(
   }
 
   // Vaga pode ter aberto (lotação aumentada): avisa a fila de espera.
-  await notifyWaitlistSpotOpen(sessionId)
+  await promoteFromWaitlist(sessionId)
 
   revalidatePath(`/admin/grade/${sessionId}`)
   revalidatePath('/admin/grade')

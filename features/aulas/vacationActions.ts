@@ -16,7 +16,7 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { requireAdmin } from './authGuards'
 import { cancelFutureBookings } from './cancelBookings'
-import { notifyWaitlistSpotOpen } from './waitlistActions'
+import { promoteFromWaitlist } from './waitlistActions'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { overlaps, type VacationPeriod } from '@/lib/aulas/vacation'
@@ -96,9 +96,9 @@ async function freeUpPeriod(
   // férias já estão gravadas e não podem ser desfeitas por falha de aviso.
   for (const sessionId of Array.from(new Set(freedSessionIds))) {
     try {
-      await notifyWaitlistSpotOpen(sessionId)
+      await promoteFromWaitlist(sessionId)
     } catch (err) {
-      console.error('[vacation] notifyWaitlistSpotOpen falhou', {
+      console.error('[vacation] promoteFromWaitlist falhou', {
         sessionId,
         error: err instanceof Error ? err.message : String(err),
       })
