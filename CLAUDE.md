@@ -158,6 +158,26 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   aluno que o professor tirou daquela data, e ressuscitá-lo desfaria uma decisão da
   academia
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
+- **Fila de espera é entrada AUTOMÁTICA.** Vaga aberta → `promoteFromWaitlist`
+  ([features/aulas/waitlistActions.ts](features/aulas/waitlistActions.ts)) coloca o primeiro
+  da fila na aula pela porta normal (`bookSessionAs`, com `orgId` explícito porque a promoção
+  roda sem usuário logado) e avisa por in-app/push/e-mail; quem ficou na frente recebe "virou
+  o primeiro", **uma vez só** (`waitlists.first_notified_at`). Não existe mais o aviso de
+  "abriu vaga" para a fila inteira. Três travas sustentam o desenho: **corte de 1h** antes do
+  início ([lib/aulas/waitlistPromotion.ts](lib/aulas/waitlistPromotion.ts)) — promover quem
+  não vai ver o aviso em tempo enche a turma no papel e esvazia na quadra, e 1h é a mesma
+  janela de `BOOKING_GRACE_MINUTES`, o prazo que o aluno tem para sair sem penalidade;
+  **entrar na fila exige poder entrar na aula** (`resolveStudentClassAccess`), senão dava
+  para ficar na fila com dívida e descobrir só na promoção; e **quem deixou de poder entrar
+  é removido da fila com aviso do motivo** — remover em silêncio deixaria a pessoa esperando
+  para sempre por uma vaga que nunca viria. A ordem da fila é `joined_at`, nunca a coluna
+  `position` (que não é recalculada). O convite manual por WhatsApp do professor
+  (`WaitlistPanel`) continua existindo para quem foi barrado ou está fora do corte de 1h.
+- **`resolveStudentClassAccess`** ([features/aulas/classAccessQuery.ts](features/aulas/classAccessQuery.ts))
+  é a única coleta de dados de "esse aluno pode entrar nesta aula?" — plano, cota, teto
+  diário, dívida, pendência de check-in, férias, cadastro inativo. Usada em três momentos que
+  têm de concordar: reservar, entrar na fila e ser promovido pela fila. A regra em si continua
+  pura em `resolveClassAccess` ([lib/utils/accessRules.ts](lib/utils/accessRules.ts)).
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
 - Aluno **sem e-mail** é cadastro gerenciado pela academia: linha em `profiles` com UUID

@@ -345,12 +345,12 @@ export async function enforceMissedCheckinBlock(
 /** Import dinâmico: waitlistActions é 'use server' e importa daqui indiretamente. */
 async function offerFreedSpots(sessionIds: string[]): Promise<void> {
   if (sessionIds.length === 0) return
-  const { notifyWaitlistSpotOpen } = await import('@/features/aulas/waitlistActions')
+  const { promoteFromWaitlist } = await import('@/features/aulas/waitlistActions')
   for (const sessionId of Array.from(new Set(sessionIds))) {
     try {
-      await notifyWaitlistSpotOpen(sessionId)
+      await promoteFromWaitlist(sessionId)
     } catch (err) {
-      console.error('[enforceMissedCheckinBlock] notifyWaitlistSpotOpen falhou', {
+      console.error('[enforceMissedCheckinBlock] promoteFromWaitlist falhou', {
         sessionId, error: err instanceof Error ? err.message : String(err),
       })
     }
