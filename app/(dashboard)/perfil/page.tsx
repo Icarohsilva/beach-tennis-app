@@ -1,5 +1,5 @@
 // app/(dashboard)/perfil/page.tsx
-import { createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
+import { createAdminClient, getActiveMembership, getActiveOrgId, getAuthUser, getCurrentOrg } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { SubscriptionCard } from '@/features/financeiro/SubscriptionCard'
@@ -47,6 +47,8 @@ export default async function PerfilPage() {
     .single()
 
   const membership = await getActiveMembership()
+  // Memoizado por request (requestCache), então não custa uma consulta a mais.
+  const org = await getCurrentOrg()
   // Cardápio de modalidades da academia — domínio do seletor "Meus esportes".
   const orgSports = await getOrgSports(orgId)
   const profile = membership
@@ -244,6 +246,7 @@ export default async function PerfilPage() {
           <CalendarSyncForm
             enabled={membership?.calendar_sync_enabled ?? false}
             url={membership?.calendar_feed_token ? calendarFeedUrl(membership.calendar_feed_token) : null}
+            calendarName={`Agenda ${org?.name ?? 'ArenaHub'}`}
           />
         </div>
       </section>
