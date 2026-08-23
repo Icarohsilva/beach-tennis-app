@@ -20,7 +20,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { generateGrid } from '@/features/aulas/gridGeneration'
 import { notifyGridGenerated } from '@/features/aulas/gridNotify'
-import { brtToday, addDaysStr, shouldRunGridNow } from '@/lib/utils/gridSchedule'
+import { brtToday, shouldRunGridNow, autoGridWindow } from '@/lib/utils/gridSchedule'
 import { fetchAllPages } from '@/lib/supabase/paginate'
 
 export const maxDuration = 300
@@ -82,8 +82,12 @@ export async function GET(req: NextRequest) {
       if (!shouldRunGridNow(day, hour, lastRun, now)) continue
 
       try {
-        const from = brtToday(now)
-        const r = await generateGrid(orgId, from, addDaysStr(from, 6))
+        // Amanhã..+7, não hoje..+6: com a janela começando hoje, o dia escolhido
+        // para gerar nunca alcançava a própria próxima ocorrência (sábado dava
+        // sábado→sexta, cujo único sábado era o de hoje, já em andamento às 14h).
+        // Ver autoGridWindow.
+        const { from, to } = autoGridWindow(brtToday(now))
+        const r = await generateGrid(orgId, from, to)
         if (r.error) {
           // generateGrid não lançou (erro de upsert é engolido lá), mas não
           // podemos tratar como sucesso: nem soma contador de sucesso nem
@@ -92,6 +96,14 @@ export async function GET(req: NextRequest) {
           console.error('[cron/weekly-grid-generation] falhou para uma academia', {
             organizationId: orgId,
             error: r.error,
+          })
+          // Vai ao Sentry: sem isto a academia fica semanas sem grade em
+          // silêncio. A marca d'água não avança, então nada na tela denuncia —
+          // foi exatamente assim que uma falha passou 5 dias sem ser vista.
+          Sentry.captureMessage('[cron/weekly-grid-generation] geração falhou para uma academia', {
+            level: 'error',
+            tags: { cron: 'weekly-grid-generation' },
+            extra: { organizationId: orgId, error: r.error },
           })
           continue
         }
@@ -121,6 +133,10 @@ export async function GET(req: NextRequest) {
         console.error('[cron/weekly-grid-generation] falhou para uma academia', {
           organizationId: orgId,
           error: err instanceof Error ? err.message : String(err),
+        })
+        Sentry.captureException(err, {
+          tags: { cron: 'weekly-grid-generation' },
+          extra: { organizationId: orgId },
         })
       }
     }

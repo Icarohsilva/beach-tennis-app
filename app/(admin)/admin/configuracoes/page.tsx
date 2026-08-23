@@ -48,6 +48,10 @@ export default async function ConfiguracoesPage() {
     grid_auto_enabled: (map.get('grid_auto_enabled') ?? 'false') === 'true',
     grid_auto_day: Number(map.get('grid_auto_day') ?? 1),
     grid_auto_hour: Number(map.get('grid_auto_hour') ?? 6),
+    // Marca d'água que o cron grava DEPOIS de gerar. Vai para a tela porque sem
+    // ela "não rodou" e "rodou e não criou nada" são indistinguíveis para o
+    // admin — e a única forma de descobrir era consultar o banco.
+    grid_auto_last_run: map.get('grid_auto_last_run') ?? null,
   }
 
   const cobranca = {
