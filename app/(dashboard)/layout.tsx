@@ -1,12 +1,13 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser, getAuthUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { OrgSwitcher } from '@/components/ui/OrgSwitcher'
 import { Logo } from '@/components/ui/Logo'
-import { hasStudentAccess } from '@/lib/org/activeOrg'
+import { hasStudentAccess, isStaffOfActiveOrg } from '@/lib/org/activeOrg'
 import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
@@ -36,6 +37,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Conta livre e vínculo só de atleta não têm turma, plano nem ranking: Home,
   // Liga e a agenda seriam telas vazias. O menu deles é Explorar/Arena/Perfil.
   const isStudent = hasStudentAccess(memberships)
+  // Porta de volta ao painel. Sem ela, o admin que cai aqui (é o start_url do
+  // PWA) não tinha caminho nenhum de volta a não ser sair e entrar de novo, e
+  // parecia ter "virado aluno". Zero consulta extra: memberships e activeOrgId
+  // já estão carregados acima.
+  const isStaff = isStaffOfActiveOrg(memberships, activeOrgId)
 
   // Fetch recent notifications (last 20)
   const { data: notificationsRaw } = await supabase
@@ -80,6 +86,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </span>
         )}
         <div className="flex items-center gap-1">
+          {/* shrink-0 + whitespace-nowrap: divide a barra de 44px com o nome da
+              academia, que é truncado — sem isso o rótulo quebraria antes dele. */}
+          {isStaff && (
+            <Link
+              href="/admin/dashboard"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1 text-xs font-semibold text-brand-300 transition-colors hover:bg-brand-500/20"
+            >
+              Painel
+            </Link>
+          )}
           <HelpButton variant="aluno" inline />
           <NotificationBell initialNotifications={notifications} orgName={org?.name ?? null} />
         </div>

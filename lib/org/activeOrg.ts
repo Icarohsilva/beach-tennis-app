@@ -41,3 +41,25 @@ export function resolveActiveOrg(
 export function hasStudentAccess(memberships: { role: string }[]): boolean {
   return memberships.some((m) => m.role !== 'athlete')
 }
+
+/**
+ * A pessoa é staff (admin/professor) da academia ATIVA?
+ *
+ * Existe porque o app do aluno e o painel admin são duas casas, e quem tem as
+ * duas chaves precisa de porta entre elas: o admin que cai em /home (é o
+ * `start_url` do PWA) ficava sem nenhum caminho de volta ao painel a não ser
+ * sair e entrar de novo — o login é ciente do papel, a área do aluno não era.
+ *
+ * Escopado à academia ativa de propósito: ser admin numa academia não dá painel
+ * na outra. `role === 'admin'` é o mesmo teste que app/(admin)/layout.tsx aplica
+ * (professor também é 'admin'; o que o separa do dono é `is_co_owner`, e isso é
+ * decidido lá dentro por `canAccessArea`) — se os dois discordassem, este link
+ * levaria a um redirect de volta.
+ */
+export function isStaffOfActiveOrg(
+  memberships: { organization_id: string; role: string }[],
+  activeOrgId: string | null,
+): boolean {
+  if (!activeOrgId) return false
+  return memberships.some((m) => m.organization_id === activeOrgId && m.role === 'admin')
+}

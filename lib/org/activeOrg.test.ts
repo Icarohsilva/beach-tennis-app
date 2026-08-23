@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveActiveOrg, hasStudentAccess } from './activeOrg'
+import { resolveActiveOrg, hasStudentAccess, isStaffOfActiveOrg } from './activeOrg'
 
 const m = (organization_id: string) => ({ organization_id })
 
@@ -45,5 +45,40 @@ describe('hasStudentAccess', () => {
   it('papel desconhecido conta como aluno — falha para o lado seguro', () => {
     // Esconder o app de quem paga é pior que mostrar uma aba a mais.
     expect(hasStudentAccess([{ role: 'coach' }])).toBe(true)
+  })
+})
+
+describe('isStaffOfActiveOrg', () => {
+  const admin = { organization_id: 'org-1', role: 'admin' }
+  const aluno = { organization_id: 'org-1', role: 'student' }
+
+  it('admin da academia ativa é staff', () => {
+    expect(isStaffOfActiveOrg([admin], 'org-1')).toBe(true)
+  })
+
+  it('aluno não é staff', () => {
+    expect(isStaffOfActiveOrg([aluno], 'org-1')).toBe(false)
+  })
+
+  // Ser admin numa academia não pode abrir o painel de outra: o link levaria a
+  // um redirect de volta, e no pior caso sugeriria acesso que não existe.
+  it('admin de OUTRA academia não é staff na ativa', () => {
+    expect(isStaffOfActiveOrg([{ organization_id: 'org-2', role: 'admin' }], 'org-1')).toBe(false)
+  })
+
+  it('escolhe a membership da academia ativa quando há várias', () => {
+    const ms = [{ organization_id: 'org-1', role: 'student' }, { organization_id: 'org-2', role: 'admin' }]
+    expect(isStaffOfActiveOrg(ms, 'org-1')).toBe(false)
+    expect(isStaffOfActiveOrg(ms, 'org-2')).toBe(true)
+  })
+
+  // Academia ativa não resolvida: sem isso o `.some` compararia com undefined e
+  // um membership com organization_id nulo passaria por engano.
+  it('sem academia ativa, ninguém é staff', () => {
+    expect(isStaffOfActiveOrg([admin], null)).toBe(false)
+  })
+
+  it('sem membership nenhuma, não é staff', () => {
+    expect(isStaffOfActiveOrg([], 'org-1')).toBe(false)
   })
 })
