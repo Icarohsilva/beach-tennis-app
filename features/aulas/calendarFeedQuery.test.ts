@@ -31,11 +31,14 @@ interface SessionFixture {
 function makeClient(input: {
   sessions?: SessionFixture[]
   enrollments?: { class_id: string }[]
-  bookings?: { session_id: string }[]
+  /** `status` omitido conta como 'confirmed' — só 'cancelled' é opt-out. */
+  bookings?: { session_id: string; status?: string }[]
+  vacations?: { starts_on: string; ends_on: string }[]
 }) {
   const sessions = input.sessions ?? []
   const enrollments = input.enrollments ?? []
   const bookings = input.bookings ?? []
+  const vacations = input.vacations ?? []
 
   function builder<T extends Record<string, unknown>>(rows: T[]) {
     const filters: [string, unknown][] = []
@@ -56,6 +59,11 @@ function makeClient(input: {
     // Terminal: fetchAllPages faz `await makeQuery(a, b)` — não há mais nada
     // encadeado depois de .range() no código real.
     b.range = () => resolved()
+    // Awaitable em qualquer ponto da cadeia: getApprovedVacations termina em
+    // .gte(), sem .range() nem .in() depois. Sem isto o await cairia no próprio
+    // objeto e a query devolveria undefined em silêncio.
+    b.then = (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) =>
+      Promise.resolve(resolved()).then(onFulfilled)
     // Só filtra por campos que os fixtures de fato modelam — igual ao fake
     // client de gridGeneration.test.ts. organization_id/is_active são sempre
     // aplicados pelo código real mas não entram nos fixtures aqui: tratados
@@ -82,6 +90,7 @@ function makeClient(input: {
     if (table === 'class_sessions') return builder(sessions as unknown as Record<string, unknown>[])
     if (table === 'enrollments') return builder(enrollments as unknown as Record<string, unknown>[])
     if (table === 'session_bookings') return builder(bookings as unknown as Record<string, unknown>[])
+    if (table === 'vacations') return builder(vacations as unknown as Record<string, unknown>[])
     throw new Error(`tabela não modelada: ${table}`)
   })
 
@@ -161,4 +170,88 @@ describe('getCalendarFeedEvents', () => {
     const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
     expect(events[0].location).toBeNull()
   })
+
+  // ── Recusa da data ────────────────────────────────────────────────────────
+  // O feed tratava matrícula e reserva como duas fontes e nunca olhava a
+  // TERCEIRA informação: a recusa daquela data. Resultado: o aluno saía da
+  // lista de presentes no app e a aula continuava no Google Calendar dele.
+
+  it('fixo que avisou que NÃO vem: a aula sai do feed', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-08-25', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      bookings: [{ session_id: 's1', status: 'cancelled' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events).toEqual([])
+  })
+
+  it('reserva confirmada vence o opt-out (precedência de mergeSessionAttendees)', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-08-25', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      bookings: [{ session_id: 's1', status: 'confirmed' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events).toHaveLength(1)
+  })
+
+  it('recusar UMA data não tira as outras datas da mesma turma', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-08-25', class_id: 'c1', status: 'scheduled', classes: TURMA },
+        { id: 's2', session_date: '2026-09-01', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      bookings: [{ session_id: 's1', status: 'cancelled' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events.map((e) => e.uid)).toEqual(['s2'])
+  })
+
+  // ── Férias ────────────────────────────────────────────────────────────────
+  // O fixo de férias não ganha reserva (a reconciliação nega com on_vacation),
+  // então não há linha 'cancelled' para excluí-lo — precisa da leitura própria.
+
+  it('fixo de férias na data: a aula sai do feed', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-08-25', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      vacations: [{ starts_on: '2026-08-24', ends_on: '2026-08-30' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events).toEqual([])
+  })
+
+  it('data fora do período de férias continua no feed', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-09-15', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      vacations: [{ starts_on: '2026-08-24', ends_on: '2026-08-30' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events.map((e) => e.uid)).toEqual(['s1'])
+  })
+
+  it('reserva confirmada dentro das férias entra — a mesma precedência vale aqui', async () => {
+    const client = makeClient({
+      sessions: [
+        { id: 's1', session_date: '2026-08-25', class_id: 'c1', status: 'scheduled', classes: TURMA },
+      ],
+      enrollments: [{ class_id: 'c1' }],
+      bookings: [{ session_id: 's1', status: 'confirmed' }],
+      vacations: [{ starts_on: '2026-08-24', ends_on: '2026-08-30' }],
+    })
+    const events = await getCalendarFeedEvents(client, { orgId: 'org-1', studentId: 'aluno-1' })
+    expect(events).toHaveLength(1)
+  })
+
 })

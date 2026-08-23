@@ -14,6 +14,8 @@ import { IN_CHUNK_SIZE, chunk, fetchAllPages } from '@/lib/supabase/paginate'
 import { resolveSession } from '@/lib/aulas/sessionOverride'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getApprovedVacations } from './vacationQueries'
+import { isOnVacation } from '@/lib/aulas/vacation'
 import type { CalendarEvent } from '@/lib/aulas/icsFeed'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -54,6 +56,13 @@ async function idsIn<T>(
  * Todas as aulas futuras (`scheduled`) que são do aluno nesta academia —
  * fixas (matrícula ativa) ou avulsas (reserva confirmada) — já resolvidas
  * para hora/quadra reais, prontas para `buildIcsCalendar`.
+ *
+ * "É do aluno" segue a precedência de `mergeSessionAttendees`
+ * (lib/utils/attendees.ts): reserva confirmada vence; na falta dela a matrícula
+ * ativa conta, **a menos que** o aluno tenha avisado que não vem naquela data
+ * (reserva `cancelled`) ou esteja de férias nela. Sem esses dois cortes o feed
+ * mantinha no Google/Apple/Outlook uma aula que o app já tinha tirado da lista
+ * de presentes — as duas fontes são parciais, e é a recusa que as corrige.
  */
 export async function getCalendarFeedEvents(
   client: AdminClient,
@@ -62,7 +71,7 @@ export async function getCalendarFeedEvents(
   const { orgId, studentId } = input
   const today = brtToday(new Date())
 
-  const [sessions, enrollments] = await Promise.all([
+  const [sessions, enrollments, vacations] = await Promise.all([
     fetchAllPages<SessionRow>(
       (a, b) =>
         client
@@ -89,27 +98,46 @@ export async function getCalendarFeedEvents(
           .range(a, b) as unknown as Page<{ class_id: string }>,
       { label: 'calendarFeed/matriculas' },
     ),
+    // Férias aprovadas que ainda alcançam o futuro. O aluno fixo de férias não
+    // ganha reserva (a reconciliação nega com `on_vacation`), então não existe
+    // linha `cancelled` para excluí-lo — sem esta leitura a aula seguiria no
+    // calendário pessoal dele durante as férias.
+    getApprovedVacations(client, studentId, orgId, today),
   ])
 
   const fixedClassIds = new Set(enrollments.map((e) => e.class_id))
 
-  const myBookings = await idsIn(sessions.map((s) => s.id), (part) =>
+  // Traz os DOIS status na mesma ida, sem filtro de status na query: o enum
+  // `booking_status` só tem 'confirmed' e 'cancelled' (001_initial_schema.sql),
+  // então não há terceiro caso a excluir — e uma query só custa o mesmo que a
+  // anterior. A reserva `cancelled` é o opt-out do aluno fixo.
+  const bookingRows = await idsIn(sessions.map((s) => s.id), (part) =>
     client
       .from('session_bookings')
-      .select('session_id')
+      .select('session_id, status')
       .eq('student_id', studentId)
-      .eq('status', 'confirmed')
       .in('session_id', part) as unknown as PromiseLike<{
-      data: { session_id: string }[] | null
+      data: { session_id: string; status: string }[] | null
     }>,
-  ).then((rows) => new Set(rows.map((r) => r.session_id)))
+  )
+
+  const myBookings = new Set(
+    bookingRows.filter((r) => r.status !== 'cancelled').map((r) => r.session_id),
+  )
+  const myOptOuts = new Set(
+    bookingRows.filter((r) => r.status === 'cancelled').map((r) => r.session_id),
+  )
 
   const events: CalendarEvent[] = []
 
   for (const row of sessions) {
     const cls = Array.isArray(row.classes) ? row.classes[0] : row.classes
     if (!cls) continue
-    if (!myBookings.has(row.id) && !fixedClassIds.has(row.class_id)) continue
+    const temReserva = myBookings.has(row.id)
+    const souFixo = fixedClassIds.has(row.class_id)
+    // Reserva confirmada vence: quem confirmou entra, mesmo de férias.
+    const recusouEstaData = myOptOuts.has(row.id) || isOnVacation(vacations, row.session_date)
+    if (!temReserva && (!souFixo || recusouEstaData)) continue
 
     const resolved = resolveSession(row, cls)
     events.push({
