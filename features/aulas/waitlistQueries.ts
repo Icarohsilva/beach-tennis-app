@@ -11,12 +11,18 @@ export interface WaitlistRow {
   studentId: string
   fullName: string
   status: Extract<WaitlistStatus, 'waiting' | 'offered'>
-  /** Ordem de chegada (1 = entrou primeiro). Não dá prioridade: a vaga é de
-   *  quem entrar primeiro quando abre — serve só para o professor ler a fila. */
+  /** Ordem de chegada (1 = entrou primeiro). Com entrada automática ela vale de
+   *  verdade: abrindo vaga, o 1º é promovido. */
   position: number
   joinedAt: string
-  /** Quando esta pessoa foi avisada da última vaga aberta. */
-  notifiedAt: string | null
+  /**
+   * Quando o aluno foi avisado de que virou o PRIMEIRO da fila.
+   *
+   * Era `notified_at` ("a fila inteira foi avisada de uma vaga"), coluna que
+   * deixou de ser escrita quando a entrada virou automática — o painel mostrava
+   * um campo que nunca mais ia preencher.
+   */
+  firstNotifiedAt: string | null
   /** WhatsApp do aluno, para o professor chamá-lo direto. null = sem telefone. */
   phone: string | null
 }
@@ -35,7 +41,7 @@ export async function getSessionWaitlist(
 ): Promise<WaitlistRow[]> {
   const { data, error } = await client
     .from('waitlists')
-    .select('id, student_id, status, joined_at, notified_at')
+    .select('id, student_id, status, joined_at, first_notified_at')
     .eq('session_id', sessionId)
     .eq('organization_id', orgId)
     .in('status', ['waiting', 'offered'])
@@ -51,7 +57,7 @@ export async function getSessionWaitlist(
     student_id: string
     status: 'waiting' | 'offered'
     joined_at: string
-    notified_at: string | null
+    first_notified_at: string | null
   }[]
 
   const studentIds = rows.map((r) => r.student_id)
@@ -74,7 +80,7 @@ export async function getSessionWaitlist(
     status: r.status,
     position: i + 1,
     joinedAt: r.joined_at,
-    notifiedAt: r.notified_at,
+    firstNotifiedAt: r.first_notified_at,
     phone: byId.get(r.student_id)?.phone ?? null,
   }))
 }

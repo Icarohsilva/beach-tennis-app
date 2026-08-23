@@ -4,102 +4,286 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
+import type { AccessDenial } from '@/lib/utils/accessRules'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { resolveSession, type SessionOverrides } from '@/lib/aulas/sessionOverride'
+import { sessionStartIso } from '@/lib/utils/sessionTime'
+import { canAutoEnter, openSpots } from '@/lib/aulas/waitlistPromotion'
+import {
+  buildAutoEnteredNotice,
+  buildNowFirstNotice,
+  buildRemovedFromWaitlistNotice,
+  type WaitlistNotice,
+  type WaitlistSessionRef,
+} from '@/lib/aulas/waitlistMessages'
+import { getMembershipFor, resolveStudentClassAccess } from './classAccessQuery'
 
 // ---------------------------------------------------------------------------
-// notifyWaitlistSpotOpen — avisa a fila inteira quando uma vaga abre
+// promoteFromWaitlist — o primeiro da fila entra AUTOMATICAMENTE
 // ---------------------------------------------------------------------------
 
 /**
- * Avisa TODA a fila de espera de que uma vaga abriu. A vaga fica com quem
- * entrar primeiro — não há oferta individual nem reserva temporária.
+ * Vaga abriu: coloca na aula quem está na frente da fila, um por vaga.
  *
- * O modelo anterior oferecia a vaga a uma pessoa por vez, com 1h para aceitar,
- * e dependia de um cron para expirar a oferta e passar para a próxima. Como o
- * plano Hobby da Vercel só permite cron 1x/dia, uma oferta não aceita segurava
- * a fila por até ~24h e a vaga morria sem ninguém usar. Notificando todo mundo
- * de uma vez a fila não trava: a corrida é resolvida no próprio agendamento,
- * que é atômico (book_session_atomic + advisory lock), então quem chega depois
- * do último lugar recebe SESSION_FULL e continua na fila para a próxima vaga.
+ * Substitui o modelo de "avisa a fila inteira e a vaga fica com quem entrar
+ * primeiro". Aquele modelo existia porque o anterior a ele — oferta individual
+ * com 1h para aceitar — dependia de um cron para expirar a oferta, e no plano
+ * Hobby da Vercel o cron roda 1x/dia: uma oferta não aceita segurava a fila por
+ * ~24h e a vaga morria sem ninguém usar. A entrada automática não reintroduz
+ * esse problema porque não existe oferta pendente para expirar: ou entra agora,
+ * ou a vez passa.
+ *
+ * O que acontece, em ordem:
+ *   1. Faltando menos de 1h para o início, NINGUÉM é promovido — a vaga fica
+ *      aberta para quem quiser. Colocar alguém que não vai ver o aviso em tempo
+ *      enche a turma no papel e esvazia na quadra (ver waitlistPromotion.ts).
+ *   2. Para cada vaga, o primeiro da fila que PODE entrar entra e é avisado.
+ *   3. Quem não pode entrar sai da fila e é avisado do motivo. Remoção em
+ *      silêncio seria pior: ele esperaria para sempre por uma vaga que, com
+ *      dívida ou cota estourada, nunca seria oferecida.
+ *   4. No fim, quem ficou na frente da fila é avisado de que virou o primeiro —
+ *      uma vez só, via `first_notified_at`.
+ *
+ * Nunca lança: é chamada depois de um cancelamento já gravado (fire-and-forget),
+ * e falha aqui não pode desfazer a saída que abriu a vaga.
  */
-export async function notifyWaitlistSpotOpen(sessionId: string): Promise<void> {
-  const adminClient = createAdminClient()
-
-  const { data: waiting } = await adminClient
-    .from('waitlists')
-    .select('id, student_id')
-    .eq('session_id', sessionId)
-    .eq('status', 'waiting')
-    .order('joined_at', { ascending: true })
-
-  const entries = (waiting ?? []) as { id: string; student_id: string }[]
-  if (entries.length === 0) return
-
-  const { data: session } = await adminClient
-    .from('class_sessions')
-    .select('organization_id, session_date, class:classes(name)')
-    .eq('id', sessionId)
-    .single()
-
-  const classRaw = Array.isArray(session?.class) ? session!.class[0] : session?.class
-  const className = (classRaw as { name: string } | null)?.name ?? 'sua aula'
-
-  const title = 'Vaga disponível!'
-  const body =
-    `Abriu uma vaga em ${className} (${session?.session_date}). ` +
-    'A vaga é de quem entrar primeiro. Abra o app e garanta a sua.'
-
-  const studentIds = entries.map((e) => e.student_id)
-
-  // Best-effort: falha de notificação não pode derrubar o cancelamento que a
-  // originou (chamada fire-and-forget por cancelBooking/skipEnrollmentSession).
+export async function promoteFromWaitlist(sessionId: string): Promise<void> {
   try {
-    const { data: profiles } = await adminClient
-      .from('profiles')
-      .select('id, phone')
-      .in('id', studentIds)
-    const { data: emailRows } = await adminClient
-      .from('user_emails')
-      .select('id, email')
-      .in('id', studentIds)
-
-    const phoneById = new Map(
-      ((profiles ?? []) as { id: string; phone: string | null }[]).map((p) => [p.id, p.phone]),
-    )
-    const emailById = new Map(
-      ((emailRows ?? []) as { id: string; email: string }[]).map((e) => [e.id, e.email]),
-    )
-
-    await notifyUsers(adminClient, {
-      orgId: session?.organization_id as string,
-      recipients: studentIds.map((id) => ({
-        userId: id,
-        email: emailById.get(id) ?? null,
-        phone: phoneById.get(id) ?? null,
-      })),
-      type: 'waitlist_offer',
-      title,
-      body,
-      channels: ['inapp', 'email', 'whatsapp', 'push'],
-    })
-
-    // Marca d'água de quando a fila foi avisada — o painel do professor usa
-    // para mostrar que todo mundo já foi chamado para esta vaga.
-    await adminClient
-      .from('waitlists')
-      .update({ notified_at: new Date().toISOString() })
-      .in('id', entries.map((e) => e.id))
+    await runPromotion(sessionId)
   } catch (err) {
-    console.error('[notifyWaitlistSpotOpen] notifyUsers falhou', {
+    console.error('[promoteFromWaitlist] falhou', {
       sessionId,
-      recipients: studentIds.length,
       error: err instanceof Error ? err.message : String(err),
     })
     Sentry.captureException(err, {
-      tags: { channel: 'dispatch', notificationType: 'waitlist_offer' },
-      extra: { sessionId, recipients: studentIds.length },
+      tags: { channel: 'waitlist', notificationType: 'waitlist_promotion' },
+      extra: { sessionId },
+    })
+  }
+}
+
+async function runPromotion(sessionId: string): Promise<void> {
+  const adminClient = createAdminClient()
+
+  const { data: sessionRow } = await adminClient
+    .from('class_sessions')
+    .select(
+      'id, organization_id, session_date, status, start_time, end_time, court, max_students, class:classes(name, max_students, start_time, end_time, court)',
+    )
+    .eq('id', sessionId)
+    .single()
+
+  if (!sessionRow) return
+  // Aula cancelada ou concluída não tem vaga a preencher.
+  if (sessionRow.status !== 'scheduled') return
+
+  const clsRaw = Array.isArray(sessionRow.class) ? sessionRow.class[0] : sessionRow.class
+  const cls = clsRaw as {
+    name: string
+    max_students: number
+    start_time: string
+    end_time: string
+    court: number | null
+  } | null
+  if (!cls) return
+
+  const orgId = sessionRow.organization_id as string
+  const sessionDate = sessionRow.session_date as string
+
+  // Capacidade e horário DESTA data, não os da turma: aula remarcada ou com
+  // capacidade ajustada muda os dois.
+  const resolved = resolveSession(sessionRow as SessionOverrides, cls)
+  const ref = {
+    className: cls.name,
+    sessionDate,
+    startTime: resolved.startTime,
+  }
+
+  // Corte de 1h. Vale para a promoção inteira, então é avaliado antes de
+  // qualquer leitura de fila.
+  if (!canAutoEnter(sessionStartIso(sessionDate, resolved.startTime), new Date().toISOString())) {
+    return
+  }
+
+  const { data: waiting } = await adminClient
+    .from('waitlists')
+    .select('id, student_id, first_notified_at')
+    .eq('session_id', sessionId)
+    .eq('status', 'waiting')
+    // A ordem é joined_at, nunca a coluna `position`: ela não é recalculada e
+    // fica defasada (ver features/aulas/waitlistQueries.ts).
+    .order('joined_at', { ascending: true })
+
+  const fila = (waiting ?? []) as {
+    id: string
+    student_id: string
+    first_notified_at: string | null
+  }[]
+  if (fila.length === 0) return
+
+  const { count: confirmados } = await adminClient
+    .from('session_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId)
+    .eq('status', 'confirmed')
+
+  let vagas = openSpots(resolved.maxStudents, confirmados ?? 0)
+
+  for (const entrada of fila) {
+    if (vagas === 0) break
+
+    const membership = await getMembershipFor(adminClient, entrada.student_id, orgId)
+    if (!membership) continue
+
+    const access = await resolveStudentClassAccess(adminClient, {
+      studentId: entrada.student_id,
+      orgId,
+      sessionDate,
+      membership,
+    })
+
+    // Barrado: sai da fila e é avisado do motivo. `dailyCapExceeded` é o teto
+    // diário medido fora da cota — a decisão não o cobre quando a academia tem
+    // a cota desligada, então ele entra aqui explicitamente.
+    const denial =
+      'denied' in access.decision
+        ? access.decision.denied
+        : access.dailyCapExceeded
+          ? ('daily_cap' as const)
+          : null
+
+    if (denial) {
+      await adminClient
+        .from('waitlists')
+        .update({ status: 'cancelled' as WaitlistStatus })
+        .eq('id', entrada.id)
+
+      await enviar(
+        adminClient,
+        orgId,
+        entrada.student_id,
+        'waitlist_removed',
+        buildRemovedFromWaitlistNotice(ref, denial, access.debtTotal),
+      )
+      continue
+    }
+
+    // Reserva pela porta normal: é ela que garante capacidade atômica
+    // (book_session_atomic), débito de crédito, saída da fila e o ponto de Liga
+    // de "pegou vaga da fila". `orgId` explícito porque aqui não há usuário
+    // logado — a promoção roda no cron e no request de quem cancelou.
+    // Import dinâmico: `actions.ts` importa deste módulo, então o estático
+    // fecharia um ciclo. Mesmo recurso que features/checkin/missedCheckins.ts
+    // já usa para chamar a fila de volta.
+    const { bookSessionAs } = await import('./actions')
+    const { error } = await bookSessionAs(entrada.student_id, sessionId, { orgId })
+    if (error) {
+      // Corrida (alguém entrou primeiro) ou recusa que a decisão não previu.
+      // Não remove da fila: o lugar dele continua valendo para a próxima vaga.
+      console.error('[promoteFromWaitlist] reserva recusada', {
+        sessionId,
+        studentId: entrada.student_id,
+        error,
+      })
+      continue
+    }
+
+    vagas--
+    await enviar(
+      adminClient,
+      orgId,
+      entrada.student_id,
+      'waitlist_auto_entered',
+      buildAutoEnteredNotice(ref),
+    )
+  }
+
+  await avisarNovoPrimeiro(adminClient, sessionId, orgId, ref)
+}
+
+/**
+ * Avisa quem ficou na frente da fila. Uma vez por pessoa, por sessão: sem a
+ * marca em `first_notified_at`, o cron de rede de segurança reavisaria o mesmo
+ * aluno a cada passada.
+ */
+async function avisarNovoPrimeiro(
+  adminClient: ReturnType<typeof createAdminClient>,
+  sessionId: string,
+  orgId: string,
+  ref: WaitlistSessionRef,
+): Promise<void> {
+  const { data: restante } = await adminClient
+    .from('waitlists')
+    .select('id, student_id, first_notified_at')
+    .eq('session_id', sessionId)
+    .eq('status', 'waiting')
+    .order('joined_at', { ascending: true })
+    .limit(1)
+
+  const primeiro = ((restante ?? []) as {
+    id: string
+    student_id: string
+    first_notified_at: string | null
+  }[])[0]
+
+  if (!primeiro || primeiro.first_notified_at) return
+
+  await adminClient
+    .from('waitlists')
+    .update({ first_notified_at: new Date().toISOString() })
+    .eq('id', primeiro.id)
+
+  await enviar(
+    adminClient,
+    orgId,
+    primeiro.student_id,
+    'waitlist_now_first',
+    buildNowFirstNotice(ref),
+  )
+}
+
+/**
+ * Dispara um aviso da fila. In-app + push + e-mail, sem WhatsApp.
+ *
+ * Best-effort: a reserva (ou a remoção) já está gravada e não pode ser desfeita
+ * porque um push falhou. O e-mail precisa do endereço de `user_emails` — aluno
+ * sem login (dependente, cadastro gerenciado pela academia) não tem, e para ele
+ * sobram in-app e push.
+ */
+async function enviar(
+  adminClient: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  studentId: string,
+  type: string,
+  notice: WaitlistNotice,
+): Promise<void> {
+  try {
+    const { data: emailRow } = await adminClient
+      .from('user_emails')
+      .select('email')
+      .eq('id', studentId)
+      .maybeSingle()
+
+    await notifyUsers(adminClient, {
+      orgId,
+      recipients: [
+        { userId: studentId, email: (emailRow as { email: string } | null)?.email ?? null },
+      ],
+      type,
+      title: notice.title,
+      body: notice.body,
+      channels: ['inapp', 'email', 'push'],
+    })
+  } catch (err) {
+    console.error('[promoteFromWaitlist] aviso falhou', {
+      studentId,
+      type,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    Sentry.captureException(err, {
+      tags: { channel: 'dispatch', notificationType: type },
+      extra: { studentId },
     })
   }
 }
@@ -144,6 +328,35 @@ export async function clearWaitlistEntry(
 // joinWaitlist — student joins the waitlist for a full session
 // ---------------------------------------------------------------------------
 
+/**
+ * Por que o aluno não pode nem entrar na fila.
+ *
+ * Fala de FILA, não de reserva: o aluno está tentando entrar na lista, e um
+ * texto dizendo "não foi possível agendar" o deixaria procurando um agendamento
+ * que ele não pediu.
+ */
+function describeJoinDenial(
+  denial: AccessDenial,
+  access: { dailyCap: number; quotaLimit: number | null; debtTotal: number },
+): string {
+  switch (denial) {
+    case 'archived':
+      return 'Seu cadastro nesta academia está inativo. Fale com a academia para voltar a agendar.'
+    case 'blocked_by_debt':
+      return `Você tem R$ ${access.debtTotal.toFixed(2).replace('.', ',')} em aberto. Regularize em Financeiro para entrar na fila.`
+    case 'blocked_by_missed_checkins':
+      return 'Você tem check-in(s) do parceiro em aberto. Regularize em Financeiro para entrar na fila.'
+    case 'on_vacation':
+      return 'Você tem férias aprovadas nesta data. Cancele as férias para poder entrar na fila desta aula.'
+    case 'quota_exhausted':
+      return `Você já usou suas ${access.quotaLimit ?? 0} aulas do ciclo. A fila coloca você na aula automaticamente, então ela precisa de aula disponível — compre uma avulsa ou cancele uma aula futura.`
+    case 'daily_cap':
+      return `Você já atingiu o limite de ${access.dailyCap} aulas por dia nessa data, então não pode entrar na fila desta aula.`
+    default:
+      return 'Não foi possível entrar na fila desta aula.'
+  }
+}
+
 export async function joinWaitlist(
   sessionId: string,
 ): Promise<{ error?: string; position?: number }> {
@@ -174,7 +387,7 @@ export async function joinWaitlistAs(
   const { data: session } = await adminClient
     .from('class_sessions')
     .select(
-      'id, status, max_students, start_time, end_time, court, class:classes(max_students, level, type, start_time, end_time, court)',
+      'id, status, session_date, max_students, start_time, end_time, court, class:classes(max_students, level, type, start_time, end_time, court)',
     )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
@@ -194,17 +407,13 @@ export async function joinWaitlistAs(
   if (!clsInfo) return { error: 'Turma não encontrada.' }
 
   // Nível/dependente/pagamento (por-academia) vêm da membership do ALUNO na
-  // academia ativa — que pode ser o dependente, não quem está logado.
-  const { data: joinProfileRaw } = await adminClient
-    .from('memberships')
-    .select('is_dependent')
-    .eq('user_id', studentId)
-    .eq('organization_id', orgId)
-    .maybeSingle()
-  const joinProfile = joinProfileRaw as { is_dependent: boolean } | null
-  if (!joinProfile) return { error: 'Perfil não encontrado.' }
+  // academia ativa — que pode ser o dependente, não quem está logado. A
+  // membership inteira, e não só `is_dependent`, porque a decisão de acesso
+  // abaixo precisa de crédito, parceiro e `archived_at`.
+  const joinMembership = await getMembershipFor(adminClient, studentId, orgId)
+  if (!joinMembership) return { error: 'Perfil não encontrado.' }
 
-  if (clsInfo.type === 'kids' && !joinProfile.is_dependent) {
+  if (clsInfo.type === 'kids' && !joinMembership.is_dependent) {
     return {
       error:
         'Turma exclusiva para alunos kids. Se você é responsável, coloque o seu dependente na fila.',
@@ -248,6 +457,29 @@ export async function joinWaitlistAs(
 
   if ((existingWaitlist ?? 0) > 0) {
     return { error: 'Você já está na lista de espera desta sessão.' }
+  }
+
+  // A fila agora é entrada automática: quem está nela ENTRA na aula sozinho
+  // quando a vaga abre. Então entrar na fila exige poder entrar na aula — a mesma
+  // decisão da reserva, pela mesma função. Antes daqui a fila não checava nada
+  // disso, e dava para entrar com dívida e só descobrir na hora da vaga.
+  //
+  // O estado muda depois (a dívida aparece, a cota vira), então a checagem
+  // também é refeita na promoção, que remove quem deixou de poder entrar.
+  const access = await resolveStudentClassAccess(adminClient, {
+    studentId,
+    orgId,
+    sessionDate: session.session_date as string,
+    membership: joinMembership,
+  })
+
+  if ('denied' in access.decision) {
+    return { error: describeJoinDenial(access.decision.denied, access) }
+  }
+  if (access.dailyCapExceeded) {
+    return {
+      error: `Você já atingiu o limite de ${access.dailyCap} aulas por dia nessa data, então não pode entrar na fila desta aula.`,
+    }
   }
 
   // Entradas mortas (saiu da fila / perdeu o prazo) de tentativas anteriores.
@@ -302,7 +534,8 @@ export async function joinWaitlistAs(
       title: 'Você entrou na lista de espera',
       body:
         `Você é o ${position}º da fila em ${className} (${sessionInfo?.session_date}). ` +
-        'Se abrir uma vaga, avisamos todo mundo da fila. A vaga fica com quem entrar primeiro.',
+        'Quando abrir vaga, o primeiro da fila entra na aula automaticamente e é avisado. ' +
+        'Se você virar o primeiro, a gente te avisa também.',
       channels: ['inapp', 'push'],
     })
   } catch (err) {

@@ -6,7 +6,7 @@ import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } 
 import { canCancelWithRefund, getMakeupCreditExpiry } from '@/lib/utils/creditRules'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { resolveSession, type SessionOverrides } from '@/lib/aulas/sessionOverride'
-import { notifyWaitlistSpotOpen, clearWaitlistEntry } from './waitlistActions'
+import { promoteFromWaitlist, clearWaitlistEntry } from './waitlistActions'
 import {
   awardLigaExtra,
   revokeLigaExtra,
@@ -22,6 +22,7 @@ import { getApprovedVacations } from './vacationQueries'
 import { isOnVacation } from '@/lib/aulas/vacation'
 import { resolveClassAccess, exceedsDailyCap, resolveEnrollmentRejoin } from '@/lib/utils/accessRules'
 import { findEnrollmentRejoin } from './sessionUtils'
+import { getMembershipFor, resolveStudentClassAccess } from './classAccessQuery'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
@@ -137,27 +138,6 @@ async function revokeEntryPoints(
 }
 
 /**
- * Membership do aluno na academia, por id explícito.
- *
- * `getActiveMembership()` só serve para o próprio usuário logado; o responsável
- * que inscreve o filho precisa da membership DO FILHO — é ela que tem o crédito,
- * o plano e o `is_dependent` que a turma kids exige.
- */
-async function getMembershipFor(
-  adminClient: ReturnType<typeof createAdminClient>,
-  studentId: string,
-  orgId: string,
-): Promise<Membership | null> {
-  const { data } = await adminClient
-    .from('memberships')
-    .select('*')
-    .eq('user_id', studentId)
-    .eq('organization_id', orgId)
-    .maybeSingle()
-  return (data as Membership) ?? null
-}
-
-/**
  * Books a class session for the current authenticated student.
  *
  * Casca fina sobre `bookSessionAs`: o aluno é o próprio usuário logado. O
@@ -196,10 +176,14 @@ export async function bookSession(
 export async function bookSessionAs(
   studentId: string,
   sessionId: string,
-  opts: { payWith?: PayWith } = {},
+  opts: { payWith?: PayWith; orgId?: string } = {},
 ): Promise<{ error?: string }> {
   const adminClient = createAdminClient()
-  const orgId = await getActiveOrgId()
+  // `orgId` explícito existe para os caminhos SEM usuário logado: a promoção
+  // automática pela fila de espera roda no cron e dentro do request de quem
+  // cancelou, então `getActiveOrgId()` (academia ativa de quem está logado) ou
+  // não existe ou é de outra pessoa. Os callers de tela continuam sem passar.
+  const orgId = opts.orgId ?? (await getActiveOrgId())
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
   // 1. Campos por-academia (level, is_dependent, credits_balance, payment_type)
@@ -276,65 +260,31 @@ export async function bookSessionAs(
   // já foi gasto, então a volta grátis daria duas aulas por um pagamento.
   const freeRejoin = rejoinMode === 'free' || rejoinMode === 'clawback'
 
-  // Plano vigente: 'active' com período vencido NÃO dá acesso — mesmo critério
-  // da reconciliação (spec §1).
-  // getActivePlan devolve a configuração de cota, não só o sim/não — a cota
-  // precisa de classes_per_week, cycle e max_classes_per_day.
-  const plan = await getActivePlan(adminClient, studentId, orgId)
-  const hasActivePlan = plan !== null
+  const access = await resolveStudentClassAccess(adminClient, {
+    studentId,
+    orgId,
+    sessionDate: session.session_date as string,
+    membership: profile,
+    // Aula paga com crédito não gasta plano, então nem cota nem teto diário
+    // valem para ela. A preferência só existe de fato se houver saldo.
+    preferCredit: opts.payWith === 'credit' && profile.credits_balance >= 1,
+    skipCostAxes: freeRejoin,
+  })
+  const decision = access.decision
 
-  const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
-  const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
-
-  // Aula paga com crédito não gasta plano, então nem cota nem teto diário valem
-  // para ela. A preferência só existe de fato se houver saldo — sem crédito, o
-  // pedido é ignorado e a regra normal volta a decidir.
-  const preferCredit = opts.payWith === 'credit' && profile.credits_balance >= 1
-
-  // Só paga o custo das duas queries da cota quando a academia ligou a regra e a
-  // cota ainda importa para esta reserva.
-  const snapshot =
-    quotaEnforced && plan && !preferCredit && !freeRejoin
-      ? await getQuotaSnapshot(adminClient, studentId, orgId, plan, session.session_date)
-      : null
-
-  // Teto diário efetivo: o do plano do aluno, ou o padrão da academia quando
-  // não há plano ativo. Usado tanto no check inline abaixo quanto no
-  // resolveClassAccess mais adiante — nunca recalculado duas vezes.
-  // 0 = sem teto (ver exceedsDailyCap).
-  const dailyCap = plan?.maxClassesPerDay ?? orgDailyCap
-
-  // 4. Daily limit. Esta checagem roda mesmo com a cota desligada, então ela também
-  //    precisa respeitar o teto 0 e a escolha do crédito — senão o aluno seria
-  //    barrado aqui, antes de resolveClassAccess sequer opinar.
-  if (!preferCredit && !freeRejoin && dailyCap > 0) {
-    const { count: dailyCount } = await adminClient
-      .from('session_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', studentId)
-      .eq('status', 'confirmed')
-      .in(
-        'session_id',
-        (
-          await adminClient
-            .from('class_sessions')
-            .select('id')
-            .eq('organization_id', orgId)
-            .eq('session_date', session.session_date)
-        ).data?.map((s: { id: string }) => s.id) ?? [],
-      )
-
-    if (exceedsDailyCap(dailyCount ?? 0, dailyCap)) {
-      return {
-        error:
-          profile.credits_balance >= 1
-            ? `Limite de ${dailyCap} aulas por dia atingido. Você pode entrar usando 1 crédito avulso.`
-            : `Você já atingiu o limite de ${dailyCap} aulas por dia nessa data.`,
-      }
+  // 4. Teto diário. Fica ANTES da checagem de duplicidade e da decisão para
+  //    preservar a precedência das mensagens: quem estourou o teto ouve sobre o
+  //    teto, com o caminho do crédito quando ele existe.
+  if (access.dailyCapExceeded) {
+    return {
+      error:
+        profile.credits_balance >= 1
+          ? `Limite de ${access.dailyCap} aulas por dia atingido. Você pode entrar usando 1 crédito avulso.`
+          : `Você já atingiu o limite de ${access.dailyCap} aulas por dia nessa data.`,
     }
   }
 
-  // 5. Duplicate check
+  // 5. Reserva confirmada duplicada nesta mesma sessão.
   const { count: dupCount } = await adminClient
     .from('session_bookings')
     .select('id', { count: 'exact', head: true })
@@ -346,65 +296,6 @@ export async function bookSessionAs(
     return { error: 'Você já possui um agendamento confirmado nesta sessão.' }
   }
 
-  // Dívida aberta = payments pendente COM session_id. O filtro de session_id é
-  // essencial: compra de crédito abandonada no checkout também fica 'pending',
-  // mas com session_id null — sem o filtro ela bloquearia o aluno para sempre
-  // (spec §4). Desde 2026-07-22, ter pendência não basta: precisa ter valor e
-  // ter passado a carência (spec cobrança §2) — senão uma dívida de R$ 0
-  // (academia sem preço configurado) travava o aluno indefinidamente.
-  const { data: debtRows } = await adminClient
-    .from('payments')
-    .select('id, amount, created_at, receipt_url')
-    .eq('student_id', studentId)
-    .eq('organization_id', orgId)
-    .eq('status', 'pending')
-    .not('session_id', 'is', null)
-    // A pendência de check-in também vive em payments, mas tem regra própria
-    // (limite de contagem, não carência). Sem este filtro a mesma falta bloquearia
-    // por dois caminhos, um deles não configurado pela academia.
-    .eq('missed_checkin', false)
-
-  const graceDays = await getDebtGraceDays(adminClient, orgId)
-  const debtSummary = summarizeDebts(
-    ((debtRows ?? []) as { id: string; amount: number; created_at: string; receipt_url: string | null }[])
-      .map((r) => ({ id: r.id, amount: Number(r.amount), createdAt: r.created_at, receiptUrl: r.receipt_url })),
-    graceDays,
-    new Date(),
-  )
-
-  // Pendência de check-in do parceiro. Só busca para quem tem parceiro — é o único
-  // aluno que pode ter pendência, e este é o caminho quente de toda reserva.
-  const { blockLimit: missedCheckinBlockLimit } = profile.partner
-    ? await getMissedCheckinSettings(adminClient, orgId)
-    : { blockLimit: 0 }
-  const openMissedCheckins =
-    profile.partner && missedCheckinBlockLimit > 0
-      ? await countOpenMissedCheckins(adminClient, studentId, orgId)
-      : 0
-
-  // Férias aprovadas cobrindo a data: o aluno declarou ausência, e a grade já
-  // foi gerada sem ele. Deixar entrar aqui contradiria o próprio pedido dele.
-  const vacations = await getApprovedVacations(adminClient, studentId, orgId, session.session_date)
-
-  const decision = resolveClassAccess({
-    archived: Boolean(profile.archived_at),
-    onVacation: isOnVacation(vacations, session.session_date),
-    partner: profile.partner,
-    hasActivePlan,
-    creditsBalance: profile.credits_balance,
-    hasOpenDebt: debtSummary.isBlocked,
-    openMissedCheckins,
-    missedCheckinBlockLimit,
-    // Volta à aula fixa não consome plano: desligar a cota aqui é o que faz
-    // `resolveClassAccess` pular 'quota_exhausted' e 'daily_cap' sem que eu
-    // precise reimplementar a ordem das negações fora dela.
-    quotaEnforced: freeRejoin ? false : quotaEnforced,
-    quotaRemaining: snapshot?.remaining ?? null,
-    bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
-    maxClassesPerDay: freeRejoin ? 0 : dailyCap,
-    preferCredit,
-  })
-
   if ('denied' in decision) {
     // As duas negações de cota deixam de ser beco sem saída quando o aluno tem
     // crédito comprado: dizer só "acabou" esconde o caminho que existe.
@@ -412,16 +303,16 @@ export async function bookSessionAs(
     if (decision.denied === 'daily_cap') {
       return {
         error: comCredito
-          ? `Você já tem ${dailyCap} aulas reservadas neste dia. Pode entrar usando 1 crédito avulso.`
-          : `Você já tem ${dailyCap} aulas reservadas neste dia. É o limite do seu plano.`,
+          ? `Você já tem ${access.dailyCap} aulas reservadas neste dia. Pode entrar usando 1 crédito avulso.`
+          : `Você já tem ${access.dailyCap} aulas reservadas neste dia. É o limite do seu plano.`,
       }
     }
     if (decision.denied === 'quota_exhausted') {
-      const periodo = plan?.cycle === 'weekly' ? 'desta semana' : 'deste mês'
+      const periodo = access.planCycle === 'weekly' ? 'desta semana' : 'deste mês'
       return {
         error: comCredito
-          ? `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Pode entrar usando 1 crédito avulso.`
-          : `Você já usou suas ${snapshot?.limit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
+          ? `Você já usou suas ${access.quotaLimit ?? 0} aulas ${periodo}. Pode entrar usando 1 crédito avulso.`
+          : `Você já usou suas ${access.quotaLimit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
       }
     }
     if (decision.denied === 'archived') {
@@ -435,11 +326,11 @@ export async function bookSessionAs(
     }
     if (decision.denied === 'blocked_by_missed_checkins') {
       return {
-        error: `Você tem ${openMissedCheckins} check-in(s) do parceiro em aberto. Regularize em Financeiro para voltar a agendar.`,
+        error: `Você tem ${access.openMissedCheckins} check-in(s) do parceiro em aberto. Regularize em Financeiro para voltar a agendar.`,
       }
     }
     return {
-      error: `Você tem R$ ${debtSummary.total.toFixed(2).replace('.', ',')} em aberto. Regularize em Financeiro para voltar a agendar.`,
+      error: `Você tem R$ ${access.debtTotal.toFixed(2).replace('.', ',')} em aberto. Regularize em Financeiro para voltar a agendar.`,
     }
   }
 
@@ -656,7 +547,7 @@ export async function skipEnrollmentSession(bookingId: string): Promise<{ error?
   }
 
   // Open spot for next person on waitlist
-  await notifyWaitlistSpotOpen(booking.session_id)
+  await promoteFromWaitlist(booking.session_id)
 
   // Liga: sair da aula devolve o ponto que a entrada rendeu, por qualquer porta.
   // O esporte vem da turma para casar com o que a entrada creditou.
@@ -1014,7 +905,7 @@ export async function cancelBookingAs(
   }
 
   // Notify next person on waitlist if any
-  await notifyWaitlistSpotOpen(booking.session_id)
+  await promoteFromWaitlist(booking.session_id)
 
   // Liga. Sair da aula devolve o ponto que a ENTRADA rendeu — a antecedência que
   // foi premiada deixou de existir. Isso vale sempre, dentro ou fora da janela.

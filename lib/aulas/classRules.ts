@@ -167,8 +167,20 @@ export function buildClassRules(input: ClassRulesInput): RuleSection[] {
     items: [
       { text: 'Entre na lista de espera pela própria ficha da aula' },
       {
-        text: 'Abriu vaga, todo mundo da fila é avisado',
-        detail: 'A vaga fica com quem entrar primeiro — deixe as notificações ligadas.',
+        text: 'Abriu vaga, o primeiro da fila entra automaticamente',
+        detail:
+          'Você recebe aviso por push e e-mail dizendo que está na aula. Não vai poder ir? ' +
+          'Remova seu nome em até 1h para não perder o crédito nem levar falta.',
+      },
+      {
+        text: 'Só quem vira o primeiro da fila é avisado',
+        detail: 'Deixe as notificações ligadas — quem não vê o aviso perde a aula.',
+      },
+      {
+        text: 'Perto do início a entrada deixa de ser automática',
+        detail:
+          'Faltando menos de 1h para a aula, a vaga fica aberta para quem quiser em vez de ' +
+          'entrar alguém que não teria tempo de ver o aviso.',
       },
     ],
   })

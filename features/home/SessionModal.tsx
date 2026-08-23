@@ -154,7 +154,7 @@ export function SessionModal({
       }
       setFeedback({
         kind: 'ok',
-        text: `${firstName(dep.name)} entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}.`,
+        text: `${firstName(dep.name)} entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Abrindo vaga, o primeiro da fila entra na aula automaticamente.`,
       })
     })
   }
@@ -180,7 +180,7 @@ export function SessionModal({
       }
       setFeedback({
         kind: 'ok',
-        text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Avisamos se abrir vaga. Quem entrar primeiro fica com ela.`,
+        text: `Você entrou na fila${result.position ? ` na ${result.position}ª posição` : ''}. Abrindo vaga, o primeiro da fila entra na aula automaticamente e é avisado.`,
       })
     })
   }
@@ -355,8 +355,8 @@ export function SessionModal({
                   key={`wl-${name}-${i}`}
                   className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-sm text-slate-300"
                 >
-                  {/* Número é ordem de chegada, não prioridade: a vaga fica com
-                      quem entrar primeiro quando ela abre. */}
+                  {/* Número é ordem de chegada, e agora vale de verdade: quando
+                      abre vaga, o 1º é promovido automaticamente. */}
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-slate-400">
                     {i + 1}
                   </span>
@@ -514,8 +514,9 @@ export function SessionModal({
                 </button>
               </div>
               <p className="text-xs text-slate-400">
-                Se alguém cancelar, avisamos todo mundo da fila. A vaga fica com
-                quem entrar primeiro.
+                Se abrir vaga, o primeiro da fila entra na aula automaticamente e
+                recebe aviso. Faltando menos de 1h para começar, a entrada deixa
+                de ser automática e a vaga fica aberta para quem quiser.
               </p>
             </div>
           ) : isFull ? (
@@ -530,16 +531,19 @@ export function SessionModal({
                 Entrar na fila de espera
               </Button>
               <p className="text-center text-xs text-slate-400">
-                Turma lotada. Se alguém cancelar, avisamos todo mundo da fila. A
-                vaga fica com quem entrar primeiro.
+                Turma lotada. Na fila, se abrir vaga o primeiro da fila entra na
+                aula automaticamente e é avisado.
               </p>
             </div>
           ) : session.waitlistEntryId ? (
-            // Estava na fila e abriu vaga: a corrida está aberta para toda a
-            // fila. Entrar aqui passa pelo agendamento normal e já tira da fila.
+            // Vaga aberta com o aluno AINDA na fila. Com entrada automática isso
+            // é o caso do corte de 1h — perto do início ninguém é promovido, e a
+            // vaga fica aberta — ou a janela curta antes da promoção rodar.
+            // Entrar aqui passa pelo agendamento normal e já tira da fila.
             <div className="space-y-2">
               <p className="text-center text-xs font-semibold text-brand-400">
-                🔔 Vaga disponível! A vaga é de quem entrar primeiro.
+                🔔 Vaga aberta! Esta vaga não foi preenchida automaticamente —
+                garanta a sua.
               </p>
               <Button
                 variant="primary"

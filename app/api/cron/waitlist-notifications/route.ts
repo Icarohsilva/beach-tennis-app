@@ -1,17 +1,20 @@
 // app/api/cron/waitlist-notifications/route.ts
 // Rede de segurança diária da fila de espera.
 //
-// A vaga não é mais oferecida a uma pessoa por vez: quando alguém cancela,
-// notifyWaitlistSpotOpen avisa a fila inteira na hora e a vaga fica com quem
-// entrar primeiro (ver features/aulas/waitlistActions.ts). Este cron não tem
-// mais oferta vencida para varrer — ele existe para o caso de a vaga ter sido
-// liberada por um caminho que não dispara a notificação (ajuste manual do
-// professor, remoção de aluno, correção direta no banco): varre as sessões
-// futuras que ainda têm gente na fila, e avisa onde de fato sobrou lugar.
+// Quando alguém cancela, `promoteFromWaitlist` coloca o primeiro da fila na aula
+// na hora (ver features/aulas/waitlistActions.ts). Este cron existe para a vaga
+// liberada por um caminho que NÃO dispara a promoção — ajuste manual do
+// professor, remoção de aluno, correção direta no banco: varre as sessões
+// futuras que ainda têm gente na fila e promove onde de fato sobrou lugar.
+//
+// Não há anti-spam aqui, e não precisa: promover é idempotente (promoveu, não há
+// mais vaga; e o aviso de "virou o primeiro" é travado por
+// waitlists.first_notified_at). O modelo anterior avisava a fila inteira a cada
+// passada, e por isso precisava de uma janela de silêncio.
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
-import { notifyWaitlistSpotOpen } from '@/features/aulas/waitlistActions'
+import { promoteFromWaitlist } from '@/features/aulas/waitlistActions'
 import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { fetchAllPages, chunk, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
@@ -19,13 +22,10 @@ import { mapWithConcurrency } from '@/lib/utils/concurrency'
 
 export const maxDuration = 300
 
-/** Não reavisa a mesma fila com intervalo menor que isto (evita spam diário). */
-const RENOTIFY_AFTER_MS = 12 * 60 * 60 * 1000
-
 /** Margem para responder antes de a plataforma matar a função. */
 const TIME_BUDGET_MS = 240_000
 
-/** Avisos de vaga em voo ao mesmo tempo (cada um manda push para a fila inteira). */
+/** Promoções em voo ao mesmo tempo (cada uma reserva e avisa). */
 const NOTIFY_CONCURRENCY = 4
 
 export async function GET(req: NextRequest) {
@@ -37,11 +37,11 @@ export async function GET(req: NextRequest) {
   const deadline = Date.now() + TIME_BUDGET_MS
 
   try {
-    const waiting = await fetchAllPages<{ session_id: string; notified_at: string | null }>(
+    const waiting = await fetchAllPages<{ session_id: string }>(
       (from, to) =>
         adminClient
           .from('waitlists')
-          .select('session_id, notified_at')
+          .select('session_id')
           .eq('status', 'waiting')
           .order('id', { ascending: true })
           .range(from, to),
@@ -49,18 +49,9 @@ export async function GET(req: NextRequest) {
     )
     if (waiting.length === 0) return NextResponse.json({ notified: 0, checked: 0 })
 
-    // Último aviso por sessão: null (nunca avisada) conta como "pode avisar".
-    const lastNotifiedBySession = new Map<string, number | null>()
-    for (const w of waiting) {
-      const prev = lastNotifiedBySession.get(w.session_id)
-      const cur = w.notified_at ? new Date(w.notified_at).getTime() : null
-      if (prev === undefined) lastNotifiedBySession.set(w.session_id, cur)
-      else if (prev !== null && (cur === null || cur > prev)) {
-        lastNotifiedBySession.set(w.session_id, cur)
-      }
-    }
+    const sessoesComFila = new Set(waiting.map((w) => w.session_id))
 
-    const sessionIds = Array.from(lastNotifiedBySession.keys())
+    const sessionIds = Array.from(sessoesComFila)
 
     // Só sessões futuras e ainda agendadas — fila de aula que já passou não
     // interessa. `class` traz a capacidade para comparar com as reservas.
@@ -88,20 +79,15 @@ export async function GET(req: NextRequest) {
       )
     ).flat()
 
-    const cutoff = Date.now() - RENOTIFY_AFTER_MS
-
-    // Candidatas: fila não avisada há pouco e turma com capacidade declarada.
+    // Candidatas: turma com capacidade declarada. O corte de 1h antes do início
+    // e a checagem de acesso de cada aluno ficam em promoteFromWaitlist, que é a
+    // dona da regra — repetir aqui criaria duas versões dela.
     const candidates = sessions
       .map((s) => {
         const clsRaw = Array.isArray(s.class) ? s.class[0] : s.class
         return { id: s.id, maxStudents: (clsRaw as { max_students: number } | null)?.max_students ?? 0 }
       })
-      .filter((s) => {
-        const last = lastNotifiedBySession.get(s.id)
-        // Avisada há pouco: a notificação da hora do cancelamento já cobriu.
-        if (last !== null && last !== undefined && last > cutoff) return false
-        return s.maxStudents > 0
-      })
+      .filter((s) => s.maxStudents > 0)
 
     // Ocupação de todas as candidatas de uma vez. Antes era um count por sessão,
     // em série — com milhares de filas abertas o cron não terminava.
@@ -135,7 +121,7 @@ export async function GET(req: NextRequest) {
       withSpot,
       async (s) => {
         try {
-          await notifyWaitlistSpotOpen(s.id)
+          await promoteFromWaitlist(s.id)
           notified++
         } catch (e) {
           Sentry.captureException(e, {
