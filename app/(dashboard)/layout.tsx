@@ -1,7 +1,7 @@
 // app/(dashboard)/layout.tsx
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser, getAuthUser } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getCurrentOrg, getMemberships, getActiveOrgId, resolveActiveOrgForUser, getAuthUser } from '@/lib/supabase/server'
 import { BottomNav } from '@/components/ui/BottomNav'
 import { AuroraBackground } from '@/components/ui/AuroraBackground'
 import { NotificationBell } from '@/components/ui/NotificationBell'
@@ -12,6 +12,8 @@ import { accentVars } from '@/lib/branding/theme'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { LegalFooterLinks } from '@/components/ui/LegalFooterLinks'
 import { SuspendedNotice } from '@/components/ui/SuspendedNotice'
+import { DocumentGate } from '@/features/documentos/DocumentGate'
+import { getPendingDocuments } from '@/features/documentos/pendingQuery'
 import { TourProvider } from '@/components/tour/TourProvider'
 import { HelpButton } from '@/components/tour/HelpButton'
 import { InstallGate } from '@/components/pwa/InstallGate'
@@ -42,6 +44,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // parecia ter "virado aluno". Zero consulta extra: memberships e activeOrgId
   // já estão carregados acima.
   const isStaff = isStaffOfActiveOrg(memberships, activeOrgId)
+
+  // Termo/comunicado obrigatório pendente: bloqueia tudo, no molde da academia
+  // suspensa acima. Só para quem é aluno de fato — o admin puro (sem vínculo de
+  // aluno) não é destinatário destes documentos e não pode ficar trancado fora
+  // do próprio painel por causa deles.
+  if (isStudent && activeOrgId) {
+    const pendentes = await getPendingDocuments(createAdminClient(), {
+      orgId: activeOrgId,
+      userId: user.id,
+    })
+    if (pendentes.length > 0) return <DocumentGate docs={pendentes} />
+  }
 
   // Fetch recent notifications (last 20)
   const { data: notificationsRaw } = await supabase

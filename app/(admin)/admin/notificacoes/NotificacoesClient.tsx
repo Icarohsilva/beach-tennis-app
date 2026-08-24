@@ -2,7 +2,8 @@
 // app/(admin)/notificacoes/NotificacoesClient.tsx
 
 import { useState, useTransition } from 'react'
-import { Send, CheckCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Send, CheckCircle, FileText } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -97,11 +98,20 @@ export function NotificacoesClient() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Notificações</h1>
-        <p className="text-slate-400 mt-1 text-sm">
-          Envie notificações para alunos segmentados por nível, plano ou dispositivo.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Notificações</h1>
+          <p className="text-slate-400 mt-1 text-sm">
+            Envie notificações para alunos segmentados por nível, plano ou dispositivo.
+          </p>
+        </div>
+        <Link
+          href="/admin/notificacoes/documentos"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-surface-border px-3 py-2 text-sm text-slate-300 hover:text-white hover:border-brand-600/50"
+        >
+          <FileText size={16} />
+          Termos e comunicados obrigatórios
+        </Link>
       </div>
 
       {successCount !== null && (
