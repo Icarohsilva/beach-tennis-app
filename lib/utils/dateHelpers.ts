@@ -40,6 +40,19 @@ export function formatTime(time: string): string {
   return time.slice(0, 5)
 }
 
+/**
+ * Data e hora de um timestamptz (instante real, ex: acked_at), sempre em
+ * horário de Brasília — nunca no fuso de quem roda o código. `toLocaleString`
+ * sem `timeZone` usa o fuso do processo, que em produção (Vercel) é UTC: sem
+ * isto, algo assinado às 22h30 em BRT aparecia gravado às 01h30 do dia
+ * seguinte. Diferente de `formatDate`/`toCalendarDate` acima — aquelas
+ * corrigem data PURA (sem hora); esta corrige um INSTANTE, que carrega hora
+ * de verdade e por isso precisa da conversão de fuso, não só preservar o dia.
+ */
+export function formatDateTime(isoString: string): string {
+  return new Date(isoString).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+}
+
 export function getFirstDayOfNextMonth(): Date {
   return startOfMonth(addMonths(new Date(), 1))
 }

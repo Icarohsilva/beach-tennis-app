@@ -9,6 +9,7 @@ import { getOrgDocumentDetail } from '@/features/documentos/adminQuery'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatDocument } from '@/lib/validation/documento'
+import { formatDateTime } from '@/lib/utils/dateHelpers'
 
 interface Props {
   params: { id: string }
@@ -54,7 +55,7 @@ export default async function DocumentoDetailPage({ params }: Props) {
               <div key={s.userId} className="flex flex-col gap-0.5 border-b border-surface-border/50 py-2 last:border-0 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-white">{s.name || 'Sem nome'}</span>
                 <span className="text-xs text-slate-400">
-                  {s.ackedAt && new Date(s.ackedAt).toLocaleString('pt-BR')}
+                  {s.ackedAt && formatDateTime(s.ackedAt)}
                   {s.signedName && (
                     <> — assinado por <strong className="text-slate-300">{s.signedName}</strong>{s.signedCpf && ` (${formatDocument(s.signedCpf)})`}</>
                   )}
