@@ -4,7 +4,14 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { confirmEntryPayment } from '@/features/torneios/actions'
 
-export function ConfirmPaymentButton({ entryId }: { entryId: string }) {
+export function ConfirmPaymentButton({
+  entryId,
+  side = 'player',
+}: {
+  entryId: string
+  /** Dupla fixa é cobrada por atleta — qual lado desta inscrição confirmar. */
+  side?: 'player' | 'partner'
+}) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -12,7 +19,7 @@ export function ConfirmPaymentButton({ entryId }: { entryId: string }) {
   function handleConfirm() {
     setError(null)
     startTransition(async () => {
-      const result = await confirmEntryPayment(entryId)
+      const result = await confirmEntryPayment(entryId, side)
       if (result.error) setError(result.error)
       else router.refresh()
     })

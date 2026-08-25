@@ -544,6 +544,11 @@ export interface TournamentEntry {
   receipt_url: string | null
   entry_status: 'confirmed' | 'waitlist' | 'offered'
   offer_expires_at: string | null
+  /** Cobrança do parceiro (dupla fixa). Nulo = sem parceiro, ou linha anterior à cobrança em dupla. */
+  partner_payment_status: 'free' | 'pending' | 'paid' | null
+  partner_discount_pct: number
+  partner_final_price_cents: number
+  partner_receipt_url: string | null
 }
 
 export interface Post {

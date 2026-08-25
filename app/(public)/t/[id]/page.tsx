@@ -9,6 +9,7 @@ import { RegisterExternalButton } from './RegisterExternalButton'
 import { ReceiptUploadButton } from './ReceiptUploadButton'
 import { ShareButton } from './ShareButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
+import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
 
 interface PageProps { params: { id: string } }
 
@@ -132,13 +133,30 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   } | null
   let userEntry: UserEntryData = null
   if (user) {
+    // Casa player_id OU partner_id: quem entrou como parceiro de dupla fixa
+    // não encontrava a própria inscrição aqui (o filtro só olhava player_id) —
+    // e a cobrança dele mora nas colunas partner_*, não nas do titular.
     const { data: entryRaw } = await adminClient
       .from('tournament_entries')
-      .select('payment_status, receipt_url, final_price_cents, discount_pct, entry_status, offer_expires_at, created_at')
+      .select(
+        'player_id, partner_id, payment_status, receipt_url, final_price_cents, discount_pct, partner_payment_status, partner_receipt_url, partner_final_price_cents, partner_discount_pct, entry_status, offer_expires_at, created_at',
+      )
       .eq('tournament_id', params.id)
-      .eq('player_id', user.id)
+      .or(`player_id.eq.${user.id},partner_id.eq.${user.id}`)
       .maybeSingle()
-    userEntry = entryRaw as UserEntryData
+    if (entryRaw) {
+      const side = sideOfEntry(user.id, entryRaw as { player_id: string; partner_id: string | null })
+      const charge = chargeFor(side ?? 'player', entryRaw as unknown as PayableEntry)
+      userEntry = {
+        payment_status: (charge.paymentStatus ?? 'free') as 'free' | 'pending' | 'paid',
+        receipt_url: charge.receiptUrl,
+        final_price_cents: charge.finalPriceCents,
+        discount_pct: charge.discountPct,
+        entry_status: entryRaw.entry_status as 'confirmed' | 'waitlist' | 'offered',
+        offer_expires_at: entryRaw.offer_expires_at as string | null,
+        created_at: entryRaw.created_at as string,
+      }
+    }
   }
   const isRegistered = userEntry !== null
 

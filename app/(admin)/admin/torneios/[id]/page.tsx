@@ -57,9 +57,10 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .from('tournament_entries')
     .select(`id, player_id, partner_id, seed, created_at,
       payment_status, discount_pct, final_price_cents, receipt_url,
+      partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
       entry_status, offer_expires_at,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
-      partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
+      partner:profiles!tournament_entries_partner_id_fkey(id, full_name, phone)`)
     .eq('tournament_id', params.id)
     .order('created_at', { ascending: true })
 
@@ -69,17 +70,24 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     discount_pct: number
     final_price_cents: number
     receipt_url: string | null
+    partner_payment_status: 'free' | 'pending' | 'paid' | null
+    partner_discount_pct: number
+    partner_final_price_cents: number
+    partner_receipt_url: string | null
     entry_status: 'confirmed' | 'waitlist' | 'offered'
     offer_expires_at: string | null
     player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
-    partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
+    partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
 
-  // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1
+  // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1.
+  // Duas chaves por entry (titular e parceiro): a dupla fixa é cobrada por
+  // atleta, cada um com o próprio comprovante.
   const receiptSignedUrls: Record<string, string> = {}
-  await Promise.all(
-    entries
+  const partnerReceiptSignedUrls: Record<string, string> = {}
+  await Promise.all([
+    ...entries
       .filter((e) => e.receipt_url)
       .map(async (e) => {
         const { data: signed, error: signErr } = await adminClient.storage
@@ -87,8 +95,17 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
           .createSignedUrl(e.receipt_url as string, 300)
         if (signErr) console.error('[receipt] signedUrl failed for entry', e.id, signErr.message)
         else if (signed?.signedUrl) receiptSignedUrls[e.id] = signed.signedUrl
-      })
-  )
+      }),
+    ...entries
+      .filter((e) => e.partner_receipt_url)
+      .map(async (e) => {
+        const { data: signed, error: signErr } = await adminClient.storage
+          .from('payment-receipts')
+          .createSignedUrl(e.partner_receipt_url as string, 300)
+        if (signErr) console.error('[receipt] signedUrl failed for partner of entry', e.id, signErr.message)
+        else if (signed?.signedUrl) partnerReceiptSignedUrls[e.id] = signed.signedUrl
+      }),
+  ])
 
   // Confrontos com colunas de placar/status
   const { data: matchesRaw } = await adminClient
@@ -256,6 +273,12 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                       `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
                     )
                   : null
+                const partnerWaUrl = entry.partner_payment_status === 'pending' && pt?.phone && t.pix_key
+                  ? buildWhatsAppUrl(
+                      pt.phone,
+                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                    )
+                  : null
                 return (
                   <Card key={entry.id}>
                     <div className="flex items-start justify-between gap-2">
@@ -265,7 +288,19 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           name={p?.full_name ?? entry.player_id}
                           className="block text-sm font-medium text-white"
                         />
-                        {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
+                        {pt && (
+                          <p className="text-xs text-slate-400">
+                            Parceiro: {pt.full_name}
+                            {entry.partner_payment_status === 'paid' && (
+                              <span className="ml-1 text-green-400">· pago</span>
+                            )}
+                            {entry.partner_payment_status === 'pending' && (
+                              <span className="ml-1 text-yellow-400">
+                                · pendente R$ {(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}
+                              </span>
+                            )}
+                          </p>
+                        )}
                         {entry.payment_status === 'pending' && (
                           <p className="text-xs text-yellow-400 mt-0.5">
                             Aguardando: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
@@ -298,7 +333,19 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           rel="noopener noreferrer"
                           className="text-xs text-brand-400 hover:text-brand-300"
                         >
-                          📎 Ver comprovante
+                          📎 Ver comprovante (titular)
+                        </a>
+                      </div>
+                    )}
+                    {partnerReceiptSignedUrls[entry.id] && (
+                      <div className="mt-2">
+                        <a
+                          href={partnerReceiptSignedUrls[entry.id]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-400 hover:text-brand-300"
+                        >
+                          📎 Ver comprovante (parceiro)
                         </a>
                       </div>
                     )}
@@ -312,7 +359,22 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                             rel="noopener noreferrer"
                             className="text-xs text-green-400 hover:text-green-300"
                           >
-                            📱 Cobrar via WhatsApp
+                            📱 Cobrar titular via WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {entry.partner_payment_status === 'pending' && (
+                      <div className="mt-2 flex flex-wrap gap-2 items-center">
+                        <ConfirmPaymentButton entryId={entry.id} side="partner" />
+                        {partnerWaUrl && (
+                          <a
+                            href={partnerWaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-400 hover:text-green-300"
+                          >
+                            📱 Cobrar parceiro via WhatsApp
                           </a>
                         )}
                       </div>
