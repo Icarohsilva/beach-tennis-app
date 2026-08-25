@@ -3,7 +3,9 @@
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
+import { canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
+import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
+import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
   DEFAULT_GROUP_COUNT,
@@ -228,7 +230,9 @@ export async function registerForTournament(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, level, category, participant_type, entry_price_cents, pix_key, max_players')
+    .select(
+      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players',
+    )
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -240,24 +244,51 @@ export async function registerForTournament(
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
 
-  // Gênero é identidade → vem de profiles.
-  const { data: profile } = await adminClient
+  const selfErr = selfPairError(user.id, partnerId)
+  if (selfErr) return { error: selfErr }
+
+  // Gênero é identidade → vem de profiles. Os dois lados de uma vez: BUG A
+  // (parceiro nunca era conferido) era exatamente ler só o meu gênero aqui.
+  const ids = partnerId ? [user.id, partnerId] : [user.id]
+  const { data: profilesRaw } = await adminClient
     .from('profiles')
-    .select('gender')
-    .eq('id', user.id)
-    .single()
-  const myGender = (profile?.gender ?? null) as Gender | null
+    .select('id, full_name, gender')
+    .in('id', ids)
+  const profileById = new Map(
+    ((profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null }[]).map((p) => [
+      p.id,
+      p,
+    ]),
+  )
+  const myGender = (profileById.get(user.id)?.gender ?? null) as Gender | null
+  const partnerGender = partnerId
+    ? ((profileById.get(partnerId)?.gender ?? null) as Gender | null)
+    : undefined
 
-  const elig = canRegister(myGender, tournament.category as TournamentCategory)
-  if (!elig.ok) return { error: elig.reason ?? 'Inscrição não permitida nesta categoria.' }
+  const allowedPairGenders = canonicalizePairGenders(
+    (tournament.allowed_pair_genders as string[] | null) ?? [],
+  )
+  const verdict = validateEntry({
+    participantType: tournament.participant_type as ParticipantType,
+    allowed: allowedPairGenders,
+    myGender,
+    partnerGender,
+  })
+  if (!verdict.ok) return { error: verdict.reason ?? 'Inscrição não permitida nesta categoria.' }
 
-  // Duplicidade.
-  const { count: dupCount } = await adminClient
+  // Duplicidade dos DOIS lados: o unique (tournament_id, player_id) não impede
+  // que a mesma pessoa seja partner_id numa dupla e player_id (ou partner_id)
+  // em outra — BUG B.
+  const orFilter = ids.flatMap((id) => [`player_id.eq.${id}`, `partner_id.eq.${id}`]).join(',')
+  const { data: existingRaw } = await adminClient
     .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
+    .select('player_id, partner_id')
     .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if ((dupCount ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
+    .or(orFilter)
+  const existing = (existingRaw ?? []) as { player_id: string; partner_id: string | null }[]
+  const people = ids.map((id) => ({ id, name: profileById.get(id)?.full_name ?? null }))
+  const clash = findEntrantClash(existing, people, user.id)
+  if (clash) return { error: clashMessage(clash) }
 
   // Verificar capacidade
   const { count: occupiedCount } = await adminClient
@@ -269,26 +300,7 @@ export async function registerForTournament(
   const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
   const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
 
-  // Dupla fixa exige parceiro; em misto valida 1 M + 1 F.
-  let partner: string | null = null
-  if (tournament.participant_type === 'dupla_fixa') {
-    if (!partnerId) return { error: 'Selecione um parceiro para dupla fixa.' }
-    partner = partnerId
-    if (tournament.category === 'misto') {
-      const { data: partnerProfile } = await adminClient
-        .from('profiles')
-        .select('gender')
-        .eq('id', partnerId)
-        .single()
-      const partnerGender = (partnerProfile?.gender ?? null) as Gender | null
-      const oneEach =
-        (myGender === 'M' && partnerGender === 'F') ||
-        (myGender === 'F' && partnerGender === 'M')
-      if (!oneEach) {
-        return { error: 'Categoria mista exige uma dupla com 1 homem e 1 mulher.' }
-      }
-    }
-  }
+  const partner = tournament.participant_type === 'dupla_fixa' ? partnerId ?? null : null
 
   let insertPayload: {
     organization_id: string
@@ -340,6 +352,11 @@ export async function registerForTournament(
 
   if (entryStatus === 'confirmed') {
     await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
+    // O parceiro de dupla fixa também entrou no torneio — merece o mesmo ponto
+    // da Liga. Antes só quem clicou "Inscrever-se" ganhava.
+    if (partner) {
+      await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: partner })
+    }
   }
 
   revalidatePath(`/t/${tournamentId}`)
@@ -1384,11 +1401,20 @@ export async function registerExternal(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, organization_id, status, entry_price_cents, pix_key, max_players')
+    .select(
+      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players',
+    )
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
   if (tournament.status !== 'open') return { error: 'Inscrições encerradas.' }
+
+  // Dupla fixa exige escolher parceiro, e o link público ainda não tem essa
+  // tela — sem esta trava, o link coletava inscrição solteira num torneio que
+  // precisa de dupla, sem aviso nenhum.
+  if (tournament.participant_type === 'dupla_fixa') {
+    return { error: 'Este torneio é de dupla fixa: entre no app para escolher o parceiro.' }
+  }
 
   const tournamentOrgId = tournament.organization_id as string
 
@@ -1406,13 +1432,34 @@ export async function registerExternal(
       { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
     )
 
-  // Checar duplicidade
-  const { count: dup } = await adminClient
+  // Gênero: hoje registerExternal não conferia nada — um torneio 'masculino'
+  // aceitava qualquer inscrição avulsa, sem olhar profiles.gender.
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('gender')
+    .eq('id', user.id)
+    .single()
+  const myGender = (profile?.gender ?? null) as Gender | null
+  const allowedPairGenders = canonicalizePairGenders(
+    (tournament.allowed_pair_genders as string[] | null) ?? [],
+  )
+  const verdict = validateEntry({
+    participantType: tournament.participant_type as ParticipantType,
+    allowed: allowedPairGenders,
+    myGender,
+  })
+  if (!verdict.ok) return { error: verdict.reason ?? 'Inscrição não permitida nesta categoria.' }
+
+  // Checar duplicidade nos dois lados — o mesmo cuidado de registerForTournament:
+  // esta pessoa pode já ter sido escrita como partner_id em outra inscrição.
+  const { data: existingRaw } = await adminClient
     .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
+    .select('player_id, partner_id')
     .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if ((dup ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
+    .or(`player_id.eq.${user.id},partner_id.eq.${user.id}`)
+  const existing = (existingRaw ?? []) as { player_id: string; partner_id: string | null }[]
+  const clash = findEntrantClash(existing, [{ id: user.id }], user.id)
+  if (clash) return { error: clashMessage(clash) }
 
   // Verificar capacidade
   const { count: occupiedCount } = await adminClient

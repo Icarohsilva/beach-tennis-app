@@ -1,11 +1,9 @@
 // lib/torneios/eligibility.test.ts
+//
+// A régua de gênero (canRegister) mudou de casa: ver pairRules.test.ts
+// (canEnter/canPairUp/validateEntry), que cobre os dois lados da dupla.
 import { describe, it, expect } from 'vitest'
-import {
-  canRegister,
-  canReportResult,
-  canConfirmResult,
-  type EligibilityMatch,
-} from './eligibility'
+import { canReportResult, canConfirmResult, type EligibilityMatch } from './eligibility'
 
 const match: EligibilityMatch = {
   player1_id: 'a',
@@ -14,29 +12,6 @@ const match: EligibilityMatch = {
   partner2_id: 'd',
   reported_by: null,
 }
-
-describe('canRegister', () => {
-  it('masculino: aceita M, barra F, pede perfil se null', () => {
-    expect(canRegister('M', 'masculino').ok).toBe(true)
-    expect(canRegister('F', 'masculino').ok).toBe(false)
-    const semGenero = canRegister(null, 'masculino')
-    expect(semGenero.ok).toBe(false)
-    expect(semGenero.reason).toMatch(/perfil/i)
-  })
-
-  it('feminino: aceita F, barra M', () => {
-    expect(canRegister('F', 'feminino').ok).toBe(true)
-    expect(canRegister('M', 'feminino').ok).toBe(false)
-  })
-
-  it('misto e livre: aceitam qualquer gênero, inclusive null', () => {
-    for (const cat of ['misto', 'livre'] as const) {
-      expect(canRegister('M', cat).ok).toBe(true)
-      expect(canRegister('F', cat).ok).toBe(true)
-      expect(canRegister(null, cat).ok).toBe(true)
-    }
-  })
-})
 
 describe('canReportResult', () => {
   it('aceita qualquer um dos 4 jogadores', () => {

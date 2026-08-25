@@ -90,6 +90,8 @@ export type Periodicity = 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' |
 export type SubscriptionGateway = 'manual' | 'mercadopago'
 export type Gender = 'M' | 'F'
 export type TournamentCategory = 'masculino' | 'feminino' | 'misto' | 'livre'
+/** Formações de dupla possíveis. Ordem canônica: MM < MF < FF. */
+export type PairGenders = 'MM' | 'MF' | 'FF'
 export type ParticipantType = 'individual' | 'dupla_fixa' | 'dupla_revezando'
 // 'super8' mantido p/ leitura de linhas legadas; o motor novo usa 'americano'.
 export type TournamentFormat =
@@ -477,6 +479,8 @@ export interface Tournament {
   date: string
   sport: string
   category: TournamentCategory
+  /** Formações de dupla aceitas — quem valida de verdade (ver migração 20260826000100). */
+  allowed_pair_genders: PairGenders[]
   participant_type: ParticipantType
   format: TournamentFormat
   modality: TournamentModality | null

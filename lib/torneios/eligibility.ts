@@ -1,36 +1,15 @@
 // lib/torneios/eligibility.ts
-import type { Gender, TournamentCategory } from '@/types'
-
+//
+// canRegister() (só via gênero de quem clicou, nunca do parceiro) saiu de
+// aqui — virou canEnter()/canPairUp()/validateEntry() em pairRules.ts, que
+// cobre os dois lados da dupla. Regra de partida (quem pode reportar/confirmar
+// placar) continua aqui, sem relação com a régua de gênero.
 export interface EligibilityMatch {
   player1_id: string
   partner1_id: string | null
   player2_id: string
   partner2_id: string | null
   reported_by: string | null
-}
-
-export function canRegister(
-  playerGender: Gender | null,
-  category: TournamentCategory,
-): { ok: boolean; reason?: string } {
-  if (category === 'misto' || category === 'livre') return { ok: true }
-
-  const required: Gender = category === 'masculino' ? 'M' : 'F'
-  if (playerGender === null) {
-    return {
-      ok: false,
-      reason: 'Complete seu gênero no perfil para se inscrever nesta categoria.',
-    }
-  }
-  if (playerGender !== required) {
-    return {
-      ok: false,
-      reason: `Este torneio é exclusivo para ${
-        category === 'masculino' ? 'masculino' : 'feminino'
-      }.`,
-    }
-  }
-  return { ok: true }
 }
 
 function sideOf(userId: string, m: EligibilityMatch): 1 | 2 | null {

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { TournamentSignupForm } from './TournamentSignupForm'
 import { normalizeSportForOrg } from '@/lib/arenas/sports'
+import { canonicalizePairGenders, requiresKnownGender } from '@/lib/torneios/pairRules'
 
 interface PageProps { params: { id: string } }
 
@@ -12,10 +13,16 @@ export default async function TournamentCadastroPage({ params }: PageProps) {
   const admin = createAdminClient()
   const { data: tournament } = await admin
     .from('tournaments')
-    .select('organization_id, sport')
+    .select('organization_id, sport, allowed_pair_genders')
     .eq('id', params.id)
     .single()
   if (!tournament) notFound()
+
+  // Torneio com restrição de gênero: pede o gênero já no cadastro, senão a
+  // pessoa cria a conta só para ser recusada na inscrição por perfil incompleto.
+  const requiresGender = requiresKnownGender(
+    canonicalizePairGenders((tournament.allowed_pair_genders as string[] | null) ?? []),
+  )
 
   const { data: org } = await admin
     .from('organizations')
@@ -35,6 +42,7 @@ export default async function TournamentCadastroPage({ params }: PageProps) {
       tournamentId={params.id}
       orgInviteCode={(org?.invite_code as string | null) ?? null}
       sport={sport}
+      requiresGender={requiresGender}
     />
   )
 }

@@ -183,8 +183,12 @@ export function levelLabel(level: StudentLevel, sport: string | null | undefined
 
 // --- Formato ----------------------------------------------------------------
 
+// O valor no banco continua 'americano' (default de coluna, chave de
+// lib/torneios/formats.ts, destino do backfill de 'super8') — só o RÓTULO
+// muda. O mercado nunca chama esse formato de "Americano", chama de "Super";
+// renomear o valor criaria um terceiro nome legado ao lado de 'super8'.
 const FORMAT_LABELS: Record<TournamentFormat, string> = {
-  americano: 'Americano',
+  americano: 'Super',
   round_robin: 'Todos contra todos',
   eliminatoria: 'Eliminatória',
   grupos: 'Grupos + mata-mata',
@@ -195,7 +199,7 @@ const FORMAT_LABELS: Record<TournamentFormat, string> = {
 /**
  * Nome do formato como o card mostra.
  *
- * No americano com teto de vagas o mercado não diz "americano", diz "Super 8",
+ * No americano com teto de vagas o mercado não diz "Super", diz "Super 8",
  * "Super 12", "Super 16" — o número de participantes É o nome do torneio. Sem
  * teto definido, cai no nome do formato. Antes daqui o card carimbava "Super 8"
  * fixo em todo torneio, inclusive nos de 20 vagas.
@@ -208,7 +212,7 @@ export function formatLabel(
   if ((fmt === 'americano' || fmt === 'super8') && maxPlayers && maxPlayers > 0) {
     return `Super ${maxPlayers}`
   }
-  return FORMAT_LABELS[fmt] ?? 'Americano'
+  return FORMAT_LABELS[fmt] ?? 'Super'
 }
 
 // --- Categoria --------------------------------------------------------------

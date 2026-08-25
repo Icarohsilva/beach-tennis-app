@@ -150,8 +150,8 @@ describe('formatLabel', () => {
   })
 
   it('americano sem teto usa o nome do formato', () => {
-    expect(formatLabel('americano', null)).toBe('Americano')
-    expect(formatLabel('americano', 0)).toBe('Americano')
+    expect(formatLabel('americano', null)).toBe('Super')
+    expect(formatLabel('americano', 0)).toBe('Super')
   })
 
   it('formatos não-americanos nunca viram Super N', () => {
@@ -166,7 +166,7 @@ describe('formatLabel', () => {
   })
 
   it('formato ausente cai no padrão do banco', () => {
-    expect(formatLabel(null, null)).toBe('Americano')
+    expect(formatLabel(null, null)).toBe('Super')
   })
 })
 

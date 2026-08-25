@@ -34,6 +34,7 @@ function CadastroInner() {
   const [freeSignup, setFreeSignup] = useState(false)
 
   const [form, setForm] = useState({ full_name: '', email: '', password: '', phone: '' })
+  const [gender, setGender] = useState<'' | 'M' | 'F'>('')
   const [partner, setPartner] = useState<'none' | 'wellhub' | 'totalpass'>('none')
   const [partnerId, setPartnerId] = useState('')
   const [error, setError] = useState('')
@@ -94,6 +95,7 @@ function CadastroInner() {
     // Uma server action pós-signUp não serviria: com confirmação de email ligada não
     // há sessão aqui, e mandar o user_id pelo cliente seria IDOR.
     if (sports.length > 0) meta.sports = sports.join(',')
+    if (gender) meta.gender = gender
     if (partner !== 'none') {
       meta.pending_partner = partner
       meta.partner_id = partnerId.trim()
@@ -270,6 +272,21 @@ function CadastroInner() {
         <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
         <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
         <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
+        <label className="text-sm text-slate-300">
+          Gênero <span className="text-slate-500">(opcional)</span>
+          <select
+            value={gender}
+            onChange={(e) => setGender(e.target.value as '' | 'M' | 'F')}
+            className="mt-1 block w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+          >
+            <option value="">Prefiro não informar</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+          </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            Usado para validar inscrição em torneios com categoria por gênero. Pode preencher depois no perfil.
+          </span>
+        </label>
         {/* Gympass/TotalPass e modalidades são dados POR ACADEMIA: o trigger os
             grava na membership, que não existe no cadastro livre. Pedi-los aqui
             seria coletar o que vai ser descartado. */}
