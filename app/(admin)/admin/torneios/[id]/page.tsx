@@ -206,7 +206,15 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         >
           ←
         </Link>
-        <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+          <Link
+            href={`/admin/torneios/${t.id}/editar`}
+            className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
+          >
+            Configurar
+          </Link>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {heroChips.map((c) => (
             <span key={c} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">

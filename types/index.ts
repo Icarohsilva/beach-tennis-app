@@ -506,6 +506,26 @@ export interface Tournament {
   advance_per_group: number
   /** Evento que agrupa este torneio na divulgação. Nulo = torneio avulso. */
   event_id: string | null
+  /** Vazio/nulo herda do evento — ver lib/torneios/content.ts. */
+  description: string | null
+  rules: string | null
+  venue: string | null
+  /** 'HH:MM:SS'. Não herda do evento — varia por categoria (misto 8h, masculino 14h). */
+  start_time: string | null
+  /** ISO. Nulo = só fecha por troca de status (comportamento de hoje). */
+  registration_deadline: string | null
+}
+
+export interface TournamentPrize {
+  id: string
+  organization_id: string
+  tournament_id: string
+  kind: 'podium' | 'special'
+  position: number | null
+  description: string
+  value_cents: number | null
+  delivered_at: string | null
+  created_at: string
 }
 
 /**
@@ -521,6 +541,9 @@ export interface TournamentEvent {
   /** Global (como o da academia): o link divulgado é /e/<slug>. */
   slug: string
   description: string | null
+  /** Regulamento e local herdados pelos torneios do evento (lib/torneios/content.ts). */
+  rules: string | null
+  venue: string | null
   cover_image_url: string | null
   starts_on: string
   /** Nulo = evento de um dia só. */

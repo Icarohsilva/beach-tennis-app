@@ -10,6 +10,11 @@ import { ReceiptUploadButton } from './ReceiptUploadButton'
 import { ShareButton } from './ShareButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
+import { resolveTournamentContent } from '@/lib/torneios/content'
+import { resolveRegistrationWindow, deadlineLabel, closingSoonLabel } from '@/lib/torneios/registrationWindow'
+import { sortPrizes, positionLabel, type PrizeRow } from '@/lib/torneios/prizes'
+import { MarkdownDoc } from '@/components/docs/MarkdownDoc'
+import type { TournamentStatus } from '@/types'
 
 interface PageProps { params: { id: string } }
 
@@ -25,7 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const adminClient = createAdminClient()
   const { data: t } = await adminClient
     .from('tournaments')
-    .select('name, date, cover_image_url')
+    .select('name, date, cover_image_url, description')
     .eq('id', params.id)
     .not('status', 'eq', 'draft')
     .single()
@@ -37,13 +42,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ? [{ url: t.cover_image_url as string, width: 1200, height: 630 }]
     : []
   const dateStr = formatDate(t.date as string, "dd 'de' MMMM 'de' yyyy")
+  const description = (t.description as string | null)?.trim() || `Torneio ${dateStr}`
 
   return {
     title: t.name as string,
-    description: `Torneio ${dateStr}`,
+    description,
     openGraph: {
       title: t.name as string,
-      description: `Torneio ${dateStr}`,
+      description,
       url: `${baseUrl}/t/${params.id}`,
       images,
       type: 'website',
@@ -64,7 +70,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
   const { data: tournamentRaw } = await adminClient
     .from('tournaments')
-    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players, event_id')
+    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players, event_id, description, rules, venue, start_time, registration_deadline')
     .eq('id', params.id)
     .not('status', 'eq', 'draft')
     .single()
@@ -78,20 +84,42 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     entry_price_cents: number | null; pix_key: string | null
     max_players: number | null
     event_id: string | null
+    description: string | null; rules: string | null; venue: string | null
+    start_time: string | null; registration_deadline: string | null
   }
   const t = tournamentRaw as unknown as TRow
 
   // Torneio dentro de um evento ganha o caminho de volta para a capa — quem
-  // chegou pelo link direto ainda descobre que existem outras categorias.
+  // chegou pelo link direto ainda descobre que existem outras categorias — e
+  // herda descrição/regulamento/local quando o próprio campo estiver vazio
+  // (lib/torneios/content.ts).
   const { data: eventRaw } = t.event_id
     ? await adminClient
         .from('tournament_events')
-        .select('name, slug')
+        .select('name, slug, description, rules, venue')
         .eq('id', t.event_id)
         .eq('is_published', true)
         .maybeSingle()
     : { data: null }
-  const parentEvent = eventRaw as { name: string; slug: string } | null
+  const parentEvent = eventRaw as { name: string; slug: string; description: string | null; rules: string | null; venue: string | null } | null
+
+  const resolvedContent = resolveTournamentContent({
+    tournament: { description: t.description, rules: t.rules, venue: t.venue },
+    event: parentEvent
+      ? { name: parentEvent.name, slug: parentEvent.slug, description: parentEvent.description, rules: parentEvent.rules, venue: parentEvent.venue }
+      : null,
+  })
+
+  const { data: prizesRaw } = await adminClient
+    .from('tournament_prizes')
+    .select('id, kind, position, description, value_cents, delivered_at')
+    .eq('tournament_id', params.id)
+  const prizes = sortPrizes((prizesRaw ?? []) as PrizeRow[])
+
+  const regWindow = resolveRegistrationWindow(
+    { status: t.status as TournamentStatus, registration_deadline: t.registration_deadline },
+    new Date(),
+  )
 
   // Inscritos
   const { data: entriesRaw } = await adminClient
@@ -337,12 +365,23 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                 </>
               )}
             </>
+          ) : !regWindow.open ? (
+            <span className="block bg-slate-800/60 text-slate-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
+              ⏰ {regWindow.reason}
+            </span>
           ) : user ? (
-            <RegisterExternalButton
-              tournamentId={t.id}
-              isPaid={isPaid}
-              finalPriceCents={isPaid ? (t.entry_price_cents ?? 0) : undefined}
-            />
+            <div>
+              <RegisterExternalButton
+                tournamentId={t.id}
+                isPaid={isPaid}
+                finalPriceCents={isPaid ? (t.entry_price_cents ?? 0) : undefined}
+              />
+              {closingSoonLabel(t.registration_deadline, new Date()) && (
+                <p className="mt-2 text-center text-xs font-semibold text-amber-400">
+                  {closingSoonLabel(t.registration_deadline, new Date())}
+                </p>
+              )}
+            </div>
           ) : (
             <div>
               <Link
@@ -357,8 +396,80 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                   Cadastre-se grátis
                 </Link>
               </p>
+              {deadlineLabel(t.registration_deadline) && (
+                <p className="mt-2 text-center text-xs text-slate-500">{deadlineLabel(t.registration_deadline)}</p>
+              )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Descrição */}
+      {resolvedContent.description && (
+        <div className="px-3 mt-3">
+          <p className="text-slate-300 text-sm leading-relaxed">{resolvedContent.description.text}</p>
+        </div>
+      )}
+
+      {/* Local e horário */}
+      {(resolvedContent.venue || t.start_time) && (
+        <div className="px-3 mt-3 space-y-1">
+          {resolvedContent.venue && (
+            <p className="text-slate-400 text-sm flex items-start gap-1.5">
+              <span aria-hidden>📍</span>
+              <span>
+                {resolvedContent.venue.text}
+                {resolvedContent.venue.origin === 'event' && (
+                  <span className="text-slate-600"> · local do evento {resolvedContent.venue.sourceName}</span>
+                )}
+              </span>
+            </p>
+          )}
+          {t.start_time && (
+            <p className="text-slate-400 text-sm flex items-center gap-1.5">
+              <span aria-hidden>🕗</span>
+              <span>Início às {t.start_time.slice(0, 5)}</span>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Premiação */}
+      {prizes.length > 0 && (
+        <div className="px-3 mt-3">
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-2">🏆 Premiação</p>
+          <div className="bg-surface-card border border-surface-border rounded-xl p-3 space-y-1.5">
+            {prizes.map((p) => (
+              <p key={p.id} className="text-sm text-slate-300">
+                <span className="font-semibold text-white">
+                  {p.kind === 'podium' ? positionLabel(p.position as number) : 'Especial'}:
+                </span>{' '}
+                {p.description}
+                {p.value_cents !== null && (
+                  <span className="text-green-400"> · R$ {(p.value_cents / 100).toFixed(2).replace('.', ',')}</span>
+                )}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Regulamento — recolhido por padrão: é referência, não a primeira coisa que se lê */}
+      {resolvedContent.rules && (
+        <div className="px-3 mt-3">
+          <details className="bg-surface-card border border-surface-border rounded-xl p-3">
+            <summary className="text-sm font-semibold text-white cursor-pointer">
+              📋 Regulamento
+              {resolvedContent.rules.origin === 'event' && (
+                <span className="ml-1.5 text-xs font-normal text-slate-500">
+                  (do evento {resolvedContent.rules.sourceName})
+                </span>
+              )}
+            </summary>
+            <div className="mt-3">
+              <MarkdownDoc content={resolvedContent.rules.text} />
+            </div>
+          </details>
         </div>
       )}
 

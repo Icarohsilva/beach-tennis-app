@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createTournamentEvent, setEventPublished } from '@/features/torneios/eventActions'
+import { updateTournamentEventContent } from '@/features/torneios/configActions'
 import { formatEventRange } from '@/lib/torneios/event'
 
 export interface AdminEvent {
@@ -22,6 +23,9 @@ export interface AdminEvent {
   starts_on: string
   ends_on: string | null
   is_published: boolean
+  description: string | null
+  rules: string | null
+  venue: string | null
   tournamentCount: number
 }
 
@@ -70,6 +74,8 @@ function CreateEventForm({ onDone }: { onDone: () => void }) {
   const [startsOn, setStartsOn] = useState('')
   const [endsOn, setEndsOn] = useState('')
   const [description, setDescription] = useState('')
+  const [rules, setRules] = useState('')
+  const [venue, setVenue] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
@@ -88,10 +94,15 @@ function CreateEventForm({ onDone }: { onDone: () => void }) {
         setError(result.error)
         return
       }
+      if (result.id && (rules.trim() || venue.trim())) {
+        await updateTournamentEventContent(result.id, { rules: rules || null, venue: venue || null })
+      }
       setName('')
       setStartsOn('')
       setEndsOn('')
       setDescription('')
+      setRules('')
+      setVenue('')
       onDone()
       router.refresh()
     })
@@ -122,9 +133,22 @@ function CreateEventForm({ onDone }: { onDone: () => void }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
-          placeholder="Premiação, regulamento, horários…"
+          placeholder="Resumo curto do evento…"
           className={inputClass}
         />
+      </div>
+      <div className="flex flex-col gap-1 sm:col-span-2">
+        <label className="text-sm font-medium text-slate-300">Regulamento (opcional)</label>
+        <textarea
+          value={rules}
+          onChange={(e) => setRules(e.target.value)}
+          rows={3}
+          placeholder="Herdado por todos os torneios deste evento, salvo quando um deles tiver o próprio."
+          className={inputClass}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <Input label="Local (opcional)" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Ex: Arena Central — Rua X, 123" />
       </div>
       {error && <p className="text-sm text-red-400 sm:col-span-2">{error}</p>}
       <div className="sm:col-span-2">
@@ -142,9 +166,29 @@ function CreateEventForm({ onDone }: { onDone: () => void }) {
 function EventRow({ event }: { event: AdminEvent }) {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [editingContent, setEditingContent] = useState(false)
+  const [description, setDescription] = useState(event.description ?? '')
+  const [rules, setRules] = useState(event.rules ?? '')
+  const [venue, setVenue] = useState(event.venue ?? '')
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const path = `/e/${event.slug}`
+
+  function saveContent() {
+    setError(null)
+    startTransition(async () => {
+      const result = await updateTournamentEventContent(event.id, {
+        description: description || null,
+        rules: rules || null,
+        venue: venue || null,
+      })
+      if (result.error) setError(result.error)
+      else {
+        setEditingContent(false)
+        router.refresh()
+      }
+    })
+  }
 
   function togglePublish() {
     setError(null)
@@ -190,6 +234,9 @@ function EventRow({ event }: { event: AdminEvent }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setEditingContent((v) => !v)}>
+            {editingContent ? 'Fechar' : 'Editar conteúdo'}
+          </Button>
           <Button variant="ghost" size="sm" onClick={copyLink}>
             {copied ? <Check className="mr-1 h-4 w-4" /> : <Copy className="mr-1 h-4 w-4" />}
             {copied ? 'Copiado' : 'Copiar link'}
@@ -213,6 +260,26 @@ function EventRow({ event }: { event: AdminEvent }) {
         </div>
       </div>
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {editingContent && (
+        <div className="mt-3 space-y-2 rounded-lg border border-surface-border bg-surface/60 p-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-300">Descrição</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputClass} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-300">
+              Regulamento <span className="text-slate-500">(herdado por todos os torneios sem regulamento próprio)</span>
+            </label>
+            <textarea value={rules} onChange={(e) => setRules(e.target.value)} rows={3} className={inputClass} />
+          </div>
+          <Input label="Local" value={venue} onChange={(e) => setVenue(e.target.value)} />
+          <div className="flex justify-end">
+            <Button size="sm" onClick={saveContent} loading={isPending}>
+              Salvar
+            </Button>
+          </div>
+        </div>
+      )}
     </li>
   )
 }

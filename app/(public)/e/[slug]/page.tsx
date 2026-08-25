@@ -17,6 +17,7 @@ import { accentVars } from '@/lib/branding/theme'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { Logo } from '@/components/ui/Logo'
 import { PoweredBy } from '@/components/ui/PoweredBy'
+import { MarkdownDoc } from '@/components/docs/MarkdownDoc'
 import { ShareButton } from '@/features/torneios/ShareButton'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
 import { EventStat } from '@/features/torneios/EventStat'
@@ -184,12 +185,27 @@ export default async function EventoPage({ params }: PageProps) {
               {org.state ? `/${org.state}` : ''}
             </span>
           </Link>
+          {event.venue && (
+            <p className="flex items-center gap-2 text-slate-300">
+              <MapPin className="h-4 w-4 shrink-0 text-brand-400" aria-hidden />
+              <span className="min-w-0">{event.venue}</span>
+            </p>
+          )}
         </div>
 
         {event.description && (
           <p className="whitespace-pre-line text-sm leading-relaxed text-slate-300">
             {event.description}
           </p>
+        )}
+
+        {event.rules && (
+          <details className="rounded-2xl border border-white/[0.07] bg-surface-card p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-white">📋 Regulamento</summary>
+            <div className="mt-3">
+              <MarkdownDoc content={event.rules} />
+            </div>
+          </details>
         )}
 
         {/* ── Números do evento ───────────────────────────────────────────── */}
