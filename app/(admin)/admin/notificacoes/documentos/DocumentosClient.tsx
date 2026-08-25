@@ -233,7 +233,7 @@ function DocumentEditor({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 xs:flex-row xs:items-center xs:justify-between">
         <button onClick={onCancel} className="flex items-center gap-1 text-sm text-slate-400 hover:text-white">
           <ArrowLeft size={16} />
           Voltar
@@ -243,6 +243,7 @@ function DocumentEditor({
           size="sm"
           disabled={!body.trim()}
           onClick={() => setShowPreview(true)}
+          className="xs:shrink-0"
         >
           <Eye size={16} className="mr-2" />
           Visualizar como o aluno

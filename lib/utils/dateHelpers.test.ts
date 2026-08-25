@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDate, formatTime } from './dateHelpers'
+import { formatDate, formatTime, formatDateTime } from './dateHelpers'
 
 /**
  * O bug que estes testes travam: `class_sessions.session_date` é uma coluna
@@ -51,5 +51,23 @@ describe('formatTime', () => {
   it('corta os segundos', () => {
     expect(formatTime('18:00:00')).toBe('18:00')
     expect(formatTime('09:30')).toBe('09:30')
+  })
+})
+
+/**
+ * O bug que este teste trava: um instante gravado em UTC (toda coluna
+ * timestamptz, ex: org_document_acks.acked_at) formatado com `toLocaleString`
+ * sem `timeZone` sai no fuso do processo — em produção (Vercel), UTC. Uma
+ * assinatura feita às 22h30 em Brasília (01h30 UTC do dia seguinte) aparecia
+ * para o admin como "01:30" do dia seguinte, e não como as 22h30 reais.
+ */
+describe('formatDateTime', () => {
+  it('converte um instante UTC para horário de Brasília (UTC-3), não o fuso da máquina', () => {
+    // 2026-08-25T01:30:00Z é 24/08 22:30 em Brasília.
+    expect(formatDateTime('2026-08-25T01:30:00.000Z')).toBe('24/08/2026, 22:30:00')
+  })
+
+  it('meio-dia UTC vira manhã em Brasília, sem trocar o dia', () => {
+    expect(formatDateTime('2026-08-25T12:00:00.000Z')).toBe('25/08/2026, 09:00:00')
   })
 })
