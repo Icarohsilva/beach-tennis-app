@@ -6,12 +6,13 @@
 // idas e vindas por navegação de página.
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { FileText, Plus, ArrowLeft } from 'lucide-react'
+import { FileText, Plus, ArrowLeft, Eye } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { MarkdownDoc } from '@/components/docs/MarkdownDoc'
+import { DocumentGate } from '@/features/documentos/DocumentGate'
 import { createDocument, updateDocument, publishDocument, archiveDocument } from '@/features/documentos/adminActions'
 import type { OrgDocumentRow } from '@/features/documentos/adminQuery'
 import type { EditMode } from '@/lib/documentos/versioningRules'
@@ -176,6 +177,7 @@ function DocumentEditor({
   const [body, setBody] = useState(initial?.body ?? '')
   const [error, setError] = useState<string | null>(null)
   const [modeChoice, setModeChoice] = useState<{ affectedCount: number } | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   function save(mode?: EditMode) {
@@ -219,12 +221,33 @@ function DocumentEditor({
     })
   }
 
+  if (showPreview) {
+    return (
+      <DocumentGate
+        docs={[{ id: 'preview', title: title || 'Sem título', kind, version: 1, body }]}
+        preview
+        onClosePreview={() => setShowPreview(false)}
+      />
+    )
+  }
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <button onClick={onCancel} className="flex items-center gap-1 text-sm text-slate-400 hover:text-white">
-        <ArrowLeft size={16} />
-        Voltar
-      </button>
+      <div className="flex items-center justify-between gap-4">
+        <button onClick={onCancel} className="flex items-center gap-1 text-sm text-slate-400 hover:text-white">
+          <ArrowLeft size={16} />
+          Voltar
+        </button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={!body.trim()}
+          onClick={() => setShowPreview(true)}
+        >
+          <Eye size={16} className="mr-2" />
+          Visualizar como o aluno
+        </Button>
+      </div>
 
       <h1 className="text-2xl font-bold text-white">{initial ? 'Editar documento' : 'Novo documento'}</h1>
 
