@@ -206,11 +206,14 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   const needsPartner = t.participant_type === 'dupla_fixa'
   let potentialPartners: { id: string; full_name: string }[] = []
   if (needsPartner && t.status === 'open' && !isMine) {
+    // 'student' e 'athlete': quem chegou pelo link público de outro torneio
+    // (registerExternal) vira 'athlete' nesta academia — antes ficava de fora
+    // desta lista e nunca aparecia como opção de parceiro.
     const { data: membRaw } = await adminClient
       .from('memberships')
       .select('user_id, profiles:profiles!memberships_user_id_fkey(full_name)')
       .eq('organization_id', orgId)
-      .eq('role', 'student')
+      .in('role', ['student', 'athlete'])
       .is('archived_at', null)
       .neq('user_id', user.id)
     type MembRow = { user_id: string; profiles: { full_name: string } | { full_name: string }[] | null }

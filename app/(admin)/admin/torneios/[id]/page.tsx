@@ -17,6 +17,10 @@ import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { ConfirmPaymentButton } from './ConfirmPaymentButton'
 import { CancelForNonPaymentButton } from './CancelForNonPaymentButton'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
+import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
+import { inviteState } from '@/lib/torneios/invite'
+import { PairFixControls } from './PairFixControls'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -57,9 +61,10 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .from('tournament_entries')
     .select(`id, player_id, partner_id, seed, created_at,
       payment_status, discount_pct, final_price_cents, receipt_url,
+      partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
       entry_status, offer_expires_at,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
-      partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
+      partner:profiles!tournament_entries_partner_id_fkey(id, full_name, phone)`)
     .eq('tournament_id', params.id)
     .order('created_at', { ascending: true })
 
@@ -69,17 +74,105 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     discount_pct: number
     final_price_cents: number
     receipt_url: string | null
+    partner_payment_status: 'free' | 'pending' | 'paid' | null
+    partner_discount_pct: number
+    partner_final_price_cents: number
+    partner_receipt_url: string | null
     entry_status: 'confirmed' | 'waitlist' | 'offered'
     offer_expires_at: string | null
     player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
-    partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
+    partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
 
-  // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1
-  const receiptSignedUrls: Record<string, string> = {}
+  // Link pessoal de pagamento por lado (features/torneios/entryPaymentActions.ts):
+  // gerado aqui (idempotente) para a mensagem de cobrança do admin levar o
+  // link certo em vez da chave PIX solta — o link já mostra valor, desconto
+  // e o jeito de pagar daquela pessoa.
+  const paymentTokens: Record<string, { player?: string; partner?: string }> = {}
   await Promise.all(
-    entries
+    entries.flatMap((e) => {
+      const jobs: Promise<void>[] = []
+      if (e.payment_status === 'pending') {
+        jobs.push(
+          ensureEntryPaymentToken(adminClient, { orgId, tournamentId: t.id, entryId: e.id, side: 'player' })
+            .then((token) => { if (token) (paymentTokens[e.id] ??= {}).player = token })
+            .catch((err) => console.error('[admin/torneios] falha ao gerar link de pagamento (titular)', err)),
+        )
+      }
+      if (e.partner_payment_status === 'pending') {
+        jobs.push(
+          ensureEntryPaymentToken(adminClient, { orgId, tournamentId: t.id, entryId: e.id, side: 'partner' })
+            .then((token) => { if (token) (paymentTokens[e.id] ??= {}).partner = token })
+            .catch((err) => console.error('[admin/torneios] falha ao gerar link de pagamento (parceiro)', err)),
+        )
+      }
+      return jobs
+    }),
+  )
+
+  // "Duplas incompletas": inscrições de dupla fixa sem parceiro — convite
+  // nunca respondido, expirado ou recusado. Ficam presas esperando um link
+  // que talvez nunca seja aberto; o admin resolve aqui em vez de apagar a
+  // inscrição (perdendo pagamento, seed e posição na fila do titular).
+  const isDuplaFixa = t.participant_type === 'dupla_fixa'
+  const incompleteEntries = isDuplaFixa
+    ? entries.filter((e) => !e.partner_id && e.entry_status !== 'offered')
+    : []
+
+  type InviteStatus = { state: 'pending' | 'accepted' | 'declined' | 'expired'; invitedName: string }
+  const inviteByEntry: Record<string, InviteStatus> = {}
+  if (incompleteEntries.length > 0) {
+    const { data: invitesRaw } = await adminClient
+      .from('tournament_partner_invites')
+      .select('entry_id, invited_name, expires_at, accepted_at, declined_at')
+      .in('entry_id', incompleteEntries.map((e) => e.id))
+    for (const inv of (invitesRaw ?? []) as {
+      entry_id: string; invited_name: string; expires_at: string
+      accepted_at: string | null; declined_at: string | null
+    }[]) {
+      inviteByEntry[inv.entry_id] = {
+        state: inviteState(
+          { expires_at: inv.expires_at, accepted_at: inv.accepted_at, declined_at: inv.declined_at },
+          new Date(),
+        ),
+        invitedName: inv.invited_name,
+      }
+    }
+  }
+
+  // Candidatos a parceiro para o painel de conserto de dupla: alunos/atletas
+  // ativos desta academia, menos quem já está em alguma dupla deste torneio
+  // (dos dois lados) — inclui o próprio titular de cada inscrição, então
+  // ninguém vira "parceiro de si mesmo" na lista.
+  let pairCandidates: { id: string; full_name: string }[] = []
+  if (isDuplaFixa && t.status === 'open') {
+    const pairedIds = new Set(
+      entries.flatMap((e) => [e.player_id, e.partner_id].filter((id): id is string => Boolean(id))),
+    )
+    const { data: membRaw } = await adminClient
+      .from('memberships')
+      .select('user_id, profiles:profiles!memberships_user_id_fkey(full_name)')
+      .eq('organization_id', orgId)
+      .in('role', ['student', 'athlete'])
+      .is('archived_at', null)
+    type MembRow = { user_id: string; profiles: { full_name: string } | { full_name: string }[] | null }
+    pairCandidates = ((membRaw ?? []) as unknown as MembRow[])
+      .filter((m) => !pairedIds.has(m.user_id))
+      .map((m) => {
+        const prof = normalizeProf(m.profiles as { full_name: string } | { full_name: string }[])
+        return { id: m.user_id, full_name: prof?.full_name ?? '' }
+      })
+      .filter((p) => p.full_name)
+  }
+
+  // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1.
+  // Duas chaves por entry (titular e parceiro): a dupla fixa é cobrada por
+  // atleta, cada um com o próprio comprovante.
+  const receiptSignedUrls: Record<string, string> = {}
+  const partnerReceiptSignedUrls: Record<string, string> = {}
+  await Promise.all([
+    ...entries
       .filter((e) => e.receipt_url)
       .map(async (e) => {
         const { data: signed, error: signErr } = await adminClient.storage
@@ -87,8 +180,17 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
           .createSignedUrl(e.receipt_url as string, 300)
         if (signErr) console.error('[receipt] signedUrl failed for entry', e.id, signErr.message)
         else if (signed?.signedUrl) receiptSignedUrls[e.id] = signed.signedUrl
-      })
-  )
+      }),
+    ...entries
+      .filter((e) => e.partner_receipt_url)
+      .map(async (e) => {
+        const { data: signed, error: signErr } = await adminClient.storage
+          .from('payment-receipts')
+          .createSignedUrl(e.partner_receipt_url as string, 300)
+        if (signErr) console.error('[receipt] signedUrl failed for partner of entry', e.id, signErr.message)
+        else if (signed?.signedUrl) partnerReceiptSignedUrls[e.id] = signed.signedUrl
+      }),
+  ])
 
   // Confrontos com colunas de placar/status
   const { data: matchesRaw } = await adminClient
@@ -189,7 +291,15 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         >
           ←
         </Link>
-        <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold leading-tight text-white">{t.name}</h1>
+          <Link
+            href={`/admin/torneios/${t.id}/editar`}
+            className="shrink-0 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25"
+          >
+            Configurar
+          </Link>
+        </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {heroChips.map((c) => (
             <span key={c} className="rounded-full bg-white/15 px-2.5 py-1 text-xs font-semibold text-white">
@@ -242,6 +352,45 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             : `Inscrições (${confirmedEntries.length} confirmados)`}
         </h2>
 
+        {/* Duplas incompletas — convite nunca respondido, expirado ou
+            recusado. Fica no topo porque é a que precisa de ação do admin;
+            as demais seções são só leitura na maior parte do tempo. */}
+        {incompleteEntries.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-2">
+              ⚠ Duplas incompletas ({incompleteEntries.length})
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {incompleteEntries.map((entry) => {
+                const p = normalizeProf(entry.player)
+                const invite = inviteByEntry[entry.id]
+                const inviteLabel = !invite
+                  ? 'Nenhum convite enviado ainda'
+                  : invite.state === 'pending'
+                    ? `Convite enviado a ${invite.invitedName} — aguardando resposta`
+                    : invite.state === 'expired'
+                      ? `Convite a ${invite.invitedName} expirou`
+                      : invite.state === 'declined'
+                        ? `${invite.invitedName} recusou o convite`
+                        : `Convite a ${invite.invitedName} aceito` // não deveria aparecer aqui (partner_id já estaria preenchido)
+                return (
+                  <Card key={entry.id}>
+                    <ParticipantName
+                      playerId={entry.player_id}
+                      name={p?.full_name ?? entry.player_id}
+                      className="block text-sm font-medium text-white"
+                    />
+                    <p className="text-xs text-slate-400 mt-0.5">{inviteLabel}</p>
+                    {t.status === 'open' && (
+                      <PairFixControls entryId={entry.id} hasPartner={false} candidates={pairCandidates} />
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ① Confirmados */}
         {confirmedEntries.length > 0 && (
           <div className="mb-4">
@@ -250,10 +399,18 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               {confirmedEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
-                const waUrl = entry.payment_status === 'pending' && p?.phone && t.pix_key
+                const playerPayToken = paymentTokens[entry.id]?.player
+                const partnerPayToken = paymentTokens[entry.id]?.partner
+                const waUrl = entry.payment_status === 'pending' && p?.phone && playerPayToken
                   ? buildWhatsAppUrl(
                       p.phone,
-                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${playerPayToken}`,
+                    )
+                  : null
+                const partnerWaUrl = entry.partner_payment_status === 'pending' && pt?.phone && partnerPayToken
+                  ? buildWhatsAppUrl(
+                      pt.phone,
+                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${partnerPayToken}`,
                     )
                   : null
                 return (
@@ -265,7 +422,19 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           name={p?.full_name ?? entry.player_id}
                           className="block text-sm font-medium text-white"
                         />
-                        {pt && <p className="text-xs text-slate-400">Parceiro: {pt.full_name}</p>}
+                        {pt && (
+                          <p className="text-xs text-slate-400">
+                            Parceiro: {pt.full_name}
+                            {entry.partner_payment_status === 'paid' && (
+                              <span className="ml-1 text-green-400">· pago</span>
+                            )}
+                            {entry.partner_payment_status === 'pending' && (
+                              <span className="ml-1 text-yellow-400">
+                                · pendente R$ {(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}
+                              </span>
+                            )}
+                          </p>
+                        )}
                         {entry.payment_status === 'pending' && (
                           <p className="text-xs text-yellow-400 mt-0.5">
                             Aguardando: R$ {(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}
@@ -298,7 +467,19 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           rel="noopener noreferrer"
                           className="text-xs text-brand-400 hover:text-brand-300"
                         >
-                          📎 Ver comprovante
+                          📎 Ver comprovante (titular)
+                        </a>
+                      </div>
+                    )}
+                    {partnerReceiptSignedUrls[entry.id] && (
+                      <div className="mt-2">
+                        <a
+                          href={partnerReceiptSignedUrls[entry.id]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-400 hover:text-brand-300"
+                        >
+                          📎 Ver comprovante (parceiro)
                         </a>
                       </div>
                     )}
@@ -312,13 +493,31 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                             rel="noopener noreferrer"
                             className="text-xs text-green-400 hover:text-green-300"
                           >
-                            📱 Cobrar via WhatsApp
+                            📱 Cobrar titular via WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {entry.partner_payment_status === 'pending' && (
+                      <div className="mt-2 flex flex-wrap gap-2 items-center">
+                        <ConfirmPaymentButton entryId={entry.id} side="partner" />
+                        {partnerWaUrl && (
+                          <a
+                            href={partnerWaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-green-400 hover:text-green-300"
+                          >
+                            📱 Cobrar parceiro via WhatsApp
                           </a>
                         )}
                       </div>
                     )}
                     {entry.payment_status === 'pending' && (
                       <CancelForNonPaymentButton entryId={entry.id} />
+                    )}
+                    {isDuplaFixa && pt && t.status === 'open' && (
+                      <PairFixControls entryId={entry.id} hasPartner candidates={pairCandidates} />
                     )}
                   </Card>
                 )

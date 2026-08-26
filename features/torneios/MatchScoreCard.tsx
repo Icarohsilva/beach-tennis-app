@@ -43,13 +43,15 @@ export interface ScoreMatch {
 
 interface MatchScoreCardProps {
   match: ScoreMatch
-  currentUserId: string
+  currentUserId?: string
   isAdmin: boolean
   /** Rótulo opcional (ex: "Rodada 2") mostrado no topo do card. */
   roundLabel?: string
+  /** Visitante público: mostra placar/badges, esconde lançar/confirmar/agendar. */
+  readOnly?: boolean
 }
 
-export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: MatchScoreCardProps) {
+export function MatchScoreCard({ match, currentUserId = '', isAdmin, roundLabel, readOnly = false }: MatchScoreCardProps) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [g1, setG1] = useState<string>(match.games1?.toString() ?? '')
@@ -64,10 +66,10 @@ export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: Ma
     partner2_id: match.partner2_id,
     reported_by: match.reported_by,
   }
-  const iCanReport = isAdmin || canReportResult(currentUserId, elig)
+  const iCanReport = !readOnly && (isAdmin || canReportResult(currentUserId, elig))
   const confirmed = match.result_status === 'confirmed'
   const pending = match.result_status === 'pending'
-  const iCanConfirm = pending && canConfirmResult(currentUserId, elig, isAdmin)
+  const iCanConfirm = !readOnly && pending && canConfirmResult(currentUserId, elig, isAdmin)
 
   const team1 = teamLabel([match.player1?.full_name, match.partner1?.full_name])
   const team2 = teamLabel([match.player2?.full_name, match.partner2?.full_name])
@@ -81,7 +83,7 @@ export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: Ma
       ? 2
       : null
 
-  const canSchedule = isAdmin || mySide !== null
+  const canSchedule = !readOnly && (isAdmin || mySide !== null)
   const [schedOpen, setSchedOpen] = useState(false)
   const [schedValue, setSchedValue] = useState<string>(
     match.played_at ? isoToBrtLocalInput(match.played_at) : '',
@@ -158,8 +160,8 @@ export function MatchScoreCard({ match, currentUserId, isAdmin, roundLabel }: Ma
   }
 
   const showReport = iCanReport && !confirmed
-  const showAdminCorrect = isAdmin && confirmed
-  const showWaiting = pending && !iCanConfirm && !isAdmin
+  const showAdminCorrect = !readOnly && isAdmin && confirmed
+  const showWaiting = !readOnly && pending && !iCanConfirm && !isAdmin
   const showFooter = editing || showReport || showAdminCorrect || iCanConfirm || showWaiting || !!error
 
   // Slot de placar (à direita do nome do time). Em edição vira input inline.

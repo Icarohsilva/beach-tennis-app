@@ -41,7 +41,7 @@ export default async function AdminTorneiosPage() {
       .order('date', { ascending: false }),
     adminClient
       .from('tournament_events')
-      .select('id, name, slug, starts_on, ends_on, is_published')
+      .select('id, name, slug, starts_on, ends_on, is_published, description, rules, venue')
       .eq('organization_id', orgId)
       .order('starts_on', { ascending: false }),
   ])

@@ -19,6 +19,7 @@ interface PaymentRow {
   credits_qty: number | null
   dayuse_booking_id: string | null
   session_id: string | null
+  tournament_entry_id: string | null
 }
 
 export async function handleOrgCheckoutPayment(
@@ -43,7 +44,7 @@ export async function handleOrgCheckoutPayment(
   const admin = createAdminClient()
   const { data: payRaw } = await admin
     .from('payments')
-    .select('id, organization_id, student_id, status, type, amount, credits_qty, dayuse_booking_id, session_id')
+    .select('id, organization_id, student_id, status, type, amount, credits_qty, dayuse_booking_id, session_id, tournament_entry_id')
     .eq('id', ref)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -120,6 +121,21 @@ export async function handleOrgCheckoutPayment(
     })
     if (rpcErr) {
       throw new Error(`[webhook/mp] record_dayuse_checkout_payment falhou: ${rpcErr.message}`)
+    }
+    return
+  }
+
+  if (pay.type === 'tournament_entry' && pay.tournament_entry_id) {
+    // Atômico (RPC record_tournament_entry_checkout_payment): marca o
+    // pagamento pago E o lado certo (titular/parceiro) da inscrição na mesma
+    // transação — a dupla fixa é cobrada por atleta (Fase 2a), então dar
+    // baixa sem saber o lado sobrescreveria a metade errada da dupla.
+    const { error: rpcErr } = await admin.rpc('record_tournament_entry_checkout_payment', {
+      p_payment_id: pay.id,
+      p_gateway_payment_id: gatewayPaymentId,
+    })
+    if (rpcErr) {
+      throw new Error(`[webhook/mp] record_tournament_entry_checkout_payment falhou: ${rpcErr.message}`)
     }
   }
 }

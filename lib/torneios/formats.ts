@@ -10,7 +10,7 @@ import { computeStandings } from './standings'
 // por chave e chamam generate/computeStandings.
 export const FORMATS: Record<string, FormatEngine> = {
   americano: {
-    label: 'Americano (Super N)',
+    label: 'Super (Super 8, Super 12...)',
     // O americano sorteia parceiro a cada rodada, então só os jogadores importam.
     generate: (entries) => generateAmericanoSchedule(entries.map((e) => e.playerId)),
     computeStandings,

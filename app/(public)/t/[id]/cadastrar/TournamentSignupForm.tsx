@@ -7,11 +7,27 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 
-interface Props { tournamentId: string; orgInviteCode: string | null; sport?: string | null }
+interface Props {
+  tournamentId: string
+  orgInviteCode: string | null
+  sport?: string | null
+  /** Torneio com restrição de gênero: sem isto, a pessoa cria conta só para
+   * ser recusada na inscrição por "complete seu gênero no perfil". */
+  requiresGender?: boolean
+  /** Para onde voltar depois de criar a conta — ex: aceitar um convite de dupla. */
+  next?: string | null
+}
 
-export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null }: Props) {
+export function TournamentSignupForm({
+  tournamentId,
+  orgInviteCode,
+  sport = null,
+  requiresGender = false,
+  next = null,
+}: Props) {
   const router = useRouter()
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
+  const [gender, setGender] = useState<'' | 'M' | 'F'>('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [confirmEmail, setConfirmEmail] = useState(false)
@@ -22,6 +38,7 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.full_name.trim()) { setError('Informe seu nome completo.'); return }
+    if (requiresGender && !gender) { setError('Este torneio pede o gênero para validar a inscrição.'); return }
     setLoading(true)
     setError('')
     const supabase = createClient()
@@ -36,6 +53,7 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
           ...(orgInviteCode ? { org_invite_code: orgInviteCode } : {}),
           // handle_new_user grava em memberships.sports.
           ...(sport ? { sports: sport } : {}),
+          ...(gender ? { gender } : {}),
         },
       },
     })
@@ -53,7 +71,7 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
     }
     if (data.session) {
       setLoading(false)
-      router.push(`/t/${tournamentId}`)
+      router.push(next ?? `/t/${tournamentId}`)
       router.refresh()
       return
     }
@@ -73,8 +91,8 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
               Enviamos um link para <span className="text-brand-400">{form.email}</span>.
               Clique no link para ativar sua conta e depois volte para se inscrever.
             </p>
-            <Link href={`/t/${tournamentId}`} className="text-brand-400 text-sm hover:text-brand-300">
-              ← Voltar ao torneio
+            <Link href={next ?? `/t/${tournamentId}`} className="text-brand-400 text-sm hover:text-brand-300">
+              ← Voltar {next ? 'ao convite' : 'ao torneio'}
             </Link>
           </div>
         </Card>
@@ -93,6 +111,24 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
+          {requiresGender && (
+            <label className="text-sm text-slate-300">
+              Gênero
+              <select
+                value={gender}
+                onChange={(e) => setGender(e.target.value as '' | 'M' | 'F')}
+                required
+                className="mt-1 block w-full bg-surface-card border border-surface-border rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+              >
+                <option value="">Selecione...</option>
+                <option value="M">Masculino</option>
+                <option value="F">Feminino</option>
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">
+                Este torneio tem restrição de gênero na dupla — precisamos saber para validar sua inscrição.
+              </span>
+            </label>
+          )}
           <Input label="Senha" type="password" value={form.password} onChange={set('password')} required minLength={6} />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <Button type="submit" loading={loading} size="lg" className="w-full">Criar conta</Button>

@@ -90,6 +90,8 @@ export type Periodicity = 'monthly' | 'bimonthly' | 'quarterly' | 'semiannual' |
 export type SubscriptionGateway = 'manual' | 'mercadopago'
 export type Gender = 'M' | 'F'
 export type TournamentCategory = 'masculino' | 'feminino' | 'misto' | 'livre'
+/** Formações de dupla possíveis. Ordem canônica: MM < MF < FF. */
+export type PairGenders = 'MM' | 'MF' | 'FF'
 export type ParticipantType = 'individual' | 'dupla_fixa' | 'dupla_revezando'
 // 'super8' mantido p/ leitura de linhas legadas; o motor novo usa 'americano'.
 export type TournamentFormat =
@@ -477,6 +479,8 @@ export interface Tournament {
   date: string
   sport: string
   category: TournamentCategory
+  /** Formações de dupla aceitas — quem valida de verdade (ver migração 20260826000100). */
+  allowed_pair_genders: PairGenders[]
   participant_type: ParticipantType
   format: TournamentFormat
   modality: TournamentModality | null
@@ -502,6 +506,26 @@ export interface Tournament {
   advance_per_group: number
   /** Evento que agrupa este torneio na divulgação. Nulo = torneio avulso. */
   event_id: string | null
+  /** Vazio/nulo herda do evento — ver lib/torneios/content.ts. */
+  description: string | null
+  rules: string | null
+  venue: string | null
+  /** 'HH:MM:SS'. Não herda do evento — varia por categoria (misto 8h, masculino 14h). */
+  start_time: string | null
+  /** ISO. Nulo = só fecha por troca de status (comportamento de hoje). */
+  registration_deadline: string | null
+}
+
+export interface TournamentPrize {
+  id: string
+  organization_id: string
+  tournament_id: string
+  kind: 'podium' | 'special'
+  position: number | null
+  description: string
+  value_cents: number | null
+  delivered_at: string | null
+  created_at: string
 }
 
 /**
@@ -517,6 +541,9 @@ export interface TournamentEvent {
   /** Global (como o da academia): o link divulgado é /e/<slug>. */
   slug: string
   description: string | null
+  /** Regulamento e local herdados pelos torneios do evento (lib/torneios/content.ts). */
+  rules: string | null
+  venue: string | null
   cover_image_url: string | null
   starts_on: string
   /** Nulo = evento de um dia só. */
@@ -540,6 +567,11 @@ export interface TournamentEntry {
   receipt_url: string | null
   entry_status: 'confirmed' | 'waitlist' | 'offered'
   offer_expires_at: string | null
+  /** Cobrança do parceiro (dupla fixa). Nulo = sem parceiro, ou linha anterior à cobrança em dupla. */
+  partner_payment_status: 'free' | 'pending' | 'paid' | null
+  partner_discount_pct: number
+  partner_final_price_cents: number
+  partner_receipt_url: string | null
 }
 
 export interface Post {

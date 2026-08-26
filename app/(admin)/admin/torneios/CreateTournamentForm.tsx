@@ -20,7 +20,7 @@ const CATEGORY_OPTIONS: { value: TournamentCategory; label: string }[] = [
   { value: 'misto', label: 'Misto' },
 ]
 const PARTICIPANT_OPTIONS: { value: ParticipantType; label: string }[] = [
-  { value: 'dupla_revezando', label: 'Dupla Revezando (Americano)' },
+  { value: 'dupla_revezando', label: 'Dupla Revezando (Super)' },
   { value: 'dupla_fixa', label: 'Dupla Fixa' },
   { value: 'individual', label: 'Individual' },
 ]
@@ -30,7 +30,7 @@ const PARTICIPANT_OPTIONS: { value: ParticipantType; label: string }[] = [
 const FORMAT_OPTIONS: { value: TournamentFormat; label: string; hint: string }[] = [
   {
     value: 'americano',
-    label: 'Americano (Super N)',
+    label: 'Super',
     hint: 'Todos jogam com todos, trocando de parceiro a cada rodada. Classifica por saldo de games.',
   },
   {
@@ -154,7 +154,7 @@ export function CreateTournamentForm() {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
-      <Input label="Nome do torneio" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Americano de Sábado" required />
+      <Input label="Nome do torneio" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Super 8 de Sábado" required />
       <Input label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
 
       <div className="flex flex-col gap-1">

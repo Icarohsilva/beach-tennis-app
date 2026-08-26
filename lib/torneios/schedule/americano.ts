@@ -23,7 +23,7 @@ function circleRounds(m: number): [number, number][][] {
 export function generateAmericanoSchedule(playerIds: string[]): RoundPlan[] {
   const n = playerIds.length
   if (n < 4 || n > 16 || n % 2 !== 0) {
-    throw new Error('Americano aceita apenas um número par de 4 a 16 jogadores.')
+    throw new Error('Super aceita apenas um número par de 4 a 16 jogadores.')
   }
 
   const rounds = circleRounds(n)

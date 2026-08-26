@@ -3,7 +3,10 @@
 
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { canRegister, canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
+import { canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
+import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
+import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
+import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
   DEFAULT_GROUP_COUNT,
@@ -21,6 +24,9 @@ import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
 import { awardTournamentEntry, syncTournamentResultPoints } from '@/features/liga/tournamentPoints'
+import { ensureEntryPaymentToken } from './entryPaymentActions'
+import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
 import type {
   StudentLevel,
   TournamentStatus,
@@ -52,11 +58,12 @@ function shuffle<T>(arr: T[]): T[] {
   return out
 }
 
-// Calcula os campos de pagamento para uma nova inscrição.
-// Retorna payment_status, discount_pct e final_price_cents.
-async function computePaymentFields(
+// Calcula os campos de pagamento para uma nova inscrição, para UMA pessoa
+// (titular ou parceiro — dupla fixa é cobrada por atleta, cada um com o
+// próprio degrau de desconto semanal).
+export async function computePersonPayment(
   adminClient: ReturnType<typeof createAdminClient>,
-  playerId: string,
+  personId: string,
   orgId: string,
   entryPriceCents: number | null,
   pixKey: string | null,
@@ -73,15 +80,19 @@ async function computePaymentFields(
   const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
   const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
 
-  // Contar inscrições pagas nesta semana calendário (BRT)
+  // Contar inscrições pagas desta pessoa nesta semana calendário (BRT), nos
+  // DOIS papéis: um torneio pago como parceiro numa semana anterior tinha que
+  // contar para o degrau de desconto do 2º/3º torneio, e não contava (só
+  // player_id entrava na conta) — dava desconto a mais para quem só entrou
+  // como titular nesta semana.
   const { start, end } = getWeekBounds(new Date())
   const { count: weeklyCount } = await adminClient
     .from('tournament_entries')
     .select('id', { count: 'exact', head: true })
-    .eq('player_id', playerId)
     .eq('organization_id', orgId)
-    .in('payment_status', ['pending', 'paid'])
-    .gt('final_price_cents', 0)
+    .or(
+      `and(player_id.eq.${personId},final_price_cents.gt.0),and(partner_id.eq.${personId},partner_final_price_cents.gt.0)`,
+    )
     .gte('created_at', start.toISOString())
     .lte('created_at', end.toISOString())
 
@@ -89,6 +100,64 @@ async function computePaymentFields(
   const finalPriceCents = applyDiscount(entryPriceCents!, discountPct)
 
   return { payment_status: 'pending', discount_pct: discountPct, final_price_cents: finalPriceCents }
+}
+
+// Recalcula o desconto de UMA pessoa depois que uma inscrição dela (titular ou
+// parceiro) saiu da semana — a mesma lógica de computePersonPayment, mas
+// olhando para trás em vez de para a próxima inscrição. Cada linha pendente
+// dessa pessoa na semana pode ter sido titular OU parceiro, então a coluna
+// atualizada varia por linha.
+async function reversePersonWeeklyDiscount(
+  adminClient: ReturnType<typeof createAdminClient>,
+  personId: string,
+  orgId: string,
+  referenceDate: Date,
+): Promise<void> {
+  const { data: orgRow } = await adminClient
+    .from('organizations')
+    .select('tournament_discount_2_pct, tournament_discount_3_pct')
+    .eq('id', orgId)
+    .single()
+  const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
+  const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
+
+  const { start, end } = getWeekBounds(referenceDate)
+
+  type PendingRow = {
+    id: string
+    player_id: string
+    tournament: { entry_price_cents: number } | { entry_price_cents: number }[] | null
+  }
+  const { data: pendingRaw } = await adminClient
+    .from('tournament_entries')
+    .select('id, player_id, tournament:tournaments!inner(entry_price_cents)')
+    .eq('organization_id', orgId)
+    .or(
+      `and(player_id.eq.${personId},payment_status.eq.pending,final_price_cents.gt.0),and(partner_id.eq.${personId},partner_payment_status.eq.pending,partner_final_price_cents.gt.0)`,
+    )
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+    .order('created_at', { ascending: true })
+
+  const pending = (pendingRaw ?? []) as unknown as PendingRow[]
+
+  for (let i = 0; i < pending.length; i++) {
+    const tData = pending[i].tournament
+    const tRow = Array.isArray(tData) ? (tData[0] ?? null) : tData
+    if (!tRow) continue
+    const priceCents = tRow.entry_price_cents as number
+    const newDiscountPct = computeEntryDiscount(i, discount2, discount3)
+    const newFinalPrice = applyDiscount(priceCents, newDiscountPct)
+    const isPlayerSide = pending[i].player_id === personId
+    await adminClient
+      .from('tournament_entries')
+      .update(
+        isPlayerSide
+          ? { discount_pct: newDiscountPct, final_price_cents: newFinalPrice }
+          : { partner_discount_pct: newDiscountPct, partner_final_price_cents: newFinalPrice },
+      )
+      .eq('id', pending[i].id)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -217,7 +286,7 @@ export async function createTournament(input: {
 export async function registerForTournament(
   tournamentId: string,
   partnerId?: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; partnerPaymentUrl?: string; partnerWhatsappUrl?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -228,36 +297,67 @@ export async function registerForTournament(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, level, category, participant_type, entry_price_cents, pix_key, max_players')
+    .select(
+      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
+    )
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
-  if (tournament.status !== 'open') {
-    return { error: 'Inscrições encerradas para este torneio.' }
-  }
+  const regWindow = resolveRegistrationWindow(
+    { status: tournament.status as TournamentStatus, registration_deadline: tournament.registration_deadline as string | null },
+    new Date(),
+  )
+  if (!regWindow.open) return { error: regWindow.reason ?? 'Inscrições encerradas para este torneio.' }
 
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
 
-  // Gênero é identidade → vem de profiles.
-  const { data: profile } = await adminClient
+  const selfErr = selfPairError(user.id, partnerId)
+  if (selfErr) return { error: selfErr }
+
+  // Gênero é identidade → vem de profiles. Os dois lados de uma vez: BUG A
+  // (parceiro nunca era conferido) era exatamente ler só o meu gênero aqui.
+  const ids = partnerId ? [user.id, partnerId] : [user.id]
+  const { data: profilesRaw } = await adminClient
     .from('profiles')
-    .select('gender')
-    .eq('id', user.id)
-    .single()
-  const myGender = (profile?.gender ?? null) as Gender | null
+    .select('id, full_name, gender, phone')
+    .in('id', ids)
+  const profileById = new Map(
+    ((profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null; phone: string | null }[]).map((p) => [
+      p.id,
+      p,
+    ]),
+  )
+  const myGender = (profileById.get(user.id)?.gender ?? null) as Gender | null
+  const partnerGender = partnerId
+    ? ((profileById.get(partnerId)?.gender ?? null) as Gender | null)
+    : undefined
 
-  const elig = canRegister(myGender, tournament.category as TournamentCategory)
-  if (!elig.ok) return { error: elig.reason ?? 'Inscrição não permitida nesta categoria.' }
+  const allowedPairGenders = canonicalizePairGenders(
+    (tournament.allowed_pair_genders as string[] | null) ?? [],
+  )
+  const verdict = validateEntry({
+    participantType: tournament.participant_type as ParticipantType,
+    allowed: allowedPairGenders,
+    myGender,
+    partnerGender,
+  })
+  if (!verdict.ok) return { error: verdict.reason ?? 'Inscrição não permitida nesta categoria.' }
 
-  // Duplicidade.
-  const { count: dupCount } = await adminClient
+  // Duplicidade dos DOIS lados: o unique (tournament_id, player_id) não impede
+  // que a mesma pessoa seja partner_id numa dupla e player_id (ou partner_id)
+  // em outra — BUG B.
+  const orFilter = ids.flatMap((id) => [`player_id.eq.${id}`, `partner_id.eq.${id}`]).join(',')
+  const { data: existingRaw } = await adminClient
     .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
+    .select('player_id, partner_id')
     .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if ((dupCount ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
+    .or(orFilter)
+  const existing = (existingRaw ?? []) as { player_id: string; partner_id: string | null }[]
+  const people = ids.map((id) => ({ id, name: profileById.get(id)?.full_name ?? null }))
+  const clash = findEntrantClash(existing, people, user.id)
+  if (clash) return { error: clashMessage(clash) }
 
   // Verificar capacidade
   const { count: occupiedCount } = await adminClient
@@ -269,26 +369,7 @@ export async function registerForTournament(
   const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
   const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
 
-  // Dupla fixa exige parceiro; em misto valida 1 M + 1 F.
-  let partner: string | null = null
-  if (tournament.participant_type === 'dupla_fixa') {
-    if (!partnerId) return { error: 'Selecione um parceiro para dupla fixa.' }
-    partner = partnerId
-    if (tournament.category === 'misto') {
-      const { data: partnerProfile } = await adminClient
-        .from('profiles')
-        .select('gender')
-        .eq('id', partnerId)
-        .single()
-      const partnerGender = (partnerProfile?.gender ?? null) as Gender | null
-      const oneEach =
-        (myGender === 'M' && partnerGender === 'F') ||
-        (myGender === 'F' && partnerGender === 'M')
-      if (!oneEach) {
-        return { error: 'Categoria mista exige uma dupla com 1 homem e 1 mulher.' }
-      }
-    }
-  }
+  const partner = tournament.participant_type === 'dupla_fixa' ? partnerId ?? null : null
 
   let insertPayload: {
     organization_id: string
@@ -299,6 +380,9 @@ export async function registerForTournament(
     payment_status: 'free' | 'pending'
     discount_pct: number
     final_price_cents: number
+    partner_payment_status: 'free' | 'pending' | null
+    partner_discount_pct: number
+    partner_final_price_cents: number
   }
 
   if (entryStatus === 'waitlist') {
@@ -312,15 +396,30 @@ export async function registerForTournament(
       payment_status: 'free',
       discount_pct: 0,
       final_price_cents: 0,
+      partner_payment_status: partner ? 'free' : null,
+      partner_discount_pct: 0,
+      partner_final_price_cents: 0,
     }
   } else {
-    const paymentFields = await computePaymentFields(
+    // Dupla fixa é cobrada por atleta: os dois pagam a sua parte, cada um com
+    // o próprio degrau de desconto semanal — BUG C era o parceiro entrar de
+    // graça porque só o titular era cobrado.
+    const paymentFields = await computePersonPayment(
       adminClient,
       user.id,
       orgId,
       (tournament.entry_price_cents as number | null),
       (tournament.pix_key as string | null),
     )
+    const partnerPaymentFields = partner
+      ? await computePersonPayment(
+          adminClient,
+          partner,
+          orgId,
+          (tournament.entry_price_cents as number | null),
+          (tournament.pix_key as string | null),
+        )
+      : null
     insertPayload = {
       organization_id: orgId,
       tournament_id: tournamentId,
@@ -330,21 +429,62 @@ export async function registerForTournament(
       payment_status: paymentFields.payment_status,
       discount_pct: paymentFields.discount_pct,
       final_price_cents: paymentFields.final_price_cents,
+      partner_payment_status: partnerPaymentFields?.payment_status ?? (partner ? 'free' : null),
+      partner_discount_pct: partnerPaymentFields?.discount_pct ?? 0,
+      partner_final_price_cents: partnerPaymentFields?.final_price_cents ?? 0,
     }
   }
 
-  const { error: insertErr } = await adminClient
+  const { data: insertedEntry, error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert(insertPayload)
-  if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+    .select('id')
+    .single()
+  if (insertErr || !insertedEntry) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  let partnerPaymentUrl: string | undefined
+  let partnerWhatsappUrl: string | undefined
 
   if (entryStatus === 'confirmed') {
     await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
+    // O parceiro de dupla fixa também entrou no torneio — merece o mesmo ponto
+    // da Liga. Antes só quem clicou "Inscrever-se" ganhava.
+    if (partner) {
+      await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: partner })
+    }
+
+    // Link pessoal de pagamento por lado — best-effort: uma falha aqui não
+    // pode derrubar uma inscrição que já segurou a vaga e cobrou.
+    try {
+      if (insertPayload.payment_status === 'pending') {
+        await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: insertedEntry.id as string, side: 'player',
+        })
+      }
+      if (insertPayload.partner_payment_status === 'pending' && partner) {
+        const token = await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: insertedEntry.id as string, side: 'partner',
+        })
+        if (token) {
+          partnerPaymentUrl = `${getSiteUrl()}/p/${token}`
+          const partnerPhone = profileById.get(partner)?.phone
+          if (partnerPhone) {
+            const myName = profileById.get(user.id)?.full_name ?? 'Alguém'
+            partnerWhatsappUrl = buildWhatsAppUrl(
+              partnerPhone,
+              `${myName} te inscreveu no torneio! Sua parte é R$ ${(insertPayload.partner_final_price_cents / 100).toFixed(2).replace('.', ',')} — pague por aqui: ${partnerPaymentUrl}`,
+            )
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[registerForTournament] falha ao gerar link de pagamento', e)
+    }
   }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
-  return {}
+  return { partnerPaymentUrl, partnerWhatsappUrl }
 }
 
 // ---------------------------------------------------------------------------
@@ -857,66 +997,33 @@ export async function removeEntry(
     return { error: 'Só é possível cancelar a inscrição com inscrições abertas.' }
   }
 
-  // Busca dados do entry antes de deletar (para reversal de desconto)
+  // Busca dados do entry antes de deletar (para reversal de desconto). Casa
+  // player_id OU partner_id: quem entrou como parceiro de dupla fixa não
+  // conseguia cancelar a própria inscrição (só o titular era encontrado).
   const { data: deletedEntry } = await adminClient
     .from('tournament_entries')
-    .select('final_price_cents, created_at')
+    .select('id, player_id, partner_id, final_price_cents, partner_final_price_cents, created_at')
     .eq('tournament_id', tournamentId)
-    .eq('player_id', target)
     .eq('organization_id', orgId)
-    .single()
+    .or(`player_id.eq.${target},partner_id.eq.${target}`)
+    .maybeSingle()
 
   if (!deletedEntry) return { error: 'Inscrição não encontrada.' }
 
   const { error: delErr } = await adminClient
     .from('tournament_entries')
     .delete()
-    .eq('tournament_id', tournamentId)
-    .eq('player_id', target)
-    .eq('organization_id', orgId)
+    .eq('id', deletedEntry.id as string)
   if (delErr) return { error: 'Erro ao cancelar inscrição. Tente novamente.' }
 
-  // Reversal de desconto: recalcula entradas PENDING do mesmo jogador na mesma semana
+  // Reversal de desconto para os DOIS lados: cancelar uma dupla libera semana
+  // para o titular e, se houve parceiro cobrado, para o parceiro também.
+  const referenceDate = new Date(deletedEntry.created_at as string)
   if ((deletedEntry.final_price_cents as number) > 0) {
-    const { data: orgRow } = await adminClient
-      .from('organizations')
-      .select('tournament_discount_2_pct, tournament_discount_3_pct')
-      .eq('id', orgId)
-      .single()
-    const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
-    const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
-
-    const { start, end } = getWeekBounds(new Date(deletedEntry.created_at as string))
-
-    type PendingRow = {
-      id: string
-      tournament: { entry_price_cents: number } | { entry_price_cents: number }[] | null
-    }
-    const { data: pendingRaw } = await adminClient
-      .from('tournament_entries')
-      .select('id, tournament:tournaments!inner(entry_price_cents)')
-      .eq('player_id', target)
-      .eq('organization_id', orgId)
-      .eq('payment_status', 'pending')
-      .gt('final_price_cents', 0)
-      .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString())
-      .order('created_at', { ascending: true })
-
-    const pending = (pendingRaw ?? []) as unknown as PendingRow[]
-
-    for (let i = 0; i < pending.length; i++) {
-      const tData = pending[i].tournament
-      const tRow = Array.isArray(tData) ? (tData[0] ?? null) : tData
-      if (!tRow) continue
-      const priceCents = tRow.entry_price_cents as number
-      const newDiscountPct = computeEntryDiscount(i, discount2, discount3)
-      const newFinalPrice = applyDiscount(priceCents, newDiscountPct)
-      await adminClient
-        .from('tournament_entries')
-        .update({ discount_pct: newDiscountPct, final_price_cents: newFinalPrice })
-        .eq('id', pending[i].id)
-    }
+    await reversePersonWeeklyDiscount(adminClient, deletedEntry.player_id as string, orgId, referenceDate)
+  }
+  if (deletedEntry.partner_id && (deletedEntry.partner_final_price_cents as number) > 0) {
+    await reversePersonWeeklyDiscount(adminClient, deletedEntry.partner_id as string, orgId, referenceDate)
   }
 
   // Promover lista de espera se houver limite de vagas
@@ -954,7 +1061,7 @@ export async function cancelEntryForNonPayment(
   // Buscar entry
   const { data: entry } = await adminClient
     .from('tournament_entries')
-    .select('id, tournament_id, player_id, payment_status, final_price_cents, created_at')
+    .select('id, tournament_id, player_id, partner_id, payment_status, final_price_cents, partner_final_price_cents, created_at')
     .eq('id', entryId)
     .eq('organization_id', orgId)
     .single()
@@ -966,59 +1073,25 @@ export async function cancelEntryForNonPayment(
   }
 
   const tournamentId = entry.tournament_id as string
-  const target = entry.player_id as string
+  const referenceDate = new Date(entry.created_at as string)
 
-  // Reversal de desconto: recalcula entradas PENDING do mesmo jogador na mesma semana
-  if ((entry.final_price_cents as number) > 0) {
-    const { data: orgRow } = await adminClient
-      .from('organizations')
-      .select('tournament_discount_2_pct, tournament_discount_3_pct')
-      .eq('id', orgId)
-      .single()
-    const discount2 = (orgRow?.tournament_discount_2_pct as number | null) ?? 30
-    const discount3 = (orgRow?.tournament_discount_3_pct as number | null) ?? 50
-
-    const { start, end } = getWeekBounds(new Date(entry.created_at as string))
-
-    type PendingRow = {
-      id: string
-      tournament: { entry_price_cents: number } | { entry_price_cents: number }[] | null
-    }
-    const { data: pendingRaw } = await adminClient
-      .from('tournament_entries')
-      .select('id, tournament:tournaments!inner(entry_price_cents)')
-      .eq('player_id', target)
-      .eq('organization_id', orgId)
-      .eq('payment_status', 'pending')
-      .gt('final_price_cents', 0)
-      .neq('id', entryId) // excluir a própria entry que será deletada
-      .gte('created_at', start.toISOString())
-      .lte('created_at', end.toISOString())
-      .order('created_at', { ascending: true })
-
-    const pending = (pendingRaw ?? []) as unknown as PendingRow[]
-
-    for (let i = 0; i < pending.length; i++) {
-      const tData = pending[i].tournament
-      const tRow = Array.isArray(tData) ? (tData[0] ?? null) : tData
-      if (!tRow) continue
-      const priceCents = tRow.entry_price_cents as number
-      const newDiscountPct = computeEntryDiscount(i, discount2, discount3)
-      const newFinalPrice = applyDiscount(priceCents, newDiscountPct)
-      await adminClient
-        .from('tournament_entries')
-        .update({ discount_pct: newDiscountPct, final_price_cents: newFinalPrice })
-        .eq('id', pending[i].id)
-    }
-  }
-
-  // Deletar entry
+  // Deletar entry primeiro: a reversal (abaixo) recalcula a partir do que
+  // SOBRA na semana, então precisa rodar depois que esta linha já saiu.
   const { error: delErr } = await adminClient
     .from('tournament_entries')
     .delete()
     .eq('id', entryId)
     .eq('organization_id', orgId)
   if (delErr) return { error: 'Erro ao cancelar inscrição. Tente novamente.' }
+
+  // Reversal de desconto para os DOIS lados — a linha saiu da semana tanto do
+  // titular quanto do parceiro (se houve).
+  if ((entry.final_price_cents as number) > 0) {
+    await reversePersonWeeklyDiscount(adminClient, entry.player_id as string, orgId, referenceDate)
+  }
+  if (entry.partner_id && (entry.partner_final_price_cents as number) > 0) {
+    await reversePersonWeeklyDiscount(adminClient, entry.partner_id as string, orgId, referenceDate)
+  }
 
   // Buscar max_players e promover lista de espera
   const { data: tournament } = await adminClient
@@ -1057,7 +1130,7 @@ export async function confirmWaitlistOffer(
   // Buscar entry do usuário com entry_status = 'offered' nesse torneio (escopo por org)
   const { data: entry } = await adminClient
     .from('tournament_entries')
-    .select('id, offer_expires_at, payment_status, created_at')
+    .select('id, partner_id, offer_expires_at, payment_status, created_at')
     .eq('tournament_id', tournamentId)
     .eq('player_id', user.id)
     .eq('organization_id', tournament.organization_id as string)
@@ -1079,9 +1152,12 @@ export async function confirmWaitlistOffer(
   let paymentStatus: 'free' | 'pending' = 'free'
   let finalPriceCents = 0
   let discountPct = 0
+  let partnerPaymentStatus: 'free' | 'pending' | null = entry.partner_id ? 'free' : null
+  let partnerFinalPriceCents = 0
+  let partnerDiscountPct = 0
 
   if (isPaid) {
-    const paymentFields = await computePaymentFields(
+    const paymentFields = await computePersonPayment(
       adminClient,
       user.id,
       tournament.organization_id as string,
@@ -1091,6 +1167,19 @@ export async function confirmWaitlistOffer(
     paymentStatus = paymentFields.payment_status
     finalPriceCents = paymentFields.final_price_cents
     discountPct = paymentFields.discount_pct
+
+    if (entry.partner_id) {
+      const partnerFields = await computePersonPayment(
+        adminClient,
+        entry.partner_id as string,
+        tournament.organization_id as string,
+        tournament.entry_price_cents as number | null,
+        tournament.pix_key as string | null,
+      )
+      partnerPaymentStatus = partnerFields.payment_status
+      partnerFinalPriceCents = partnerFields.final_price_cents
+      partnerDiscountPct = partnerFields.discount_pct
+    }
   }
 
   const { error: updateErr } = await adminClient
@@ -1101,6 +1190,9 @@ export async function confirmWaitlistOffer(
       payment_status: paymentStatus,
       final_price_cents: finalPriceCents,
       discount_pct: discountPct,
+      partner_payment_status: partnerPaymentStatus,
+      partner_final_price_cents: partnerFinalPriceCents,
+      partner_discount_pct: partnerDiscountPct,
     })
     .eq('id', entry.id)
 
@@ -1111,6 +1203,13 @@ export async function confirmWaitlistOffer(
     tournamentId,
     studentId: user.id,
   })
+  if (entry.partner_id) {
+    await awardTournamentEntry(adminClient, {
+      orgId: tournament.organization_id as string,
+      tournamentId,
+      studentId: entry.partner_id as string,
+    })
+  }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
@@ -1384,11 +1483,24 @@ export async function registerExternal(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, organization_id, status, entry_price_cents, pix_key, max_players')
+    .select(
+      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
+    )
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
-  if (tournament.status !== 'open') return { error: 'Inscrições encerradas.' }
+  const regWindow = resolveRegistrationWindow(
+    { status: tournament.status as TournamentStatus, registration_deadline: tournament.registration_deadline as string | null },
+    new Date(),
+  )
+  if (!regWindow.open) return { error: regWindow.reason ?? 'Inscrições encerradas.' }
+
+  // Dupla fixa exige escolher parceiro, e o link público ainda não tem essa
+  // tela — sem esta trava, o link coletava inscrição solteira num torneio que
+  // precisa de dupla, sem aviso nenhum.
+  if (tournament.participant_type === 'dupla_fixa') {
+    return { error: 'Este torneio é de dupla fixa: entre no app para escolher o parceiro.' }
+  }
 
   const tournamentOrgId = tournament.organization_id as string
 
@@ -1406,13 +1518,34 @@ export async function registerExternal(
       { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
     )
 
-  // Checar duplicidade
-  const { count: dup } = await adminClient
+  // Gênero: hoje registerExternal não conferia nada — um torneio 'masculino'
+  // aceitava qualquer inscrição avulsa, sem olhar profiles.gender.
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('gender')
+    .eq('id', user.id)
+    .single()
+  const myGender = (profile?.gender ?? null) as Gender | null
+  const allowedPairGenders = canonicalizePairGenders(
+    (tournament.allowed_pair_genders as string[] | null) ?? [],
+  )
+  const verdict = validateEntry({
+    participantType: tournament.participant_type as ParticipantType,
+    allowed: allowedPairGenders,
+    myGender,
+  })
+  if (!verdict.ok) return { error: verdict.reason ?? 'Inscrição não permitida nesta categoria.' }
+
+  // Checar duplicidade nos dois lados — o mesmo cuidado de registerForTournament:
+  // esta pessoa pode já ter sido escrita como partner_id em outra inscrição.
+  const { data: existingRaw } = await adminClient
     .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
+    .select('player_id, partner_id')
     .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if ((dup ?? 0) > 0) return { error: 'Você já está inscrito neste torneio.' }
+    .or(`player_id.eq.${user.id},partner_id.eq.${user.id}`)
+  const existing = (existingRaw ?? []) as { player_id: string; partner_id: string | null }[]
+  const clash = findEntrantClash(existing, [{ id: user.id }], user.id)
+  if (clash) return { error: clashMessage(clash) }
 
   // Verificar capacidade
   const { count: occupiedCount } = await adminClient
@@ -1447,7 +1580,7 @@ export async function registerExternal(
       final_price_cents: 0,
     }
   } else {
-    const paymentFields = await computePaymentFields(
+    const paymentFields = await computePersonPayment(
       adminClient,
       user.id,
       tournamentOrgId,
@@ -1466,10 +1599,22 @@ export async function registerExternal(
     }
   }
 
-  const { error: insertErr } = await adminClient
+  const { data: insertedEntry, error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert(insertPayload)
-  if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+    .select('id')
+    .single()
+  if (insertErr || !insertedEntry) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  if (entryStatus === 'confirmed' && insertPayload.payment_status === 'pending') {
+    try {
+      await ensureEntryPaymentToken(adminClient, {
+        orgId: tournamentOrgId, tournamentId, entryId: insertedEntry.id as string, side: 'player',
+      })
+    } catch (e) {
+      console.error('[registerExternal] falha ao gerar link de pagamento', e)
+    }
+  }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
@@ -1482,6 +1627,7 @@ export async function registerExternal(
 
 export async function confirmEntryPayment(
   entryId: string,
+  side: 'player' | 'partner' = 'player',
 ): Promise<{ error?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -1501,60 +1647,34 @@ export async function confirmEntryPayment(
 
   const { data: entry, error: entryErr } = await adminClient
     .from('tournament_entries')
-    .select('id, tournament_id, payment_status')
+    .select('id, tournament_id, partner_id, payment_status, partner_payment_status')
     .eq('id', entryId)
     .eq('organization_id', orgId)
     .single()
   if (entryErr || !entry) return { error: 'Inscrição não encontrada.' }
-  if (entry.payment_status !== 'pending') {
-    return { error: 'Esta inscrição não está aguardando pagamento.' }
-  }
 
-  const { error: updateErr } = await adminClient
-    .from('tournament_entries')
-    .update({ payment_status: 'paid' })
-    .eq('id', entryId)
-  if (updateErr) return { error: 'Erro ao confirmar pagamento. Tente novamente.' }
+  if (side === 'partner') {
+    if (!entry.partner_id) return { error: 'Esta inscrição não tem parceiro.' }
+    if (entry.partner_payment_status !== 'pending') {
+      return { error: 'Esta inscrição não está aguardando pagamento.' }
+    }
+    const { error: updateErr } = await adminClient
+      .from('tournament_entries')
+      .update({ partner_payment_status: 'paid' })
+      .eq('id', entryId)
+    if (updateErr) return { error: 'Erro ao confirmar pagamento. Tente novamente.' }
+  } else {
+    if (entry.payment_status !== 'pending') {
+      return { error: 'Esta inscrição não está aguardando pagamento.' }
+    }
+    const { error: updateErr } = await adminClient
+      .from('tournament_entries')
+      .update({ payment_status: 'paid' })
+      .eq('id', entryId)
+    if (updateErr) return { error: 'Erro ao confirmar pagamento. Tente novamente.' }
+  }
 
   revalidatePath(`/admin/torneios/${entry.tournament_id as string}`)
-  return {}
-}
-
-// ---------------------------------------------------------------------------
-// updateEntryReceipt — jogador salva path do comprovante após upload
-// ---------------------------------------------------------------------------
-
-export async function updateEntryReceipt(
-  tournamentId: string,
-  receiptPath: string,
-): Promise<{ error?: string }> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Não autenticado.' }
-
-  // Valida formato do path: deve ser {tournamentId}/{userId}/receipt.*
-  if (!receiptPath.startsWith(`${tournamentId}/`)) {
-    return { error: 'Caminho do comprovante inválido.' }
-  }
-
-  // adminClient usado porque jogadores externos (sem membership) não têm org ativa.
-  // O filtro player_id = user.id garante que só a entrada do próprio jogador é atualizada.
-  const adminClient = createAdminClient()
-
-  // Verifica que o jogador está inscrito antes de gravar o comprovante
-  const { count } = await adminClient
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if ((count ?? 0) === 0) return { error: 'Você não está inscrito neste torneio.' }
-
-  const { error } = await adminClient
-    .from('tournament_entries')
-    .update({ receipt_url: receiptPath })
-    .eq('tournament_id', tournamentId)
-    .eq('player_id', user.id)
-  if (error) return { error: 'Erro ao salvar comprovante. Tente novamente.' }
   return {}
 }
 
