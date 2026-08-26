@@ -131,6 +131,13 @@ export async function swapEntryPartner(entryId: string, newPartnerId: string): P
   if ('error' in loaded) return loaded
   const { entry, tournament } = loaded
 
+  // O parceiro atual (se houver) já pagou: trocar aqui apagaria o registro
+  // do pagamento em silêncio, sem sobrar rastro de quem deve o estorno —
+  // mesma trava de clearEntryPartner.
+  if (entry.partner_id && entry.partner_payment_status === 'paid') {
+    return { error: 'O parceiro atual já pagou. Estorne antes de trocar — trocar aqui perderia o registro do pagamento.' }
+  }
+
   const selfErr = selfPairError(entry.player_id, newPartnerId)
   if (selfErr) return { error: selfErr }
 
@@ -246,6 +253,13 @@ export async function promotePartnerToPlayer(entryId: string): Promise<{ error?:
   const { entry } = loaded
 
   if (!entry.partner_id) return { error: 'Esta inscrição não tem parceiro para promover.' }
+  // O titular que sai já pagou: promover por cima apagaria o registro desse
+  // pagamento sem deixar rastro de quem deve o estorno — mesma trava de
+  // clearEntryPartner/swapEntryPartner. O admin estorna primeiro (fluxo do
+  // financeiro) e só então promove.
+  if (entry.payment_status === 'paid') {
+    return { error: 'O titular já pagou. Estorne antes de promover — promover aqui perderia o registro do pagamento.' }
+  }
 
   const { error } = await adminClient
     .from('tournament_entries')

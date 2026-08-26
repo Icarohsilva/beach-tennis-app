@@ -11,6 +11,7 @@ import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/
 import { canonicalizePairGenders, canEnter, canPairUp, requiresKnownGender } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
 import { inviteState, inviteExpiry } from '@/lib/torneios/invite'
+import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
 import { availableSlots } from '@/lib/torneios/waitlist'
 import { computePersonPayment } from './actions'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
@@ -18,7 +19,7 @@ import { awardTournamentEntry } from '@/features/liga/tournamentPoints'
 import { normalizePhone } from '@/lib/notifications/whatsapp'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
-import type { ParticipantType, Gender } from '@/types'
+import type { ParticipantType, Gender, TournamentStatus } from '@/types'
 
 function newInviteToken(): string {
   return randomBytes(32).toString('hex')
@@ -52,7 +53,11 @@ export async function inviteTournamentPartner(
     .eq('organization_id', orgId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
-  if (tournament.status !== 'open') return { error: 'Inscrições encerradas para este torneio.' }
+  const regWindow = resolveRegistrationWindow(
+    { status: tournament.status as TournamentStatus, registration_deadline: tournament.registration_deadline as string | null },
+    new Date(),
+  )
+  if (!regWindow.open) return { error: regWindow.reason ?? 'Inscrições encerradas para este torneio.' }
   if (tournament.participant_type !== 'dupla_fixa') {
     return { error: 'Convite de parceiro só existe em torneios de dupla fixa.' }
   }

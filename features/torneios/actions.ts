@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
 import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
+import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
   DEFAULT_GROUP_COUNT,
@@ -297,15 +298,17 @@ export async function registerForTournament(
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
     .select(
-      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players',
+      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
     )
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
   if (tErr || !tournament) return { error: 'Torneio não encontrado.' }
-  if (tournament.status !== 'open') {
-    return { error: 'Inscrições encerradas para este torneio.' }
-  }
+  const regWindow = resolveRegistrationWindow(
+    { status: tournament.status as TournamentStatus, registration_deadline: tournament.registration_deadline as string | null },
+    new Date(),
+  )
+  if (!regWindow.open) return { error: regWindow.reason ?? 'Inscrições encerradas para este torneio.' }
 
   const membership = await getActiveMembership()
   if (!membership) return { error: 'Perfil não encontrado.' }
@@ -1481,12 +1484,16 @@ export async function registerExternal(
   const { data: tournament } = await adminClient
     .from('tournaments')
     .select(
-      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players',
+      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
     )
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
-  if (tournament.status !== 'open') return { error: 'Inscrições encerradas.' }
+  const regWindow = resolveRegistrationWindow(
+    { status: tournament.status as TournamentStatus, registration_deadline: tournament.registration_deadline as string | null },
+    new Date(),
+  )
+  if (!regWindow.open) return { error: regWindow.reason ?? 'Inscrições encerradas.' }
 
   // Dupla fixa exige escolher parceiro, e o link público ainda não tem essa
   // tela — sem esta trava, o link coletava inscrição solteira num torneio que
