@@ -96,7 +96,10 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/legal') ||
     pathname.startsWith('/t/') ||
     // Capa pública do evento de torneio — é o link que a academia divulga.
-    pathname.startsWith('/e/')
+    pathname.startsWith('/e/') ||
+    // Link pessoal de pagamento de inscrição de torneio (quem paga pode ser
+    // o parceiro convidado, sem sessão nesta aba).
+    pathname.startsWith('/p/')
   ) {
     return finalizar(NextResponse.next())
   }

@@ -29,7 +29,9 @@ export function AcceptInviteCard({ token, tournamentId, needsGender }: Props) {
         setError(res.error)
         return
       }
-      router.push(`/t/${tournamentId}`)
+      // Com pagamento pendente, vai direto pro link pessoal — é a próxima
+      // coisa que a pessoa precisa fazer, não a página do torneio.
+      router.push(res.paymentPath ?? `/t/${tournamentId}`)
       router.refresh()
     })
   }

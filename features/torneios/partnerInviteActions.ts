@@ -13,6 +13,7 @@ import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/en
 import { inviteState, inviteExpiry } from '@/lib/torneios/invite'
 import { availableSlots } from '@/lib/torneios/waitlist'
 import { computePersonPayment } from './actions'
+import { ensureEntryPaymentToken } from './entryPaymentActions'
 import { awardTournamentEntry } from '@/features/liga/tournamentPoints'
 import { normalizePhone } from '@/lib/notifications/whatsapp'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
@@ -122,6 +123,15 @@ export async function inviteTournamentPartner(
 
   if (entryStatus === 'confirmed') {
     await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
+    if (paymentFields.payment_status === 'pending') {
+      try {
+        await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: entry.id as string, side: 'player',
+        })
+      } catch (e) {
+        console.error('[inviteTournamentPartner] falha ao gerar link de pagamento', e)
+      }
+    }
   }
 
   const token = newInviteToken()
@@ -165,7 +175,7 @@ export async function inviteTournamentPartner(
 export async function acceptPartnerInvite(
   token: string,
   input?: { gender?: Gender },
-): Promise<{ error?: string; tournamentId?: string }> {
+): Promise<{ error?: string; tournamentId?: string; paymentPath?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: 'Entre ou crie uma conta para aceitar o convite.' }
 
@@ -271,13 +281,24 @@ export async function acceptPartnerInvite(
     .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
     .eq('id', invite.id as string)
 
+  let paymentPath: string | undefined
   if (entry.entry_status === 'confirmed') {
     await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
+    if (partnerPayment.payment_status === 'pending') {
+      try {
+        const payToken = await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: entry.id as string, side: 'partner',
+        })
+        if (payToken) paymentPath = `/p/${payToken}`
+      } catch (e) {
+        console.error('[acceptPartnerInvite] falha ao gerar link de pagamento', e)
+      }
+    }
   }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
-  return { tournamentId }
+  return { tournamentId, paymentPath }
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,6 @@ import { revalidatePath } from 'next/cache'
 import { canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
 import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
-import { sideOfEntry } from '@/lib/torneios/entrySide'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
   DEFAULT_GROUP_COUNT,
@@ -24,6 +23,9 @@ import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
 import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
 import { awardTournamentEntry, syncTournamentResultPoints } from '@/features/liga/tournamentPoints'
+import { ensureEntryPaymentToken } from './entryPaymentActions'
+import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
 import type {
   StudentLevel,
   TournamentStatus,
@@ -283,7 +285,7 @@ export async function createTournament(input: {
 export async function registerForTournament(
   tournamentId: string,
   partnerId?: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; partnerPaymentUrl?: string; partnerWhatsappUrl?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado.' }
@@ -316,10 +318,10 @@ export async function registerForTournament(
   const ids = partnerId ? [user.id, partnerId] : [user.id]
   const { data: profilesRaw } = await adminClient
     .from('profiles')
-    .select('id, full_name, gender')
+    .select('id, full_name, gender, phone')
     .in('id', ids)
   const profileById = new Map(
-    ((profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null }[]).map((p) => [
+    ((profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null; phone: string | null }[]).map((p) => [
       p.id,
       p,
     ]),
@@ -430,10 +432,15 @@ export async function registerForTournament(
     }
   }
 
-  const { error: insertErr } = await adminClient
+  const { data: insertedEntry, error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert(insertPayload)
-  if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+    .select('id')
+    .single()
+  if (insertErr || !insertedEntry) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  let partnerPaymentUrl: string | undefined
+  let partnerWhatsappUrl: string | undefined
 
   if (entryStatus === 'confirmed') {
     await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: user.id })
@@ -442,11 +449,39 @@ export async function registerForTournament(
     if (partner) {
       await awardTournamentEntry(adminClient, { orgId, tournamentId, studentId: partner })
     }
+
+    // Link pessoal de pagamento por lado — best-effort: uma falha aqui não
+    // pode derrubar uma inscrição que já segurou a vaga e cobrou.
+    try {
+      if (insertPayload.payment_status === 'pending') {
+        await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: insertedEntry.id as string, side: 'player',
+        })
+      }
+      if (insertPayload.partner_payment_status === 'pending' && partner) {
+        const token = await ensureEntryPaymentToken(adminClient, {
+          orgId, tournamentId, entryId: insertedEntry.id as string, side: 'partner',
+        })
+        if (token) {
+          partnerPaymentUrl = `${getSiteUrl()}/p/${token}`
+          const partnerPhone = profileById.get(partner)?.phone
+          if (partnerPhone) {
+            const myName = profileById.get(user.id)?.full_name ?? 'Alguém'
+            partnerWhatsappUrl = buildWhatsAppUrl(
+              partnerPhone,
+              `${myName} te inscreveu no torneio! Sua parte é R$ ${(insertPayload.partner_final_price_cents / 100).toFixed(2).replace('.', ',')} — pague por aqui: ${partnerPaymentUrl}`,
+            )
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[registerForTournament] falha ao gerar link de pagamento', e)
+    }
   }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
-  return {}
+  return { partnerPaymentUrl, partnerWhatsappUrl }
 }
 
 // ---------------------------------------------------------------------------
@@ -1557,10 +1592,22 @@ export async function registerExternal(
     }
   }
 
-  const { error: insertErr } = await adminClient
+  const { data: insertedEntry, error: insertErr } = await adminClient
     .from('tournament_entries')
     .insert(insertPayload)
-  if (insertErr) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+    .select('id')
+    .single()
+  if (insertErr || !insertedEntry) return { error: 'Erro ao realizar inscrição. Tente novamente.' }
+
+  if (entryStatus === 'confirmed' && insertPayload.payment_status === 'pending') {
+    try {
+      await ensureEntryPaymentToken(adminClient, {
+        orgId: tournamentOrgId, tournamentId, entryId: insertedEntry.id as string, side: 'player',
+      })
+    } catch (e) {
+      console.error('[registerExternal] falha ao gerar link de pagamento', e)
+    }
+  }
 
   revalidatePath(`/t/${tournamentId}`)
   revalidatePath(`/admin/torneios/${tournamentId}`)
@@ -1621,45 +1668,6 @@ export async function confirmEntryPayment(
   }
 
   revalidatePath(`/admin/torneios/${entry.tournament_id as string}`)
-  return {}
-}
-
-// ---------------------------------------------------------------------------
-// updateEntryReceipt — jogador salva path do comprovante após upload
-// ---------------------------------------------------------------------------
-
-export async function updateEntryReceipt(
-  tournamentId: string,
-  receiptPath: string,
-): Promise<{ error?: string }> {
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Não autenticado.' }
-
-  // Valida formato do path: deve ser {tournamentId}/{userId}/receipt.*
-  if (!receiptPath.startsWith(`${tournamentId}/`)) {
-    return { error: 'Caminho do comprovante inválido.' }
-  }
-
-  // adminClient usado porque jogadores externos (sem membership) não têm org ativa.
-  const adminClient = createAdminClient()
-
-  // Casa player_id OU partner_id: quem entrou como parceiro de dupla fixa não
-  // conseguia nem gravar o próprio comprovante (o filtro só olhava player_id).
-  const { data: entry } = await adminClient
-    .from('tournament_entries')
-    .select('id, player_id, partner_id')
-    .eq('tournament_id', tournamentId)
-    .or(`player_id.eq.${user.id},partner_id.eq.${user.id}`)
-    .maybeSingle()
-  if (!entry) return { error: 'Você não está inscrito neste torneio.' }
-
-  const side = sideOfEntry(user.id, entry as { player_id: string; partner_id: string | null })
-  const { error } = await adminClient
-    .from('tournament_entries')
-    .update(side === 'partner' ? { partner_receipt_url: receiptPath } : { receipt_url: receiptPath })
-    .eq('id', entry.id)
-  if (error) return { error: 'Erro ao salvar comprovante. Tente novamente.' }
   return {}
 }
 

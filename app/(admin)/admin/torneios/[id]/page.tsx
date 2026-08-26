@@ -17,6 +17,8 @@ import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { ConfirmPaymentButton } from './ConfirmPaymentButton'
 import { CancelForNonPaymentButton } from './CancelForNonPaymentButton'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
+import { getSiteUrl } from '@/lib/utils/siteUrl'
+import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -80,6 +82,32 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
+
+  // Link pessoal de pagamento por lado (features/torneios/entryPaymentActions.ts):
+  // gerado aqui (idempotente) para a mensagem de cobrança do admin levar o
+  // link certo em vez da chave PIX solta — o link já mostra valor, desconto
+  // e o jeito de pagar daquela pessoa.
+  const paymentTokens: Record<string, { player?: string; partner?: string }> = {}
+  await Promise.all(
+    entries.flatMap((e) => {
+      const jobs: Promise<void>[] = []
+      if (e.payment_status === 'pending') {
+        jobs.push(
+          ensureEntryPaymentToken(adminClient, { orgId, tournamentId: t.id, entryId: e.id, side: 'player' })
+            .then((token) => { if (token) (paymentTokens[e.id] ??= {}).player = token })
+            .catch((err) => console.error('[admin/torneios] falha ao gerar link de pagamento (titular)', err)),
+        )
+      }
+      if (e.partner_payment_status === 'pending') {
+        jobs.push(
+          ensureEntryPaymentToken(adminClient, { orgId, tournamentId: t.id, entryId: e.id, side: 'partner' })
+            .then((token) => { if (token) (paymentTokens[e.id] ??= {}).partner = token })
+            .catch((err) => console.error('[admin/torneios] falha ao gerar link de pagamento (parceiro)', err)),
+        )
+      }
+      return jobs
+    }),
+  )
 
   // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1.
   // Duas chaves por entry (titular e parceiro): a dupla fixa é cobrada por
@@ -275,16 +303,18 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               {confirmedEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
-                const waUrl = entry.payment_status === 'pending' && p?.phone && t.pix_key
+                const playerPayToken = paymentTokens[entry.id]?.player
+                const partnerPayToken = paymentTokens[entry.id]?.partner
+                const waUrl = entry.payment_status === 'pending' && p?.phone && playerPayToken
                   ? buildWhatsAppUrl(
                       p.phone,
-                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${playerPayToken}`,
                     )
                   : null
-                const partnerWaUrl = entry.partner_payment_status === 'pending' && pt?.phone && t.pix_key
+                const partnerWaUrl = entry.partner_payment_status === 'pending' && pt?.phone && partnerPayToken
                   ? buildWhatsAppUrl(
                       pt.phone,
-                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')} via PIX para a chave ${t.pix_key}. Envie o comprovante pelo app. Obrigado!`,
+                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${partnerPayToken}`,
                     )
                   : null
                 return (

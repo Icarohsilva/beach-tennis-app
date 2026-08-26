@@ -6,10 +6,10 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { sportLabel } from '@/lib/arenas/sports'
 import { RegisterExternalButton } from './RegisterExternalButton'
-import { ReceiptUploadButton } from './ReceiptUploadButton'
 import { ShareButton } from './ShareButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
+import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { resolveTournamentContent } from '@/lib/torneios/content'
 import { resolveRegistrationWindow, deadlineLabel, closingSoonLabel } from '@/lib/torneios/registrationWindow'
 import { sortPrizes, positionLabel, type PrizeRow } from '@/lib/torneios/prizes'
@@ -70,7 +70,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
 
   const { data: tournamentRaw } = await adminClient
     .from('tournaments')
-    .select('id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players, event_id, description, rules, venue, start_time, registration_deadline')
+    .select('id, organization_id, name, date, sport, category, level, status, cover_image_url, winner1_id, winner2_id, winner3_id, entry_price_cents, pix_key, max_players, event_id, description, rules, venue, start_time, registration_deadline')
     .eq('id', params.id)
     .not('status', 'eq', 'draft')
     .single()
@@ -78,7 +78,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   if (!tournamentRaw) notFound()
 
   type TRow = {
-    id: string; name: string; date: string; sport: string; category: string
+    id: string; organization_id: string; name: string; date: string; sport: string; category: string
     level: string; status: string; cover_image_url: string | null
     winner1_id: string | null; winner2_id: string | null; winner3_id: string | null
     entry_price_cents: number | null; pix_key: string | null
@@ -158,6 +158,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     entry_status: 'confirmed' | 'waitlist' | 'offered'
     offer_expires_at: string | null
     created_at: string
+    paymentPath: string | null
   } | null
   let userEntry: UserEntryData = null
   if (user) {
@@ -167,7 +168,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     const { data: entryRaw } = await adminClient
       .from('tournament_entries')
       .select(
-        'player_id, partner_id, payment_status, receipt_url, final_price_cents, discount_pct, partner_payment_status, partner_receipt_url, partner_final_price_cents, partner_discount_pct, entry_status, offer_expires_at, created_at',
+        'id, player_id, partner_id, payment_status, receipt_url, final_price_cents, discount_pct, partner_payment_status, partner_receipt_url, partner_final_price_cents, partner_discount_pct, entry_status, offer_expires_at, created_at',
       )
       .eq('tournament_id', params.id)
       .or(`player_id.eq.${user.id},partner_id.eq.${user.id}`)
@@ -175,6 +176,17 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     if (entryRaw) {
       const side = sideOfEntry(user.id, entryRaw as { player_id: string; partner_id: string | null })
       const charge = chargeFor(side ?? 'player', entryRaw as unknown as PayableEntry)
+      let paymentPath: string | null = null
+      if (charge.paymentStatus === 'pending') {
+        try {
+          const token = await ensureEntryPaymentToken(adminClient, {
+            orgId: t.organization_id, tournamentId: t.id, entryId: entryRaw.id as string, side: side ?? 'player',
+          })
+          if (token) paymentPath = `/p/${token}`
+        } catch (e) {
+          console.error('[t/[id]] falha ao gerar link de pagamento', e)
+        }
+      }
       userEntry = {
         payment_status: (charge.paymentStatus ?? 'free') as 'free' | 'pending' | 'paid',
         receipt_url: charge.receiptUrl,
@@ -183,6 +195,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
         entry_status: entryRaw.entry_status as 'confirmed' | 'waitlist' | 'offered',
         offer_expires_at: entryRaw.offer_expires_at as string | null,
         created_at: entryRaw.created_at as string,
+        paymentPath,
       }
     }
   }
@@ -320,15 +333,19 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                             <span className="text-green-400 text-sm font-normal ml-2">({userEntry.discount_pct}% de desconto)</span>
                           )}
                         </p>
-                        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mt-2 mb-0.5">Chave PIX</p>
-                        <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
                       </div>
-                      {user && (
-                        <ReceiptUploadButton
-                          tournamentId={t.id}
-                          userId={user.id}
-                          hasExistingReceipt={!!userEntry.receipt_url}
-                        />
+                      {userEntry.paymentPath ? (
+                        <Link
+                          href={userEntry.paymentPath}
+                          className="block w-full rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 py-3 text-center text-sm font-semibold text-white hover:from-orange-500 hover:to-orange-400"
+                        >
+                          💳 Ir para o pagamento
+                        </Link>
+                      ) : (
+                        <div className="bg-surface rounded-lg px-3 py-2">
+                          <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Chave PIX</p>
+                          <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
+                        </div>
                       )}
                     </div>
                   )}
