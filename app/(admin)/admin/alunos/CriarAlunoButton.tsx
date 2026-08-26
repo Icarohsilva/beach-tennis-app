@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { createStudent } from '@/features/organizations/actions'
+import { sendPasswordResetLink } from '@/features/aulas/studentIdentityActions'
 import { SportsPicker } from '@/components/ui/SportsPicker'
 import { cn } from '@/lib/utils/cn'
 import type { AgeGroup } from '@/types'
@@ -19,8 +20,11 @@ export function CriarAlunoButton({ orgSports }: { orgSports: string[] }) {
   const [sports, setSports] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  // '' = criado sem e-mail (cadastro gerenciado, sem login); string = senha temporária.
-  const [criado, setCriado] = useState<{ password: string | null } | null>(null)
+  // password null = criado sem e-mail (cadastro gerenciado, sem login).
+  const [criado, setCriado] = useState<{ password: string | null; studentId: string | null } | null>(null)
+  const [linkResult, setLinkResult] = useState<{ whatsappUrl?: string; emailSent?: boolean } | null>(null)
+  const [linkError, setLinkError] = useState('')
+  const [sendingLink, setSendingLink] = useState<'whatsapp' | 'email' | null>(null)
 
   const semEmail = email.trim() === ''
 
@@ -34,8 +38,26 @@ export function CriarAlunoButton({ orgSports }: { orgSports: string[] }) {
       setError(res.error)
       return
     }
-    setCriado({ password: res.password ?? null })
+    setCriado({ password: res.password ?? null, studentId: res.studentId ?? null })
     router.refresh()
+  }
+
+  async function handleSendLink(channel: 'whatsapp' | 'email') {
+    if (!criado?.studentId) return
+    setLinkError('')
+    setSendingLink(channel)
+    const res = await sendPasswordResetLink(criado.studentId, channel)
+    setSendingLink(null)
+    if (res.error) {
+      setLinkError(res.error)
+      return
+    }
+    if (channel === 'whatsapp' && res.whatsappUrl) {
+      window.open(res.whatsappUrl, '_blank', 'noopener,noreferrer')
+      setLinkResult({ whatsappUrl: res.whatsappUrl })
+    } else {
+      setLinkResult({ emailSent: true })
+    }
   }
 
   function reset() {
@@ -47,6 +69,8 @@ export function CriarAlunoButton({ orgSports }: { orgSports: string[] }) {
     setSports([])
     setError('')
     setCriado(null)
+    setLinkResult(null)
+    setLinkError('')
   }
 
   if (!open) {
@@ -72,6 +96,50 @@ export function CriarAlunoButton({ orgSports }: { orgSports: string[] }) {
                   <p className="text-xs text-slate-500">Senha temporária</p>
                   <p className="text-lg font-mono text-brand-400 break-all">{criado.password}</p>
                 </div>
+
+                {/* Alternativa a repassar a senha temporária: manda um link para o
+                    próprio aluno definir a senha dele. */}
+                {criado.studentId && !linkResult && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">Ou mande um link para ele definir a senha:</p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1"
+                        loading={sendingLink === 'whatsapp'}
+                        disabled={sendingLink !== null}
+                        onClick={() => handleSendLink('whatsapp')}
+                      >
+                        📱 WhatsApp
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="flex-1"
+                        loading={sendingLink === 'email'}
+                        disabled={sendingLink !== null}
+                        onClick={() => handleSendLink('email')}
+                      >
+                        ✉️ E-mail
+                      </Button>
+                    </div>
+                    {linkError && <p className="text-xs text-red-400">{linkError}</p>}
+                  </div>
+                )}
+                {linkResult?.whatsappUrl && (
+                  <p className="text-xs text-green-400">
+                    Link aberto no WhatsApp.{' '}
+                    <a href={linkResult.whatsappUrl} target="_blank" rel="noopener noreferrer" className="underline">
+                      Abrir de novo
+                    </a>
+                  </p>
+                )}
+                {linkResult?.emailSent && (
+                  <p className="text-xs text-green-400">E-mail enviado.</p>
+                )}
               </>
             ) : (
               // Sem e-mail não há senha para entregar: o cadastro existe para a

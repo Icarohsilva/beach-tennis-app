@@ -14,6 +14,7 @@ import {
   Trophy,
   CalendarPlus,
   Sparkles,
+  HeartHandshake,
 } from 'lucide-react'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card } from '@/components/ui/Card'
@@ -30,6 +31,7 @@ import { TrialCardActions } from './TrialCardActions'
 import Link from 'next/link'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 export default async function AdminDashboardPage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -42,7 +44,7 @@ export default async function AdminDashboardPage() {
   const [
     { count: activeStudents },
     { count: todaySessionsCount },
-    { count: activeEnrollments },
+    { count: wellhubCount },
     { count: todayDayUseCount },
     { data: todaySessions },
     { data: recentTrials },
@@ -52,7 +54,9 @@ export default async function AdminDashboardPage() {
     // que só reflete a academia padrão do aluno multi-vínculo).
     adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('contract_active', true).is('archived_at', null).eq('organization_id', orgId),
     adminClient.from('class_sessions').select('id', { count: 'exact', head: true }).eq('session_date', today).eq('status', 'scheduled').eq('organization_id', orgId),
-    adminClient.from('enrollments').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
+    // Parceiro é eixo independente da cobrança (CLAUDE.md) — conta quem tem
+    // check-in via Wellhub nesta academia, ativo.
+    adminClient.from('memberships').select('id', { count: 'exact', head: true }).eq('role', 'student').eq('partner', 'wellhub').is('archived_at', null).eq('organization_id', orgId),
     adminClient.from('dayuse_slots').select('id', { count: 'exact', head: true }).eq('date', today).eq('is_active', true).eq('organization_id', orgId),
     adminClient.from('class_sessions')
       .select('id, status, class:classes(name, start_time, end_time, level, type, max_students)')
@@ -67,6 +71,29 @@ export default async function AdminDashboardPage() {
       .limit(5),
     adminClient.from('organizations').select('name').eq('id', orgId).single(),
   ])
+
+  // Planos ativos: assinatura com pagamento em dia (não é a contagem de
+  // matrícula em turma — turma é aula, plano é cobrança).
+  // student_subscriptions_one_live_per_student garante no máx. 1 'active' por
+  // aluno, então a contagem de linhas já é a contagem de alunos. Cresce com o
+  // tamanho da academia, então passa por fetchAllPages — sem isso uma
+  // academia grande teria o card mostrando um número (e uma receita) menor
+  // que a real, sem nenhum erro aparecer.
+  const activePlansRows = await fetchAllPages<{ price: number | null }>(
+    (from, to) =>
+      adminClient
+        .from('student_subscriptions')
+        .select('price')
+        .eq('status', 'active')
+        .eq('organization_id', orgId)
+        .order('id', { ascending: true })
+        .range(from, to),
+    { label: 'dashboard/planos-ativos' },
+  )
+  const activePlansCount = activePlansRows.length
+  const activePlansValue = activePlansRows.reduce((sum, s) => sum + Number(s.price ?? 0), 0)
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount)
 
   type SessionRow = {
     id: string
@@ -159,11 +186,19 @@ export default async function AdminDashboardPage() {
         <AdminHero orgName={org?.name ?? 'Painel'} pulse={pulse} actions={heroActions} />
       </Reveal>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatCard label="Alunos ativos" value={activeStudents ?? 0} icon={Users} step={1} href="/admin/alunos" />
         <StatCard label="Aulas hoje" value={todaySessionsCount ?? 0} icon={CalendarDays} step={2} href="/admin/grade" />
-        <StatCard label="Matrículas ativas" value={activeEnrollments ?? 0} icon={ClipboardCheck} step={3} href="/admin/grade" />
-        <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} icon={Sun} step={4} href="/admin/grade/dayuse" />
+        <StatCard
+          label="Planos ativos"
+          value={activePlansCount}
+          hint={activePlansCount > 0 ? `${formatCurrency(activePlansValue)}/mês` : undefined}
+          icon={ClipboardCheck}
+          step={3}
+          href="/admin/financeiro/planos"
+        />
+        <StatCard label="Wellhub" value={wellhubCount ?? 0} icon={HeartHandshake} step={4} href="/admin/wellhub" />
+        <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} icon={Sun} step={5} href="/admin/grade/dayuse" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

@@ -166,6 +166,17 @@ export async function reactivateStudent(studentId: string): Promise<{ error?: st
   if (target.role !== 'student') return { error: 'Só cadastro de aluno pode ser reativado aqui.' }
   if (!target.archived_at) return { error: 'Este cadastro já está ativo.' }
 
+  // Excluído permanentemente (identidade anonimizada, login removido) não
+  // reativa — a UI já esconde este botão nesse caso, mas a action precisa
+  // recusar por conta própria: quem chamasse direto conseguiria "reativar"
+  // um cadastro sem nome nem login nenhum ligado a ele.
+  const { data: profile } = await adminClient
+    .from('profiles')
+    .select('deleted_at')
+    .eq('id', studentId)
+    .maybeSingle()
+  if (profile?.deleted_at) return { error: 'Este cadastro foi excluído permanentemente e não pode ser reativado.' }
+
   const { error } = await adminClient
     .from('memberships')
     .update({ archived_at: null })
