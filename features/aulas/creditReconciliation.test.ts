@@ -122,7 +122,7 @@ describe('reconcileAllActiveEnrollments', () => {
     })
     vi.mocked(reconcileEnrollmentCredits).mockImplementation(async (_s, _c, _f, _t, _client, budget) => {
       const bookedNow = budget == null || budget > 0 ? 1 : 0
-      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1 }
+      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1, waitlisted: 0 }
     })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
@@ -165,7 +165,7 @@ describe('reconcileAllActiveEnrollments', () => {
     })
     vi.mocked(reconcileEnrollmentCredits).mockImplementation(async (_s, _c, _f, _t, _client, budget) => {
       const bookedNow = budget == null || budget > 0 ? 1 : 0
-      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1 }
+      return { booked: bookedNow, skipped: 0, quotaSkipped: bookedNow === 1 ? 0 : 1, waitlisted: 0 }
     })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
@@ -211,7 +211,7 @@ describe('reconcileAllActiveEnrollments', () => {
     vi.mocked(getQuotaSnapshot).mockResolvedValue({
       limit: 8, used: 0, remaining: 8, carriedIn: 0, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
     })
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -233,7 +233,7 @@ describe('reconcileAllActiveEnrollments', () => {
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
     vi.mocked(isQuotaEnforced).mockResolvedValue(false)
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -258,7 +258,7 @@ describe('reconcileAllActiveEnrollments', () => {
       ],
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -276,7 +276,7 @@ describe('reconcileAllActiveEnrollments', () => {
       memberships: [{ user_id: 'stu-1', organization_id: 'org-1', partner: 'wellhub' }],
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -295,7 +295,7 @@ describe('reconcileAllActiveEnrollments', () => {
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
     vi.mocked(isQuotaEnforced).mockResolvedValue(true)
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -321,7 +321,7 @@ describe('reconcileAllActiveEnrollments', () => {
     vi.mocked(getQuotaSnapshot).mockResolvedValue({
       limit: 4, used: 4, remaining: 0, carriedIn: 0, bookingsOnDate: 0, window: { from: '2026-07-01', to: '2026-07-31' },
     })
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 1 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 0, skipped: 0, quotaSkipped: 1, waitlisted: 0 })
 
     await reconcileAllActiveEnrollments('2026-07-27', '2026-08-02', 'org-1')
 
@@ -356,7 +356,7 @@ describe('reconcileAllActiveEnrollments — pendência de check-in', () => {
     vi.mocked(notifyQuotaSkips).mockResolvedValue(undefined)
     vi.mocked(notifyMissedCheckinSkips).mockResolvedValue(undefined)
     vi.mocked(isQuotaEnforced).mockResolvedValue(false)
-    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    vi.mocked(reconcileEnrollmentCredits).mockResolvedValue({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
   })
 
   it('aluno bloqueado não recebe reserva de nenhuma das fixas dele', async () => {

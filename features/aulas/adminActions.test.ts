@@ -582,10 +582,10 @@ describe('enrollStudentInClass — orçamento de cota na reconciliação', () =>
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
 
-    await enrollStudentInClass('stu-1', 'class-2')
+    await enrollStudentInClass('stu-1', 'class-2', true)
 
     expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
-      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, 0,
+      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, 0, new Set(), true,
     )
   })
 
@@ -600,10 +600,10 @@ describe('enrollStudentInClass — orçamento de cota na reconciliação', () =>
     })
     vi.mocked(createAdminClient).mockReturnValue(client)
 
-    await enrollStudentInClass('stu-1', 'class-2')
+    await enrollStudentInClass('stu-1', 'class-2', true)
 
     expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
-      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, null,
+      'stu-1', 'class-2', '2026-07-15', '2026-07-31', client, null, new Set(), true,
     )
   })
 })

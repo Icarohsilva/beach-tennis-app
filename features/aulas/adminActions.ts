@@ -130,7 +130,16 @@ export async function updateStudentSports(
 export async function enrollStudentInClass(
   studentId: string,
   classId: string,
-): Promise<{ error?: string }> {
+  /**
+   * Vincula a matrícula às sessões JÁ GERADAS da turma (até o fim do mês).
+   * Default false: matricular só cria a matrícula fixa — sessões futuras
+   * geradas depois deste momento pegam o aluno normalmente, mas as que já
+   * existem não são tocadas sem o admin confirmar antes (previewGeneratedSessions).
+   * Sem essa confirmação, um aluno era encaixado automaticamente em aulas já
+   * cheias sem ninguém decidir isso — a academia só descobria na quadra.
+   */
+  linkGeneratedSessions = false,
+): Promise<{ error?: string; booked?: number; waitlisted?: number }> {
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
@@ -267,11 +276,62 @@ export async function enrollStudentInClass(
     adminClient, studentId, orgId, quotaEnforced, activePlanForQuota, partnerForBudget, today,
   )
 
-  await reconcileEnrollmentCredits(studentId, classId, today, monthEnd, adminClient, quotaBudget)
+  // linkGeneratedSessions=false: matrícula fixa fica só para as sessões que a
+  // grade ainda vai gerar — as já existentes não são tocadas sem o admin
+  // confirmar antes (ver previewGeneratedSessions), então aqui não reconcilia.
+  let result: { error?: string; booked?: number; waitlisted?: number } = {}
+  if (linkGeneratedSessions) {
+    const reconcileResult = await reconcileEnrollmentCredits(
+      studentId, classId, today, monthEnd, adminClient, quotaBudget, new Set(), true,
+    )
+    result = { booked: reconcileResult.booked, waitlisted: reconcileResult.waitlisted }
+  }
 
   revalidatePath(`/admin/alunos/${studentId}`)
   revalidatePath('/admin/alunos')
-  return {}
+  return result
+}
+
+// ---------------------------------------------------------------------------
+// previewGeneratedSessions
+// ---------------------------------------------------------------------------
+
+/**
+ * O que já existe de sessão gerada para esta turma, daqui até o fim do mês —
+ * usado pela UI antes de matricular, para perguntar ao admin se quer vincular
+ * o aluno a elas (e, se cheias, para a fila de espera) em vez de vinculá-lo
+ * em silêncio a uma aula já lotada.
+ */
+export async function previewGeneratedSessions(
+  classId: string,
+): Promise<{ error?: string; count: number; dates: string[] }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr, count: 0, dates: [] }
+
+  const adminClient = createAdminClient()
+
+  const { data: cls } = await adminClient
+    .from('classes')
+    .select('id')
+    .eq('id', classId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!cls) return { error: 'Turma não encontrada.', count: 0, dates: [] }
+
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd')
+
+  const { data: sessionsRaw } = await adminClient
+    .from('class_sessions')
+    .select('session_date')
+    .eq('class_id', classId)
+    .eq('status', 'scheduled')
+    .gte('session_date', today)
+    .lte('session_date', monthEnd)
+    .order('session_date', { ascending: true })
+
+  const dates = ((sessionsRaw ?? []) as { session_date: string }[]).map((s) => s.session_date)
+  return { count: dates.length, dates }
 }
 
 // ---------------------------------------------------------------------------
@@ -1025,7 +1085,11 @@ export async function removeStudentFromSession(
     refunded = true
   }
 
-  // Vaga liberada: avisa a fila de espera desta sessão.
+  // Vaga liberada: avisa a fila de espera desta sessão. Turma que estava ACIMA
+  // do limite (matrícula incorreta) e teve um aluno removido não abre vaga de
+  // verdade — promoteFromWaitlist reconta confirmados de novo (já sem este
+  // aluno, a reserva acima já está 'cancelled') e openSpots() nunca promove
+  // enquanto a contagem continuar >= max_students.
   await promoteFromWaitlist(sessionId)
 
   // Liga: o aluno saiu da aula, então o ponto de ter entrado com antecedência (ou

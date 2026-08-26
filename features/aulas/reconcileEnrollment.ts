@@ -4,15 +4,18 @@
 // mockável isoladamente nos testes de reconcileAllActiveEnrollments.
 import { createAdminClient } from '@/lib/supabase/server'
 import { buildReconciliationOps } from '@/lib/utils/reconciliationOps'
+import { joinWaitlistAs } from './waitlistActions'
 
 export interface ReconcileResult {
   booked: number
   skipped: number
   /** Pendente reservar, mas sem orçamento de cota — não é falha, é limite. */
   quotaSkipped: number
+  /** Sessão lotada e `waitlistOnFull` ligado: entrou na fila em vez de ser pulada. */
+  waitlisted: number
 }
 
-const EMPTY: ReconcileResult = { booked: 0, skipped: 0, quotaSkipped: 0 }
+const EMPTY: ReconcileResult = { booked: 0, skipped: 0, quotaSkipped: 0, waitlisted: 0 }
 
 /**
  * Reserva as sessões da matrícula fixa (aluno+turma) no intervalo [from, to].
@@ -42,6 +45,14 @@ export async function reconcileEnrollmentCredits(
    * por sessão.
    */
   vacationDates: Set<string> = new Set(),
+  /**
+   * Sessão já lotada vira fila de espera em vez de ser silenciosamente
+   * pulada. Só liga em quem o admin vinculou às aulas já geradas de propósito
+   * (enrollStudentInClass com confirmação) — a reconciliação em lote do cron
+   * (reconcileAllActiveEnrollments) continua com o comportamento de sempre
+   * (skip), que já é escala diferente e não pediu esta mudança.
+   */
+  waitlistOnFull = false,
 ): Promise<ReconcileResult> {
   const adminClient = injectedClient ?? createAdminClient()
   const result: ReconcileResult = { ...EMPTY }
@@ -98,7 +109,17 @@ export async function reconcileEnrollmentCredits(
       p_credit_used: false,
     })
     if (bookErr) {
-      // SESSION_FULL ou ALREADY_BOOKED (corrida): pula.
+      // SESSION_FULL com fila ligada: entra na fila em vez de ficar de fora
+      // sem explicação nenhuma — mesmo tratamento que a promoção automática
+      // já dá a quem está esperando vaga. ALREADY_BOOKED (corrida) e qualquer
+      // outra falha continuam como skip puro.
+      if (waitlistOnFull && bookErr.message?.includes('SESSION_FULL')) {
+        const wl = await joinWaitlistAs(studentId, op.sessionId)
+        if (!wl.error) {
+          result.waitlisted++
+          continue
+        }
+      }
       result.skipped++
       continue
     }

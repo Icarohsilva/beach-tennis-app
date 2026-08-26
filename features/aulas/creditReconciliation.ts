@@ -114,6 +114,7 @@ export async function reconcileAllActiveEnrollments(
     booked: 0,
     skipped: 0,
     quotaSkipped: 0,
+    waitlisted: 0,
     missedCheckinSkipped: 0,
     processedEnrollments: 0,
     failed: 0,
@@ -240,6 +241,7 @@ export async function reconcileAllActiveEnrollments(
         totals.booked += r.booked
         totals.skipped += r.skipped
         totals.quotaSkipped += r.quotaSkipped
+        totals.waitlisted += r.waitlisted
         totals.processedEnrollments++
         if (budget !== null) budget -= r.booked
         if (r.quotaSkipped > 0) {

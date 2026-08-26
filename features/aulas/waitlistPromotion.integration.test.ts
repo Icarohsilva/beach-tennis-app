@@ -186,6 +186,22 @@ describe('promoteFromWaitlist', () => {
     expect(bookSessionAs).not.toHaveBeenCalled()
   })
 
+  it('turma ACIMA do limite (matrícula incorreta) não promove ninguém, mesmo depois de tirar um aluno', async () => {
+    // Cenário real: a turma tinha 4 de capacidade e chegou a 5 confirmados por um
+    // bug de vínculo automático. Tirar UM aluno dessas 5 não abre vaga — ainda
+    // sobra 1 além do limite. `confirmados` aqui já reflete o estado PÓS-remoção
+    // (é o que a query de verdade lê, já que a remoção grava 'cancelled' antes de
+    // chamar promoteFromWaitlist) — então isto testa exatamente o que o admin
+    // veria ao tirar o aluno excedente de uma turma lotada além da conta.
+    setup(['aluno-1'], { confirmados: 5 })
+    await promoteFromWaitlist('sess-1')
+    expect(bookSessionAs).not.toHaveBeenCalled()
+    // "virou o primeiro" é só aviso, não vaga — continua disparando mesmo sem
+    // promoção nenhuma, e não é o que este teste protege.
+    const tipos = notifyUsers.mock.calls.map((c) => (c[1] as { type: string }).type)
+    expect(tipos).not.toContain('waitlist_auto_entered')
+  })
+
   it('duas vagas promovem dois, em ordem de chegada', async () => {
     setup(['aluno-1', 'aluno-2', 'aluno-3'], { confirmados: 2 })
     await promoteFromWaitlist('sess-1')
