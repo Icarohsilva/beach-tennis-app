@@ -1085,7 +1085,11 @@ export async function removeStudentFromSession(
     refunded = true
   }
 
-  // Vaga liberada: avisa a fila de espera desta sessão.
+  // Vaga liberada: avisa a fila de espera desta sessão. Turma que estava ACIMA
+  // do limite (matrícula incorreta) e teve um aluno removido não abre vaga de
+  // verdade — promoteFromWaitlist reconta confirmados de novo (já sem este
+  // aluno, a reserva acima já está 'cancelled') e openSpots() nunca promove
+  // enquanto a contagem continuar >= max_students.
   await promoteFromWaitlist(sessionId)
 
   // Liga: o aluno saiu da aula, então o ponto de ter entrado com antecedência (ou
