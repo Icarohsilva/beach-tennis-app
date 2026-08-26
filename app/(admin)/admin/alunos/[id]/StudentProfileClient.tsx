@@ -13,6 +13,7 @@ import {
   updateStudentAgeGroup,
   updateStudentSports,
   enrollStudentInClass,
+  previewGeneratedSessions,
   cancelEnrollment,
   addDependent,
   addCreditsManually,
@@ -142,6 +143,7 @@ export function StudentProfileClient({
   const [creditsBalance, setCreditsBalance] = useState(currentCreditsBalance)
 
   const [selectedClassId, setSelectedClassId] = useState('')
+  const [enrollPreview, setEnrollPreview] = useState<{ classId: string; count: number } | null>(null)
   const [newDependentName, setNewDependentName] = useState('')
   const [newDependentLevel, setNewDependentLevel] = useState<StudentLevel>('iniciante')
   const [selectedPlanId, setSelectedPlanId] = useState('')
@@ -231,34 +233,62 @@ export function StudentProfileClient({
     })
   }
 
+  async function doEnroll(classId: string, linkGeneratedSessions: boolean) {
+    const result = await enrollStudentInClass(studentId, classId, linkGeneratedSessions)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    // Refresh — find class data from available classes
+    const cls = availableClasses.find((c) => c.id === classId)
+    if (cls) {
+      setEnrollmentList((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(), // temporary until page reload
+          organization_id: organizationId,
+          student_id: studentId,
+          class_id: cls.id,
+          enrolled_at: new Date().toISOString(),
+          cancelled_at: null,
+          is_active: true,
+          class: cls as EnrollmentWithClass['class'],
+        },
+      ])
+    }
+    setSelectedClassId('')
+    const parts: string[] = []
+    if (result.booked) parts.push(`${result.booked} aula(s) reservada(s)`)
+    if (result.waitlisted) parts.push(`${result.waitlisted} na fila de espera`)
+    notify(parts.length ? `Matrícula criada. ${parts.join(', ')}.` : 'Matrícula criada.')
+  }
+
   function handleEnroll() {
     if (!selectedClassId) return
     setError(null)
     startTransition(async () => {
-      const result = await enrollStudentInClass(studentId, selectedClassId)
-      if (result.error) {
-        setError(result.error)
+      // Aula já gerada e cheia não pode receber o aluno em silêncio (era o bug
+      // relatado): pergunta antes de vincular às sessões que já existem.
+      const preview = await previewGeneratedSessions(selectedClassId)
+      if (preview.error) {
+        setError(preview.error)
         return
       }
-      // Refresh — find class data from available classes
-      const cls = availableClasses.find((c) => c.id === selectedClassId)
-      if (cls) {
-        setEnrollmentList((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(), // temporary until page reload
-            organization_id: organizationId,
-            student_id: studentId,
-            class_id: cls.id,
-            enrolled_at: new Date().toISOString(),
-            cancelled_at: null,
-            is_active: true,
-            class: cls as EnrollmentWithClass['class'],
-          },
-        ])
+      if (preview.count > 0) {
+        setEnrollPreview({ classId: selectedClassId, count: preview.count })
+        return
       }
-      setSelectedClassId('')
-      notify('Matrícula criada.')
+      await doEnroll(selectedClassId, false)
+    })
+  }
+
+  function handleConfirmEnrollPreview(link: boolean) {
+    const preview = enrollPreview
+    if (!preview) return
+    setEnrollPreview(null)
+    setError(null)
+    startTransition(async () => {
+      await doEnroll(preview.classId, link)
     })
   }
 
@@ -646,6 +676,43 @@ export function StudentProfileClient({
               )
             })}
           </ul>
+        )}
+
+        {/* Confirmação: turma já tem aula(s) gerada(s) — vincular ou não */}
+        {enrollPreview && (
+          <div className="bg-yellow-950/40 border border-yellow-800/50 rounded-xl px-4 py-3 mb-4 space-y-3">
+            <p className="text-white text-sm font-semibold">
+              Esta turma já tem {enrollPreview.count} aula{enrollPreview.count !== 1 ? 's' : ''} gerada{enrollPreview.count !== 1 ? 's' : ''} este mês.
+            </p>
+            <p className="text-slate-300 text-xs">
+              Vincular o aluno a elas? Se a aula já estiver cheia, ele entra na fila de espera em vez de ocupar uma vaga que não existe.
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="primary"
+                size="sm"
+                loading={isPending}
+                onClick={() => handleConfirmEnrollPreview(true)}
+              >
+                Vincular às aulas já geradas
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={isPending}
+                onClick={() => handleConfirmEnrollPreview(false)}
+              >
+                Só a partir da próxima geração
+              </Button>
+              <button
+                type="button"
+                onClick={() => setEnrollPreview(null)}
+                className="text-xs text-slate-400 hover:text-white underline"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Enroll in new class */}

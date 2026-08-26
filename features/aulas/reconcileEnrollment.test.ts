@@ -1,5 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { reconcileEnrollmentCredits } from './reconcileEnrollment'
+import { joinWaitlistAs } from './waitlistActions'
+
+vi.mock('./waitlistActions', () => ({
+  joinWaitlistAs: vi.fn(),
+}))
+
+beforeEach(() => {
+  vi.mocked(joinWaitlistAs).mockReset()
+})
 
 /**
  * Stub escopado ao que reconcileEnrollmentCredits consulta: a turma
@@ -58,7 +67,7 @@ describe('reconcileEnrollmentCredits', () => {
 
     const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client)
 
-    expect(r).toEqual({ booked: 2, skipped: 0, quotaSkipped: 0 })
+    expect(r).toEqual({ booked: 2, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(2)
   })
 
@@ -72,7 +81,7 @@ describe('reconcileEnrollmentCredits', () => {
 
     const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client, 0)
 
-    expect(r).toEqual({ booked: 0, skipped: 0, quotaSkipped: 2 })
+    expect(r).toEqual({ booked: 0, skipped: 0, quotaSkipped: 2, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(0)
   })
 
@@ -86,7 +95,7 @@ describe('reconcileEnrollmentCredits', () => {
 
     const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client, 1)
 
-    expect(r).toEqual({ booked: 1, skipped: 0, quotaSkipped: 1 })
+    expect(r).toEqual({ booked: 1, skipped: 0, quotaSkipped: 1, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(1)
     expect(rpcCalls[0].p_session_id).toBe('s1')
   })
@@ -102,7 +111,7 @@ describe('reconcileEnrollmentCredits', () => {
 
     const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client, 5)
 
-    expect(r).toEqual({ booked: 1, skipped: 1, quotaSkipped: 0 })
+    expect(r).toEqual({ booked: 1, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(2)
   })
 
@@ -117,8 +126,51 @@ describe('reconcileEnrollmentCredits', () => {
 
     const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client)
 
-    expect(r).toEqual({ booked: 1, skipped: 0, quotaSkipped: 0 })
+    expect(r).toEqual({ booked: 1, skipped: 0, quotaSkipped: 0, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(1)
     expect(rpcCalls[0].p_session_id).toBe('s2')
+  })
+
+  describe('waitlistOnFull', () => {
+    it('SESSION_FULL entra na fila em vez de ser pulada quando ligado', async () => {
+      vi.mocked(joinWaitlistAs).mockResolvedValueOnce({ position: 1 })
+      const { client } = makeClient({
+        sessions: [{ id: 's1', session_date: '2026-07-07' }],
+        bookErrors: new Set(['s1']),
+      })
+
+      const r = await reconcileEnrollmentCredits(
+        'stu-1', 'class-1', '2026-07-01', '2026-07-31', client, null, new Set(), true,
+      )
+
+      expect(r).toEqual({ booked: 0, skipped: 0, quotaSkipped: 0, waitlisted: 1 })
+      expect(joinWaitlistAs).toHaveBeenCalledWith('stu-1', 's1')
+    })
+
+    it('falha ao entrar na fila cai de volta para skipped, sem quebrar a reconciliação', async () => {
+      vi.mocked(joinWaitlistAs).mockResolvedValueOnce({ error: 'Você já está na lista de espera desta sessão.' })
+      const { client } = makeClient({
+        sessions: [{ id: 's1', session_date: '2026-07-07' }],
+        bookErrors: new Set(['s1']),
+      })
+
+      const r = await reconcileEnrollmentCredits(
+        'stu-1', 'class-1', '2026-07-01', '2026-07-31', client, null, new Set(), true,
+      )
+
+      expect(r).toEqual({ booked: 0, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
+    })
+
+    it('sem waitlistOnFull (default), SESSION_FULL continua pulando em silêncio', async () => {
+      const { client } = makeClient({
+        sessions: [{ id: 's1', session_date: '2026-07-07' }],
+        bookErrors: new Set(['s1']),
+      })
+
+      const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client)
+
+      expect(r).toEqual({ booked: 0, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
+      expect(joinWaitlistAs).not.toHaveBeenCalled()
+    })
   })
 })
