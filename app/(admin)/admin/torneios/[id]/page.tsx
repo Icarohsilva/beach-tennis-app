@@ -19,6 +19,8 @@ import { CancelForNonPaymentButton } from './CancelForNonPaymentButton'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
+import { inviteState } from '@/lib/torneios/invite'
+import { PairFixControls } from './PairFixControls'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -108,6 +110,61 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       return jobs
     }),
   )
+
+  // "Duplas incompletas": inscrições de dupla fixa sem parceiro — convite
+  // nunca respondido, expirado ou recusado. Ficam presas esperando um link
+  // que talvez nunca seja aberto; o admin resolve aqui em vez de apagar a
+  // inscrição (perdendo pagamento, seed e posição na fila do titular).
+  const isDuplaFixa = t.participant_type === 'dupla_fixa'
+  const incompleteEntries = isDuplaFixa
+    ? entries.filter((e) => !e.partner_id && e.entry_status !== 'offered')
+    : []
+
+  type InviteStatus = { state: 'pending' | 'accepted' | 'declined' | 'expired'; invitedName: string }
+  const inviteByEntry: Record<string, InviteStatus> = {}
+  if (incompleteEntries.length > 0) {
+    const { data: invitesRaw } = await adminClient
+      .from('tournament_partner_invites')
+      .select('entry_id, invited_name, expires_at, accepted_at, declined_at')
+      .in('entry_id', incompleteEntries.map((e) => e.id))
+    for (const inv of (invitesRaw ?? []) as {
+      entry_id: string; invited_name: string; expires_at: string
+      accepted_at: string | null; declined_at: string | null
+    }[]) {
+      inviteByEntry[inv.entry_id] = {
+        state: inviteState(
+          { expires_at: inv.expires_at, accepted_at: inv.accepted_at, declined_at: inv.declined_at },
+          new Date(),
+        ),
+        invitedName: inv.invited_name,
+      }
+    }
+  }
+
+  // Candidatos a parceiro para o painel de conserto de dupla: alunos/atletas
+  // ativos desta academia, menos quem já está em alguma dupla deste torneio
+  // (dos dois lados) — inclui o próprio titular de cada inscrição, então
+  // ninguém vira "parceiro de si mesmo" na lista.
+  let pairCandidates: { id: string; full_name: string }[] = []
+  if (isDuplaFixa && t.status === 'open') {
+    const pairedIds = new Set(
+      entries.flatMap((e) => [e.player_id, e.partner_id].filter((id): id is string => Boolean(id))),
+    )
+    const { data: membRaw } = await adminClient
+      .from('memberships')
+      .select('user_id, profiles:profiles!memberships_user_id_fkey(full_name)')
+      .eq('organization_id', orgId)
+      .in('role', ['student', 'athlete'])
+      .is('archived_at', null)
+    type MembRow = { user_id: string; profiles: { full_name: string } | { full_name: string }[] | null }
+    pairCandidates = ((membRaw ?? []) as unknown as MembRow[])
+      .filter((m) => !pairedIds.has(m.user_id))
+      .map((m) => {
+        const prof = normalizeProf(m.profiles as { full_name: string } | { full_name: string }[])
+        return { id: m.user_id, full_name: prof?.full_name ?? '' }
+      })
+      .filter((p) => p.full_name)
+  }
 
   // Signed URLs para comprovantes (válidas por 5 min) — paralelas para evitar N+1.
   // Duas chaves por entry (titular e parceiro): a dupla fixa é cobrada por
@@ -295,6 +352,45 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             : `Inscrições (${confirmedEntries.length} confirmados)`}
         </h2>
 
+        {/* Duplas incompletas — convite nunca respondido, expirado ou
+            recusado. Fica no topo porque é a que precisa de ação do admin;
+            as demais seções são só leitura na maior parte do tempo. */}
+        {incompleteEntries.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-2">
+              ⚠ Duplas incompletas ({incompleteEntries.length})
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {incompleteEntries.map((entry) => {
+                const p = normalizeProf(entry.player)
+                const invite = inviteByEntry[entry.id]
+                const inviteLabel = !invite
+                  ? 'Nenhum convite enviado ainda'
+                  : invite.state === 'pending'
+                    ? `Convite enviado a ${invite.invitedName} — aguardando resposta`
+                    : invite.state === 'expired'
+                      ? `Convite a ${invite.invitedName} expirou`
+                      : invite.state === 'declined'
+                        ? `${invite.invitedName} recusou o convite`
+                        : `Convite a ${invite.invitedName} aceito` // não deveria aparecer aqui (partner_id já estaria preenchido)
+                return (
+                  <Card key={entry.id}>
+                    <ParticipantName
+                      playerId={entry.player_id}
+                      name={p?.full_name ?? entry.player_id}
+                      className="block text-sm font-medium text-white"
+                    />
+                    <p className="text-xs text-slate-400 mt-0.5">{inviteLabel}</p>
+                    {t.status === 'open' && (
+                      <PairFixControls entryId={entry.id} hasPartner={false} candidates={pairCandidates} />
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ① Confirmados */}
         {confirmedEntries.length > 0 && (
           <div className="mb-4">
@@ -419,6 +515,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                     )}
                     {entry.payment_status === 'pending' && (
                       <CancelForNonPaymentButton entryId={entry.id} />
+                    )}
+                    {isDuplaFixa && pt && t.status === 'open' && (
+                      <PairFixControls entryId={entry.id} hasPartner candidates={pairCandidates} />
                     )}
                   </Card>
                 )

@@ -34,6 +34,12 @@ interface TournamentHeroProps {
   waitlistCount: number
   /** Slot à direita do cabeçalho (compartilhar, selo de ao vivo). */
   actions?: React.ReactNode
+  /**
+   * Link do botão "voltar". `/torneios` (painel do aluno, default) só existe
+   * logado — a página pública passa o link do evento pai, ou `null` para
+   * esconder o botão quando o torneio é avulso.
+   */
+  backHref?: string | null
 }
 
 export function TournamentHero({
@@ -41,6 +47,7 @@ export function TournamentHero({
   occupiedCount,
   waitlistCount,
   actions,
+  backHref = '/torneios',
 }: TournamentHeroProps) {
   const sport = sportChip(t.sport)
   const tone = toneClasses(sport.tone)
@@ -76,14 +83,16 @@ export function TournamentHero({
       </div>
 
       <div className="relative p-5">
-        <div className="flex items-start justify-between gap-2">
-          <Link
-            href="/torneios"
-            aria-label="Voltar para a Arena"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-colors hover:bg-black/50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <div className={cn('flex items-start gap-2', backHref ? 'justify-between' : 'justify-end')}>
+          {backHref && (
+            <Link
+              href={backHref}
+              aria-label="Voltar"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-colors hover:bg-black/50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          )}
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
 
