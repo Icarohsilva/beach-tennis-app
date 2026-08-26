@@ -170,6 +170,8 @@ export interface Profile {
   tour_aluno_seen_at: string | null
   tour_admin_seen_at: string | null
   created_at: string
+  /** Exclusão permanente (global) — ver lib/aulas/studentIdentity.ts. null = identidade ativa. */
+  deleted_at: string | null
 }
 
 // Vínculo de uma pessoa com uma academia. Fonte da verdade dos dados por-academia

@@ -233,7 +233,7 @@ export interface CreateStudentInput {
 // a troca no 1º login (must_change_password). Admin-only (qualquer staff role='admin').
 export async function createStudent(
   input: CreateStudentInput,
-): Promise<{ error?: string; password?: string }> {
+): Promise<{ error?: string; password?: string; studentId?: string }> {
   const ctx = await getStaffContext()
   if (!ctx) return { error: 'Não autenticado.' }
 
@@ -350,7 +350,7 @@ export async function createStudent(
   }
 
   revalidatePath('/admin/alunos')
-  return { password }
+  return { password, studentId: created.user.id }
 }
 
 // Remove um professor da academia do dono. Owner-only. Não permite remover o dono.

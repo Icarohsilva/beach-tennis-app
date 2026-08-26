@@ -60,7 +60,7 @@ export default async function AlunosPage({ searchParams }: Props) {
   let dbQuery = adminClient
     .from('memberships')
     .select(
-      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, age_group, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name)',
+      'user_id, level, sports, payment_type, partner, contract_active, is_dependent, parent_id, age_group, credits_balance, pending_partner, monthly_checkin_target, archived_at, profiles:profiles!memberships_user_id_fkey!inner(full_name, deleted_at)',
     )
     .eq('role', 'student')
     .eq('organization_id', orgId)
@@ -105,6 +105,7 @@ export default async function AlunosPage({ searchParams }: Props) {
     pending_partner: Membership['pending_partner']
     monthly_checkin_target: number
     archived_at: string | null
+    deleted_at: string | null
   }
 
   const students: StudentRow[] = (
@@ -122,7 +123,7 @@ export default async function AlunosPage({ searchParams }: Props) {
       pending_partner: Membership['pending_partner']
       monthly_checkin_target: number | null
       archived_at: string | null
-      profiles: { full_name: string } | { full_name: string }[] | null
+      profiles: { full_name: string; deleted_at: string | null } | { full_name: string; deleted_at: string | null }[] | null
     }[]
   )
     .map((m) => {
@@ -143,6 +144,7 @@ export default async function AlunosPage({ searchParams }: Props) {
         pending_partner: m.pending_partner,
         monthly_checkin_target: m.monthly_checkin_target ?? 0,
         archived_at: m.archived_at,
+        deleted_at: prof?.deleted_at ?? null,
       }
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
@@ -415,10 +417,16 @@ export default async function AlunosPage({ searchParams }: Props) {
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div className="min-w-0">
                       <p className="text-white font-medium text-sm truncate">{student.full_name}</p>
-                      {student.archived_at && (
-                        <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300">
-                          Inativo desde {formatDate(student.archived_at)}
+                      {student.deleted_at ? (
+                        <span className="mt-0.5 inline-block rounded bg-red-900/40 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">
+                          Excluído em {formatDate(student.deleted_at)}
                         </span>
+                      ) : (
+                        student.archived_at && (
+                          <span className="mt-0.5 inline-block rounded bg-slate-700/60 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-300">
+                            Inativo desde {formatDate(student.archived_at)}
+                          </span>
+                        )
                       )}
                       {student.age_group === 'kids' && (
                         // Só o Kids ganha selo: adulto é a esmagadora maioria, e um

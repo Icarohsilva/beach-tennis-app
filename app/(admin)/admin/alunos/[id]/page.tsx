@@ -6,6 +6,9 @@ import { getMonthWindow } from '@/lib/utils/monthWindow'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { StudentProfileClient } from './StudentProfileClient'
+import { StudentIdentityCard } from './StudentIdentityCard'
+import { StudentMedicalCard } from './StudentMedicalCard'
+import { DeleteStudentPermanentlyButton } from './DeleteStudentPermanentlyButton'
 import { RecommendPlanCard } from './RecommendPlanCard'
 import { getOrgDefaultCheckinTarget } from '@/lib/checkin/orgCheckinTarget'
 import { getOrgSports } from '@/lib/arenas/orgSports'
@@ -52,7 +55,7 @@ export default async function StudentProfilePage({ params }: Props) {
   // Identidade (compartilhada entre academias) vem de profiles.
   const { data: profile } = await adminClient
     .from('profiles')
-    .select('id, full_name, phone, avatar_url')
+    .select('id, full_name, phone, avatar_url, gender, deleted_at')
     .eq('id', params.id)
     .single()
 
@@ -60,13 +63,30 @@ export default async function StudentProfilePage({ params }: Props) {
 
   // Identidade (profiles) + campos por-academia (membership da org ativa).
   const student = {
-    ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url'>),
+    ...(profile as Pick<Profile, 'id' | 'full_name' | 'phone' | 'avatar_url' | 'gender' | 'deleted_at'>),
     ...(membership as Pick<
       Membership,
       'level' | 'sports' | 'payment_type' | 'contract_active' | 'is_dependent' | 'parent_id' | 'age_group' | 'credits_balance' | 'monthly_checkin_target' | 'pending_partner' | 'wellhub_id' | 'totalpass_id' | 'partner' | 'archived_at'
     >),
     organization_id: orgId,
   }
+
+  // E-mail (login) vive em auth.users — user_emails é a view de leitura só
+  // para service role (ver 20260714000100_user_emails_view.sql). null =
+  // cadastro gerenciado, sem login.
+  const { data: emailRow } = await adminClient
+    .from('user_emails')
+    .select('email')
+    .eq('id', params.id)
+    .maybeSingle()
+  const studentEmail = (emailRow?.email as string | null) ?? null
+
+  // Ficha médica: leitura só (quem edita é o próprio aluno em /perfil).
+  const { data: medicalRow } = await adminClient
+    .from('medical_profiles')
+    .select('birth_date, blood_type, emergency_name, emergency_phone, health_notes')
+    .eq('profile_id', params.id)
+    .maybeSingle()
 
   // Cardápio de modalidades da academia — domínio do seletor de esportes do aluno.
   const orgSports = await getOrgSports(orgId)
@@ -295,7 +315,11 @@ export default async function StudentProfilePage({ params }: Props) {
               {student.full_name}
             </h1>
             {student.is_dependent && <Badge variant="kids">KIDS</Badge>}
-            {student.archived_at && <Badge variant="default">INATIVO</Badge>}
+            {student.deleted_at ? (
+              <Badge variant="danger">EXCLUÍDO</Badge>
+            ) : (
+              student.archived_at && <Badge variant="default">INATIVO</Badge>
+            )}
           </div>
 
           {guardian && (
@@ -335,29 +359,58 @@ export default async function StudentProfilePage({ params }: Props) {
         </div>
       </div>
 
-      {/* Aviso de cadastro inativo. Fica ANTES do painel: quem abre esta ficha para
-          matricular numa turma precisa saber, antes de tentar, que este aluno saiu da
-          academia. */}
-      {student.archived_at && (
-        <div className="rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3">
+      {/* Excluído permanentemente: identidade já foi anonimizada e o login
+          removido — não há mais o que editar, matricular ou cobrar. A ficha
+          para por aqui de propósito, em vez de mostrar seções em branco. */}
+      {student.deleted_at ? (
+        <div className="rounded-xl border border-red-900/50 bg-red-950/20 px-4 py-3">
           <p className="text-sm font-semibold text-white">
-            Cadastro inativo nesta academia desde {formatDate(student.archived_at)}.
+            Cadastro excluído permanentemente em {formatDate(student.deleted_at)}.
           </p>
           <p className="mt-1 text-xs text-slate-400">
-            O aluno não aparece nas listas, na chamada nem na Liga, e não pode ser
-            agendado. O histórico de presenças e o extrato de créditos seguem
-            intactos. Matrícula em turma e plano não voltam sozinhos ao reativar.
+            O login foi removido e a identidade (nome, telefone, ficha médica) foi apagada.
+            Presenças, pagamentos, créditos e pontos da Liga seguem guardados, sem nome ligado
+            a eles. Não é possível reativar — só um cadastro novo dá acesso de volta.
           </p>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Aviso de cadastro inativo. Fica ANTES do painel: quem abre esta ficha para
+              matricular numa turma precisa saber, antes de tentar, que este aluno saiu da
+              academia. */}
+          {student.archived_at && (
+            <div className="rounded-xl border border-slate-600/50 bg-slate-800/40 px-4 py-3">
+              <p className="text-sm font-semibold text-white">
+                Cadastro inativo nesta academia desde {formatDate(student.archived_at)}.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                O aluno não aparece nas listas, na chamada nem na Liga, e não pode ser
+                agendado. O histórico de presenças e o extrato de créditos seguem
+                intactos. Matrícula em turma e plano não voltam sozinhos ao reativar.
+              </p>
+            </div>
+          )}
 
-      {/* Férias: fica FORA do StudentProfileClient de propósito — aquele
-          componente já carrega 20 props, e férias é um assunto fechado em si. */}
-      <VacationPanel mode="admin" studentId={student.id} vacations={vacations} />
+          {/* Identidade + ficha médica: fora do StudentProfileClient de propósito,
+              mesmo motivo do VacationPanel — aquele componente já carrega 20+ props. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <StudentIdentityCard
+              studentId={student.id}
+              fullName={student.full_name}
+              phone={student.phone}
+              gender={student.gender}
+              email={studentEmail}
+            />
+            <StudentMedicalCard medical={medicalRow ?? null} />
+          </div>
 
-      {/* Interactive section (level, enrollments, dependents, subscription) */}
-      <Card>
-        <StudentProfileClient
+          {/* Férias: fica FORA do StudentProfileClient de propósito — aquele
+              componente já carrega 20 props, e férias é um assunto fechado em si. */}
+          <VacationPanel mode="admin" studentId={student.id} vacations={vacations} />
+
+          {/* Interactive section (level, enrollments, dependents, subscription) */}
+          <Card>
+            <StudentProfileClient
           studentId={student.id}
           organizationId={student.organization_id}
           currentLevel={student.level as StudentLevel}
@@ -430,6 +483,14 @@ export default async function StudentProfilePage({ params }: Props) {
           ))}
         </div>
       </section>
+
+          {/* Zona de risco: só existe depois de inativado nesta academia
+              (canPermanentlyDelete). */}
+          {student.archived_at && (
+            <DeleteStudentPermanentlyButton studentId={student.id} fullName={student.full_name} />
+          )}
+        </>
+      )}
     </div>
   )
 }
