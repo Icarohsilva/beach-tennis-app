@@ -58,7 +58,7 @@ function shuffle<T>(arr: T[]): T[] {
 // Calcula os campos de pagamento para uma nova inscrição, para UMA pessoa
 // (titular ou parceiro — dupla fixa é cobrada por atleta, cada um com o
 // próprio degrau de desconto semanal).
-async function computePersonPayment(
+export async function computePersonPayment(
   adminClient: ReturnType<typeof createAdminClient>,
   personId: string,
   orgId: string,

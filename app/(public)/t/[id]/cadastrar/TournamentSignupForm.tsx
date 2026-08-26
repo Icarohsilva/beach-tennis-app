@@ -14,9 +14,17 @@ interface Props {
   /** Torneio com restrição de gênero: sem isto, a pessoa cria conta só para
    * ser recusada na inscrição por "complete seu gênero no perfil". */
   requiresGender?: boolean
+  /** Para onde voltar depois de criar a conta — ex: aceitar um convite de dupla. */
+  next?: string | null
 }
 
-export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null, requiresGender = false }: Props) {
+export function TournamentSignupForm({
+  tournamentId,
+  orgInviteCode,
+  sport = null,
+  requiresGender = false,
+  next = null,
+}: Props) {
   const router = useRouter()
   const [form, setForm] = useState({ full_name: '', email: '', password: '' })
   const [gender, setGender] = useState<'' | 'M' | 'F'>('')
@@ -63,7 +71,7 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
     }
     if (data.session) {
       setLoading(false)
-      router.push(`/t/${tournamentId}`)
+      router.push(next ?? `/t/${tournamentId}`)
       router.refresh()
       return
     }
@@ -83,8 +91,8 @@ export function TournamentSignupForm({ tournamentId, orgInviteCode, sport = null
               Enviamos um link para <span className="text-brand-400">{form.email}</span>.
               Clique no link para ativar sua conta e depois volte para se inscrever.
             </p>
-            <Link href={`/t/${tournamentId}`} className="text-brand-400 text-sm hover:text-brand-300">
-              ← Voltar ao torneio
+            <Link href={next ?? `/t/${tournamentId}`} className="text-brand-400 text-sm hover:text-brand-300">
+              ← Voltar {next ? 'ao convite' : 'ao torneio'}
             </Link>
           </div>
         </Card>

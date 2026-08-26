@@ -5,9 +5,9 @@ import { TournamentSignupForm } from './TournamentSignupForm'
 import { normalizeSportForOrg } from '@/lib/arenas/sports'
 import { canonicalizePairGenders, requiresKnownGender } from '@/lib/torneios/pairRules'
 
-interface PageProps { params: { id: string } }
+interface PageProps { params: { id: string }; searchParams: { next?: string } }
 
-export default async function TournamentCadastroPage({ params }: PageProps) {
+export default async function TournamentCadastroPage({ params, searchParams }: PageProps) {
   // Resolve o convite da academia DONA do torneio para que o novo usuário seja
   // vinculado a ela (e não à academia padrão) já na criação da conta.
   const admin = createAdminClient()
@@ -37,12 +37,17 @@ export default async function TournamentCadastroPage({ params }: PageProps) {
     (org?.sports as string[] | null) ?? [],
   )
 
+  // Só aceita destino relativo dentro de /t/ — searchParams vem da URL, nunca
+  // confiar para redirect aberto.
+  const next = searchParams.next?.startsWith('/t/') ? searchParams.next : null
+
   return (
     <TournamentSignupForm
       tournamentId={params.id}
       orgInviteCode={(org?.invite_code as string | null) ?? null}
       sport={sport}
       requiresGender={requiresGender}
+      next={next}
     />
   )
 }
