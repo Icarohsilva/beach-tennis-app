@@ -4,7 +4,7 @@
 import { createClient, createAdminClient, getActiveOrgId, getActiveMembership } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { canReportResult, canConfirmResult, type EligibilityMatch } from '@/lib/torneios/eligibility'
-import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
+import { canonicalizePairGenders, pairGendersFor, validateEntry } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
 import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
 import {
@@ -254,6 +254,11 @@ export async function createTournament(input: {
       date: input.date,
       sport: input.sport,
       category: input.category,
+      // Só o valor INICIAL vem da categoria — dali em diante quem manda é esta
+      // coluna (comentário da migração 20260826000100). Sem isto, todo torneio
+      // novo nasce com o default do banco (qualquer formação), e "Masculino"/
+      // "Feminino" viram só um rótulo: a inscrição aceitaria qualquer gênero.
+      allowed_pair_genders: pairGendersFor(input.category),
       participant_type: input.participant_type,
       modality: modalityFromParticipant(input.participant_type),
       format: input.format,

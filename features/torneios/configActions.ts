@@ -8,6 +8,8 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { presentOrNull } from '@/lib/torneios/content'
+import { canonicalizePairGenders } from '@/lib/torneios/pairRules'
+import type { PairGenders } from '@/types'
 
 async function requireAdmin(): Promise<
   { orgId: string; adminClient: ReturnType<typeof createAdminClient> } | { error: string }
@@ -83,6 +85,62 @@ export async function updateTournamentContent(
   if ('registration_deadline' in input) update.registration_deadline = input.registration_deadline ?? null
 
   const { error } = await adminClient.from('tournaments').update(update).eq('id', tournamentId)
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
+  const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
+  revalidateTournament(tournamentId, eventSlug)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// updateTournamentPairGenders — quem pode entrar/parear por gênero
+// ---------------------------------------------------------------------------
+// createTournament (features/torneios/actions.ts) já deriva o valor inicial da
+// categoria (masculino→MM, feminino→FF, misto→MF, livre→qualquer). Esta action
+// existe para o torneio que nasceu ANTES dessa mudança, ou para o caso raro de
+// um "Masculino" que precisa aceitar outra formação — é o mesmo conjunto que
+// canPairUp()/canEnter() (lib/torneios/pairRules.ts) validam na inscrição.
+
+export async function updateTournamentPairGenders(
+  tournamentId: string,
+  allowed: PairGenders[],
+): Promise<{ error?: string }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  const canon = canonicalizePairGenders(allowed)
+  if (canon.length === 0) return { error: 'Selecione ao menos uma formação de dupla.' }
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, event:tournament_events(slug)')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  // Trocar a regra com gente já inscrita pode deixar uma dupla ou um jogador
+  // de fora do que o torneio passa a aceitar — a checagem completa (reler o
+  // gênero de cada inscrito e cada parceiro) é trabalho demais para um caso
+  // raro; mais simples e sempre seguro é recusar e pedir para revisar as
+  // inscrições à mão antes.
+  const { count } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+  if ((count ?? 0) > 0) {
+    return {
+      error:
+        'Este torneio já tem inscrição. Mudar a regra de gênero agora poderia deixar alguém já inscrito fora do que passaria a valer — revise as inscrições antes.',
+    }
+  }
+
+  const { error } = await adminClient
+    .from('tournaments')
+    .update({ allowed_pair_genders: canon })
+    .eq('id', tournamentId)
   if (error) return { error: 'Erro ao salvar. Tente novamente.' }
 
   const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null

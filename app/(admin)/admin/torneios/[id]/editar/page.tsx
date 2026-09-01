@@ -8,6 +8,8 @@ import { resolveTournamentContent } from '@/lib/torneios/content'
 import { sortPrizes, type PrizeRow } from '@/lib/torneios/prizes'
 import { TournamentContentForm } from './TournamentContentForm'
 import { TournamentPrizesCard } from './TournamentPrizesCard'
+import { TournamentPairGendersCard } from './TournamentPairGendersCard'
+import type { PairGenders } from '@/types'
 
 interface PageProps { params: { id: string } }
 
@@ -19,11 +21,16 @@ export default async function EditarTorneioPage({ params }: PageProps) {
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id')
+    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type')
     .eq('id', params.id)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!tournament) notFound()
+
+  const { count: entryCount } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', params.id)
 
   const { data: event } = tournament.event_id
     ? await adminClient
@@ -83,6 +90,13 @@ export default async function EditarTorneioPage({ params }: PageProps) {
           registration_deadline: tournament.registration_deadline as string | null,
         }}
         resolved={resolved}
+      />
+
+      <TournamentPairGendersCard
+        tournamentId={params.id}
+        allowedPairGenders={(tournament.allowed_pair_genders as PairGenders[] | null) ?? []}
+        participantType={tournament.participant_type as 'individual' | 'dupla_fixa' | 'dupla_revezando'}
+        hasEntries={(entryCount ?? 0) > 0}
       />
 
       <TournamentPrizesCard tournamentId={params.id} initialPrizes={prizes} />
