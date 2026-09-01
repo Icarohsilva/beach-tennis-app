@@ -25,8 +25,19 @@ export type Clipe = {
   /** Corta o fim: segundos a DESCARTAR do final. 0 = vai até o fim. */
   cortarFim: number
   /**
+   * Acelera a gravação. 1 = velocidade real, 10 = dez vezes mais rápido.
+   * A duração no vídeo final é (bruto - cortes) / velocidade, e a linha do
+   * tempo se ajusta sozinha — não há nenhum outro número para mexer.
+   * Acima de 1 aparece um selo "10×" no canto, para o cliente não achar que a
+   * gravação está travando.
+   */
+  velocidade: number
+  /**
    * Legendas que aparecem por cima do vídeo (lower third).
-   * `em` é em segundos, contados DEPOIS do corte de início.
+   * `em` é o segundo no vídeo FINAL — depois do corte de início E depois da
+   * aceleração. Com `velocidade: 10`, o minuto 2:00 do bruto cai aos 12 s aqui.
+   * O jeito prático de acertar: rode `npm run studio`, arraste a linha do tempo
+   * até o momento e leia o segundo que o próprio Studio mostra.
    * Deixe a lista vazia enquanto não souber os tempos — o vídeo roda igual.
    */
   legendas: { em: number; duracao: number; texto: string }[]
@@ -46,7 +57,10 @@ export const CLIPES: Clipe[] = [
     ],
     cortarInicio: 0,
     cortarFim: 0,
+    // Bruto de ~5 min → ~30 s no vídeo final.
+    velocidade: 10,
     legendas: [
+      // Atenção: `em` é o segundo no vídeo FINAL (já acelerado), não no bruto.
       // { em: 4, duracao: 3.5, texto: 'Reserva a aula em dois toques' },
       // { em: 12, duracao: 3.5, texto: 'Cancelou a tempo? O crédito volta na hora' },
     ],
@@ -64,6 +78,8 @@ export const CLIPES: Clipe[] = [
     ],
     cortarInicio: 0,
     cortarFim: 0,
+    // Bruto de ~20 min → ~1 min no vídeo final.
+    velocidade: 20,
     legendas: [],
   },
 ]

@@ -51,22 +51,40 @@ Quase tudo mora em [`src/config.ts`](src/config.ts):
   cartão de capítulo, os `destaques` do painel lateral, os cortes e as legendas.
 - **`cortarInicio` / `cortarFim`** — em segundos. É assim que se joga fora o
   tempo morto do começo (procurar a tela, digitar senha) e do fim.
-- **`legendas`** — `{ em, duracao, texto }`, em segundos contados **depois** do
-  corte de início. Abra o `npm run studio`, arraste a linha do tempo até o
-  momento certo, leia o segundo e anote aqui.
+- **`velocidade`** — acelera a gravação. `10` transforma 5 min em 30 s; `20`
+  transforma 20 min em 1 min. A linha do tempo se ajusta sozinha, e acima de 1
+  aparece um selo "10×" no canto — sem ele o cliente acha que o app travou.
+- **`legendas`** — `{ em, duracao, texto }`. `em` é o segundo no vídeo **final**,
+  já acelerado: com `velocidade: 10`, o minuto 2:00 do bruto cai aos 12 s. Abra o
+  `npm run studio`, arraste a linha do tempo até o momento, leia o segundo e
+  anote aqui.
 - **`CONTATO`** — o que aparece no encerramento.
 - **`FORMATO`** — `'paisagem'` (1920×1080, para WhatsApp, e-mail e reunião) ou
   `'retrato'` (1080×1920, para stories). A abertura, os capítulos e o
   encerramento se readaptam sozinhos: tudo é escalado a partir da largura.
 
 A duração de cada gravação **não** se digita: `src/Root.tsx` mede os arquivos com
-`parseMedia` e monta a linha do tempo a partir disso. Trocar o `.mp4` por uma
-regravação mais longa não exige mexer em número nenhum.
+`parseMedia`, divide pela `velocidade` e monta a linha do tempo a partir disso.
+Trocar o `.mp4` por uma regravação mais longa não exige mexer em número nenhum.
+
+Se a `velocidade` for alta demais para uma gravação curta, o bloco ficaria menor
+que a transição e a montagem quebraria com um erro que não diz qual clipe é. Nesse
+caso o projeto segura a duração num piso e **avisa no console** para você baixar a
+velocidade — em vez de derrubar o render.
 
 A mesma medição decide a moldura de cada clipe (`src/Clipe.tsx`): gravação
 **vertical** entra num aparelho desenhado, com painel de argumentos na sobra
 lateral; gravação **de desktop** entra numa janela e ocupa a largura toda. É o
 que evita o vídeo de celular esticado ou entre duas tarjas pretas.
+
+## Sobre acelerar demais
+
+Aceleração uniforme resolve o tamanho do arquivo, não a legibilidade. Acima de
+~8× nenhuma tela fica no ar tempo suficiente para ser lida: o cliente vê
+movimento, não o produto. Se o resultado ficar corrido, o caminho não é baixar a
+velocidade do bruto inteiro — é **escolher os trechos** que importam com
+`cortarInicio`/`cortarFim` e acelerar pouco, ou gerar um clipe por assunto com
+`render:aluno` e `render:arena`.
 
 ## Arquivos
 

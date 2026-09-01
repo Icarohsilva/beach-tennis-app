@@ -206,6 +206,7 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
           <OffthreadVideo
             src={staticFile(`videos/${clipe.arquivo}`)}
             trimBefore={Math.round(clipe.cortarInicio * fps)}
+            playbackRate={clipe.velocidade}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             // A demonstração é narrada por você ao vivo / por legenda; o áudio
             // bruto de gravação de tela só atrapalha.
@@ -213,6 +214,29 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
           />
         </div>
       </AbsoluteFill>
+
+      {/* Selo de velocidade. Sem ele, uma gravação a 10x parece o app travando
+          ou o vídeo com defeito — o cliente precisa ler que a pressa é edição. */}
+      {clipe.velocidade > 1 ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: 48 * escala,
+            right: 56 * escala,
+            padding: `${10 * escala}px ${22 * escala}px`,
+            borderRadius: 999,
+            border: `1px solid ${cores.borda}`,
+            background: `${cores.fundoCard}e6`,
+            color: cores.textoSuave,
+            fontSize: 26 * escala,
+            fontWeight: 600,
+            letterSpacing: 0.4,
+            opacity: entrada,
+          }}
+        >
+          <span style={{ color: cores.marca }}>▶</span> {clipe.velocidade}× · avanço rápido
+        </div>
+      ) : null}
 
       {/* Legendas (lower third) */}
       {clipe.legendas.map((leg, i) => {

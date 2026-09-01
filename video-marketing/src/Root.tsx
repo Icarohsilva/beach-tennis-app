@@ -3,11 +3,29 @@ import { Composition, staticFile } from 'remotion'
 import { parseMedia } from '@remotion/media-parser'
 import { Abertura } from './Abertura'
 import { Encerramento } from './Encerramento'
-import { Demo, DemoProps, Medida, duracaoTotal, DUR_ABERTURA, DUR_ENCERRAMENTO } from './Demo'
+import { Demo, DemoProps, Medida, TRANSICAO, duracaoTotal, DUR_ABERTURA, DUR_ENCERRAMENTO } from './Demo'
 import { CLIPES, DIMENSOES, FPS, Clipe as ClipeConfig } from './config'
 
 /** Duração usada quando o arquivo não pôde ser lido — 45s, só para o Studio abrir. */
 const FALLBACK_SEGUNDOS = 45
+
+/**
+ * Piso de duração de um clipe. A TransitionSeries recusa um bloco mais curto do
+ * que a transição que vem depois dele, e o erro que ela levanta não diz qual
+ * clipe nem por quê. Sem este piso, uma `velocidade` alta demais para uma
+ * gravação curta derruba o render inteiro com uma mensagem indecifrável.
+ */
+const MIN_FRAMES = TRANSICAO * 2
+
+const comPiso = (frames: number, clipe: ClipeConfig) => {
+  if (frames >= MIN_FRAMES) return frames
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[arenahub-video] ${clipe.arquivo} ficou com ${frames} frames a ${clipe.velocidade}x — ` +
+      `curto demais para a transição. Segurando em ${MIN_FRAMES}; baixe a velocidade.`,
+  )
+  return MIN_FRAMES
+}
 
 const absoluta = (caminho: string) =>
   typeof window === 'undefined' ? caminho : new URL(caminho, window.location.href).href
@@ -29,7 +47,10 @@ const medir = async (clipes: ClipeConfig[]): Promise<Medida[]> =>
         const bruto = durationInSeconds ?? FALLBACK_SEGUNDOS
         const util = Math.max(1, bruto - clipe.cortarInicio - clipe.cortarFim)
         return {
-          frames: Math.round(util * FPS),
+          // A aceleração encurta o bloco na mesma proporção: é `playbackRate` no
+          // OffthreadVideo (Clipe.tsx) e a divisão aqui, e as duas TÊM de andar
+          // juntas — só uma delas e o vídeo corta no meio ou congela no fim.
+          frames: comPiso(Math.round((util / Math.max(1, clipe.velocidade)) * FPS), clipe),
           retrato: dimensions ? dimensions.height >= dimensions.width : true,
         }
       } catch (erro) {
@@ -38,7 +59,13 @@ const medir = async (clipes: ClipeConfig[]): Promise<Medida[]> =>
           `[arenahub-video] não consegui ler public/videos/${clipe.arquivo} — usando ${FALLBACK_SEGUNDOS}s.`,
           erro,
         )
-        return { frames: FALLBACK_SEGUNDOS * FPS, retrato: true }
+        return {
+          frames: comPiso(
+            Math.round((FALLBACK_SEGUNDOS / Math.max(1, clipe.velocidade)) * FPS),
+            clipe,
+          ),
+          retrato: true,
+        }
       }
     }),
   )
