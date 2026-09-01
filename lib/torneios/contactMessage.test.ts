@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildContactMessage, firstName } from './contactMessage'
+import { buildAccessMessage, buildContactMessage, firstName } from './contactMessage'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 
 describe('firstName', () => {
@@ -92,5 +92,56 @@ describe('mensagem dentro do link', () => {
 
   it('telefone já com DDI não ganha outro 55', () => {
     expect(buildWhatsAppUrl('5521999991234', 'oi')).toContain('wa.me/5521999991234?')
+  })
+})
+
+describe('buildAccessMessage', () => {
+  const base = {
+    toName: 'Ana Carolina Prado',
+    tournamentName: 'Super 8 Feminino',
+    tournamentUrl: 'https://arenahub.website/t/abc',
+    email: 'ana@exemplo.com',
+    orgName: 'Arena Maré Alta',
+  }
+
+  it('diz o torneio, a arena, o link e como entrar', () => {
+    const msg = buildAccessMessage({ ...base, password: 'Xk4p2Qw9' })
+    expect(msg).toContain('Oi, Ana!')
+    expect(msg).toContain('Super 8 Feminino')
+    expect(msg).toContain('Arena Maré Alta')
+    expect(msg).toContain('https://arenahub.website/t/abc')
+    expect(msg).toContain('ana@exemplo.com')
+    expect(msg).toContain('Xk4p2Qw9')
+  })
+
+  it('avisa que a senha é só do primeiro acesso', () => {
+    // Sem isso a pessoa guarda a provisória e estranha o app pedir outra.
+    const msg = buildAccessMessage({ ...base, password: 'Xk4p2Qw9' })
+    expect(msg).toMatch(/primeiro login/i)
+  })
+
+  it('sem senha nova, manda para "esqueci minha senha" em vez de inventar uma', () => {
+    const msg = buildAccessMessage({ ...base })
+    expect(msg).not.toMatch(/senha provis/i)
+    expect(msg).toMatch(/Esqueci minha senha/i)
+    expect(msg).toContain('ana@exemplo.com')
+  })
+
+  it('sem arena, a frase continua de pé', () => {
+    const msg = buildAccessMessage({ ...base, orgName: null, password: 'a1b2' })
+    expect(msg).toContain('Super 8 Feminino')
+    expect(msg).not.toMatch(/undefined|null|\(\)/)
+  })
+
+  it('sem nome, não sai "Oi, !"', () => {
+    const msg = buildAccessMessage({ ...base, toName: '' })
+    expect(msg.startsWith('Oi!')).toBe(true)
+  })
+
+  it('quebra de linha sobrevive ao link do wa.me', () => {
+    // O WhatsApp respeita %0A; sem escapar, o texto chegaria numa linha só.
+    const url = buildWhatsAppUrl('31994147094', buildAccessMessage({ ...base, password: 'a1' }))
+    expect(url).toContain('%0A')
+    expect(url.startsWith('https://wa.me/5531994147094?text=')).toBe(true)
   })
 })
