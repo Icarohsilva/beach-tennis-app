@@ -9,7 +9,7 @@
     "render:abertura": "remotion render Abertura out/arenahub-abertura.mp4",
     "render:aluno": "remotion render DemoAluno out/arenahub-aluno.mp4 --concurrency=2",
     "render:arena": "remotion render DemoArena out/arenahub-arena.mp4 --concurrency=2",
-    "still": "remotion still Abertura out/capa.png --frame=110",
+    "still": "remotion still Convite out/capa.png --frame=0",
     "gerar:sfx": "node scripts/gerar-sfx.mjs",
     "render:convite": "remotion render Convite out/arenahub-convite.mp4 --concurrency=2"
   },
