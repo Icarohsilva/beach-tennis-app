@@ -1,0 +1,27 @@
+{
+  "name": "arenahub-video-marketing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Video de demonstracao do ArenaHub (Remotion). Independente do app Next.",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Demo out/arenahub-demo.mp4 --concurrency=2",
+    "render:abertura": "remotion render Abertura out/arenahub-abertura.mp4",
+    "render:aluno": "remotion render DemoAluno out/arenahub-aluno.mp4 --concurrency=2",
+    "render:arena": "remotion render DemoArena out/arenahub-arena.mp4 --concurrency=2",
+    "still": "remotion still Abertura out/capa.png --frame=110"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.410",
+    "@remotion/google-fonts": "4.0.410",
+    "@remotion/media-parser": "4.0.410",
+    "@remotion/transitions": "4.0.410",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.410"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "typescript": "5.6.3"
+  }
+}

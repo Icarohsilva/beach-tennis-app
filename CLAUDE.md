@@ -298,6 +298,35 @@ saem em `tests/.artifacts/bancada-<largura>px.png`. Ao mexer num componente da
 bancada, atualize a fixture: ela replica o layout real e um teste sobre marcação
 desatualizada passa sem medir nada.
 
+### Vídeo de demonstração (Remotion)
+
+[video-marketing/](video-marketing/) monta em código o vídeo que vai para o cliente no
+primeiro contato: abertura de marca → gravação do aluno → gravação do painel → chamada para
+ação. É um projeto **separado**, com `package.json` próprio, fora do build da Vercel — o
+`tsconfig.json` do app o exclui de propósito.
+
+As gravações brutas ficam em `public/videos/` e são **gitignoradas**: são pesadas e
+`public/` é publicado no deploy. O `remotion.config.ts` aponta o `publicDir` para `../public`,
+então `staticFile('videos/aluno.mp4')` e a marca em `public/brand/` resolvem sem duplicar
+arquivo.
+
+Duas decisões que não são óbvias e quebram em silêncio se desfeitas:
+
+- **A duração não é digitada.** `src/Root.tsx` mede cada arquivo com `parseMedia` em
+  `calculateMetadata` e monta a linha do tempo a partir disso — regravar mais longo não
+  exige mexer em número nenhum. A mesma medição decide a moldura: gravação vertical entra
+  num aparelho desenhado com painel de argumentos na sobra lateral, gravação de desktop
+  entra numa janela e ocupa a largura toda.
+- **As fontes vêm de `public/fonts/`, não do CDN do Google**, e são carregadas pela FontFace
+  API com `delayRender` próprio. Pelo CDN são 100+ requisições por aba de render, e um render
+  sem rede cai para a fonte de sistema **entregando o vídeo com outra tipografia sem avisar**;
+  o `loadFont` do `@remotion/fonts` tem um `delayRender` interno de 28s que não é
+  configurável e estoura quando a aba está decodificando vídeo.
+
+Editar corte, texto, legenda ou formato (paisagem/retrato) é mexer só em
+[video-marketing/src/config.ts](video-marketing/src/config.ts). O resto está no
+[README de lá](video-marketing/README.md).
+
 ### Planned but Not Yet Implemented
 
 The `features/` directory (aulas, financeiro, torneios) and most dashboard pages are planned for Plan 2+. Most `app/(dashboard)/` pages currently show placeholder text. The spec is at [docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md](docs/superpowers/specs/2026-05-31-beach-tennis-app-design.md). Comunidade (`features/comunidade/`) já está implementada (feed social), mas saiu do menu do aluno — ver [docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md](docs/superpowers/specs/2026-07-31-video-cameras-iframe-design.md).

@@ -59,3 +59,10 @@ devserver.log
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# gravações brutas do vídeo de demonstração (pesadas, e public/ vai para o deploy)
+/public/videos/
+# projeto Remotion (video-marketing/)
+/video-marketing/node_modules/
+/video-marketing/out/
+/video-marketing/.remotion/
