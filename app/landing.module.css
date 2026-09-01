@@ -342,6 +342,11 @@
     0 0 90px rgba(249, 115, 22, 0.18);
   transform: rotate(-2deg);
 }
+@media (max-width: 400px) {
+  /* Sem espaço sobrando pro giro: a caixa alta (aspect-ratio 9/19) rotacionada
+     passa ~8px de cada lado do phoneWrap nesses tamanhos. */
+  .phone { transform: none; }
+}
 .phone::before {
   content: '';
   position: absolute;
@@ -406,10 +411,10 @@
 .phPill { font-size: 9px; padding: 2px 7px; border-radius: 999px; background: rgba(249, 115, 22, 0.25); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.4); font-weight: 700; }
 .phPillBlue { background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.4); }
 
-.floatEmoji { position: absolute; font-size: 32px; opacity: 0.85; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5)); }
-.f1 { top: 5%; right: -8px; transform: rotate(12deg); animation: bob1 4s ease-in-out infinite; }
-.f2 { bottom: 14%; left: -16px; transform: rotate(-18deg); animation: bob2 4.5s ease-in-out infinite; }
-.f3 { top: 40%; right: -28px; font-size: 24px; animation: bob1 3.5s ease-in-out infinite 0.5s; }
+.floatEmoji { position: absolute; z-index: 4; font-size: 32px; opacity: 0.85; filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5)); }
+.f1 { top: 5%; right: 8px; transform: rotate(12deg); animation: bob1 4s ease-in-out infinite; }
+.f2 { bottom: 14%; left: 4px; transform: rotate(-18deg); animation: bob2 4.5s ease-in-out infinite; }
+.f3 { top: 40%; right: 8px; font-size: 24px; animation: bob1 3.5s ease-in-out infinite 0.5s; }
 @keyframes bob1 { 50% { transform: translateY(-12px) rotate(18deg); } }
 @keyframes bob2 { 50% { transform: translateY(-10px) rotate(-10deg); } }
 

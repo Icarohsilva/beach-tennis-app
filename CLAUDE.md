@@ -35,6 +35,21 @@ da transação — apagar achando que não apagou, ou o contrário. Pelo mesmo m
 "academia com sinal de vida" é repetida dentro do passo 5: os passos rodam
 independentemente, então uma trava que só existisse no passo 4 seria pulável.
 
+## Plugins do Claude Code
+
+Instalados via marketplace oficial da Anthropic (`claude plugin list` mostra `scope: user`,
+valem para qualquer projeto nesta máquina — não são dependência do repo). Usar sempre que a
+tarefa se encaixar, em vez de decidir de memória ou fazer scraping manual:
+
+| Plugin | Quando usar |
+|---|---|
+| **context7** | Antes de responder sobre API/config de uma lib externa (Next.js, Supabase JS, date-fns, Tailwind etc.) — busca a doc atual em vez de confiar em conhecimento de treino, que pode estar desatualizado |
+| **playwright** | Para validar UI de verdade num browser: rodar o dev server (`arenahub-dev` em `.claude/launch.json`) e clicar o fluxo, não só checar tipo/lint |
+| **supabase** | Para inspecionar o projeto Supabase real (schema, RLS, migrations aplicadas) via MCP em vez de assumir pelo código local — **sempre usar `lib/supabase/client.ts` / `server.ts` no código da app**; o plugin é ferramenta de inspeção do Claude, não uma forma nova de acessar o banco a partir da aplicação |
+
+Não confundir com `npx claude install <url>`: esse comando não existe. Plugin novo entra com
+`claude plugin install <nome>@claude-plugins-official` (ou outro marketplace já configurado).
+
 ## Fluxo de trabalho (git)
 
 **Antes de qualquer push, confira se o PR da branch já foi mergeado.** A branch de
