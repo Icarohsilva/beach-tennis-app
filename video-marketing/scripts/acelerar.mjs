@@ -27,6 +27,16 @@ const VIDEOS = join(AQUI, '..', '..', 'public', 'videos')
 const CONFIG = join(AQUI, '..', 'src', 'config.ts')
 
 /**
+ * O CLI do Remotion, chamado pelo próprio Node.
+ *
+ * NÃO por `npx`: no Windows o executável é `npx.cmd`, e `execFileSync` não
+ * resolve extensão — dá `spawnSync npx ENOENT`. Chamar o .js direto funciona nos
+ * três sistemas, dispensa `shell: true` (que traria problema de aspas em caminho
+ * com espaço) e ainda pula a resolução de pacote que o npx faz a cada chamada.
+ */
+const REMOTION_CLI = join(AQUI, '..', 'node_modules', '@remotion', 'cli', 'remotion-cli.js')
+
+/**
  * Lê os pares (arquivo, velocidade) do config.
  *
  * Por regex, e não por import, porque o config é TypeScript e este script roda
@@ -57,6 +67,10 @@ const nomeAcelerado = (arquivo, velocidade) => {
 
 const mb = (caminho) => (statSync(caminho).size / 1024 / 1024).toFixed(1)
 
+if (!existsSync(REMOTION_CLI)) {
+  throw new Error(`Não achei ${REMOTION_CLI}. Rode "npm install" primeiro.`)
+}
+
 const clipes = lerClipes()
 let feitos = 0
 
@@ -75,9 +89,9 @@ for (const { arquivo, velocidade } of clipes) {
   console.log(`  ${arquivo} → ${nomeAcelerado(arquivo, velocidade)} (${velocidade}×)…`)
 
   execFileSync(
-    'npx',
+    process.execPath,
     [
-      'remotion',
+      REMOTION_CLI,
       'ffmpeg',
       '-y',
       '-itsscale',
