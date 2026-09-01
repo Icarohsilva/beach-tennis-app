@@ -209,16 +209,25 @@ export const CONTATO = {
  * O Convite. Ele NÃO pede a venda — pede só a permissão de mostrar, que é a
  * única coisa que um vídeo frio consegue arrancar.
  *
- * `blocos` espelha a ordem de CLIPES: quantos segundos de cada gravação entram
- * na montagem e onde ela congela. A VELOCIDADE não se define aqui — ela é
- * calculada a partir da duração real do arquivo para caber nos `segundos`
- * pedidos, então trocar a gravação por uma mais longa não desregula o convite.
+ * `blocos` espelha a ordem de CLIPES. A VELOCIDADE não se define aqui — sai de
+ * `janela / segundos`, então trocar a gravação por uma mais longa não desregula
+ * o convite.
+ *
+ * `janela` é a parte do BRUTO que entra, e existe para o convite não espremer a
+ * gravação inteira: 20 minutos em 8 segundos dá 150×, e a essa taxa quadros
+ * vizinhos ficam a cinco segundos de distância um do outro — vira um estrobo de
+ * telas sem relação, não uma demonstração. Uma janela de 60-120 s de um trecho
+ * bom dá uma passagem que se entende. Sem `janela`, usa a gravação toda.
+ *
+ * `de` é onde a janela começa no bruto. Escolha no Studio, olhando a gravação.
  */
 export const CONVITE = {
   pergunta: 'Quer ver por dentro?',
   resposta: 'Respondo com o vídeo completo. 1 minuto e meio.',
   blocos: [
     {
+      de: 0,
+      janela: 90,
       segundos: 8,
       paradas: [
         { em: 2.5, duracao: 1.2, texto: 'A semana inteira, num clique' },
@@ -226,6 +235,8 @@ export const CONVITE = {
       ] as Parada[],
     },
     {
+      de: 0,
+      janela: 70,
       segundos: 7,
       paradas: [
         { em: 2, duracao: 1.2, texto: 'O aluno reserva sozinho' },

@@ -319,6 +319,13 @@ Decisões que não são óbvias e quebram em silêncio se desfeitas:
   `calculateMetadata`, divide pela `velocidade`, soma as paradas e monta a linha do
   tempo. A mesma medição escolhe a moldura (vertical → aparelho com painel lateral;
   desktop → janela) e calcula a velocidade do Convite a partir dos segundos pedidos.
+- **Velocidade acima de 4× não usa `playbackRate`**, e sim amostragem do quadro de
+  origem (`LIMITE_TAXA_NATIVA` em `Clipe.tsx`). O `playbackRate` vai para um elemento
+  de vídeo do navegador, cujo teto é 16×: o render (que extrai quadro, sem elemento)
+  aceitava qualquer valor e o Studio quebrava com `NotSupportedError` — ou seja, o
+  defeito só aparecia na hora de conferir o corte. O Convite ainda limita o trecho com
+  `CONVITE.blocos[].janela`, porque comprimir 20 min em 8 s continua sendo um estrobo
+  de telas sem relação mesmo funcionando.
 - **`segmentos.ts` é a única fonte da matemática das paradas** (os congelamentos com
   rótulo), e é chamado nos dois lados: no Root para reservar a duração e no Clipe para
   desenhar. Se as contas divergissem, o bloco terminaria fora do que a linha do tempo

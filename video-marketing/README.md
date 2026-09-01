@@ -71,8 +71,13 @@ Quase tudo mora em [`src/config.ts`](src/config.ts):
   lido, e legenda por cima de imagem ilegível não resolve. Quatro por bloco é o alvo.
 - **`NARRACAO` / `TRILHA` / `EFEITOS`** — as faixas de áudio, cada uma com o segundo em
   que entra. Arquivos em `public/audio/`.
-- **`CONVITE`** — o que o convite pede no fim, e quantos segundos de cada gravação
-  entram na montagem curta.
+- **`CONVITE`** — o que o convite pede no fim, e de que trecho de cada gravação ele é
+  montado: `de` (onde começa no bruto), `janela` (quantos segundos do bruto entram) e
+  `segundos` (quanto isso vira no convite). A velocidade sai de `janela / segundos`.
+  A `janela` existe para o convite não espremer a gravação inteira — 20 minutos em 8
+  segundos são 150×, e a essa taxa quadros vizinhos ficam a cinco segundos de distância:
+  vira um estrobo de telas sem relação. Uma janela de 60-120 s de um trecho bom dá uma
+  passagem que se entende.
 - **`FORMATO`** — orientação da Apresentação. O Convite é sempre vertical.
 
 ## O que o projeto resolve sozinho
@@ -86,11 +91,19 @@ entra num aparelho desenhado, com painel de argumentos na sobra lateral; gravaç
 desktop entra numa janela e ocupa a largura toda. É o que evita o vídeo de celular
 esticado ou entre duas tarjas pretas.
 
-**A velocidade do Convite se calcula.** O convite pede "me dá 8 segundos desta gravação"
-e a velocidade sai da duração real do arquivo — a mesma gravação serve aos dois vídeos.
+**A velocidade do Convite se calcula.** O convite pede "me dá 8 segundos desta janela da
+gravação" e a velocidade sai daí — a mesma gravação serve aos dois vídeos, e regravar
+mais longo não desregula o convite.
 
 **A trilha abaixa quando você fala.** As janelas de ducking saem da medição dos próprios
 arquivos de narração, então continuam certas depois de regravar uma faixa.
+
+**Velocidade alta não depende de `playbackRate`.** Acima de 4× o clipe passa a ser
+amostrado quadro a quadro (`LIMITE_TAXA_NATIVA`, em `src/Clipe.tsx`), porque
+`playbackRate` é aplicado a um elemento de vídeo do navegador e o limite dele é 16× — o
+Studio levanta `NotSupportedError` e não abre a composição. O render não passa por
+elemento de vídeo e aceitava qualquer valor, então esse defeito só aparecia na hora de
+conferir o corte, que é justamente quando ele mais atrapalha.
 
 Se a `velocidade` for alta demais para uma gravação curta, o bloco ficaria menor que a
 transição e a montagem quebraria com um erro que não diz qual clipe é. Nesse caso o

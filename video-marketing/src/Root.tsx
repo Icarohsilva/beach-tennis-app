@@ -115,9 +115,9 @@ const calcularDemo = async ({ props }: { props: DemoProps }) => {
 }
 
 /**
- * O convite não define velocidade: ele pede "me dá 8 segundos desta gravação" e
- * a velocidade sai da duração real do arquivo. Assim a mesma gravação serve aos
- * dois vídeos, e trocá-la por uma mais longa não desregula o convite.
+ * O convite não define velocidade: ele pede "me dá 8 segundos desta janela da
+ * gravação" e a velocidade sai daí. Assim a mesma gravação serve aos dois
+ * vídeos, e trocá-la por uma mais longa não desregula o convite.
  */
 const calcularConvite = async ({ props }: { props: ConviteProps }) => {
   const brutos = await Promise.all(
@@ -126,11 +126,17 @@ const calcularConvite = async ({ props }: { props: ConviteProps }) => {
 
   const clipes: ClipeConfig[] = CLIPES.map((clipe, i) => {
     const bloco = CONVITE.blocos[i]
-    const util = Math.max(1, brutos[i].segundos - clipe.cortarInicio - clipe.cortarFim)
+    const inicio = bloco?.de ?? clipe.cortarInicio
+    const disponivel = Math.max(1, brutos[i].segundos - inicio)
+    // A janela pedida, limitada ao que a gravação realmente tem depois de `de`.
+    const janela = Math.min(bloco?.janela ?? disponivel, disponivel)
     const alvo = bloco?.segundos ?? 8
     return {
       ...clipe,
-      velocidade: Math.max(1, util / alvo),
+      cortarInicio: inicio,
+      // O corte de fim vira o resto da gravação: o convite mostra só a janela.
+      cortarFim: Math.max(0, brutos[i].segundos - inicio - janela),
+      velocidade: Math.max(1, janela / alvo),
       paradas: bloco?.paradas ?? [],
       legendas: [],
     }

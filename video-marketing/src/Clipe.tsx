@@ -176,6 +176,58 @@ const RotuloParada: React.FC<{
 }
 
 /**
+ * Acima desta taxa o vídeo passa a ser AMOSTRADO em vez de acelerado.
+ *
+ * `playbackRate` é aplicado a um elemento de vídeo do navegador, e o limite dele
+ * é 16× — acima disso o Studio levanta NotSupportedError e não abre a
+ * composição. (O render não passa por elemento de vídeo e aceitava qualquer
+ * valor, então o defeito só aparecia na hora de conferir o corte, que é
+ * justamente quando ele mais atrapalha.)
+ *
+ * 4× e não 16× porque acima disso a reprodução acelerada já não é fluida de
+ * qualquer jeito, e a amostragem dá o mesmo resultado com um caminho só.
+ */
+const LIMITE_TAXA_NATIVA = 4
+
+/**
+ * Um trecho da gravação. Três modos, e quem escolhe é a velocidade:
+ *
+ * - `congelado`: mostra um quadro fixo (as paradas).
+ * - até 4×: `playbackRate`, que é o caminho barato e fluido.
+ * - acima de 4×: calcula o quadro de origem correspondente a cada quadro de
+ *   saída e mostra só ele. Sem limite de taxa, e idêntico no Studio e no render.
+ */
+const TrechoDeVideo: React.FC<{
+  arquivo: string
+  trimBefore: number
+  velocidade: number
+  congelado?: boolean
+}> = ({ arquivo, trimBefore, velocidade, congelado = false }) => {
+  const frame = useCurrentFrame()
+
+  const comum = {
+    src: staticFile(`videos/${arquivo}`),
+    style: { width: '100%', height: '100%', objectFit: 'cover' as const },
+    // A demonstração é narrada por você; o áudio bruto de gravação de tela
+    // acelerada só atrapalha.
+    muted: true,
+  }
+
+  if (congelado || velocidade > LIMITE_TAXA_NATIVA) {
+    const origem = congelado ? trimBefore : Math.round(trimBefore + frame * velocidade)
+    // Freeze com frame 0 faz o OffthreadVideo mostrar exatamente `origem`: ele
+    // zera o deslocamento da Series, e o vídeo começa em trimBefore.
+    return (
+      <Freeze frame={0}>
+        <OffthreadVideo {...comum} trimBefore={origem} playbackRate={1} />
+      </Freeze>
+    )
+  }
+
+  return <OffthreadVideo {...comum} trimBefore={trimBefore} playbackRate={velocidade} />
+}
+
+/**
  * Uma gravação de tela dentro do vídeo, emoldurada com a marca.
  *
  * Duas molduras, escolhidas pela proporção do arquivo (`retrato`, medido em
@@ -221,20 +273,6 @@ export const Clipe: React.FC<{
 
   const segmentos = montarSegmentos(clipe, framesDeMovimento, fps)
   const parada = paradaNoFrame(segmentos, frame)
-
-  const video = (trimBefore: number, congelado: boolean) => (
-    <OffthreadVideo
-      src={staticFile(`videos/${clipe.arquivo}`)}
-      trimBefore={trimBefore}
-      // Numa parada a taxa não importa (o frame está fixo), e 1 evita que o
-      // Remotion procure um tempo de origem além do fim do arquivo.
-      playbackRate={congelado ? 1 : clipe.velocidade}
-      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-      // A demonstração é narrada por você; o áudio bruto de gravação de tela
-      // acelerada só atrapalha.
-      muted
-    />
-  )
 
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo, fontFamily: INTER }}>
@@ -307,14 +345,20 @@ export const Clipe: React.FC<{
             {segmentos.map((segmento, i) =>
               segmento.tipo === 'movimento' ? (
                 <Series.Sequence key={i} durationInFrames={segmento.frames}>
-                  {video(segmento.trimBefore, false)}
+                  <TrechoDeVideo
+                    arquivo={clipe.arquivo}
+                    trimBefore={segmento.trimBefore}
+                    velocidade={clipe.velocidade}
+                  />
                 </Series.Sequence>
               ) : (
                 <Series.Sequence key={i} durationInFrames={segmento.frames}>
-                  {/* frame={0} com trimBefore no frame desejado mostra exatamente
-                      aquele quadro da origem: o Freeze zera o deslocamento da
-                      Series, e o OffthreadVideo começa em trimBefore. */}
-                  <Freeze frame={0}>{video(segmento.trimBefore, true)}</Freeze>
+                  <TrechoDeVideo
+                    arquivo={clipe.arquivo}
+                    trimBefore={segmento.trimBefore}
+                    velocidade={clipe.velocidade}
+                    congelado
+                  />
                   <EscurecerParada />
                 </Series.Sequence>
               ),
