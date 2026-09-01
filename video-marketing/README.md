@@ -58,6 +58,9 @@ Quase tudo mora em [`src/config.ts`](src/config.ts):
   já acelerado: com `velocidade: 10`, o minuto 2:00 do bruto cai aos 12 s. Abra o
   `npm run studio`, arraste a linha do tempo até o momento, leia o segundo e
   anote aqui.
+- **`NARRACAO`** — as faixas de áudio (narração e trilha), cada uma com o segundo
+  em que entra. Os arquivos vão em `public/audio/`. O texto pronto para gravar,
+  com os tempos de cada bloco, está em [NARRACAO.md](NARRACAO.md).
 - **`CONTATO`** — o que aparece no encerramento.
 - **`FORMATO`** — `'paisagem'` (1920×1080, para WhatsApp, e-mail e reunião) ou
   `'retrato'` (1080×1920, para stories). A abertura, os capítulos e o
@@ -97,6 +100,7 @@ velocidade do bruto inteiro — é **escolher os trechos** que importam com
 | `src/Capitulo.tsx` | O cartão que anuncia cada gravação. |
 | `src/Clipe.tsx` | A moldura da gravação, o painel lateral e as legendas. |
 | `src/Encerramento.tsx` | O último quadro, com a chamada para ação. |
+| `NARRACAO.md` | O roteiro para gravar, os tempos e como montar o áudio. |
 | `src/theme.ts` | As cores, espelhando `tailwind.config.ts`. |
 | `src/componentes/Quadra.tsx` | A quadra em perspectiva usada de fundo. |
 | `src/componentes/tipografia.ts` | Carrega Sora e Inter de `public/fonts`. |

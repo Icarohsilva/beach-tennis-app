@@ -4,7 +4,7 @@ import { parseMedia } from '@remotion/media-parser'
 import { Abertura } from './Abertura'
 import { Encerramento } from './Encerramento'
 import { Demo, DemoProps, Medida, TRANSICAO, duracaoTotal, DUR_ABERTURA, DUR_ENCERRAMENTO } from './Demo'
-import { CLIPES, DIMENSOES, FPS, Clipe as ClipeConfig } from './config'
+import { CLIPES, DIMENSOES, FPS, NARRACAO, Clipe as ClipeConfig } from './config'
 
 /** Duração usada quando o arquivo não pôde ser lido — 45s, só para o Studio abrir. */
 const FALLBACK_SEGUNDOS = 45
@@ -84,7 +84,7 @@ export const RemotionRoot: React.FC = () => (
       fps={FPS}
       {...DIMENSOES}
       durationInFrames={DUR_ABERTURA}
-      defaultProps={{ clipes: CLIPES, medidas: [] as Medida[] }}
+      defaultProps={{ clipes: CLIPES, medidas: [] as Medida[], faixas: NARRACAO }}
       calculateMetadata={calcular}
     />
 
@@ -95,7 +95,7 @@ export const RemotionRoot: React.FC = () => (
       fps={FPS}
       {...DIMENSOES}
       durationInFrames={DUR_ABERTURA}
-      defaultProps={{ clipes: CLIPES.slice(0, 1), medidas: [] as Medida[] }}
+      defaultProps={{ clipes: CLIPES.slice(0, 1), medidas: [] as Medida[], faixas: [] }}
       calculateMetadata={calcular}
     />
     <Composition
@@ -104,7 +104,7 @@ export const RemotionRoot: React.FC = () => (
       fps={FPS}
       {...DIMENSOES}
       durationInFrames={DUR_ABERTURA}
-      defaultProps={{ clipes: CLIPES.slice(1, 2), medidas: [] as Medida[] }}
+      defaultProps={{ clipes: CLIPES.slice(1, 2), medidas: [] as Medida[], faixas: [] }}
       calculateMetadata={calcular}
     />
 

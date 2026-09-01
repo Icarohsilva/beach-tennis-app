@@ -1,5 +1,5 @@
 import React from 'react'
-import { AbsoluteFill } from 'remotion'
+import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from 'remotion'
 import { TransitionSeries, linearTiming } from '@remotion/transitions'
 import { fade } from '@remotion/transitions/fade'
 import { wipe } from '@remotion/transitions/wipe'
@@ -8,7 +8,7 @@ import { Capitulo } from './Capitulo'
 import { Clipe } from './Clipe'
 import { Encerramento } from './Encerramento'
 import { cores } from './theme'
-import type { Clipe as ClipeConfig } from './config'
+import type { Clipe as ClipeConfig, Faixa } from './config'
 
 export const DUR_ABERTURA = 195
 export const DUR_CAPITULO = 90
@@ -21,6 +21,12 @@ export type Medida = { frames: number; retrato: boolean }
 export type DemoProps = {
   clipes: ClipeConfig[]
   medidas: Medida[]
+  /**
+   * Narração e trilha. Fica vazia nos recortes (DemoAluno/DemoArena): os tempos
+   * das faixas são medidos no vídeo COMPLETO, então num recorte elas cairiam no
+   * lugar errado — e narração fora de hora é pior do que nenhuma.
+   */
+  faixas: Faixa[]
 }
 
 /**
@@ -40,9 +46,20 @@ export const duracaoTotal = (medidas: Medida[]) => {
   )
 }
 
-export const Demo: React.FC<DemoProps> = ({ clipes, medidas }) => {
+export const Demo: React.FC<DemoProps> = ({ clipes, medidas, faixas }) => {
+  const { fps } = useVideoConfig()
+
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo }}>
+      {/* Áudio fora da TransitionSeries de propósito: dentro dela cada faixa
+          viraria um bloco da montagem e as transições comeriam 18 frames de
+          narração em cada emenda. */}
+      {faixas.map((faixa) => (
+        <Sequence key={`${faixa.arquivo}-${faixa.em}`} from={Math.round(faixa.em * fps)}>
+          <Audio src={staticFile(`audio/${faixa.arquivo}`)} volume={faixa.volume} />
+        </Sequence>
+      ))}
+
       <TransitionSeries>
         <TransitionSeries.Sequence durationInFrames={DUR_ABERTURA}>
           <Abertura />

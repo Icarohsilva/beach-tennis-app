@@ -84,6 +84,35 @@ export const CLIPES: Clipe[] = [
   },
 ]
 
+/**
+ * Faixas de áudio sobrepostas ao vídeo — narração e, se quiser, música de fundo.
+ * Os arquivos vão em `public/audio/` (na raiz do repo, ao lado de `public/videos/`).
+ *
+ * `em` é o segundo do vídeo FINAL em que a faixa começa. Uma narração gravada de
+ * uma vez só é uma faixa com `em: 0`; narração por bloco são várias faixas, e é o
+ * formato mais fácil de manter — regravar 15 segundos não obriga a regravar tudo,
+ * e mudar a `velocidade` de um clipe só desloca as faixas dali para a frente.
+ *
+ * Deixe a lista vazia para renderizar sem áudio.
+ */
+export type Faixa = {
+  arquivo: string
+  em: number
+  /** 1 = volume cheio. Música de fundo pede algo entre 0.08 e 0.15. */
+  volume: number
+}
+
+export const NARRACAO: Faixa[] = [
+  // Tempos calculados para o corte padrao (aluno 5min a 10x, admin 20min a 20x).
+  // Confira no Studio depois de trocar velocidade ou cortes: e a linha do tempo
+  // que manda, e o texto de cada bloco esta em NARRACAO.md.
+  // { arquivo: 'narracao-01-abertura.mp3', em: 1.5, volume: 1 },
+  // { arquivo: 'narracao-02-aluno.mp3', em: 8.5, volume: 1 },
+  // { arquivo: 'narracao-03-arena.mp3', em: 40.5, volume: 1 },
+  // { arquivo: 'narracao-04-fecho.mp3', em: 99.5, volume: 1 },
+  // { arquivo: 'trilha.mp3', em: 0, volume: 0.1 },
+]
+
 /** Contato que aparece no encerramento. */
 export const CONTATO = {
   site: 'arenahub.app',
