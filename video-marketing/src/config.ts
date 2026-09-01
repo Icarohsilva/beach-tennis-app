@@ -210,11 +210,13 @@ export const CONVITE = {
    * Os arquivos vão em `public/imagens/`, na raiz do repositório.
    */
   imagens: [
-    { arquivo: '01-agenda-semana.png', rotulo: 'A grade da semana, pronta' },
+    // Rótulos batem com o conteúdo real de cada print (não com o nome do
+    // arquivo): a home do admin mostra o DIA, não a semana, por exemplo.
+    { arquivo: '01-agenda-semana.png', rotulo: 'O seu dia, numa tela só' },
     { arquivo: '02-chamada.png', rotulo: 'Chamada no celular, na quadra' },
-    { arquivo: '03-inadimplencia.png', rotulo: 'Quem está devendo, na hora' },
+    { arquivo: '03-inadimplencia.png', rotulo: 'Quem está devendo, sem planilha' },
     { arquivo: '04-aluno-reserva.png', rotulo: 'O aluno reserva sozinho' },
-    { arquivo: '05-aluno-credito.png', rotulo: 'Cancelou a tempo? Crédito de volta' },
+    { arquivo: '05-aluno-credito.png', rotulo: 'Créditos e frequência, sempre à mão' },
     { arquivo: '06-liga.png', rotulo: 'Ranking que traz o aluno de volta' },
   ],
   /** Quanto tempo cada imagem fica na tela, em segundos. */
