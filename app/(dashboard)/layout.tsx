@@ -78,9 +78,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { data: tourProfile } = await supabase
     .from('profiles')
-    .select('tour_aluno_seen_at')
+    .select('tour_aluno_seen_at, is_platform_admin')
     .eq('id', user.id)
     .single()
+
+  // Mesmo motivo do badge "Painel" (isStaff) logo abaixo: sem atalho, quem também é
+  // platform admin não tem caminho nenhum de volta ao painel de plataforma a partir
+  // da visão de aluno a não ser digitar a URL. RLS de profiles já permite ler a
+  // própria linha — não precisa de createAdminClient() aqui, é só um atalho de
+  // navegação, não o gate de segurança (esse já existe em (super-admin)/layout.tsx).
+  const isPlatformAdmin = tourProfile?.is_platform_admin === true
 
   return (
     <div style={accentVars(org?.brand_color)} className="min-h-screen bg-surface text-white">
@@ -108,6 +115,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
               className="shrink-0 whitespace-nowrap rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1 text-xs font-semibold text-brand-300 transition-colors hover:bg-brand-500/20"
             >
               Painel
+            </Link>
+          )}
+          {isPlatformAdmin && (
+            <Link
+              href="/super-admin"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1 text-xs font-semibold text-brand-300 transition-colors hover:bg-brand-500/20"
+            >
+              Plataforma
             </Link>
           )}
           <HelpButton variant="aluno" inline />

@@ -54,6 +54,12 @@ export default async function SuperAdminLayout({ children }: { children: React.R
             <span className="hidden text-xs text-slate-500 sm:block">
               {profile.full_name ?? user.email}
             </span>
+            <Link
+              href="/home"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-brand-500/40 bg-brand-500/10 px-2 py-1 text-xs font-semibold text-brand-300 transition-colors hover:bg-brand-500/20"
+            >
+              Aluno
+            </Link>
             <LogoutButton className="text-sm font-semibold text-red-400 hover:text-red-300">
               Sair
             </LogoutButton>
