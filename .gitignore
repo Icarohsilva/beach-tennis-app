@@ -67,6 +67,8 @@ devserver.log
 # são nossos, então esses ficam versionados.
 /public/audio/*
 !/public/audio/sfx/
+# prints do app usados no Convite: assets seus, e public/ vai para o deploy
+/public/imagens/
 # projeto Remotion (video-marketing/)
 /video-marketing/node_modules/
 /video-marketing/out/

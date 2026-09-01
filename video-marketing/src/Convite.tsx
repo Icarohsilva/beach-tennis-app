@@ -3,33 +3,41 @@ import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, us
 import { TransitionSeries, linearTiming } from '@remotion/transitions'
 import { fade } from '@remotion/transitions/fade'
 import { Abertura, DUR_ABERTURA_FRAMES, escalaDoQuadro } from './Abertura'
-import { Clipe } from './Clipe'
+import { DUR_GALERIA, Galeria } from './Galeria'
 import { Brilho, Quadra } from './componentes/Quadra'
-import { FaixasDeAudio, JanelaFala, Medida, TRANSICAO } from './Demo'
+import { FaixasDeAudio, JanelaFala, TRANSICAO } from './Demo'
 import { SORA, INTER } from './componentes/tipografia'
 import { cores } from './theme'
 import { CONVITE, CONTATO } from './config'
-import type { Clipe as ClipeConfig, Faixa } from './config'
+import type { Faixa } from './config'
 
-export const DUR_CHAMADA = 210
+export const DUR_CHAMADA = 240
 
 /**
- * O último bloco do Convite. Ele pede UMA coisa: permissão para mandar o vídeo
- * completo. Pedir a venda aqui seria pedir demais para um primeiro contato — e
- * um "posso te mandar?" é um sim muito mais barato do que "vamos conversar?".
+ * O último bloco do Convite.
+ *
+ * Ele não pede a venda nem manda "responder": é uma frase que fecha a ideia e se
+ * sustenta sozinha, porque este vídeo também vai para o story e para o feed, onde
+ * "me responde" não faz sentido nenhum. O convite para conversar mora na mensagem
+ * de WhatsApp que acompanha o arquivo, não dentro dele.
  */
 const Chamada: React.FC = () => {
   const frame = useCurrentFrame()
   const { fps, width, height } = useVideoConfig()
   const escala = escalaDoQuadro(width, height)
 
-  const pergunta = spring({ frame, fps, config: { damping: 13, mass: 0.7 } })
-  const resposta = spring({ frame: frame - 16, fps, config: { damping: 14, mass: 0.7 } })
-  const marca = interpolate(frame, [40, 62], [0, 1], {
+  const l1 = spring({ frame, fps, config: { damping: 14, mass: 0.7 } })
+  const l2 = spring({ frame: frame - 14, fps, config: { damping: 14, mass: 0.7 } })
+  const marca = spring({ frame: frame - 40, fps, config: { damping: 15, mass: 0.7 } })
+  const apoio = interpolate(frame, [66, 88], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   })
-  const pulso = 1 + Math.sin(Math.max(0, frame - 30) / 13) * 0.02
+  const risco = interpolate(frame, [22, 52], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: (x) => 1 - Math.pow(1 - x, 3),
+  })
 
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo, fontFamily: INTER }}>
@@ -41,66 +49,99 @@ const Chamada: React.FC = () => {
           justifyContent: 'center',
           alignItems: 'center',
           textAlign: 'center',
-          padding: `0 ${90 * escala}px`,
+          padding: `0 ${70 * escala}px`,
         }}
       >
         <h2
           style={{
             fontFamily: SORA,
-            fontSize: 104 * escala,
+            fontSize: 96 * escala,
             fontWeight: 700,
             color: cores.texto,
             letterSpacing: -2.5,
-            lineHeight: 1.1,
+            lineHeight: 1.08,
             margin: 0,
-            transform: `translateY(${(1 - pergunta) * 50 * escala}px) scale(${(0.9 + pergunta * 0.1) * pulso})`,
-            opacity: pergunta,
+            transform: `translateY(${(1 - l1) * 44 * escala}px)`,
+            opacity: l1,
           }}
         >
-          {CONVITE.pergunta}
+          {CONVITE.fecho.linha1}
         </h2>
 
-        <p
+        <h2
           style={{
-            fontSize: 46 * escala,
-            color: cores.textoSuave,
-            lineHeight: 1.4,
-            marginTop: 34 * escala,
-            maxWidth: 1100 * escala,
-            transform: `translateY(${(1 - resposta) * 34 * escala}px)`,
-            opacity: resposta,
+            fontFamily: SORA,
+            fontSize: 96 * escala,
+            fontWeight: 700,
+            color: cores.marca,
+            letterSpacing: -2.5,
+            lineHeight: 1.08,
+            margin: `${12 * escala}px 0 0`,
+            transform: `translateY(${(1 - l2) * 44 * escala}px)`,
+            opacity: l2,
           }}
         >
-          {CONVITE.resposta}
-        </p>
+          {CONVITE.fecho.linha2}
+        </h2>
+
+        <div
+          style={{
+            width: 420 * escala * risco,
+            height: 5 * escala,
+            borderRadius: 4,
+            marginTop: 40 * escala,
+            background: `linear-gradient(90deg, ${cores.marcaProfunda}, ${cores.marca}, #fdba74)`,
+            boxShadow: `0 0 24px ${cores.marca}80`,
+          }}
+        />
 
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 16 * escala,
-            marginTop: 74 * escala,
+            marginTop: 62 * escala,
             opacity: marca,
+            transform: `scale(${0.9 + marca * 0.1})`,
           }}
         >
           <Img
             src={staticFile('brand/arenahub-symbol-transparent.png')}
-            style={{ width: 66 * escala, height: 66 * escala }}
+            style={{ width: 72 * escala, height: 72 * escala }}
           />
           <span
             style={{
               fontFamily: SORA,
-              fontSize: 58 * escala,
+              fontSize: 64 * escala,
               fontWeight: 700,
               color: cores.texto,
-              letterSpacing: -1.5,
+              letterSpacing: -1.6,
             }}
           >
             Arena<span style={{ color: cores.marca }}>Hub</span>
           </span>
         </div>
 
-        <div style={{ marginTop: 22 * escala, fontSize: 32 * escala, color: cores.textoSuave, opacity: marca }}>
+        <div
+          style={{
+            marginTop: 26 * escala,
+            fontSize: 32 * escala,
+            color: cores.textoSuave,
+            opacity: apoio,
+          }}
+        >
+          {CONVITE.fecho.apoio}
+        </div>
+
+        <div
+          style={{
+            marginTop: 14 * escala,
+            fontSize: 34 * escala,
+            fontWeight: 600,
+            color: cores.marca,
+            opacity: apoio,
+          }}
+        >
           {CONTATO.site}
         </div>
       </AbsoluteFill>
@@ -109,70 +150,47 @@ const Chamada: React.FC = () => {
 }
 
 export type ConviteProps = {
-  /** Já com os trechos próprios do convite e aparados ao arquivo — ver Root.tsx. */
-  clipes: ClipeConfig[]
-  medidas: Medida[]
   faixas: Faixa[]
   trilha: Faixa[]
   efeitos: Faixa[]
   janelasFala: JanelaFala[]
 }
 
-export const duracaoConvite = (medidas: Medida[]) =>
-  DUR_ABERTURA_FRAMES +
-  medidas.reduce((soma, m) => soma + m.frames, 0) +
-  DUR_CHAMADA -
-  (medidas.length + 1) * TRANSICAO
+export const DUR_CONVITE =
+  DUR_ABERTURA_FRAMES + DUR_GALERIA + DUR_CHAMADA - 2 * TRANSICAO
 
 /**
  * O vídeo curto que acompanha o "oi" no WhatsApp.
  *
- * Diferente do Demo em três coisas, todas por causa do contexto frio: é vertical
- * (o WhatsApp é vertical e mudo), não tem cartão de capítulo (não sobra tempo
- * para anunciar o que vem — a prova tem de entrar direto), e termina pedindo
- * permissão em vez de pedir a venda.
+ * Diferente da Apresentação em três coisas, todas por causa do contexto frio: é
+ * vertical (o WhatsApp é vertical e mudo), mostra TELAS PARADAS em vez da
+ * gravação (em 40 s, vídeo acelerado não dá tempo de ser entendido), e fecha com
+ * uma frase que se sustenta sozinha, porque ele também serve para postar.
  */
-export const Convite: React.FC<ConviteProps> = ({
-  clipes,
-  medidas,
-  faixas,
-  trilha,
-  efeitos,
-  janelasFala,
-}) => {
-  return (
-    <AbsoluteFill style={{ backgroundColor: cores.fundo }}>
-      <FaixasDeAudio faixas={faixas} trilha={trilha} efeitos={efeitos} janelasFala={janelasFala} />
+export const Convite: React.FC<ConviteProps> = ({ faixas, trilha, efeitos, janelasFala }) => (
+  <AbsoluteFill style={{ backgroundColor: cores.fundo }}>
+    <FaixasDeAudio faixas={faixas} trilha={trilha} efeitos={efeitos} janelasFala={janelasFala} />
 
-      <TransitionSeries>
-        <TransitionSeries.Sequence durationInFrames={DUR_ABERTURA_FRAMES}>
-          <Abertura />
-        </TransitionSeries.Sequence>
+    <TransitionSeries>
+      <TransitionSeries.Sequence durationInFrames={DUR_ABERTURA_FRAMES}>
+        <Abertura />
+      </TransitionSeries.Sequence>
 
-        {clipes.map((clipe, i) => {
-          const medida = medidas[i]
-          if (!medida) return null
-          return (
-            <React.Fragment key={clipe.arquivo}>
-              <TransitionSeries.Transition
-                presentation={fade()}
-                timing={linearTiming({ durationInFrames: TRANSICAO })}
-              />
-              <TransitionSeries.Sequence durationInFrames={medida.frames}>
-                <Clipe clipe={clipe} retrato={medida.retrato} comPainel={false} />
-              </TransitionSeries.Sequence>
-            </React.Fragment>
-          )
-        })}
+      <TransitionSeries.Transition
+        presentation={fade()}
+        timing={linearTiming({ durationInFrames: TRANSICAO })}
+      />
+      <TransitionSeries.Sequence durationInFrames={DUR_GALERIA}>
+        <Galeria />
+      </TransitionSeries.Sequence>
 
-        <TransitionSeries.Transition
-          presentation={fade()}
-          timing={linearTiming({ durationInFrames: TRANSICAO })}
-        />
-        <TransitionSeries.Sequence durationInFrames={DUR_CHAMADA}>
-          <Chamada />
-        </TransitionSeries.Sequence>
-      </TransitionSeries>
-    </AbsoluteFill>
-  )
-}
+      <TransitionSeries.Transition
+        presentation={fade()}
+        timing={linearTiming({ durationInFrames: TRANSICAO })}
+      />
+      <TransitionSeries.Sequence durationInFrames={DUR_CHAMADA}>
+        <Chamada />
+      </TransitionSeries.Sequence>
+    </TransitionSeries>
+  </AbsoluteFill>
+)

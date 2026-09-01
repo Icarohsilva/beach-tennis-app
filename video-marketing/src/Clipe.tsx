@@ -3,7 +3,6 @@ import {
   AbsoluteFill,
   Img,
   OffthreadVideo,
-  Series,
   interpolate,
   spring,
   staticFile,
@@ -13,7 +12,6 @@ import {
 import { SORA, INTER } from './componentes/tipografia'
 import { escalaDoQuadro } from './Abertura'
 import { cores } from './theme'
-import { montarSegmentos, velocidadeVisivel } from './segmentos'
 import type { Clipe as ClipeConfig } from './config'
 
 /**
@@ -112,25 +110,26 @@ const PainelLateral: React.FC<{ clipe: ClipeConfig; escala: number }> = ({ clipe
 /**
  * Uma gravação de tela dentro do vídeo, emoldurada com a marca.
  *
- * Duas molduras, escolhidas pela proporção do arquivo (`retrato`, medido em
- * calculateMetadata): gravação de celular entra num aparelho desenhado, com as
- * sobras laterais preenchidas pela marca; gravação de desktop entra numa janela.
- * Esticar um vídeo 9:16 para 16:9 — ou deixar duas tarjas pretas — é o que faz
- * demonstração parecer amadora.
+ * Duas molduras, escolhidas pela proporção do arquivo: gravação de celular entra
+ * num aparelho desenhado, com a sobra lateral ocupada pelo painel de argumentos;
+ * gravação de desktop entra numa janela. Esticar um 9:16 para 16:9 — ou deixar
+ * duas tarjas pretas sem mais nada — é o que faz demonstração parecer amadora.
  *
- * Por dentro da moldura o vídeo CORRE SOLTO: uma `Series` de trechos escolhidos,
- * cada um tocado de ponta a ponta com `playbackRate`. Nada congela, e cada
- * trecho faz uma única busca no arquivo — no começo dele. Foi tentado o
- * contrário (saltar quadro a quadro para acelerar mais): no Studio o elemento de
- * vídeo passa a buscar posição nova 30 vezes por segundo num arquivo longo, a
- * busca nunca termina e a tela fica PRETA. Ver `segmentos.ts`.
+ * A gravação toca INTEIRA e de uma vez só, sem corte, congelamento nem pausa. A
+ * aceleração já veio embutida no arquivo (ver `fonte.ts` e `npm run acelerar`),
+ * então aqui é um `<OffthreadVideo>` simples a 1×: um único posicionamento, no
+ * começo. Tentar acelerar na hora de tocar foi o que deixava a tela preta.
  */
 export const Clipe: React.FC<{
   clipe: ClipeConfig
   retrato: boolean
+  /** Arquivo que vai tocar — o pré-acelerado quando existe. Ver `fonte.ts`. */
+  arquivo: string
+  /** O que ainda falta acelerar na hora de tocar. 1 no caminho normal. */
+  taxa: number
   /** Em quadro vertical não sobra lateral, então o painel não faz sentido. */
   comPainel?: boolean
-}> = ({ clipe, retrato, comPainel = true }) => {
+}> = ({ clipe, retrato, arquivo, taxa, comPainel = true }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames, width, height } = useVideoConfig()
   const escala = escalaDoQuadro(width, height)
@@ -151,8 +150,7 @@ export const Clipe: React.FC<{
   const larguraMoldura = Math.min(width * (painel ? 0.5 : 0.88), height * (painel ? 0.86 : 0.8) * aspecto)
   const alturaMoldura = larguraMoldura / aspecto
 
-  const segmentos = montarSegmentos(clipe, fps)
-  const velocidade = velocidadeVisivel(clipe)
+  const velocidade = Math.round(clipe.velocidade)
 
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo, fontFamily: INTER }}>
@@ -217,25 +215,18 @@ export const Clipe: React.FC<{
             boxShadow: `0 ${40 * escala}px ${120 * escala}px rgba(0,0,0,0.65), 0 0 ${90 * escala}px ${cores.marca}22`,
           }}
         >
-          <Series>
-            {segmentos.map((segmento, i) => (
-              <Series.Sequence key={i} durationInFrames={segmento.frames}>
-                <OffthreadVideo
-                  src={staticFile(`videos/${clipe.arquivo}`)}
-                  trimBefore={segmento.trimBefore}
-                  playbackRate={segmento.velocidade}
-                  // `contain`, e não `cover`: quando a proporção da moldura e a
-                  // da gravação divergem, `cover` AMPUTA a tela gravada — some
-                  // menu, some coluna, e o defeito parece do app. Barra preta é
-                  // feia; perder metade da interface é pior.
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  // A demonstração é narrada por você; o áudio bruto de gravação
-                  // de tela acelerada só atrapalha.
-                  muted
-                />
-              </Series.Sequence>
-            ))}
-          </Series>
+          <OffthreadVideo
+            src={staticFile(`videos/${arquivo}`)}
+            playbackRate={taxa}
+            // `contain`, e não `cover`: quando a proporção da moldura e a da
+            // gravação divergem, `cover` AMPUTA a tela gravada — some menu, some
+            // coluna, e o defeito parece do app. Barra preta é feia; perder
+            // metade da interface é pior.
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            // A demonstração é narrada por você; o áudio bruto de gravação de
+            // tela acelerada só atrapalha.
+            muted
+          />
         </div>
       </AbsoluteFill>
 

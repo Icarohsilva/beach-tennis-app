@@ -34,32 +34,8 @@ export const DORES = {
   fecho: 'Tem um jeito melhor.',
 }
 
-/**
- * Um pedaço da gravação que entra no vídeo.
- *
- * O vídeo é montado a partir de TRECHOS escolhidos, e não da gravação inteira
- * acelerada. Dois motivos, e os dois vieram de tentar o contrário:
- *
- * 1. Comprimir 20 min em 1 min exige 20×, e a 20× nenhuma tela fica no ar tempo
- *    suficiente para ser vista — vira movimento colorido, não produto.
- * 2. Acima de 16× o navegador recusa (`NotSupportedError`), e a alternativa de
- *    saltar quadro a quadro faz o Studio buscar posição nova 30 vezes por
- *    segundo num arquivo longo: a busca nunca termina e a tela fica PRETA.
- *
- * Dois a quatro trechos por gravação, cada um de 40-70 s a 2-4×, dão um vídeo
- * que corre solto e no qual dá para ver o que está acontecendo.
- */
-export type Trecho = {
-  /** Segundo do BRUTO em que o trecho começa. */
-  de: number
-  /** Segundo do BRUTO em que termina. */
-  ate: number
-  /** Quantas vezes mais rápido. 1 = tempo real. Acima de 4 já fica difícil de ler. */
-  velocidade: number
-}
-
 export type Clipe = {
-  /** Nome do arquivo dentro de public/videos */
+  /** Nome do arquivo BRUTO dentro de public/videos */
   arquivo: string
   /** Título grande do cartão de capítulo */
   titulo: string
@@ -82,16 +58,22 @@ export type Clipe = {
    */
   orientacao?: 'auto' | 'paisagem' | 'retrato'
   /**
-   * Os pedaços da gravação que entram, em ordem. Cortes secos entre eles.
+   * Quantas vezes mais rápido a gravação inteira passa.
    *
-   * ESTES SÃO OS NÚMEROS QUE VALE A PENA VOCÊ AJUSTAR: abra a gravação, ache os
-   * momentos que vendem e anote os segundos. É o que separa uma demonstração de
-   * uma gravação de tela acelerada.
+   * A aceleração NÃO acontece na hora de tocar: `npm run acelerar` gera antes um
+   * arquivo já acelerado (`admin--20x.mp4`), e o vídeo toca esse a 1×. Foi a
+   * saída para dois becos: o `playbackRate` do navegador para em 16×, e saltar
+   * quadro a quadro para passar disso fazia o Studio buscar posição nova 30 vezes
+   * por segundo num arquivo de 20 min — a busca nunca terminava e a tela ficava
+   * PRETA. Com o arquivo pronto, qualquer velocidade funciona e o Studio abre
+   * instantâneo.
+   *
+   * Rode `npm run acelerar` de novo sempre que mudar este número.
    */
-  trechos: Trecho[]
+  velocidade: number
   /**
    * Legendas por cima do vídeo (lower third). `em` é o segundo dentro do bloco
-   * já montado, não do bruto. Opcional — a narração costuma bastar.
+   * já montado. Opcional — a narração costuma bastar.
    */
   legendas: { em: number; duracao: number; texto: string }[]
 }
@@ -118,13 +100,8 @@ export const CLIPES: Clipe[] = [
       'Quem está devendo, na tela',
       'Relatório de presença e ocupação',
     ],
-    // ~60 s de vídeo montado a partir de 3 momentos da gravação de 20 min.
-    // AJUSTE os `de`/`ate` olhando a sua gravação — os valores abaixo são chute.
-    trechos: [
-      { de: 0, ate: 70, velocidade: 3 },
-      { de: 300, ate: 370, velocidade: 3 },
-      { de: 900, ate: 970, velocidade: 3 },
-    ],
+    // ~20 min de gravação → ~1 min no vídeo.
+    velocidade: 20,
     legendas: [],
   },
   {
@@ -139,11 +116,8 @@ export const CLIPES: Clipe[] = [
       'Fila de espera que chama o próximo automaticamente',
       'Confirma presença na quadra pelo celular',
     ],
-    // ~34 s a partir de 2 momentos da gravação de 5 min.
-    trechos: [
-      { de: 0, ate: 50, velocidade: 3 },
-      { de: 150, ate: 200, velocidade: 3 },
-    ],
+    // ~5 min de gravação → ~30 s no vídeo.
+    velocidade: 10,
     legendas: [],
   },
 ]
@@ -173,9 +147,8 @@ export type Faixa = {
 export const NARRACAO_CONVITE: Faixa[] = [
   // { arquivo: 'convite-01.mp3', em: 0.8, volume: 1 },   // apresentação
   // { arquivo: 'convite-02.mp3', em: 7, volume: 1 },     // as dores
-  // { arquivo: 'convite-03.mp3', em: 14, volume: 1 },    // a arena
-  // { arquivo: 'convite-04.mp3', em: 25, volume: 1 },    // o aluno
-  // { arquivo: 'convite-05.mp3', em: 34.5, volume: 1 },  // a chamada
+  // { arquivo: 'convite-03.mp3', em: 14.5, volume: 1 },  // as telas
+  // { arquivo: 'convite-04.mp3', em: 32.5, volume: 1 },  // o fecho
 ]
 
 /** Narração da APRESENTAÇÃO. Tempos em NARRACAO.md. */
@@ -183,8 +156,8 @@ export const NARRACAO_DEMO: Faixa[] = [
   // { arquivo: 'narracao-01-abertura.mp3', em: 0.8, volume: 1 },
   // { arquivo: 'narracao-02-dores.mp3', em: 7, volume: 1 },
   // { arquivo: 'narracao-03-arena.mp3', em: 18, volume: 1 },
-  // { arquivo: 'narracao-04-aluno.mp3', em: 89, volume: 1 },
-  // { arquivo: 'narracao-05-fecho.mp3', em: 121, volume: 1 },
+  // { arquivo: 'narracao-04-aluno.mp3', em: 79, volume: 1 },
+  // { arquivo: 'narracao-05-fecho.mp3', em: 108, volume: 1 },
 ]
 
 /**
@@ -224,12 +197,31 @@ export const CONTATO = {
  * provar que o produto existe e funciona.
  */
 export const CONVITE = {
-  pergunta: 'Quer ver por dentro?',
-  resposta: 'Respondo com o vídeo completo. 2 minutos.',
-  trechos: [
-    [{ de: 0, ate: 36, velocidade: 3 }] as Trecho[], // arena — 12 s
-    [{ de: 0, ate: 30, velocidade: 3 }] as Trecho[], // aluno — 10 s
+  /**
+   * O Convite mostra IMAGENS dentro do celular, não a gravação.
+   *
+   * Vídeo acelerado num quadro de 40 s vira borrão: o contato não tem tempo de
+   * entender nenhuma tela. Print parado, com um rótulo, ele lê inteiro em três
+   * segundos. A gravação continua sendo o corpo da Apresentação, onde há tempo.
+   *
+   * Os arquivos vão em `public/imagens/`, na raiz do repositório.
+   */
+  imagens: [
+    { arquivo: '01-agenda-semana.png', rotulo: 'A grade da semana, pronta' },
+    { arquivo: '02-chamada.png', rotulo: 'Chamada no celular, na quadra' },
+    { arquivo: '03-inadimplencia.png', rotulo: 'Quem está devendo, na hora' },
+    { arquivo: '04-aluno-reserva.png', rotulo: 'O aluno reserva sozinho' },
+    { arquivo: '05-aluno-credito.png', rotulo: 'Cancelou a tempo? Crédito de volta' },
+    { arquivo: '06-liga.png', rotulo: 'Ranking que traz o aluno de volta' },
   ],
+  /** Quanto tempo cada imagem fica na tela, em segundos. */
+  segundosPorImagem: 3.2,
+  /** O fecho. Serve para mandar no WhatsApp e para postar. */
+  fecho: {
+    linha1: 'Sua arena no automático.',
+    linha2: 'Você na quadra, não na planilha.',
+    apoio: '1º mês grátis · sem cartão · no ar em 5 minutos',
+  },
 }
 
 /** 'paisagem' (1920x1080, e-mail/reunião) ou 'retrato' (1080x1920, stories). */

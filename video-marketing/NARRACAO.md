@@ -5,7 +5,7 @@
 | | **Convite** | **Apresentação** |
 |---|---|---|
 | Quando | Junto do primeiro "oi" | Depois que a arena responde |
-| Duração | 41 s | 2:06 |
+| Duração | 40 s | 1:52 |
 | Formato | Vertical 1080×1920 | Horizontal 1920×1080 |
 | Comando | `npm run render:convite` | `npm run render` |
 
@@ -16,29 +16,32 @@ dividir por etapa dá dois vídeos inteiros.
 
 ## Como o vídeo é montado
 
+**O Convite mostra prints, a Apresentação mostra a gravação.** Em 40 s, vídeo acelerado
+vira borrão e o contato não entende nenhuma tela; um print parado com um rótulo ele lê
+inteiro em três segundos. A gravação é o corpo da Apresentação, onde há tempo para ela.
+
 **A abertura tem dois atos**: primeiro apresenta o ArenaHub, depois lista as dores em
 tópicos. Nessa ordem, e não ao contrário: o contato já sabe do que se trata quando as
 frases aparecem, então elas soam como diagnóstico e não como reclamação genérica.
 
-**Depois disso o vídeo corre solto.** Nada congela, não há pausa nem frase por cima da
-imagem — só trechos escolhidos da gravação, a 2-4×, em cortes secos. Quem carrega o
+**A gravação corre solta, inteira.** Nada congela, não há corte nem frase por cima da
+imagem: o painel passa a 20× e o app do aluno a 10×, do começo ao fim. Quem carrega o
 peso é a narração.
 
 **A narração não descreve a tela.** Descrição sai do lugar no primeiro corte e faz o
 vídeo parecer quebrado. O texto abaixo narra o valor, e por isso continua válido se
-você trocar os trechos — só os tempos de entrada mudam.
+você regravar ou mudar a velocidade — só os tempos de entrada mudam.
 
 ---
 
-# CONVITE — 41 s
+# CONVITE — 40 s
 
 | Bloco | Entra | Sai |
 |---|---|---|
 | Apresentação | 0:00 | 0:06.7 |
 | Dores em tópicos | 0:06.7 | 0:14.0 |
-| A arena | 0:13.4 | 0:25.4 |
-| O aluno | 0:24.8 | 0:34.8 |
-| Chamada | 0:34.2 | 0:41.2 |
+| As telas (6 imagens) | 0:13.4 | 0:32.6 |
+| Fecho | 0:32.0 | 0:40.0 |
 
 ### `convite-01.mp3` · entra em **0,8 s** · alvo ~6 s
 
@@ -48,34 +51,33 @@ você trocar os trechos — só os tempos de entrada mudam.
 
 > Se a sua arena vive de WhatsApp, caderninho e mensalidade atrasada, isso aqui resolve.
 
-### `convite-03.mp3` · entra em **14 s** · alvo ~9 s
+### `convite-03.mp3` · entra em **14,5 s** · alvo ~17 s
 
-> Do seu lado: a grade da semana, a chamada no celular e quem está devendo, na mesma tela.
+> Do seu lado: a grade da semana pronta, a chamada no celular e quem está devendo, na
+> mesma tela.
+>
+> Do lado do aluno: ele reserva, cancela e entra na fila sozinho — sem te mandar
+> mensagem.
 
-### `convite-04.mp3` · entra em **25 s** · alvo ~8 s
+### `convite-04.mp3` · entra em **32,5 s** · alvo ~6 s
 
-> Do lado do aluno: ele reserva, cancela e entra na fila sozinho, sem te mandar mensagem.
+> Sua arena no automático. Você na quadra, não na planilha.
 
-### `convite-05.mp3` · entra em **34,5 s** · alvo ~6 s
-
-> Quer ver por dentro? Me responde qualquer coisa que eu mando o vídeo completo.
-
-**~80 palavras.** Ajuste a lista `NARRACAO_CONVITE` em `src/config.ts` — são cinco
-faixas, não quatro como no exemplo comentado; acrescente a linha que falta.
+**~75 palavras.** São quatro faixas.
 
 ---
 
-# APRESENTAÇÃO — 2:06
+# APRESENTAÇÃO — 1:52
 
 | Bloco | Entra | Sai |
 |---|---|---|
 | Apresentação | 0:00 | 0:06.7 |
 | Dores em tópicos | 0:06.7 | 0:14.0 |
 | Capítulo 01 | 0:13.4 | 0:16.4 |
-| A sua operação | 0:15.8 | 1:25.8 |
-| Capítulo 02 | 1:25.2 | 1:28.2 |
-| O que o aluno vê | 1:27.6 | 2:00.9 |
-| Encerramento | 2:00.3 | 2:05.8 |
+| A sua operação | 0:15.8 | 1:15.8 |
+| Capítulo 02 | 1:15.2 | 1:18.2 |
+| O que o aluno vê | 1:17.6 | 1:47.6 |
+| Encerramento | 1:47.0 | 1:52.5 |
 
 ### `narracao-01-abertura.mp3` · entra em **0,8 s** · alvo ~6 s
 
@@ -86,7 +88,7 @@ faixas, não quatro como no exemplo comentado; acrescente a linha que falta.
 > Se a sua arena vive de WhatsApp, caderninho e mensalidade atrasada, você vai
 > reconhecer isto.
 
-### `narracao-03-arena.mp3` · entra em **18 s** · alvo ~55 s
+### `narracao-03-arena.mp3` · entra em **18 s** · alvo ~50 s
 
 > Vamos começar pelo seu lado.
 >
@@ -104,7 +106,7 @@ faixas, não quatro como no exemplo comentado; acrescente a linha que falta.
 >
 > O que está passando aqui não é maquete. É o sistema rodando.
 
-### `narracao-04-aluno.mp3` · entra em **89 s** · alvo ~29 s
+### `narracao-04-aluno.mp3` · entra em **79 s** · alvo ~27 s
 
 > Agora o outro lado: o que os seus alunos veem.
 >
@@ -115,14 +117,12 @@ faixas, não quatro como no exemplo comentado; acrescente a linha que falta.
 >
 > E a vaga não fica vazia: quem estava na fila é chamado automaticamente.
 
-### `narracao-05-fecho.mp3` · entra em **121 s** · alvo ~5 s
+### `narracao-05-fecho.mp3` · entra em **108 s** · alvo ~5 s
 
 > ArenaHub. Primeiro mês grátis, sem cartão. No ar em cinco minutos.
 
-**~210 palavras**, ~95 s falados nos 126 disponíveis. A folga é de propósito: o
-silêncio entre as frases é o que deixa o vídeo respirar.
-
-Se a faixa 03 ficar corrida, corte a frase do torneio/mural — é a menos essencial.
+**~200 palavras** nos 112 disponíveis. A folga é de propósito: o silêncio entre as
+frases é o que deixa o vídeo respirar.
 
 ---
 

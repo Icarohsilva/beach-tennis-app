@@ -302,7 +302,7 @@ desatualizada passa sem medir nada.
 
 [video-marketing/](video-marketing/) monta em código os **dois** vídeos da prospecção:
 o **Convite** (~40 s, vertical) que acompanha o primeiro "oi" no WhatsApp, e a
-**Apresentação** (~2 min, horizontal) enviada depois que a arena responde. A divisão é
+**Apresentação** (~1:52, horizontal) enviada depois que a arena responde. A divisão é
 por etapa da conversa e não por público (aluno/arena): em prospecção fria a conclusão
 desaba acima de 90 s. Projeto **separado**, com `package.json` próprio, fora do build
 da Vercel — o `tsconfig.json` do app o exclui de propósito.
@@ -314,19 +314,19 @@ As gravações brutas ficam em `public/videos/` e são **gitignoradas** (pesadas
 
 Decisões que não são óbvias e quebram em silêncio se desfeitas:
 
-- **O vídeo é montado de TRECHOS escolhidos, não da gravação inteira acelerada.**
-  Cada `Clipe` tem `trechos: { de, ate, velocidade }[]`, tocados de ponta a ponta em
-  cortes secos. Duas tentativas do contrário quebraram: a 20× nada fica no ar tempo
-  suficiente para ser lido, e acelerar além de 16× é impossível — o `playbackRate` de
-  um elemento de vídeo recusa (`NotSupportedError`), e a saída de saltar quadro a
-  quadro faz o Studio buscar posição nova 30 vezes por segundo num arquivo longo: a
-  busca nunca termina e **a tela fica preta**. O render funcionava e o Studio não, então
-  o defeito só aparecia na hora de conferir o corte. O teto mora em `VELOCIDADE_MAX`
-  (`segmentos.ts`), aplicado no mesmo lugar que calcula a duração — cortar só na hora de
-  tocar faria o bloco acabar antes do que a montagem reservou.
-- **`segmentos.ts` é a única fonte da matemática dos trechos**, chamada no Root (para
-  reservar a duração) e no Clipe (para desenhar). Contas divergentes fariam o bloco
-  terminar fora do que a montagem reservou, sem erro nenhum aparecendo.
+- **A aceleração acontece ANTES, no arquivo.** `npm run acelerar`
+  (`scripts/acelerar.mjs`) gera `admin--20x.mp4` a partir de `admin.mp4`, e o vídeo toca
+  esse a 1×. Duas tentativas de acelerar na hora de tocar quebraram: o `playbackRate` de
+  um elemento de vídeo para em 16× (`NotSupportedError` no Studio), e a saída de saltar
+  quadro a quadro faz o Studio buscar posição nova 30 vezes por segundo num arquivo de
+  20 min — a busca nunca termina e **a tela fica preta**. O render funcionava e o Studio
+  não, então o defeito só aparecia na hora de conferir o corte. O script usa `-itsscale`
+  e não o filtro `setpts`, porque o ffmpeg embutido do Remotion vem com quase todos os
+  filtros desabilitados. Sem o arquivo acelerado, o projeto toca o bruto limitado a 16× e
+  avisa no console (`fonte.ts`).
+- **O Convite mostra PRINTS (`public/imagens/`), não a gravação** — `Galeria.tsx`. Em
+  40 s de vídeo frio, gravação acelerada vira borrão e nenhuma tela é entendida; um print
+  parado com um rótulo é lido em três segundos. A gravação é o corpo da Apresentação.
 - **A orientação da moldura nunca é adivinhada em silêncio.** `parseMedia` às vezes
   devolve duração mas não dimensões; assumir retrato punha gravação de desktop dentro de
   um celular desenhado, cortada. Hoje avisa no console, assume paisagem, e

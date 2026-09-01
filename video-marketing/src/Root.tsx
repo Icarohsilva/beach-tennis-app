@@ -3,12 +3,11 @@ import { Composition, staticFile } from 'remotion'
 import { parseMedia } from '@remotion/media-parser'
 import { Abertura, DUR_ABERTURA_FRAMES } from './Abertura'
 import { Encerramento } from './Encerramento'
-import { Convite, ConviteProps, DUR_CHAMADA, duracaoConvite } from './Convite'
+import { Convite, ConviteProps, DUR_CONVITE } from './Convite'
 import { Demo, DemoProps, JanelaFala, Medida, duracaoTotal, DUR_ENCERRAMENTO } from './Demo'
-import { ajustarAoArquivo, duracaoDosSegmentos, montarSegmentos } from './segmentos'
+import { framesDoClipe, nomeAcelerado, resolverFonte } from './fonte'
 import {
   CLIPES,
-  CONVITE,
   DIMENSOES,
   DIMENSOES_CONVITE,
   EFEITOS,
@@ -27,7 +26,7 @@ const absoluta = (caminho: string) =>
   typeof window === 'undefined' ? caminho : new URL(caminho, window.location.href).href
 
 /** Duração e orientação de um arquivo, com aviso no console em vez de erro. */
-const lerArquivo = async (caminho: string, rotulo: string) => {
+const lerArquivo = async (caminho: string, rotulo: string, silencioso = false) => {
   try {
     const { durationInSeconds, dimensions } = await parseMedia({
       src: absoluta(staticFile(caminho)),
@@ -35,19 +34,22 @@ const lerArquivo = async (caminho: string, rotulo: string) => {
       acknowledgeRemotionLicense: true,
     })
     return {
+      existe: true,
       segundos: durationInSeconds ?? FALLBACK_SEGUNDOS,
       // null quando o arquivo não expõe as dimensões — quem chama decide, com
       // aviso, em vez de adivinhar aqui.
       retrato: dimensions ? dimensions.height >= dimensions.width : null,
     }
   } catch (erro) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[arenahub-video] não consegui ler public/${caminho} (${rotulo}) — ` +
-        `usando ${FALLBACK_SEGUNDOS}s. Confira o nome do arquivo.`,
-      erro,
-    )
-    return { segundos: FALLBACK_SEGUNDOS, retrato: null }
+    if (!silencioso) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[arenahub-video] não consegui ler public/${caminho} (${rotulo}) — ` +
+          `usando ${FALLBACK_SEGUNDOS}s. Confira o nome do arquivo.`,
+        erro,
+      )
+    }
+    return { existe: false, segundos: FALLBACK_SEGUNDOS, retrato: null }
   }
 }
 
@@ -72,27 +74,43 @@ const resolverOrientacao = (clipe: ClipeConfig, lido: boolean | null) => {
 }
 
 /**
- * Apara os trechos ao tamanho real da gravação e mede quanto cada bloco ocupa.
+ * Descobre, para cada gravação, QUAL arquivo tocar e quanto tempo ele ocupa.
  *
- * A duração do bloco vem dos TRECHOS escolhidos, não do arquivo: é a soma de
- * (ate - de) / velocidade. O arquivo só é lido por duas razões — descobrir a
- * orientação (que escolhe a moldura) e cortar um `ate` que passe do fim, que
- * senão congelaria o último quadro pelo tempo que sobrasse, sem avisar.
+ * O caminho normal é o arquivo pré-acelerado (`admin--20x.mp4`, gerado por
+ * `npm run acelerar`), tocado a 1×. Quando ele ainda não existe, cai no bruto com
+ * a taxa limitada a 16× e avisa o que rodar — o vídeo sai mais longo do que o
+ * pedido, mas visível, em vez de estourar `NotSupportedError` no Studio.
  */
 const prepararClipes = async (clipes: ClipeConfig[]) => {
-  const lidos = await Promise.all(
-    clipes.map(async (clipe) => {
-      const { segundos, retrato } = await lerArquivo(`videos/${clipe.arquivo}`, clipe.arquivo)
-      const ajustado = ajustarAoArquivo(clipe, segundos)
-      const frames = duracaoDosSegmentos(montarSegmentos(ajustado, FPS))
-      const medida: Medida = { frames, retrato: resolverOrientacao(clipe, retrato) }
-      return { clipe: ajustado, medida }
+  const medidas = await Promise.all(
+    clipes.map(async (clipe): Promise<Medida> => {
+      const acelerado = nomeAcelerado(clipe.arquivo, clipe.velocidade)
+      const tentativa =
+        clipe.velocidade > 1 ? await lerArquivo(`videos/${acelerado}`, acelerado, true) : null
+
+      if (clipe.velocidade > 1 && !tentativa?.existe) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[arenahub-video] ${acelerado} não existe — tocando ${clipe.arquivo} no bruto, ` +
+            `limitado a 16×. Rode "npm run acelerar" para gerar o arquivo a ${clipe.velocidade}×.`,
+        )
+      }
+
+      const fonte = resolverFonte(clipe, Boolean(tentativa?.existe))
+      const lido =
+        fonte.acelerado && tentativa
+          ? tentativa
+          : await lerArquivo(`videos/${clipe.arquivo}`, clipe.arquivo)
+
+      return {
+        frames: framesDoClipe(lido.segundos, fonte.taxa, FPS),
+        retrato: resolverOrientacao(clipe, lido.retrato),
+        arquivo: fonte.arquivo,
+        taxa: fonte.taxa,
+      }
     }),
   )
-  return {
-    clipes: lidos.map((l) => l.clipe),
-    medidas: lidos.map((l) => l.medida),
-  }
+  return medidas
 }
 
 /**
@@ -108,29 +126,33 @@ const medirFala = async (faixas: Faixa[]): Promise<JanelaFala[]> =>
     }),
   )
 
-const calcularDemo = async ({ props }: { props: DemoProps }) => {
-  const [{ clipes, medidas }, janelasFala] = await Promise.all([
-    prepararClipes(props.clipes),
-    medirFala(props.faixas),
-  ])
-  return { durationInFrames: duracaoTotal(medidas), props: { ...props, clipes, medidas, janelasFala } }
+/**
+ * Confere que as faixas declaradas existem mesmo.
+ *
+ * Trilha e efeitos não passam por `medirFala`, então um nome errado ou um arquivo
+ * fora da pasta ficava MUDO em silêncio — o vídeo saía sem música e sem nenhuma
+ * pista do porquê. Aqui é só uma sondagem: lê e avisa.
+ */
+const conferirAudio = async (faixas: Faixa[]) => {
+  await Promise.all(faixas.map((f) => lerArquivo(`audio/${f.arquivo}`, f.arquivo)))
 }
 
-/**
- * O convite usa as MESMAS gravações, com trechos próprios (mais curtos). Trocar
- * a gravação por outra não desregula nada: os trechos são aparados ao arquivo.
- */
-const calcularConvite = async ({ props }: { props: ConviteProps }) => {
-  const base: ClipeConfig[] = CLIPES.map((clipe, i) => ({
-    ...clipe,
-    trechos: CONVITE.trechos[i] ?? clipe.trechos.slice(0, 1),
-    legendas: [],
-  }))
-  const [{ clipes, medidas }, janelasFala] = await Promise.all([
-    prepararClipes(base),
+const calcularDemo = async ({ props }: { props: DemoProps }) => {
+  const [medidas, janelasFala] = await Promise.all([
+    prepararClipes(props.clipes),
     medirFala(props.faixas),
+    conferirAudio([...props.trilha, ...props.efeitos]),
   ])
-  return { durationInFrames: duracaoConvite(medidas), props: { ...props, clipes, medidas, janelasFala } }
+  return { durationInFrames: duracaoTotal(medidas), props: { ...props, medidas, janelasFala } }
+}
+
+/** O Convite não tem gravação: são imagens. Só o áudio precisa ser medido. */
+const calcularConvite = async ({ props }: { props: ConviteProps }) => {
+  const [janelasFala] = await Promise.all([
+    medirFala(props.faixas),
+    conferirAudio([...props.trilha, ...props.efeitos]),
+  ])
+  return { durationInFrames: DUR_CONVITE, props: { ...props, janelasFala } }
 }
 
 const semAudio = {
@@ -148,10 +170,8 @@ export const RemotionRoot: React.FC = () => (
       component={Convite}
       fps={FPS}
       {...DIMENSOES_CONVITE}
-      durationInFrames={DUR_ABERTURA_FRAMES + DUR_CHAMADA}
+      durationInFrames={DUR_CONVITE}
       defaultProps={{
-        clipes: CLIPES,
-        medidas: [] as Medida[],
         // Narração PRÓPRIA do convite: os dois vídeos têm blocos e durações
         // diferentes, e uma lista compartilhada faria as faixas de um cair no
         // lugar errado do outro — ou fora dele, sumindo sem aviso nenhum.

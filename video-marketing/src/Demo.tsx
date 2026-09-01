@@ -17,10 +17,14 @@ export const TRANSICAO = 18
 
 /** Medida de cada arquivo, apurada em calculateMetadata (ver Root.tsx). */
 export type Medida = {
-  /** Duração do bloco: a soma dos trechos escolhidos, já com a velocidade. */
+  /** Duração do bloco na montagem. */
   frames: number
   /** Gravação de celular (vertical) ou de desktop — decide a moldura. */
   retrato: boolean
+  /** Arquivo que vai tocar: o pré-acelerado quando existe. Ver `fonte.ts`. */
+  arquivo: string
+  /** O que ainda falta acelerar na hora de tocar. 1 no caminho normal. */
+  taxa: number
 }
 
 /** Trecho em que alguém está falando, em frames. Usado para abaixar a trilha. */
@@ -136,7 +140,8 @@ export const Demo: React.FC<DemoProps> = ({
         </TransitionSeries.Sequence>
 
         {clipes.map((clipe, i) => {
-          const medida = medidas[i] ?? { frames: 30 * 45, retrato: true }
+          const medida =
+            medidas[i] ?? { frames: 30 * 45, retrato: false, arquivo: clipe.arquivo, taxa: 1 }
           return (
             <React.Fragment key={clipe.arquivo}>
               <TransitionSeries.Transition
@@ -152,7 +157,12 @@ export const Demo: React.FC<DemoProps> = ({
                 timing={linearTiming({ durationInFrames: TRANSICAO })}
               />
               <TransitionSeries.Sequence durationInFrames={medida.frames}>
-                <Clipe clipe={clipe} retrato={medida.retrato} />
+                <Clipe
+                  clipe={clipe}
+                  retrato={medida.retrato}
+                  arquivo={medida.arquivo}
+                  taxa={medida.taxa}
+                />
               </TransitionSeries.Sequence>
             </React.Fragment>
           )
