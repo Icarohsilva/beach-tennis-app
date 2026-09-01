@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { createTournament } from '@/features/torneios/actions'
 import { SPORTS } from '@/lib/arenas/sports'
+import { pairGendersFor, pairGendersLabel } from '@/lib/torneios/pairRules'
 import type {
   TournamentCategory,
   ParticipantType,
@@ -52,6 +53,13 @@ const FORMAT_OPTIONS: { value: TournamentFormat; label: string; hint: string }[]
 
 const selectClass =
   'w-full rounded-lg bg-surface-card border border-surface-border px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-brand-500'
+
+/** O que a categoria escolhida vai travar na inscrição — dá para mudar depois em "Configurar". */
+function entryRuleHint(category: TournamentCategory): string {
+  const allowed = pairGendersFor(category)
+  if (category === 'livre') return 'Livre: qualquer gênero entra, sem restrição de dupla.'
+  return `Trava a inscrição: ${pairGendersLabel(allowed).toLowerCase()}.`
+}
 
 export function CreateTournamentForm() {
   const [name, setName] = useState('')
@@ -171,6 +179,10 @@ export function CreateTournamentForm() {
         <select value={category} onChange={(e) => setCategory(e.target.value as TournamentCategory)} className={selectClass}>
           {CATEGORY_OPTIONS.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}
         </select>
+        {/* A categoria já nasce travando quem entra (createTournament deriva
+            allowed_pair_genders dela) — sem isto o admin não teria como saber,
+            antes de criar, que "Masculino" já impede mulher de se inscrever. */}
+        <p className="text-xs text-slate-500">{entryRuleHint(category)}</p>
       </div>
 
       <div className="flex flex-col gap-1">
