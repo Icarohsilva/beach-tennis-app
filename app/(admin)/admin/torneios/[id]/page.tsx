@@ -21,6 +21,8 @@ import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { inviteState } from '@/lib/torneios/invite'
 import { PairFixControls } from './PairFixControls'
+import { EnrollParticipantCard } from './EnrollParticipantCard'
+import { SendAccessButton } from './SendAccessButton'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -55,6 +57,13 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   if (error || !tournament) notFound()
 
   const t = tournament as Tournament
+
+  const { data: orgRow } = await adminClient
+    .from('organizations')
+    .select('name')
+    .eq('id', orgId)
+    .maybeSingle()
+  const orgName = (orgRow as { name: string } | null)?.name ?? 'a academia'
 
   // Entradas (tournament_entries) com nome do jogador
   const { data: entriesRaw } = await adminClient
@@ -329,6 +338,18 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               {t.status !== 'finished' && (
                 <CloseTournamentButton tournamentId={t.id} />
               )}
+              {/* Mesmo limite do servidor (enrollExternalEntry): depois que a
+                  chave sai (in_progress) uma inscrição avulsa ficaria de fora
+                  dela e da classificação. */}
+              {t.status !== 'in_progress' && t.status !== 'finished' && (
+                <EnrollParticipantCard
+                  tournamentId={t.id}
+                  tournamentName={t.name}
+                  tournamentUrl={shareUrl}
+                  orgName={orgName}
+                  isDuplaFixa={t.participant_type === 'dupla_fixa'}
+                />
+              )}
             </div>
           </Card>
           <WinnersCard
@@ -422,6 +443,17 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           name={p?.full_name ?? entry.player_id}
                           className="block text-sm font-medium text-white"
                         />
+                        {p && (
+                          <SendAccessButton
+                            tournamentId={t.id}
+                            playerId={p.id}
+                            playerName={p.full_name}
+                            playerPhone={p.phone}
+                            tournamentName={t.name}
+                            tournamentUrl={shareUrl}
+                            orgName={orgName}
+                          />
+                        )}
                         {pt && (
                           <p className="text-xs text-slate-400">
                             Parceiro: {pt.full_name}
@@ -434,6 +466,17 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                               </span>
                             )}
                           </p>
+                        )}
+                        {pt && (
+                          <SendAccessButton
+                            tournamentId={t.id}
+                            playerId={pt.id}
+                            playerName={pt.full_name}
+                            playerPhone={pt.phone}
+                            tournamentName={t.name}
+                            tournamentUrl={shareUrl}
+                            orgName={orgName}
+                          />
                         )}
                         {entry.payment_status === 'pending' && (
                           <p className="text-xs text-yellow-400 mt-0.5">
