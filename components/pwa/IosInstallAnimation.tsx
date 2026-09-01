@@ -93,9 +93,7 @@ export function IosInstallAnimation({ scene: forcada }: { scene?: number }) {
               }`}
             >
               <Share size={14} />
-              {scene === 0 && (
-                <span className="absolute -inset-1 animate-ping rounded-full border-2 border-brand-400" />
-              )}
+              {scene === 0 && <span className="ping-ring absolute inset-0 rounded-full" />}
             </span>
             <BookOpen size={14} />
             <span className="h-3 w-3 rounded-sm border border-current" />

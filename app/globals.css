@@ -86,6 +86,23 @@ html {
     animation: pulse-halo 2.4s ease-in-out infinite;
   }
 
+  /* ── Anel de toque ──────────────────────────────────────────────────────
+     Pulso ao redor de um alvo pequeno (ex.: ícone de compartilhar). box-shadow
+     em vez de transform:scale (como o `animate-ping` do Tailwind) porque scale
+     conta como overflow de layout no Chrome mesmo sem sobrepor vizinho nenhum. */
+  @keyframes ping-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgb(var(--brand-400) / 0.55);
+    }
+    100% {
+      box-shadow: 0 0 0 10px rgb(var(--brand-400) / 0);
+    }
+  }
+
+  .ping-ring {
+    animation: ping-ring 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
   /* ── Varredura de brilho ────────────────────────────────────────────────
      Passa uma faixa de luz sobre superfícies de destaque (hero, CTA). */
   @keyframes sheen {
