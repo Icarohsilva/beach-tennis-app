@@ -145,10 +145,13 @@ export type Faixa = {
  * lugar errado do outro — ou fora dele, sumindo sem aviso.
  */
 export const NARRACAO_CONVITE: Faixa[] = [
-  // { arquivo: 'convite-01.mp3', em: 0.8, volume: 1 },   // apresentação
-  // { arquivo: 'convite-02.mp3', em: 7, volume: 1 },     // as dores
-  // { arquivo: 'convite-03.mp3', em: 14.5, volume: 1 },  // as telas
-  // { arquivo: 'convite-04.mp3', em: 32.5, volume: 1 },  // o fecho
+  // Tempos recalculados a partir da duração REAL de cada gravação (não do
+  // roteiro): 01 sozinho já dura 8,49s, então começar 02 aos 7s (como o
+  // roteiro sugeria) faria as duas falarem por cima uma da outra por 2,3s.
+  { arquivo: 'convite-01.mp3', em: 0.8, volume: 1 },   // apresentação
+  { arquivo: 'convite-02.mp3', em: 9.7, volume: 1 },   // as dores
+  { arquivo: 'convite-03.mp3', em: 17.3, volume: 1 },  // as telas
+  { arquivo: 'convite-04.mp3', em: 32.2, volume: 1 },  // o fecho
 ]
 
 /** Narração da APRESENTAÇÃO. Tempos em NARRACAO.md. */
@@ -168,7 +171,7 @@ export const NARRACAO_DEMO: Faixa[] = [
  * trilha inaudível.
  */
 export const TRILHA: Faixa[] = [
-  // { arquivo: 'trilha.mp3', em: 0, volume: 0.16 },
+  { arquivo: 'trilha.mp3', em: 0, volume: 0.16 },
 ]
 
 /**
