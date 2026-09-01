@@ -6,34 +6,56 @@
 //
 // São DOIS vídeos, com funções diferentes na conversa:
 //   Convite       ~40 s, vertical  — acompanha o "oi" no WhatsApp
-//   Demo          ~1:50, horizontal — vai depois que a arena responde "manda"
-// O porquê dessa divisão está em NARRACAO.md.
+//   Demo          ~2 min, horizontal — vai depois que a arena responde
 // -----------------------------------------------------------------------------
 
-/**
- * As dores do dono da arena, na ordem em que aparecem.
- *
- * Abrem tanto a `Abertura` quanto o `Convite`, ANTES de qualquer marca: em vídeo
- * frio o espectador decide em ~5 s se continua, e logo animado não é motivo para
- * continuar. Elas também são a única coisa na tela que precisa funcionar no mudo,
- * que é como o WhatsApp toca vídeo.
- *
- * Frase curta e concreta ganha de frase esperta. O teste é: o dono da arena lê e
- * pensa "isso é a minha terça-feira".
- */
-export const DORES = [
-  'Domingo, 22h.',
-  'Três alunos te chamando pra remarcar a aula de terça.',
-  'E amanhã você ainda não sabe quem faltou, quem pagou e quem está na fila.',
-]
+/** O que a abertura diz sobre o ArenaHub, antes de falar de problema nenhum. */
+export const APRESENTACAO = {
+  convite: 'Te convido a conhecer o',
+  descricao: 'O sistema que organiza as aulas, os pagamentos e a presença da sua arena — num app só.',
+  pilares: ['Agenda', 'Pagamentos', 'Check-in', 'Comunidade'],
+}
 
-export type Parada = {
-  /** Segundo do clipe (já cortado e acelerado) em que a imagem congela. */
-  em: number
-  /** Quanto tempo fica congelada. 1,2 s é o suficiente para ler um rótulo. */
-  duracao: number
-  /** O rótulo grande que aparece durante a parada. */
-  texto: string
+/**
+ * As dores do dono, em tópicos, logo depois da apresentação.
+ *
+ * Frase curta e concreta ganha de frase esperta: o teste é o dono ler e pensar
+ * "isso é a minha terça-feira". São também a única coisa na tela que precisa
+ * funcionar SEM SOM, que é como o WhatsApp toca vídeo por padrão.
+ */
+export const DORES = {
+  titulo: 'Se a sua arena vive isso:',
+  itens: [
+    'Aluno remarcando aula pelo WhatsApp, a qualquer hora',
+    'Chamada no caderninho, presença que ninguém confere',
+    'Mensalidade atrasada que você só descobre no fim do mês',
+    'Fila de espera anotada num print do celular',
+  ],
+  fecho: 'Tem um jeito melhor.',
+}
+
+/**
+ * Um pedaço da gravação que entra no vídeo.
+ *
+ * O vídeo é montado a partir de TRECHOS escolhidos, e não da gravação inteira
+ * acelerada. Dois motivos, e os dois vieram de tentar o contrário:
+ *
+ * 1. Comprimir 20 min em 1 min exige 20×, e a 20× nenhuma tela fica no ar tempo
+ *    suficiente para ser vista — vira movimento colorido, não produto.
+ * 2. Acima de 16× o navegador recusa (`NotSupportedError`), e a alternativa de
+ *    saltar quadro a quadro faz o Studio buscar posição nova 30 vezes por
+ *    segundo num arquivo longo: a busca nunca termina e a tela fica PRETA.
+ *
+ * Dois a quatro trechos por gravação, cada um de 40-70 s a 2-4×, dão um vídeo
+ * que corre solto e no qual dá para ver o que está acontecendo.
+ */
+export type Trecho = {
+  /** Segundo do BRUTO em que o trecho começa. */
+  de: number
+  /** Segundo do BRUTO em que termina. */
+  ate: number
+  /** Quantas vezes mais rápido. 1 = tempo real. Acima de 4 já fica difícil de ler. */
+  velocidade: number
 }
 
 export type Clipe = {
@@ -47,42 +69,29 @@ export type Clipe = {
   indice: string
   /**
    * Pontos que ficam no painel ao lado do vídeo — só aparecem quando a gravação
-   * é VERTICAL (celular), que é quando sobra quadro nas laterais. Em gravação de
-   * desktop o vídeo ocupa a largura toda e o painel não existe.
+   * é VERTICAL (celular) num quadro horizontal, que é quando sobra tela.
    */
   destaques: string[]
-  /** Corta o começo do bruto, em SEGUNDOS. 0 = usa desde o início. */
-  cortarInicio: number
-  /** Corta o fim: segundos a DESCARTAR do final. 0 = vai até o fim. */
-  cortarFim: number
   /**
-   * Acelera a gravação. 1 = velocidade real, 10 = dez vezes mais rápido.
-   * A duração no vídeo final é (bruto - cortes) / velocidade, e a linha do
-   * tempo se ajusta sozinha — não há nenhum outro número para mexer.
-   * Acima de 1 aparece um selo "10×" no canto, para o cliente não achar que a
-   * gravação está travando.
-   */
-  velocidade: number
-  /**
-   * Momentos em que a imagem CONGELA com um rótulo grande.
+   * Como emoldurar a gravação. 'auto' lê a proporção do arquivo.
    *
-   * É o que salva a gravação acelerada. A 10× ou 20× nenhuma tela fica no ar
-   * tempo suficiente para ser lida — o espectador vê movimento, não o produto.
-   * Congelar 1,2 s quatro vezes devolve quatro coisas que ele efetivamente vê,
-   * sem perder a sensação de volume que a passagem rápida cria.
-   *
-   * As paradas ALONGAM o clipe (a duração de cada uma entra no total), então
-   * quatro paradas de 1,2 s acrescentam ~5 s ao vídeo. Isso é contabilizado
-   * sozinho em Root.tsx.
+   * Existe porque a leitura FALHA em silêncio: alguns arquivos devolvem duração
+   * mas não dimensões, e aí o projeto teria de adivinhar — foi assim que uma
+   * gravação de desktop apareceu dentro de uma moldura de celular, cortada dos
+   * dois lados. Quando o automático errar, diga aqui e acabou.
    */
-  paradas: Parada[]
+  orientacao?: 'auto' | 'paisagem' | 'retrato'
   /**
-   * Legendas que aparecem por cima do vídeo (lower third).
-   * `em` é o segundo no vídeo FINAL — depois do corte de início E depois da
-   * aceleração. Com `velocidade: 10`, o minuto 2:00 do bruto cai aos 12 s aqui.
-   * O jeito prático de acertar: rode `npm run studio`, arraste a linha do tempo
-   * até o momento e leia o segundo que o próprio Studio mostra.
-   * Deixe a lista vazia enquanto não souber os tempos — o vídeo roda igual.
+   * Os pedaços da gravação que entram, em ordem. Cortes secos entre eles.
+   *
+   * ESTES SÃO OS NÚMEROS QUE VALE A PENA VOCÊ AJUSTAR: abra a gravação, ache os
+   * momentos que vendem e anote os segundos. É o que separa uma demonstração de
+   * uma gravação de tela acelerada.
+   */
+  trechos: Trecho[]
+  /**
+   * Legendas por cima do vídeo (lower third). `em` é o segundo dentro do bloco
+   * já montado, não do bruto. Opcional — a narração costuma bastar.
    */
   legendas: { em: number; duracao: number; texto: string }[]
 }
@@ -92,9 +101,9 @@ export type Clipe = {
  *
  * Quem decide a compra é o dono. Começando pelo aluno, ele passa os primeiros
  * 30 s — a janela em que mais gente abandona — vendo tela de alguém que ainda
- * não é problema dele. Invertido, ele vê a própria operação primeiro (o alívio),
- * e a experiência do aluno vira o desfecho: é o que ele vai querer mostrar para
- * os alunos, então é o melhor gancho possível logo antes da chamada final.
+ * não é problema dele. Invertido, ele vê a própria operação primeiro, e a
+ * experiência do aluno vira o desfecho: é o que ele vai querer mostrar para os
+ * alunos, então é o melhor gancho possível logo antes da chamada final.
  */
 export const CLIPES: Clipe[] = [
   {
@@ -102,23 +111,19 @@ export const CLIPES: Clipe[] = [
     titulo: 'A sua operação',
     subtitulo: 'Grade, chamada, mensalidade e inadimplência num lugar só.',
     indice: '01',
+    orientacao: 'auto',
     destaques: [
       'Grade da semana gerada num clique',
       'Chamada no celular, na beira da quadra',
       'Quem está devendo, na tela',
       'Relatório de presença e ocupação',
     ],
-    cortarInicio: 0,
-    cortarFim: 0,
-    // Bruto de ~20 min → ~1 min no vídeo final.
-    velocidade: 20,
-    // Ajuste `em` no Studio depois de ver o corte: o alvo é congelar numa tela
-    // cheia e reconhecível, não no meio de uma navegação.
-    paradas: [
-      { em: 12, duracao: 1.2, texto: 'A grade da semana, num clique' },
-      { em: 26, duracao: 1.2, texto: 'Chamada pelo celular, na quadra' },
-      { em: 40, duracao: 1.4, texto: 'Quem está devendo — sem planilha' },
-      { em: 52, duracao: 1.2, texto: 'Presença e ocupação de cada turma' },
+    // ~60 s de vídeo montado a partir de 3 momentos da gravação de 20 min.
+    // AJUSTE os `de`/`ate` olhando a sua gravação — os valores abaixo são chute.
+    trechos: [
+      { de: 0, ate: 70, velocidade: 3 },
+      { de: 300, ate: 370, velocidade: 3 },
+      { de: 900, ate: 970, velocidade: 3 },
     ],
     legendas: [],
   },
@@ -127,60 +132,67 @@ export const CLIPES: Clipe[] = [
     titulo: 'E o que o seu aluno vê',
     subtitulo: 'Ele reserva, cancela e confirma presença sozinho. Sem te mandar mensagem.',
     indice: '02',
+    orientacao: 'auto',
     destaques: [
       'Reserva a aula em dois toques',
       'Cancelou a tempo? O crédito volta sozinho',
       'Fila de espera que chama o próximo automaticamente',
       'Confirma presença na quadra pelo celular',
     ],
-    cortarInicio: 0,
-    cortarFim: 0,
-    // Bruto de ~5 min → ~30 s no vídeo final.
-    velocidade: 10,
-    paradas: [
-      { em: 7, duracao: 1.2, texto: 'Reserva em dois toques' },
-      { em: 16, duracao: 1.4, texto: 'Cancelou a tempo? Crédito de volta' },
-      { em: 25, duracao: 1.2, texto: 'Fila de espera automática' },
+    // ~34 s a partir de 2 momentos da gravação de 5 min.
+    trechos: [
+      { de: 0, ate: 50, velocidade: 3 },
+      { de: 150, ate: 200, velocidade: 3 },
     ],
-    legendas: [
-      // Atenção: `em` é o segundo no vídeo FINAL (já acelerado), não no bruto.
-      // { em: 4, duracao: 3.5, texto: 'Reserva a aula em dois toques' },
-    ],
+    legendas: [],
   },
 ]
 
 /**
- * Faixas de áudio sobrepostas ao vídeo. Os arquivos vão em `public/audio/`.
+ * Faixas de áudio. Os arquivos vão em `public/audio/`.
  *
- * `em` é o segundo do vídeo FINAL em que a faixa começa. Uma narração gravada de
- * uma vez só é uma faixa com `em: 0`; narração por bloco são várias faixas, e é o
- * formato mais fácil de manter — regravar 15 segundos não obriga a regravar tudo,
- * e mudar a `velocidade` de um clipe só desloca as faixas dali para a frente.
+ * `em` é o segundo do vídeo FINAL em que a faixa começa. Narração por bloco é
+ * mais fácil de manter do que uma faixa só: regravar 15 segundos não obriga a
+ * regravar tudo, e mexer num trecho só desloca as faixas dali para a frente.
  *
- * Deixe a lista vazia para renderizar sem áudio.
+ * Lista vazia = sem áudio. **Se o áudio não aparecer, é quase sempre isto: o
+ * arquivo está na pasta mas a linha continua comentada aqui.**
  */
 export type Faixa = {
   arquivo: string
   em: number
-  /** 1 = volume cheio. Música de fundo pede algo entre 0.08 e 0.15. */
+  /** 1 = volume cheio. Música de fundo pede algo entre 0.08 e 0.16. */
   volume: number
 }
 
-export const NARRACAO: Faixa[] = [
-  // Tempos para o corte padrao. Confira no Studio depois de trocar velocidade,
-  // cortes ou paradas — e a linha do tempo que manda. Texto em NARRACAO.md.
-  // { arquivo: 'narracao-01-dores.mp3', em: 0.6, volume: 1 },
-  // { arquivo: 'narracao-02-arena.mp3', em: 13, volume: 1 },
-  // { arquivo: 'narracao-03-aluno.mp3', em: 82, volume: 1 },
-  // { arquivo: 'narracao-04-fecho.mp3', em: 113, volume: 1 },
+/**
+ * Narração do CONVITE. Separada da narração do Demo de propósito: os dois vídeos
+ * têm durações e blocos diferentes, e uma lista só faria as faixas de um cair no
+ * lugar errado do outro — ou fora dele, sumindo sem aviso.
+ */
+export const NARRACAO_CONVITE: Faixa[] = [
+  // { arquivo: 'convite-01.mp3', em: 0.8, volume: 1 },   // apresentação
+  // { arquivo: 'convite-02.mp3', em: 7, volume: 1 },     // as dores
+  // { arquivo: 'convite-03.mp3', em: 14, volume: 1 },    // a arena
+  // { arquivo: 'convite-04.mp3', em: 25, volume: 1 },    // o aluno
+  // { arquivo: 'convite-05.mp3', em: 34.5, volume: 1 },  // a chamada
+]
+
+/** Narração da APRESENTAÇÃO. Tempos em NARRACAO.md. */
+export const NARRACAO_DEMO: Faixa[] = [
+  // { arquivo: 'narracao-01-abertura.mp3', em: 0.8, volume: 1 },
+  // { arquivo: 'narracao-02-dores.mp3', em: 7, volume: 1 },
+  // { arquivo: 'narracao-03-arena.mp3', em: 18, volume: 1 },
+  // { arquivo: 'narracao-04-aluno.mp3', em: 89, volume: 1 },
+  // { arquivo: 'narracao-05-fecho.mp3', em: 121, volume: 1 },
 ]
 
 /**
- * Música de fundo. Uma faixa com `em: 0` cobrindo o vídeo inteiro é o normal.
+ * Música de fundo, uma faixa com `em: 0` cobrindo o vídeo inteiro.
  *
- * O volume aqui é o volume QUANDO NINGUÉM ESTÁ FALANDO: enquanto uma faixa de
- * NARRACAO toca, a trilha abaixa sozinha (ver `ducking` em Demo.tsx). Sem isso,
- * volume fixo ou come a voz ou deixa a trilha inaudível.
+ * O volume aqui é o volume QUANDO NINGUÉM ESTÁ FALANDO: enquanto a narração
+ * toca, a trilha abaixa sozinha. Sem isso, volume fixo ou come a voz ou deixa a
+ * trilha inaudível.
  */
 export const TRILHA: Faixa[] = [
   // { arquivo: 'trilha.mp3', em: 0, volume: 0.16 },
@@ -188,13 +200,12 @@ export const TRILHA: Faixa[] = [
 
 /**
  * Efeitos pontuais. Os arquivos de `sfx/` são gerados por `npm run gerar:sfx` —
- * sintetizados no próprio projeto, e não baixados, porque material de venda com
- * áudio de licença duvidosa é um problema caro por um ganho pequeno.
+ * sintetizados no projeto, e não baixados, porque material de venda com áudio de
+ * licença duvidosa é um problema caro por um ganho pequeno.
  */
 export const EFEITOS: Faixa[] = [
-  // { arquivo: 'sfx/impacto.wav', em: 5.0, volume: 0.7 },   // a bola batendo
-  // { arquivo: 'sfx/whoosh.wav', em: 9.4, volume: 0.45 },  // virada de bloco
-  // { arquivo: 'sfx/sub-drop.wav', em: 28.2, volume: 0.5 }, // entrada da chamada
+  // { arquivo: 'sfx/impacto.wav', em: 2.3, volume: 0.7 },   // a bola batendo
+  // { arquivo: 'sfx/whoosh.wav', em: 7.0, volume: 0.45 },   // virada para as dores
 ]
 
 /** Contato que aparece no encerramento. */
@@ -209,40 +220,15 @@ export const CONTATO = {
  * O Convite. Ele NÃO pede a venda — pede só a permissão de mostrar, que é a
  * única coisa que um vídeo frio consegue arrancar.
  *
- * `blocos` espelha a ordem de CLIPES. A VELOCIDADE não se define aqui — sai de
- * `janela / segundos`, então trocar a gravação por uma mais longa não desregula
- * o convite.
- *
- * `janela` é a parte do BRUTO que entra, e existe para o convite não espremer a
- * gravação inteira: 20 minutos em 8 segundos dá 150×, e a essa taxa quadros
- * vizinhos ficam a cinco segundos de distância um do outro — vira um estrobo de
- * telas sem relação, não uma demonstração. Uma janela de 60-120 s de um trecho
- * bom dá uma passagem que se entende. Sem `janela`, usa a gravação toda.
- *
- * `de` é onde a janela começa no bruto. Escolha no Studio, olhando a gravação.
+ * `trechos` espelha a ordem de CLIPES: um pedaço curto de cada gravação, só para
+ * provar que o produto existe e funciona.
  */
 export const CONVITE = {
   pergunta: 'Quer ver por dentro?',
-  resposta: 'Respondo com o vídeo completo. 1 minuto e meio.',
-  blocos: [
-    {
-      de: 0,
-      janela: 90,
-      segundos: 8,
-      paradas: [
-        { em: 2.5, duracao: 1.2, texto: 'A semana inteira, num clique' },
-        { em: 6, duracao: 1.3, texto: 'Quem está devendo — sem planilha' },
-      ] as Parada[],
-    },
-    {
-      de: 0,
-      janela: 70,
-      segundos: 7,
-      paradas: [
-        { em: 2, duracao: 1.2, texto: 'O aluno reserva sozinho' },
-        { em: 5, duracao: 1.3, texto: 'Fila de espera automática' },
-      ] as Parada[],
-    },
+  resposta: 'Respondo com o vídeo completo. 2 minutos.',
+  trechos: [
+    [{ de: 0, ate: 36, velocidade: 3 }] as Trecho[], // arena — 12 s
+    [{ de: 0, ate: 30, velocidade: 3 }] as Trecho[], // aluno — 10 s
   ],
 }
 

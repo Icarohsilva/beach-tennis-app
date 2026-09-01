@@ -17,10 +17,9 @@ export const TRANSICAO = 18
 
 /** Medida de cada arquivo, apurada em calculateMetadata (ver Root.tsx). */
 export type Medida = {
-  /** Duração total do bloco, já com as paradas somadas. */
+  /** Duração do bloco: a soma dos trechos escolhidos, já com a velocidade. */
   frames: number
-  /** Duração só da parte que anda — o que `montarSegmentos` precisa. */
-  framesDeMovimento: number
+  /** Gravação de celular (vertical) ou de desktop — decide a moldura. */
   retrato: boolean
 }
 
@@ -137,11 +136,7 @@ export const Demo: React.FC<DemoProps> = ({
         </TransitionSeries.Sequence>
 
         {clipes.map((clipe, i) => {
-          const medida = medidas[i] ?? {
-            frames: 30 * 45,
-            framesDeMovimento: 30 * 45,
-            retrato: true,
-          }
+          const medida = medidas[i] ?? { frames: 30 * 45, retrato: true }
           return (
             <React.Fragment key={clipe.arquivo}>
               <TransitionSeries.Transition
@@ -157,11 +152,7 @@ export const Demo: React.FC<DemoProps> = ({
                 timing={linearTiming({ durationInFrames: TRANSICAO })}
               />
               <TransitionSeries.Sequence durationInFrames={medida.frames}>
-                <Clipe
-                  clipe={clipe}
-                  retrato={medida.retrato}
-                  framesDeMovimento={medida.framesDeMovimento}
-                />
+                <Clipe clipe={clipe} retrato={medida.retrato} />
               </TransitionSeries.Sequence>
             </React.Fragment>
           )

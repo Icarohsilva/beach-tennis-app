@@ -301,53 +301,52 @@ desatualizada passa sem medir nada.
 ### Vídeos de demonstração (Remotion)
 
 [video-marketing/](video-marketing/) monta em código os **dois** vídeos da prospecção:
-o **Convite** (~35 s, vertical) que acompanha o primeiro "oi" no WhatsApp, e a
-**Apresentação** (~1:57, horizontal) enviada depois que a arena responde. A divisão é
+o **Convite** (~40 s, vertical) que acompanha o primeiro "oi" no WhatsApp, e a
+**Apresentação** (~2 min, horizontal) enviada depois que a arena responde. A divisão é
 por etapa da conversa e não por público (aluno/arena): em prospecção fria a conclusão
-desaba acima de 90 s, então dois minutos é bom como segundo toque e ruim como primeiro.
-Projeto **separado**, com `package.json` próprio, fora do build da Vercel — o
-`tsconfig.json` do app o exclui de propósito.
+desaba acima de 90 s. Projeto **separado**, com `package.json` próprio, fora do build
+da Vercel — o `tsconfig.json` do app o exclui de propósito.
 
 As gravações brutas ficam em `public/videos/` e são **gitignoradas** (pesadas, e
-`public/` vai para o deploy). O `remotion.config.ts` aponta o `publicDir` para
-`../public`, então `staticFile('videos/admin.mp4')`, a marca e as fontes resolvem sem
-duplicar arquivo.
+`public/` vai para o deploy); `public/audio/` também, exceto `sfx/`, que é gerado por
+`npm run gerar:sfx` e é nosso. O `remotion.config.ts` aponta o `publicDir` para
+`../public`, então vídeos, marca e fontes resolvem sem duplicar arquivo.
 
 Decisões que não são óbvias e quebram em silêncio se desfeitas:
 
-- **Nada de duração é digitado.** `src/Root.tsx` mede cada arquivo com `parseMedia` em
-  `calculateMetadata`, divide pela `velocidade`, soma as paradas e monta a linha do
-  tempo. A mesma medição escolhe a moldura (vertical → aparelho com painel lateral;
-  desktop → janela) e calcula a velocidade do Convite a partir dos segundos pedidos.
-- **Velocidade acima de 4× não usa `playbackRate`**, e sim amostragem do quadro de
-  origem (`LIMITE_TAXA_NATIVA` em `Clipe.tsx`). O `playbackRate` vai para um elemento
-  de vídeo do navegador, cujo teto é 16×: o render (que extrai quadro, sem elemento)
-  aceitava qualquer valor e o Studio quebrava com `NotSupportedError` — ou seja, o
-  defeito só aparecia na hora de conferir o corte. O Convite ainda limita o trecho com
-  `CONVITE.blocos[].janela`, porque comprimir 20 min em 8 s continua sendo um estrobo
-  de telas sem relação mesmo funcionando.
-- **`segmentos.ts` é a única fonte da matemática das paradas** (os congelamentos com
-  rótulo), e é chamado nos dois lados: no Root para reservar a duração e no Clipe para
-  desenhar. Se as contas divergissem, o bloco terminaria fora do que a linha do tempo
-  reservou — vídeo cortado ou congelado no fim, sem erro nenhum aparecendo.
-- **A ordem de `CLIPES` é arena → aluno**, e é decisão comercial, não estética: quem
-  decide a compra é o dono, e começar pelo aluno gasta a janela de maior abandono com
-  telas que ainda não são problema dele.
-- **O frame 0 do Convite já entra com o gancho escrito** (por isso `ENTRADA_DOR[0]` é
-  negativo): o WhatsApp usa o primeiro quadro como capa da mensagem, e capa preta é a
-  diferença entre abrir e passar direto.
-- **As fontes vêm de `public/fonts/`**, carregadas pela FontFace API com `delayRender`
-  próprio. Pelo CDN do Google são 100+ requisições por aba de render, e um render sem
-  rede cai para a fonte de sistema **entregando o vídeo com outra tipografia sem
-  avisar**; o `loadFont` do `@remotion/fonts` tem um `delayRender` interno de 28 s que
-  não é configurável e estoura quando a aba está decodificando vídeo.
+- **O vídeo é montado de TRECHOS escolhidos, não da gravação inteira acelerada.**
+  Cada `Clipe` tem `trechos: { de, ate, velocidade }[]`, tocados de ponta a ponta em
+  cortes secos. Duas tentativas do contrário quebraram: a 20× nada fica no ar tempo
+  suficiente para ser lido, e acelerar além de 16× é impossível — o `playbackRate` de
+  um elemento de vídeo recusa (`NotSupportedError`), e a saída de saltar quadro a
+  quadro faz o Studio buscar posição nova 30 vezes por segundo num arquivo longo: a
+  busca nunca termina e **a tela fica preta**. O render funcionava e o Studio não, então
+  o defeito só aparecia na hora de conferir o corte. O teto mora em `VELOCIDADE_MAX`
+  (`segmentos.ts`), aplicado no mesmo lugar que calcula a duração — cortar só na hora de
+  tocar faria o bloco acabar antes do que a montagem reservou.
+- **`segmentos.ts` é a única fonte da matemática dos trechos**, chamada no Root (para
+  reservar a duração) e no Clipe (para desenhar). Contas divergentes fariam o bloco
+  terminar fora do que a montagem reservou, sem erro nenhum aparecendo.
+- **A orientação da moldura nunca é adivinhada em silêncio.** `parseMedia` às vezes
+  devolve duração mas não dimensões; assumir retrato punha gravação de desktop dentro de
+  um celular desenhado, cortada. Hoje avisa no console, assume paisagem, e
+  `Clipe.orientacao` permite forçar. O vídeo usa `objectFit: contain` pelo mesmo motivo:
+  `cover` amputa a interface gravada quando a proporção diverge.
+- **A abertura apresenta a marca ANTES de falar das dores**, e a marca já está na tela
+  no frame 0 (a bola só a "acende"): o WhatsApp usa o primeiro quadro como capa da
+  mensagem, e capa preta é a diferença entre abrir e passar direto.
+- **Cada vídeo tem a sua lista de narração** (`NARRACAO_CONVITE`, `NARRACAO_DEMO`): os
+  dois têm blocos e durações diferentes, e uma lista só faria as faixas de um cair no
+  lugar errado do outro — ou fora dele, sumindo sem aviso.
+- **As fontes vêm de `public/fonts/`**, pela FontFace API com `delayRender` próprio.
+  Pelo CDN do Google são 100+ requisições por aba de render, e um render sem rede cai
+  para a fonte de sistema **entregando o vídeo com outra tipografia sem avisar**.
 - Os efeitos sonoros são **sintetizados** por `scripts/gerar-sfx.mjs` (Node puro, WAV
-  escrito na mão) em vez de baixados: o vídeo é material de venda, e áudio de licença
-  duvidosa nele é um problema caro por um ganho pequeno.
+  escrito na mão): o vídeo é material de venda, e áudio de licença duvidosa nele é um
+  problema caro por um ganho pequeno.
 
-Editar corte, texto, velocidade, parada, áudio ou formato é mexer só em
-[video-marketing/src/config.ts](video-marketing/src/config.ts). Os roteiros de narração,
-os tempos e as mensagens de WhatsApp estão em
+Editar é mexer só em [video-marketing/src/config.ts](video-marketing/src/config.ts). Os
+roteiros, os tempos e as mensagens de WhatsApp estão em
 [video-marketing/NARRACAO.md](video-marketing/NARRACAO.md); o resto no
 [README de lá](video-marketing/README.md).
 

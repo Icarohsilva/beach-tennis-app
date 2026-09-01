@@ -109,7 +109,7 @@ const Chamada: React.FC = () => {
 }
 
 export type ConviteProps = {
-  /** Já derivados para o convite (velocidade e paradas próprias) — ver Root.tsx. */
+  /** Já com os trechos próprios do convite e aparados ao arquivo — ver Root.tsx. */
   clipes: ClipeConfig[]
   medidas: Medida[]
   faixas: Faixa[]
@@ -159,12 +159,7 @@ export const Convite: React.FC<ConviteProps> = ({
                 timing={linearTiming({ durationInFrames: TRANSICAO })}
               />
               <TransitionSeries.Sequence durationInFrames={medida.frames}>
-                <Clipe
-                  clipe={clipe}
-                  retrato={medida.retrato}
-                  framesDeMovimento={medida.framesDeMovimento}
-                  comPainel={false}
-                />
+                <Clipe clipe={clipe} retrato={medida.retrato} comPainel={false} />
               </TransitionSeries.Sequence>
             </React.Fragment>
           )

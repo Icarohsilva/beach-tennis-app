@@ -1,93 +1,92 @@
 # Roteiros, narração e mensagens
 
-## São dois vídeos, não um
+## São dois vídeos
 
 | | **Convite** | **Apresentação** |
 |---|---|---|
 | Quando | Junto do primeiro "oi" | Depois que a arena responde |
-| Duração | 35 s | 1:57 |
+| Duração | 41 s | 2:06 |
 | Formato | Vertical 1080×1920 | Horizontal 1920×1080 |
 | Comando | `npm run render:convite` | `npm run render` |
-| O que pede | Permissão para mostrar | A conversa |
 
-A divisão é por **etapa da conversa**, não por público (aluno / arena). Dividir por
-público daria dois vídeos frios pela metade, cada um contando só um lado; dividir por
-etapa dá dois vídeos inteiros, cada um com uma tarefa que ele consegue cumprir.
+A divisão é por **etapa da conversa**, não por público (aluno / arena). Em prospecção
+fria a taxa de conclusão desaba acima de 90 s, então dois minutos é bom como segundo
+toque e ruim como primeiro. Dividir por público daria dois vídeos frios pela metade;
+dividir por etapa dá dois vídeos inteiros.
 
-O motivo é de dado, não de gosto. Em prospecção fria a taxa de conclusão desaba acima
-de 90 s, ~30% abandonam nos primeiros 30 s, e o espectador decide em torno de 5 s se
-continua. Um vídeo de quase dois minutos é excelente como **segundo** toque e ruim como
-primeiro — não porque seja ruim, mas porque ninguém pediu para vê-lo ainda.
+## Como o vídeo é montado
 
-## Três decisões que o roteiro carrega
+**A abertura tem dois atos**: primeiro apresenta o ArenaHub, depois lista as dores em
+tópicos. Nessa ordem, e não ao contrário: o contato já sabe do que se trata quando as
+frases aparecem, então elas soam como diagnóstico e não como reclamação genérica.
 
-**A dor vem antes da marca.** Os primeiros 10 s dos dois vídeos são as frases de
-`DORES` (em `src/config.ts`), em texto grande, sem logo. A marca só aparece quando a
-bola bate e varre as frases. Logo animado não é motivo para continuar assistindo;
-reconhecer o próprio domingo à noite é.
+**Depois disso o vídeo corre solto.** Nada congela, não há pausa nem frase por cima da
+imagem — só trechos escolhidos da gravação, a 2-4×, em cortes secos. Quem carrega o
+peso é a narração.
 
-**A arena vem antes do aluno.** Quem decide a compra é o dono. Começando pelo aluno,
-ele passa a janela de maior abandono vendo tela de alguém que ainda não é problema
-dele. A experiência do aluno vira o desfecho — é o que ele vai querer mostrar para os
-alunos, então é o melhor gancho logo antes da chamada final.
-
-**A narração não descreve a tela.** As gravações passam a 10× e 20×; narração
-descritiva ("agora ele toca em reservar") sai do lugar no primeiro segundo. O texto
-abaixo narra o valor, e por isso continua válido se você mudar cortes ou velocidade —
-só os tempos de entrada mudam. As **paradas** (a imagem congelando com um rótulo) são
-o que dá ao espectador algo legível para olhar enquanto você fala.
+**A narração não descreve a tela.** Descrição sai do lugar no primeiro corte e faz o
+vídeo parecer quebrado. O texto abaixo narra o valor, e por isso continua válido se
+você trocar os trechos — só os tempos de entrada mudam.
 
 ---
 
-# CONVITE — 35 s
+# CONVITE — 41 s
 
 | Bloco | Entra | Sai |
 |---|---|---|
-| Dores + marca | 0:00 | 0:10.0 |
-| A arena | 0:09.4 | 0:19.9 |
-| O aluno | 0:19.3 | 0:28.8 |
-| Chamada | 0:28.2 | 0:35.2 |
+| Apresentação | 0:00 | 0:06.7 |
+| Dores em tópicos | 0:06.7 | 0:14.0 |
+| A arena | 0:13.4 | 0:25.4 |
+| O aluno | 0:24.8 | 0:34.8 |
+| Chamada | 0:34.2 | 0:41.2 |
 
-### `convite-01.mp3` · entra em **0,8 s** · alvo ~8 s
+### `convite-01.mp3` · entra em **0,8 s** · alvo ~6 s
 
-> Domingo, dez da noite, e três alunos te chamando pra remarcar aula. Você virou
-> secretária da própria arena.
+> Deixa eu te apresentar o ArenaHub — o sistema que organiza a sua arena inteira.
 
-### `convite-02.mp3` · entra em **10 s** · alvo ~9 s
+### `convite-02.mp3` · entra em **7 s** · alvo ~6 s
 
-> Isso aqui é o ArenaHub. A sua semana inteira montada num clique, e a inadimplência
-> na tela — sem planilha.
+> Se a sua arena vive de WhatsApp, caderninho e mensalidade atrasada, isso aqui resolve.
 
-### `convite-03.mp3` · entra em **20 s** · alvo ~8 s
+### `convite-03.mp3` · entra em **14 s** · alvo ~9 s
 
-> E o seu aluno reserva, cancela e entra na fila sozinho. Sem passar por você.
+> Do seu lado: a grade da semana, a chamada no celular e quem está devendo, na mesma tela.
 
-### `convite-04.mp3` · entra em **28,8 s** · alvo ~6 s
+### `convite-04.mp3` · entra em **25 s** · alvo ~8 s
 
-> Se quiser ver por dentro, me responde qualquer coisa que eu te mando o completo.
+> Do lado do aluno: ele reserva, cancela e entra na fila sozinho, sem te mandar mensagem.
 
-**~72 palavras.** Repare que a narração não repete o texto da tela — ela acrescenta o
-"virou secretária da própria arena", que é a frase que o texto não diz.
+### `convite-05.mp3` · entra em **34,5 s** · alvo ~6 s
+
+> Quer ver por dentro? Me responde qualquer coisa que eu mando o vídeo completo.
+
+**~80 palavras.** Ajuste a lista `NARRACAO_CONVITE` em `src/config.ts` — são cinco
+faixas, não quatro como no exemplo comentado; acrescente a linha que falta.
 
 ---
 
-# APRESENTAÇÃO — 1:57
+# APRESENTAÇÃO — 2:06
 
 | Bloco | Entra | Sai |
 |---|---|---|
-| Dores + marca | 0:00 | 0:10.0 |
-| Capítulo 01 | 0:09.4 | 0:12.4 |
-| A sua operação | 0:11.8 | 1:16.8 |
-| Capítulo 02 | 1:16.2 | 1:19.2 |
-| O que o aluno vê | 1:18.6 | 1:52.4 |
-| Encerramento | 1:51.8 | 1:57.3 |
+| Apresentação | 0:00 | 0:06.7 |
+| Dores em tópicos | 0:06.7 | 0:14.0 |
+| Capítulo 01 | 0:13.4 | 0:16.4 |
+| A sua operação | 0:15.8 | 1:25.8 |
+| Capítulo 02 | 1:25.2 | 1:28.2 |
+| O que o aluno vê | 1:27.6 | 2:00.9 |
+| Encerramento | 2:00.3 | 2:05.8 |
 
-### `narracao-01-dores.mp3` · entra em **0,6 s** · alvo ~9 s
+### `narracao-01-abertura.mp3` · entra em **0,8 s** · alvo ~6 s
 
-> Domingo à noite, três alunos te chamando pra remarcar. Segunda, você ainda não sabe
-> quem faltou nem quem pagou.
+> Deixa eu te apresentar o ArenaHub — o sistema que organiza a sua arena inteira.
 
-### `narracao-02-arena.mp3` · entra em **13 s** · alvo ~55 s
+### `narracao-02-dores.mp3` · entra em **7 s** · alvo ~6 s
+
+> Se a sua arena vive de WhatsApp, caderninho e mensalidade atrasada, você vai
+> reconhecer isto.
+
+### `narracao-03-arena.mp3` · entra em **18 s** · alvo ~55 s
 
 > Vamos começar pelo seu lado.
 >
@@ -103,9 +102,9 @@ o que dá ao espectador algo legível para olhar enquanto você fala.
 > Tem torneio, tem mural de avisos, e tem uma liga com ranking e medalhas — que é o que
 > faz o aluno voltar toda semana.
 >
-> O que está passando rápido aqui não é maquete. É o sistema rodando.
+> O que está passando aqui não é maquete. É o sistema rodando.
 
-### `narracao-03-aluno.mp3` · entra em **82 s** · alvo ~29 s
+### `narracao-04-aluno.mp3` · entra em **89 s** · alvo ~29 s
 
 > Agora o outro lado: o que os seus alunos veem.
 >
@@ -116,15 +115,14 @@ o que dá ao espectador algo legível para olhar enquanto você fala.
 >
 > E a vaga não fica vazia: quem estava na fila é chamado automaticamente.
 
-### `narracao-04-fecho.mp3` · entra em **113 s** · alvo ~5 s
+### `narracao-05-fecho.mp3` · entra em **121 s** · alvo ~5 s
 
 > ArenaHub. Primeiro mês grátis, sem cartão. No ar em cinco minutos.
 
-**~210 palavras**, ~95 s falados nos 117 disponíveis. A folga é de propósito: com a
-imagem correndo, o silêncio entre as frases é o que deixa o vídeo respirar.
+**~210 palavras**, ~95 s falados nos 126 disponíveis. A folga é de propósito: o
+silêncio entre as frases é o que deixa o vídeo respirar.
 
-Se a faixa 02 ficar corrida na gravação, corte a frase do torneio/mural — é a menos
-essencial das cinco.
+Se a faixa 03 ficar corrida, corte a frase do torneio/mural — é a menos essencial.
 
 ---
 
@@ -137,11 +135,11 @@ essencial das cinco.
 > Eu fiz um sistema de gestão de aulas pra arenas — agenda, chamada, mensalidade e
 > crédito no mesmo lugar, e um app pro aluno marcar sozinho.
 >
-> Gravei 35 segundos mostrando por cima. Se fizer sentido, me responde que eu mando o
+> Gravei 40 segundos mostrando por cima. Se fizer sentido, me responde que eu mando o
 > completo. 👇
 
 Manda a mensagem **e** o vídeo. Não peça permissão para mandar o que você já pode
-mandar: o convite dura 35 s e pede a permissão sozinho, no fim.
+mandar: o convite pede a permissão sozinho, no fim.
 
 ### Segunda, quando responderem
 
@@ -154,71 +152,61 @@ mandar: o convite dura 35 s e pede a permissão sozinho, no fim.
 
 ### Dois detalhes que mudam resultado
 
-**A capa é o primeiro frame.** O WhatsApp mostra o primeiro quadro do vídeo como capa
-da mensagem, e é o único que o contato vê garantidamente. Por isso o frame 0 do Convite
-já entra com o gancho escrito, em vez de fundo preto. Se você mexer nos tempos da
-abertura, confira o frame 0 (`npm run still`) antes de mandar.
+**A capa é o primeiro frame.** O WhatsApp mostra o primeiro quadro como capa da
+mensagem, e é o único que o contato vê garantidamente. Por isso a marca já está na tela
+no frame 0, em vez de entrar animada. Confira com `npm run still` antes de mandar.
 
-**Mande como vídeo, não como documento.** Enviado como documento, o WhatsApp não gera
-capa nem toca sozinho — vira um anexo que ninguém abre.
+**Mande como vídeo, não como documento.** Como documento o WhatsApp não gera capa nem
+toca sozinho — vira um anexo que ninguém abre.
 
 ---
 
 # Como gravar
 
 - **A sua voz vale mais que voz sintética.** É primeiro contato: o cliente está
-  comprando de você. Sotaque e hesitação leve ajudam; locução perfeita soa a anúncio.
-- Grave pelo celular, com o fone de ouvido do próprio celular, num cômodo com cortina
-  ou sofá — pano mata eco, e o fone fica perto da boca e pega menos sala.
-- Grave cada faixa 2 ou 3 vezes seguidas e fique com a melhor. Sai mais rápido do que
-  tentar acertar de primeira.
-- Corte o silêncio das pontas e exporte em MP3. O Audacity é grátis e tem "Normalizar"
-  e "Redução de ruído".
+  comprando de você. Locução perfeita demais soa a anúncio.
+- Celular, com o fone de ouvido do próprio celular, num cômodo com cortina ou sofá —
+  pano mata eco, e o fone pega menos sala.
+- Cada faixa 2 ou 3 vezes seguidas, fique com a melhor. Sai mais rápido do que tentar
+  acertar de primeira.
+- Corte o silêncio das pontas e exporte em MP3.
 
 # Como montar o áudio
 
 1. Salve os arquivos em `public/audio/`.
-2. Descomente as faixas em [`src/config.ts`](src/config.ts), em `NARRACAO`.
-3. `npm run studio`, ouça, e ajuste o `em` de quem entrar cedo ou tarde.
-4. `npm run render` (ou `render:convite`).
+2. **Descomente as faixas em [`src/config.ts`](src/config.ts)** — `NARRACAO_CONVITE`
+   para o convite, `NARRACAO_DEMO` para a apresentação. Se o áudio não aparecer, é
+   quase sempre isto: o arquivo está na pasta e a linha continua comentada.
+3. `npm run studio`, ouça, ajuste o `em` de quem entrar cedo ou tarde.
+4. `npm run render:convite` / `npm run render`.
 
 ### Trilha
-
-Em `TRILHA`, uma faixa com `em: 0` cobrindo o vídeo inteiro:
 
 ```ts
 export const TRILHA: Faixa[] = [{ arquivo: 'trilha.mp3', em: 0, volume: 0.16 }]
 ```
 
 O volume ali é o volume **quando ninguém está falando**: enquanto a narração toca, a
-trilha abaixa sozinha. As janelas são calculadas medindo os próprios arquivos de
-narração, então continuam certas depois de você regravar uma faixa.
+trilha abaixa sozinha, e as janelas são calculadas medindo os próprios arquivos de
+narração.
 
 Onde procurar música livre para uso comercial — **confira a licença de cada faixa, não
-a do site**, porque quase todos misturam faixas grátis e pagas na mesma busca:
-
-- **Pixabay Music** — o mais simples, sem exigência de atribuição
-- **Mixkit** — curadoria menor, licença direta
-- **Uppbeat** — grátis com atribuição, ou pago sem
-- **Biblioteca de Áudio do YouTube** — boa, e indica quando exige crédito
-
-Para este vídeo, procure algo instrumental, ritmo constante, sem vocal e sem virada
-dramática: a trilha aqui é chão, não protagonista.
+a do site**, porque quase todos misturam grátis e pago na mesma busca: **Pixabay
+Music** (o mais simples, sem atribuição), **Mixkit**, **Uppbeat** e a **Biblioteca de
+Áudio do YouTube**. Procure instrumental, ritmo constante, sem vocal: a trilha aqui é
+chão, não protagonista.
 
 ### Efeitos
 
-`npm run gerar:sfx` cria `public/audio/sfx/` com `whoosh`, `impacto`, `clique`, `riser`
-e `sub-drop` — sintetizados no próprio projeto, e não baixados, porque material de venda
-com áudio de licença duvidosa é um problema caro por um ganho pequeno.
-
-Ative em `EFEITOS`, com o segundo de cada um. Os que valem a pena:
+`npm run gerar:sfx` cria `public/audio/sfx/` — sintetizados no projeto, não baixados,
+porque material de venda com áudio de licença duvidosa é um problema caro por um ganho
+pequeno. Os que valem:
 
 | Efeito | Onde | Volume |
 |---|---|---|
-| `impacto.wav` | 5,0 s — quando a bola bate e o logo nasce | 0.7 |
-| `whoosh.wav` | nas viradas de bloco (9,4 s / 19,3 s no Convite) | 0.45 |
-| `clique.wav` | no começo de cada parada | 0.4 |
+| `impacto.wav` | 2,3 s — a bola batendo, a marca acende | 0.7 |
+| `whoosh.wav` | 7,0 s — a virada para as dores | 0.45 |
 | `sub-drop.wav` | na entrada da chamada final | 0.5 |
 
-Menos é mais: efeito em toda transição vira ruído e faz o vídeo parecer template. Três
-ou quatro no vídeo inteiro é o suficiente.
+Três ou quatro no vídeo inteiro basta. Efeito em toda transição vira ruído e faz o
+vídeo parecer template.

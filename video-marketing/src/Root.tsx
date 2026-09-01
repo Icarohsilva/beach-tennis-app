@@ -4,16 +4,8 @@ import { parseMedia } from '@remotion/media-parser'
 import { Abertura, DUR_ABERTURA_FRAMES } from './Abertura'
 import { Encerramento } from './Encerramento'
 import { Convite, ConviteProps, DUR_CHAMADA, duracaoConvite } from './Convite'
-import {
-  Demo,
-  DemoProps,
-  JanelaFala,
-  Medida,
-  TRANSICAO,
-  duracaoTotal,
-  DUR_ENCERRAMENTO,
-} from './Demo'
-import { duracaoDosSegmentos, montarSegmentos } from './segmentos'
+import { Demo, DemoProps, JanelaFala, Medida, duracaoTotal, DUR_ENCERRAMENTO } from './Demo'
+import { ajustarAoArquivo, duracaoDosSegmentos, montarSegmentos } from './segmentos'
 import {
   CLIPES,
   CONVITE,
@@ -21,28 +13,21 @@ import {
   DIMENSOES_CONVITE,
   EFEITOS,
   FPS,
-  NARRACAO,
+  NARRACAO_CONVITE,
+  NARRACAO_DEMO,
   TRILHA,
   Clipe as ClipeConfig,
   Faixa,
 } from './config'
 
-/** Duração usada quando o arquivo não pôde ser lido — 45s, só para o Studio abrir. */
-const FALLBACK_SEGUNDOS = 45
-
-/**
- * Piso de duração de um clipe. A TransitionSeries recusa um bloco mais curto do
- * que a transição que vem depois dele, e o erro que ela levanta não diz qual
- * clipe nem por quê. Sem este piso, uma `velocidade` alta demais para uma
- * gravação curta derruba o render inteiro com uma mensagem indecifrável.
- */
-const MIN_FRAMES = TRANSICAO * 2
+/** Duração usada quando o arquivo não pôde ser lido — só para o Studio abrir. */
+const FALLBACK_SEGUNDOS = 60
 
 const absoluta = (caminho: string) =>
   typeof window === 'undefined' ? caminho : new URL(caminho, window.location.href).href
 
-/** Duração bruta de um arquivo, em segundos, com aviso em vez de erro. */
-const duracaoDe = async (caminho: string, rotulo: string) => {
+/** Duração e orientação de um arquivo, com aviso no console em vez de erro. */
+const lerArquivo = async (caminho: string, rotulo: string) => {
   try {
     const { durationInSeconds, dimensions } = await parseMedia({
       src: absoluta(staticFile(caminho)),
@@ -51,47 +36,64 @@ const duracaoDe = async (caminho: string, rotulo: string) => {
     })
     return {
       segundos: durationInSeconds ?? FALLBACK_SEGUNDOS,
-      retrato: dimensions ? dimensions.height >= dimensions.width : true,
-      lido: true,
+      // null quando o arquivo não expõe as dimensões — quem chama decide, com
+      // aviso, em vez de adivinhar aqui.
+      retrato: dimensions ? dimensions.height >= dimensions.width : null,
     }
   } catch (erro) {
     // eslint-disable-next-line no-console
-    console.warn(`[arenahub-video] não consegui ler ${rotulo} — usando ${FALLBACK_SEGUNDOS}s.`, erro)
-    return { segundos: FALLBACK_SEGUNDOS, retrato: true, lido: false }
+    console.warn(
+      `[arenahub-video] não consegui ler public/${caminho} (${rotulo}) — ` +
+        `usando ${FALLBACK_SEGUNDOS}s. Confira o nome do arquivo.`,
+      erro,
+    )
+    return { segundos: FALLBACK_SEGUNDOS, retrato: null }
   }
 }
 
 /**
- * Mede cada gravação e devolve quanto ela ocupa na montagem.
+ * Decide a moldura: o que o config mandar, ou a proporção lida do arquivo.
  *
- * Três coisas saem daqui e as três precisam concordar entre si: a duração total
- * do bloco, a duração só da parte que anda (que `montarSegmentos` fatia) e a
- * orientação (que escolhe a moldura). Tudo derivado do arquivo — nenhum número
- * digitado à mão, para que regravar não obrigue a reajustar a linha do tempo.
+ * Quando o config diz 'auto' e o arquivo não expõe dimensões, avisa e assume
+ * PAISAGEM. Assumir retrato em silêncio era o comportamento anterior, e ele põe
+ * gravação de desktop dentro de um celular desenhado: a imagem sai cortada e o
+ * defeito parece do app, não da edição.
  */
-const medir = async (clipes: ClipeConfig[]): Promise<Medida[]> =>
-  Promise.all(
-    clipes.map(async (clipe): Promise<Medida> => {
-      const { segundos, retrato } = await duracaoDe(`videos/${clipe.arquivo}`, clipe.arquivo)
-      const util = Math.max(1, segundos - clipe.cortarInicio - clipe.cortarFim)
-      // A aceleração encurta a parte que anda; as paradas somam por cima.
-      const framesDeMovimento = Math.max(
-        MIN_FRAMES,
-        Math.round((util / Math.max(1, clipe.velocidade)) * FPS),
-      )
-      const frames = duracaoDosSegmentos(montarSegmentos(clipe, framesDeMovimento, FPS))
+const resolverOrientacao = (clipe: ClipeConfig, lido: boolean | null) => {
+  if (clipe.orientacao === 'retrato') return true
+  if (clipe.orientacao === 'paisagem') return false
+  if (lido !== null) return lido
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[arenahub-video] não consegui ler a proporção de ${clipe.arquivo}; assumindo paisagem. ` +
+      `Se a gravação for de celular, ponha orientacao: 'retrato' no config.`,
+  )
+  return false
+}
 
-      if (framesDeMovimento === MIN_FRAMES) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[arenahub-video] ${clipe.arquivo} a ${clipe.velocidade}x ficou curto demais para a ` +
-            `transição. Segurando em ${MIN_FRAMES} frames; baixe a velocidade.`,
-        )
-      }
-
-      return { frames, framesDeMovimento, retrato }
+/**
+ * Apara os trechos ao tamanho real da gravação e mede quanto cada bloco ocupa.
+ *
+ * A duração do bloco vem dos TRECHOS escolhidos, não do arquivo: é a soma de
+ * (ate - de) / velocidade. O arquivo só é lido por duas razões — descobrir a
+ * orientação (que escolhe a moldura) e cortar um `ate` que passe do fim, que
+ * senão congelaria o último quadro pelo tempo que sobrasse, sem avisar.
+ */
+const prepararClipes = async (clipes: ClipeConfig[]) => {
+  const lidos = await Promise.all(
+    clipes.map(async (clipe) => {
+      const { segundos, retrato } = await lerArquivo(`videos/${clipe.arquivo}`, clipe.arquivo)
+      const ajustado = ajustarAoArquivo(clipe, segundos)
+      const frames = duracaoDosSegmentos(montarSegmentos(ajustado, FPS))
+      const medida: Medida = { frames, retrato: resolverOrientacao(clipe, retrato) }
+      return { clipe: ajustado, medida }
     }),
   )
+  return {
+    clipes: lidos.map((l) => l.clipe),
+    medidas: lidos.map((l) => l.medida),
+  }
+}
 
 /**
  * Onde a narração fala, para a trilha abaixar sozinha. Mede os próprios arquivos
@@ -101,56 +103,42 @@ const medir = async (clipes: ClipeConfig[]): Promise<Medida[]> =>
 const medirFala = async (faixas: Faixa[]): Promise<JanelaFala[]> =>
   Promise.all(
     faixas.map(async (faixa): Promise<JanelaFala> => {
-      const { segundos } = await duracaoDe(`audio/${faixa.arquivo}`, faixa.arquivo)
+      const { segundos } = await lerArquivo(`audio/${faixa.arquivo}`, faixa.arquivo)
       return { de: Math.round(faixa.em * FPS), ate: Math.round((faixa.em + segundos) * FPS) }
     }),
   )
 
 const calcularDemo = async ({ props }: { props: DemoProps }) => {
-  const [medidas, janelasFala] = await Promise.all([medir(props.clipes), medirFala(props.faixas)])
-  return {
-    durationInFrames: duracaoTotal(medidas),
-    props: { ...props, medidas, janelasFala },
-  }
+  const [{ clipes, medidas }, janelasFala] = await Promise.all([
+    prepararClipes(props.clipes),
+    medirFala(props.faixas),
+  ])
+  return { durationInFrames: duracaoTotal(medidas), props: { ...props, clipes, medidas, janelasFala } }
 }
 
 /**
- * O convite não define velocidade: ele pede "me dá 8 segundos desta janela da
- * gravação" e a velocidade sai daí. Assim a mesma gravação serve aos dois
- * vídeos, e trocá-la por uma mais longa não desregula o convite.
+ * O convite usa as MESMAS gravações, com trechos próprios (mais curtos). Trocar
+ * a gravação por outra não desregula nada: os trechos são aparados ao arquivo.
  */
 const calcularConvite = async ({ props }: { props: ConviteProps }) => {
-  const brutos = await Promise.all(
-    CLIPES.map((clipe) => duracaoDe(`videos/${clipe.arquivo}`, clipe.arquivo)),
-  )
-
-  const clipes: ClipeConfig[] = CLIPES.map((clipe, i) => {
-    const bloco = CONVITE.blocos[i]
-    const inicio = bloco?.de ?? clipe.cortarInicio
-    const disponivel = Math.max(1, brutos[i].segundos - inicio)
-    // A janela pedida, limitada ao que a gravação realmente tem depois de `de`.
-    const janela = Math.min(bloco?.janela ?? disponivel, disponivel)
-    const alvo = bloco?.segundos ?? 8
-    return {
-      ...clipe,
-      cortarInicio: inicio,
-      // O corte de fim vira o resto da gravação: o convite mostra só a janela.
-      cortarFim: Math.max(0, brutos[i].segundos - inicio - janela),
-      velocidade: Math.max(1, janela / alvo),
-      paradas: bloco?.paradas ?? [],
-      legendas: [],
-    }
-  })
-
-  const [medidas, janelasFala] = await Promise.all([medir(clipes), medirFala(props.faixas)])
-  return {
-    durationInFrames: duracaoConvite(medidas),
-    props: { ...props, clipes, medidas, janelasFala },
-  }
+  const base: ClipeConfig[] = CLIPES.map((clipe, i) => ({
+    ...clipe,
+    trechos: CONVITE.trechos[i] ?? clipe.trechos.slice(0, 1),
+    legendas: [],
+  }))
+  const [{ clipes, medidas }, janelasFala] = await Promise.all([
+    prepararClipes(base),
+    medirFala(props.faixas),
+  ])
+  return { durationInFrames: duracaoConvite(medidas), props: { ...props, clipes, medidas, janelasFala } }
 }
 
-const audioPadrao = { faixas: NARRACAO, trilha: TRILHA, efeitos: EFEITOS, janelasFala: [] as JanelaFala[] }
-const semAudio = { faixas: [] as Faixa[], trilha: [] as Faixa[], efeitos: [] as Faixa[], janelasFala: [] as JanelaFala[] }
+const semAudio = {
+  faixas: [] as Faixa[],
+  trilha: [] as Faixa[],
+  efeitos: [] as Faixa[],
+  janelasFala: [] as JanelaFala[],
+}
 
 export const RemotionRoot: React.FC = () => (
   <>
@@ -161,7 +149,17 @@ export const RemotionRoot: React.FC = () => (
       fps={FPS}
       {...DIMENSOES_CONVITE}
       durationInFrames={DUR_ABERTURA_FRAMES + DUR_CHAMADA}
-      defaultProps={{ clipes: CLIPES, medidas: [] as Medida[], ...audioPadrao }}
+      defaultProps={{
+        clipes: CLIPES,
+        medidas: [] as Medida[],
+        // Narração PRÓPRIA do convite: os dois vídeos têm blocos e durações
+        // diferentes, e uma lista compartilhada faria as faixas de um cair no
+        // lugar errado do outro — ou fora dele, sumindo sem aviso nenhum.
+        faixas: NARRACAO_CONVITE,
+        trilha: TRILHA,
+        efeitos: EFEITOS,
+        janelasFala: [] as JanelaFala[],
+      }}
       calculateMetadata={calcularConvite}
     />
 
@@ -172,12 +170,19 @@ export const RemotionRoot: React.FC = () => (
       fps={FPS}
       {...DIMENSOES}
       durationInFrames={DUR_ABERTURA_FRAMES}
-      defaultProps={{ clipes: CLIPES, medidas: [] as Medida[], ...audioPadrao }}
+      defaultProps={{
+        clipes: CLIPES,
+        medidas: [] as Medida[],
+        faixas: NARRACAO_DEMO,
+        trilha: TRILHA,
+        efeitos: EFEITOS,
+        janelasFala: [] as JanelaFala[],
+      }}
       calculateMetadata={calcularDemo}
     />
 
-    {/* Recortes: mandar só a parte que interessa para cada conversa. Sem áudio,
-        porque os tempos das faixas são medidos no vídeo completo. */}
+    {/* Recortes: mandar só a parte que interessa. Sem áudio, porque os tempos
+        das faixas são medidos no vídeo completo. */}
     <Composition
       id="DemoArena"
       component={Demo}
