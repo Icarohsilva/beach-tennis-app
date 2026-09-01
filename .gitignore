@@ -62,6 +62,11 @@ devserver.log
 
 # gravações brutas do vídeo de demonstração (pesadas, e public/ vai para o deploy)
 /public/videos/
+# narração e trilha: public/ é publicado, e trilha licenciada servida na web é
+# problema de licença. Os efeitos de sfx/ são gerados por npm run gerar:sfx e
+# são nossos, então esses ficam versionados.
+/public/audio/*
+!/public/audio/sfx/
 # projeto Remotion (video-marketing/)
 /video-marketing/node_modules/
 /video-marketing/out/

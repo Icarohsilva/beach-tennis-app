@@ -3,31 +3,65 @@ import { AbsoluteFill, Audio, Sequence, staticFile, useVideoConfig } from 'remot
 import { TransitionSeries, linearTiming } from '@remotion/transitions'
 import { fade } from '@remotion/transitions/fade'
 import { wipe } from '@remotion/transitions/wipe'
-import { Abertura } from './Abertura'
+import { Abertura, DUR_ABERTURA_FRAMES } from './Abertura'
 import { Capitulo } from './Capitulo'
 import { Clipe } from './Clipe'
 import { Encerramento } from './Encerramento'
 import { cores } from './theme'
 import type { Clipe as ClipeConfig, Faixa } from './config'
 
-export const DUR_ABERTURA = 195
+export const DUR_ABERTURA = DUR_ABERTURA_FRAMES
 export const DUR_CAPITULO = 90
 export const DUR_ENCERRAMENTO = 165
 export const TRANSICAO = 18
 
 /** Medida de cada arquivo, apurada em calculateMetadata (ver Root.tsx). */
-export type Medida = { frames: number; retrato: boolean }
+export type Medida = {
+  /** Duração total do bloco, já com as paradas somadas. */
+  frames: number
+  /** Duração só da parte que anda — o que `montarSegmentos` precisa. */
+  framesDeMovimento: number
+  retrato: boolean
+}
+
+/** Trecho em que alguém está falando, em frames. Usado para abaixar a trilha. */
+export type JanelaFala = { de: number; ate: number }
 
 export type DemoProps = {
   clipes: ClipeConfig[]
   medidas: Medida[]
   /**
-   * Narração e trilha. Fica vazia nos recortes (DemoAluno/DemoArena): os tempos
-   * das faixas são medidos no vídeo COMPLETO, então num recorte elas cairiam no
-   * lugar errado — e narração fora de hora é pior do que nenhuma.
+   * Narração, trilha e efeitos. Ficam vazias nos recortes (DemoAluno/DemoArena):
+   * os tempos das faixas são medidos no vídeo COMPLETO, então num recorte elas
+   * cairiam no lugar errado — e narração fora de hora é pior do que nenhuma.
    */
   faixas: Faixa[]
+  trilha: Faixa[]
+  efeitos: Faixa[]
+  /** Onde a narração fala, para a trilha sair da frente. */
+  janelasFala: JanelaFala[]
 }
+
+/**
+ * Volume da trilha ao longo do tempo: cai enquanto a narração fala e volta
+ * depois. Trilha em volume fixo ou come a voz ou fica inaudível — não existe um
+ * número que sirva para os dois momentos.
+ *
+ * A rampa evita o degrau: a música baixando de repente chama mais atenção do que
+ * a música alta.
+ */
+export const volumeComDucking =
+  (base: number, janelas: JanelaFala[], atenuacao = 0.3, rampa = 12) =>
+  (frame: number) => {
+    let fator = 1
+    for (const janela of janelas) {
+      if (frame < janela.de - rampa || frame > janela.ate + rampa) continue
+      const entrando = Math.min(1, Math.max(0, (frame - (janela.de - rampa)) / rampa))
+      const saindo = Math.min(1, Math.max(0, (janela.ate + rampa - frame) / rampa))
+      fator = Math.min(fator, 1 - Math.min(entrando, saindo) * (1 - atenuacao))
+    }
+    return base * fator
+  }
 
 /**
  * Quantos frames o vídeo inteiro tem. Fica aqui, e não no Root, porque a conta
@@ -46,19 +80,56 @@ export const duracaoTotal = (medidas: Medida[]) => {
   )
 }
 
-export const Demo: React.FC<DemoProps> = ({ clipes, medidas, faixas }) => {
+/** Narração e efeitos: volume fixo. Trilha: volume com ducking. */
+export const FaixasDeAudio: React.FC<{
+  faixas: Faixa[]
+  trilha: Faixa[]
+  efeitos: Faixa[]
+  janelasFala: JanelaFala[]
+}> = ({ faixas, trilha, efeitos, janelasFala }) => {
   const { fps } = useVideoConfig()
 
+  const simples = [...faixas, ...efeitos]
+
+  return (
+    <>
+      {simples.map((faixa) => (
+        <Sequence key={`${faixa.arquivo}-${faixa.em}`} from={Math.round(faixa.em * fps)}>
+          <Audio src={staticFile(`audio/${faixa.arquivo}`)} volume={faixa.volume} />
+        </Sequence>
+      ))}
+      {trilha.map((faixa) => {
+        const inicio = Math.round(faixa.em * fps)
+        // As janelas são medidas na linha do tempo do vídeo; dentro da Sequence
+        // o frame recomeça do zero, então desloca-se a janela, não o áudio.
+        const janelas = janelasFala.map((j) => ({ de: j.de - inicio, ate: j.ate - inicio }))
+        return (
+          <Sequence key={`trilha-${faixa.arquivo}-${faixa.em}`} from={inicio}>
+            <Audio
+              src={staticFile(`audio/${faixa.arquivo}`)}
+              volume={volumeComDucking(faixa.volume, janelas)}
+            />
+          </Sequence>
+        )
+      })}
+    </>
+  )
+}
+
+export const Demo: React.FC<DemoProps> = ({
+  clipes,
+  medidas,
+  faixas,
+  trilha,
+  efeitos,
+  janelasFala,
+}) => {
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo }}>
       {/* Áudio fora da TransitionSeries de propósito: dentro dela cada faixa
           viraria um bloco da montagem e as transições comeriam 18 frames de
           narração em cada emenda. */}
-      {faixas.map((faixa) => (
-        <Sequence key={`${faixa.arquivo}-${faixa.em}`} from={Math.round(faixa.em * fps)}>
-          <Audio src={staticFile(`audio/${faixa.arquivo}`)} volume={faixa.volume} />
-        </Sequence>
-      ))}
+      <FaixasDeAudio faixas={faixas} trilha={trilha} efeitos={efeitos} janelasFala={janelasFala} />
 
       <TransitionSeries>
         <TransitionSeries.Sequence durationInFrames={DUR_ABERTURA}>
@@ -66,7 +137,11 @@ export const Demo: React.FC<DemoProps> = ({ clipes, medidas, faixas }) => {
         </TransitionSeries.Sequence>
 
         {clipes.map((clipe, i) => {
-          const medida = medidas[i] ?? { frames: 30 * 45, retrato: true }
+          const medida = medidas[i] ?? {
+            frames: 30 * 45,
+            framesDeMovimento: 30 * 45,
+            retrato: true,
+          }
           return (
             <React.Fragment key={clipe.arquivo}>
               <TransitionSeries.Transition
@@ -82,7 +157,11 @@ export const Demo: React.FC<DemoProps> = ({ clipes, medidas, faixas }) => {
                 timing={linearTiming({ durationInFrames: TRANSICAO })}
               />
               <TransitionSeries.Sequence durationInFrames={medida.frames}>
-                <Clipe clipe={clipe} retrato={medida.retrato} />
+                <Clipe
+                  clipe={clipe}
+                  retrato={medida.retrato}
+                  framesDeMovimento={medida.framesDeMovimento}
+                />
               </TransitionSeries.Sequence>
             </React.Fragment>
           )

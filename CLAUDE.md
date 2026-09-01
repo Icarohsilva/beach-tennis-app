@@ -298,33 +298,50 @@ saem em `tests/.artifacts/bancada-<largura>px.png`. Ao mexer num componente da
 bancada, atualize a fixture: ela replica o layout real e um teste sobre marcação
 desatualizada passa sem medir nada.
 
-### Vídeo de demonstração (Remotion)
+### Vídeos de demonstração (Remotion)
 
-[video-marketing/](video-marketing/) monta em código o vídeo que vai para o cliente no
-primeiro contato: abertura de marca → gravação do aluno → gravação do painel → chamada para
-ação. É um projeto **separado**, com `package.json` próprio, fora do build da Vercel — o
+[video-marketing/](video-marketing/) monta em código os **dois** vídeos da prospecção:
+o **Convite** (~35 s, vertical) que acompanha o primeiro "oi" no WhatsApp, e a
+**Apresentação** (~1:57, horizontal) enviada depois que a arena responde. A divisão é
+por etapa da conversa e não por público (aluno/arena): em prospecção fria a conclusão
+desaba acima de 90 s, então dois minutos é bom como segundo toque e ruim como primeiro.
+Projeto **separado**, com `package.json` próprio, fora do build da Vercel — o
 `tsconfig.json` do app o exclui de propósito.
 
-As gravações brutas ficam em `public/videos/` e são **gitignoradas**: são pesadas e
-`public/` é publicado no deploy. O `remotion.config.ts` aponta o `publicDir` para `../public`,
-então `staticFile('videos/aluno.mp4')` e a marca em `public/brand/` resolvem sem duplicar
-arquivo.
+As gravações brutas ficam em `public/videos/` e são **gitignoradas** (pesadas, e
+`public/` vai para o deploy). O `remotion.config.ts` aponta o `publicDir` para
+`../public`, então `staticFile('videos/admin.mp4')`, a marca e as fontes resolvem sem
+duplicar arquivo.
 
-Duas decisões que não são óbvias e quebram em silêncio se desfeitas:
+Decisões que não são óbvias e quebram em silêncio se desfeitas:
 
-- **A duração não é digitada.** `src/Root.tsx` mede cada arquivo com `parseMedia` em
-  `calculateMetadata` e monta a linha do tempo a partir disso — regravar mais longo não
-  exige mexer em número nenhum. A mesma medição decide a moldura: gravação vertical entra
-  num aparelho desenhado com painel de argumentos na sobra lateral, gravação de desktop
-  entra numa janela e ocupa a largura toda.
-- **As fontes vêm de `public/fonts/`, não do CDN do Google**, e são carregadas pela FontFace
-  API com `delayRender` próprio. Pelo CDN são 100+ requisições por aba de render, e um render
-  sem rede cai para a fonte de sistema **entregando o vídeo com outra tipografia sem avisar**;
-  o `loadFont` do `@remotion/fonts` tem um `delayRender` interno de 28s que não é
-  configurável e estoura quando a aba está decodificando vídeo.
+- **Nada de duração é digitado.** `src/Root.tsx` mede cada arquivo com `parseMedia` em
+  `calculateMetadata`, divide pela `velocidade`, soma as paradas e monta a linha do
+  tempo. A mesma medição escolhe a moldura (vertical → aparelho com painel lateral;
+  desktop → janela) e calcula a velocidade do Convite a partir dos segundos pedidos.
+- **`segmentos.ts` é a única fonte da matemática das paradas** (os congelamentos com
+  rótulo), e é chamado nos dois lados: no Root para reservar a duração e no Clipe para
+  desenhar. Se as contas divergissem, o bloco terminaria fora do que a linha do tempo
+  reservou — vídeo cortado ou congelado no fim, sem erro nenhum aparecendo.
+- **A ordem de `CLIPES` é arena → aluno**, e é decisão comercial, não estética: quem
+  decide a compra é o dono, e começar pelo aluno gasta a janela de maior abandono com
+  telas que ainda não são problema dele.
+- **O frame 0 do Convite já entra com o gancho escrito** (por isso `ENTRADA_DOR[0]` é
+  negativo): o WhatsApp usa o primeiro quadro como capa da mensagem, e capa preta é a
+  diferença entre abrir e passar direto.
+- **As fontes vêm de `public/fonts/`**, carregadas pela FontFace API com `delayRender`
+  próprio. Pelo CDN do Google são 100+ requisições por aba de render, e um render sem
+  rede cai para a fonte de sistema **entregando o vídeo com outra tipografia sem
+  avisar**; o `loadFont` do `@remotion/fonts` tem um `delayRender` interno de 28 s que
+  não é configurável e estoura quando a aba está decodificando vídeo.
+- Os efeitos sonoros são **sintetizados** por `scripts/gerar-sfx.mjs` (Node puro, WAV
+  escrito na mão) em vez de baixados: o vídeo é material de venda, e áudio de licença
+  duvidosa nele é um problema caro por um ganho pequeno.
 
-Editar corte, texto, legenda ou formato (paisagem/retrato) é mexer só em
-[video-marketing/src/config.ts](video-marketing/src/config.ts). O resto está no
+Editar corte, texto, velocidade, parada, áudio ou formato é mexer só em
+[video-marketing/src/config.ts](video-marketing/src/config.ts). Os roteiros de narração,
+os tempos e as mensagens de WhatsApp estão em
+[video-marketing/NARRACAO.md](video-marketing/NARRACAO.md); o resto no
 [README de lá](video-marketing/README.md).
 
 ### Planned but Not Yet Implemented

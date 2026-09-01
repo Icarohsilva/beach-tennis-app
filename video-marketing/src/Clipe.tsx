@@ -1,8 +1,10 @@
 import React from 'react'
 import {
   AbsoluteFill,
+  Freeze,
   Img,
   OffthreadVideo,
+  Series,
   interpolate,
   spring,
   staticFile,
@@ -10,7 +12,9 @@ import {
   useVideoConfig,
 } from 'remotion'
 import { SORA, INTER } from './componentes/tipografia'
+import { escalaDoQuadro } from './Abertura'
 import { cores } from './theme'
+import { montarSegmentos, paradaNoFrame } from './segmentos'
 import type { Clipe as ClipeConfig } from './config'
 
 /**
@@ -112,6 +116,65 @@ const PainelLateral: React.FC<{ clipe: ClipeConfig; escala: number }> = ({ clipe
   )
 }
 
+/** Escurece a imagem congelada. Fica dentro da moldura, colada ao vídeo. */
+const EscurecerParada: React.FC = () => {
+  const frame = useCurrentFrame()
+  const { fps, durationInFrames } = useVideoConfig()
+  const ent = spring({ frame, fps, config: { damping: 14, mass: 0.5 } })
+  const sai = interpolate(frame, [durationInFrames - 6, durationInFrames], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
+  // O quadro parado sozinho parece defeito; escurecido, parece intenção — e o
+  // olho sobe para o rótulo em vez de procurar movimento na imagem.
+  return <AbsoluteFill style={{ background: cores.fundo, opacity: ent * (1 - sai) * 0.45 }} />
+}
+
+/**
+ * O rótulo que acompanha a parada. Desenhado FORA da moldura, no rodapé da
+ * composição: em quadro vertical com gravação de desktop sobra metade da tela,
+ * e um rótulo preso à moldura ficaria pequeno no meio de um vazio.
+ */
+const RotuloParada: React.FC<{
+  texto: string
+  local: number
+  frames: number
+  escala: number
+}> = ({ texto, local, frames, escala }) => {
+  const { fps } = useVideoConfig()
+  const ent = spring({ frame: local, fps, config: { damping: 14, mass: 0.5 } })
+  const sai = interpolate(local, [frames - 6, frames], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  })
+  const visivel = ent * (1 - sai)
+
+  return (
+    <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', pointerEvents: 'none' }}>
+      <div
+        style={{
+          margin: `0 ${56 * escala}px ${90 * escala}px`,
+          padding: `${22 * escala}px ${44 * escala}px`,
+          borderRadius: 20 * escala,
+          background: `linear-gradient(135deg, ${cores.marcaEscura}, ${cores.marcaProfunda})`,
+          color: '#fff',
+          fontFamily: SORA,
+          fontWeight: 700,
+          fontSize: 52 * escala,
+          lineHeight: 1.2,
+          textAlign: 'center',
+          letterSpacing: -0.5,
+          boxShadow: `0 ${20 * escala}px ${60 * escala}px rgba(0,0,0,0.55)`,
+          transform: `translateY(${(1 - ent) * 44 * escala + sai * 26 * escala}px) scale(${0.9 + ent * 0.1})`,
+          opacity: visivel,
+        }}
+      >
+        {texto}
+      </div>
+    </AbsoluteFill>
+  )
+}
+
 /**
  * Uma gravação de tela dentro do vídeo, emoldurada com a marca.
  *
@@ -120,11 +183,21 @@ const PainelLateral: React.FC<{ clipe: ClipeConfig; escala: number }> = ({ clipe
  * sobras laterais preenchidas pela marca; gravação de desktop entra numa janela
  * com barra de título. Esticar um vídeo 9:16 para 16:9 — ou deixar duas tarjas
  * pretas — é o que faz demonstração parecer amadora.
+ *
+ * Por dentro da moldura o clipe é uma `Series`: trechos que andam alternados com
+ * paradas congeladas. Ver `segmentos.ts`.
  */
-export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clipe, retrato }) => {
+export const Clipe: React.FC<{
+  clipe: ClipeConfig
+  retrato: boolean
+  framesDeMovimento: number
+  /** Em retrato o painel lateral só faz sentido quando há quadro sobrando. */
+  comPainel?: boolean
+}> = ({ clipe, retrato, framesDeMovimento, comPainel = true }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames, width, height } = useVideoConfig()
-  const escala = width / 1920
+  const escala = escalaDoQuadro(width, height)
+  const quadroRetrato = height > width
 
   const entrada = spring({ frame, fps, config: { damping: 16, mass: 0.8 } })
   // Respiro final: a moldura recua um pouco antes de cortar para o próximo bloco.
@@ -133,21 +206,48 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
     extrapolateRight: 'clamp',
   })
 
-  const alturaMoldura = height * (retrato ? 0.86 : 0.8)
-  const larguraMoldura = retrato ? alturaMoldura * (9 / 16) : alturaMoldura * (16 / 9)
+  // Painel lateral só cabe quando a gravação é vertical E o quadro é horizontal.
+  const painel = comPainel && retrato && !quadroRetrato
+
+  // Encaixe dentro da caixa disponível, respeitando LARGURA e ALTURA. Calcular
+  // só pela altura (como antes) estoura o quadro quando a proporção da gravação
+  // e a do vídeo divergem — gravação de desktop num quadro vertical viraria uma
+  // moldura mais larga que a tela, cortada em silêncio.
+  const aspecto = retrato ? 9 / 16 : 16 / 9
+  const larguraMax = width * (painel ? 0.5 : 0.86)
+  const alturaMax = height * (painel ? 0.86 : 0.8)
+  const larguraMoldura = Math.min(larguraMax, alturaMax * aspecto)
+  const alturaMoldura = larguraMoldura / aspecto
+
+  const segmentos = montarSegmentos(clipe, framesDeMovimento, fps)
+  const parada = paradaNoFrame(segmentos, frame)
+
+  const video = (trimBefore: number, congelado: boolean) => (
+    <OffthreadVideo
+      src={staticFile(`videos/${clipe.arquivo}`)}
+      trimBefore={trimBefore}
+      // Numa parada a taxa não importa (o frame está fixo), e 1 evita que o
+      // Remotion procure um tempo de origem além do fim do arquivo.
+      playbackRate={congelado ? 1 : clipe.velocidade}
+      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      // A demonstração é narrada por você; o áudio bruto de gravação de tela
+      // acelerada só atrapalha.
+      muted
+    />
+  )
 
   return (
     <AbsoluteFill style={{ backgroundColor: cores.fundo, fontFamily: INTER }}>
-      {/* Fundo de marca: gradiente + brilho lateral, para a sobra ao lado do
-          celular não ser um vazio preto. */}
+      {/* Fundo de marca: gradiente + brilho, para a sobra ao lado do celular
+          não ser um vazio preto. */}
       <AbsoluteFill
         style={{
           background: `radial-gradient(ellipse at 50% 20%, ${cores.marcaProfunda}33 0%, transparent 55%), linear-gradient(160deg, ${cores.fundoCard} 0%, ${cores.fundo} 55%)`,
         }}
       />
 
-      {/* Marca d'água discreta, canto superior esquerdo. Em retrato ela sai:
-          o painel lateral já carrega a marca, e as duas juntas brigam. */}
+      {/* Marca d'água discreta. Em retrato com painel ela sai: o painel já
+          carrega a marca, e as duas juntas brigam. */}
       <div
         style={{
           position: 'absolute',
@@ -156,7 +256,7 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
           display: 'flex',
           alignItems: 'center',
           gap: 14 * escala,
-          opacity: retrato ? 0 : 0.9,
+          opacity: painel ? 0 : 0.9,
         }}
       >
         <Img
@@ -176,7 +276,7 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
         </span>
       </div>
 
-      {retrato ? <PainelLateral clipe={clipe} escala={escala} /> : null}
+      {painel ? <PainelLateral clipe={clipe} escala={escala} /> : null}
 
       <AbsoluteFill
         style={{
@@ -184,9 +284,9 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
           // Gravação de celular em quadro 16:9 deixa 60% da tela vazia. Em vez de
           // esticar o vídeo (que distorce) ou centralizar (que desperdiça), o
           // aparelho vai para a direita e o painel ocupa a sobra com argumento
-          // de venda. Em desktop não há sobra, então segue centralizado.
-          alignItems: retrato ? 'flex-end' : 'center',
-          paddingRight: retrato ? 150 * escala : 0,
+          // de venda. Sem painel, segue centralizado.
+          alignItems: painel ? 'flex-end' : 'center',
+          paddingRight: painel ? 150 * escala : 0,
           transform: `scale(${0.94 + entrada * 0.06 - saida * 0.03})`,
           opacity: entrada,
         }}
@@ -203,21 +303,29 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
             position: 'relative',
           }}
         >
-          <OffthreadVideo
-            src={staticFile(`videos/${clipe.arquivo}`)}
-            trimBefore={Math.round(clipe.cortarInicio * fps)}
-            playbackRate={clipe.velocidade}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            // A demonstração é narrada por você ao vivo / por legenda; o áudio
-            // bruto de gravação de tela só atrapalha.
-            muted
-          />
+          <Series>
+            {segmentos.map((segmento, i) =>
+              segmento.tipo === 'movimento' ? (
+                <Series.Sequence key={i} durationInFrames={segmento.frames}>
+                  {video(segmento.trimBefore, false)}
+                </Series.Sequence>
+              ) : (
+                <Series.Sequence key={i} durationInFrames={segmento.frames}>
+                  {/* frame={0} com trimBefore no frame desejado mostra exatamente
+                      aquele quadro da origem: o Freeze zera o deslocamento da
+                      Series, e o OffthreadVideo começa em trimBefore. */}
+                  <Freeze frame={0}>{video(segmento.trimBefore, true)}</Freeze>
+                  <EscurecerParada />
+                </Series.Sequence>
+              ),
+            )}
+          </Series>
         </div>
       </AbsoluteFill>
 
       {/* Selo de velocidade. Sem ele, uma gravação a 10x parece o app travando
           ou o vídeo com defeito — o cliente precisa ler que a pressa é edição. */}
-      {clipe.velocidade > 1 ? (
+      {clipe.velocidade >= 1.5 ? (
         <div
           style={{
             position: 'absolute',
@@ -234,8 +342,17 @@ export const Clipe: React.FC<{ clipe: ClipeConfig; retrato: boolean }> = ({ clip
             opacity: entrada,
           }}
         >
-          <span style={{ color: cores.marca }}>▶</span> {clipe.velocidade}× · avanço rápido
+          <span style={{ color: cores.marca }}>▶</span> {Math.round(clipe.velocidade)}× · avanço rápido
         </div>
+      ) : null}
+
+      {parada ? (
+        <RotuloParada
+          texto={parada.texto}
+          local={parada.local}
+          frames={parada.frames}
+          escala={escala}
+        />
       ) : null}
 
       {/* Legendas (lower third) */}
