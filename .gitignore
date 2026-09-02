@@ -59,3 +59,8 @@ devserver.log
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# gravacoes brutas e projeto de video (marketing) - nao vao para o repo
+# admin.mp4 (482MB) e aluno.mp4 (226MB) estouram o limite de 100MB do GitHub
+/public/videos/
+/video-marketing/node_modules/
