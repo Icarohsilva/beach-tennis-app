@@ -235,8 +235,12 @@ export async function reconcileAllActiveEnrollments(
 
     for (const e of ordered) {
       try {
+        // waitlistOnFull explícito (embora já seja o default): turma cheia na
+        // hora da reconciliação em lote põe o fixo na fila em vez de deixá-lo
+        // sem reserva E sem fila — o limbo que fazia a chamada mostrar mais
+        // gente que a lotação permite (ver reconcileEnrollment.ts).
         const r = await reconcileEnrollmentCredits(
-          e.studentId, e.classId, from, to, adminClient, budget, vacationDates,
+          e.studentId, e.classId, from, to, adminClient, budget, vacationDates, true,
         )
         totals.booked += r.booked
         totals.skipped += r.skipped

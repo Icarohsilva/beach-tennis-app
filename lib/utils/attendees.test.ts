@@ -67,4 +67,27 @@ describe('mergeSessionAttendees', () => {
     })
     expect(result.map((a) => a.name)).toEqual(['Ana', 'Carla'])
   })
+
+  it('remove o fixo sem reserva que está na fila de espera (turma cheia): ele não tem vaga, só a vez', () => {
+    // Bug relatado: turma com capacidade 8, 7 confirmados, mas o fixo sem
+    // reserva ainda aparecia como presente — 9 na lista. Estar na fila não é
+    // estar na aula.
+    const result = mergeSessionAttendees({
+      booked: [diego],
+      enrolled: [ana, bruno, carla],
+      optedOut: new Set(),
+      waitlisted: new Set(['b']),
+    })
+    expect(result.map((a) => a.name)).toEqual(['Ana', 'Carla', 'Diego'])
+  })
+
+  it('mantém quem tem reserva confirmada mesmo constando (por engano) como fila', () => {
+    const result = mergeSessionAttendees({
+      booked: [ana],
+      enrolled: [],
+      optedOut: new Set(),
+      waitlisted: new Set(['a']),
+    })
+    expect(result.map((a) => a.id)).toEqual(['a'])
+  })
 })

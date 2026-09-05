@@ -7,6 +7,7 @@ import { markAttendance } from '@/features/aulas/actions'
 import { AddStudentToSession, type AddableStudent } from '@/features/aulas/AddStudentToSession'
 import { addStudentToSession, removeStudentFromSession } from '@/features/aulas/adminActions'
 import { getSessionWaitlist } from '@/features/aulas/waitlistQueries'
+import { expectedStudentIds } from '@/features/aulas/sessionUtils'
 import { WaitlistPanel } from '@/features/aulas/WaitlistPanel'
 import { isSubscriptionCurrent } from '@/lib/billing/periodicity'
 import { recordCheckin } from '@/features/checkin/actions'
@@ -69,35 +70,17 @@ export default async function SessionDetailPage({ params }: Props) {
   const horario = resolveSession(typedSession, cls)
 
   // Quem a aula toca: reservas confirmadas + alunos fixos da turma, menos quem
-  // avisou que não vem. Mesma regra da agenda do aluno — sem isso o fixo sem
-  // reserva gerada não aparece na chamada e a falta dele nunca é registrada.
-  const { data: bookings } = await adminClient
-    .from('session_bookings')
-    .select('student_id, status')
-    .eq('session_id', params.sessionId)
-    .eq('organization_id', orgId)
-    .in('status', ['confirmed', 'cancelled'])
-
-  const bookingRows = (bookings ?? []) as { student_id: string; status: string }[]
-  const confirmedIds = bookingRows.filter((b) => b.status === 'confirmed').map((b) => b.student_id)
-  const optedOut = new Set(bookingRows.filter((b) => b.status === 'cancelled').map((b) => b.student_id))
-
-  const { data: fixedRaw } = await adminClient
-    .from('enrollments')
-    .select('student_id')
-    .eq('class_id', typedSession.class_id)
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-
-  const fixedIds = ((fixedRaw ?? []) as { student_id: string }[]).map((e) => e.student_id)
-
-  const seen = new Set<string>()
-  const studentIds: string[] = []
-  for (const id of [...confirmedIds, ...fixedIds.filter((f) => !optedOut.has(f))]) {
-    if (seen.has(id)) continue
-    seen.add(id)
-    studentIds.push(id)
-  }
+  // avisou que não vem ou está na fila de espera desta sessão (turma cheia na
+  // reconciliação não é vaga, é vez) — mesma regra da agenda do aluno.
+  // Compartilhada com sessionDetailQuery.ts via expectedStudentIds em vez de
+  // reimplementada aqui: era a duplicação que deixou a chamada mostrar mais
+  // gente do que `max_students` permite quando só um dos dois lados aprendeu a
+  // excluir a fila.
+  const studentIds = await expectedStudentIds(adminClient, {
+    orgId,
+    sessionId: params.sessionId,
+    classId: typedSession.class_id,
+  })
 
   // Identidade (full_name) vem de profiles; nível/tipo são por-academia e vêm
   // da membership do aluno NESTA org.
