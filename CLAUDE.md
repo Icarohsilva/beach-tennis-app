@@ -302,6 +302,12 @@ Dois defeitos se repetem — vale conhecer os dois antes de escrever linha nova:
    texto inteiro passa a contar para a largura mínima da tabela: as reticências nunca
    aparecem e um wrapper `overflow-hidden` amputa colunas em silêncio. Use
    `table-fixed` + `max-w-0` na célula.
+3. **`truncate` num item flex sem `min-w-0`.** Um filho flex não encolhe abaixo da
+   largura do próprio conteúdo por padrão (`min-width: auto`) — `truncate` só reduz
+   quando o item já pode ficar menor que o texto. Sem `min-w-0` ao lado de `flex-1
+   truncate`, uma URL ou nome comprido em fonte monoespaçada empurra o card (e a
+   página inteira) para além da tela em vez de cortar com reticências; foi assim que
+   `CoverImageCard.tsx` vazava a fileira de "Ações" inteira para fora da viewport.
 
 `npm run test:responsive` mede isso em 320/375/414px sobre a bancada
 [app/dev/responsivo](app/dev/responsivo/page.tsx) (fixtures fixas, **sem** Supabase — roda

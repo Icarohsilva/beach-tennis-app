@@ -86,14 +86,19 @@ export function CoverImageCard({ tournamentId, coverImageUrl, shareUrl }: CoverI
         </label>
       </div>
 
-      {/* URL copiável */}
+      {/* URL copiável.
+          min-w-0 é o que falta para `truncate` valer num item flex: por
+          padrão um filho flex não encolhe abaixo da largura do próprio
+          conteúdo (min-width:auto), então um UUID de 36 caracteres em
+          font-mono empurrava o card — e a página inteira — para além da
+          tela em vez de truncar com reticências. */}
       <div className="flex gap-2 items-center">
-        <span className="flex-1 bg-surface border border-surface-border rounded-lg px-3 py-2 text-xs text-slate-500 font-mono truncate">
+        <span className="min-w-0 flex-1 truncate bg-surface border border-surface-border rounded-lg px-3 py-2 text-xs text-slate-500 font-mono">
           {shareUrl}
         </span>
         <button
           onClick={handleCopy}
-          className="bg-brand-500 text-white rounded-lg px-3 py-2 text-xs font-semibold hover:bg-orange-400 transition-colors whitespace-nowrap"
+          className="shrink-0 bg-brand-500 text-white rounded-lg px-3 py-2 text-xs font-semibold hover:bg-orange-400 transition-colors whitespace-nowrap"
         >
           {copied ? 'Copiado!' : 'Copiar'}
         </button>
