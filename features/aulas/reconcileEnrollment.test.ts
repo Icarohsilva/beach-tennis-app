@@ -109,7 +109,12 @@ describe('reconcileEnrollmentCredits', () => {
       bookErrors: new Set(['s1']),
     })
 
-    const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client, 5)
+    // waitlistOnFull desligado explicitamente: aqui o que está sob teste é o
+    // skip puro por falha de RPC, não o comportamento de fila (que tem
+    // describe própria mais abaixo).
+    const r = await reconcileEnrollmentCredits(
+      'stu-1', 'class-1', '2026-07-01', '2026-07-31', client, 5, new Set(), false,
+    )
 
     expect(r).toEqual({ booked: 1, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
     expect(rpcCalls).toHaveLength(2)
@@ -161,13 +166,31 @@ describe('reconcileEnrollmentCredits', () => {
       expect(r).toEqual({ booked: 0, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
     })
 
-    it('sem waitlistOnFull (default), SESSION_FULL continua pulando em silêncio', async () => {
+    it('por padrão (sem passar o argumento), SESSION_FULL entra na fila — não fica em limbo', async () => {
+      // Era o bug relatado: fixo sem reserva E sem fila continuava contando
+      // como presente para sempre em mergeSessionAttendees/expectedStudentIds,
+      // mostrando mais gente na chamada do que a lotação permite.
+      vi.mocked(joinWaitlistAs).mockResolvedValueOnce({ position: 1 })
       const { client } = makeClient({
         sessions: [{ id: 's1', session_date: '2026-07-07' }],
         bookErrors: new Set(['s1']),
       })
 
       const r = await reconcileEnrollmentCredits('stu-1', 'class-1', '2026-07-01', '2026-07-31', client)
+
+      expect(r).toEqual({ booked: 0, skipped: 0, quotaSkipped: 0, waitlisted: 1 })
+      expect(joinWaitlistAs).toHaveBeenCalledWith('stu-1', 's1')
+    })
+
+    it('com waitlistOnFull desligado explicitamente (false), SESSION_FULL continua pulando em silêncio', async () => {
+      const { client } = makeClient({
+        sessions: [{ id: 's1', session_date: '2026-07-07' }],
+        bookErrors: new Set(['s1']),
+      })
+
+      const r = await reconcileEnrollmentCredits(
+        'stu-1', 'class-1', '2026-07-01', '2026-07-31', client, null, new Set(), false,
+      )
 
       expect(r).toEqual({ booked: 0, skipped: 1, quotaSkipped: 0, waitlisted: 0 })
       expect(joinWaitlistAs).not.toHaveBeenCalled()

@@ -129,11 +129,11 @@ describe('reconcileAllActiveEnrollments', () => {
 
     // Terça (dia 2) processa antes de Quinta (dia 4), com orçamento inicial 1.
     expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
-      1, 'stu-1', 'tue-class', '2026-07-27', '2026-08-02', client, 1, expect.any(Set),
+      1, 'stu-1', 'tue-class', '2026-07-27', '2026-08-02', client, 1, expect.any(Set), true,
     )
     // Depois de reservar a terça (orçamento decrementado pra 0), a quinta recebe orçamento 0.
     expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
-      2, 'stu-1', 'thu-class', '2026-07-27', '2026-08-02', client, 0, expect.any(Set),
+      2, 'stu-1', 'thu-class', '2026-07-27', '2026-08-02', client, 0, expect.any(Set), true,
     )
   })
 
@@ -173,12 +173,12 @@ describe('reconcileAllActiveEnrollments', () => {
     // A fixa protegida (sexta, mais antiga) processa primeiro e recebe o
     // orçamento inteiro, apesar de cair depois na semana.
     expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
-      1, 'stu-1', 'fri-class', '2026-07-27', '2026-08-02', client, 1, expect.any(Set),
+      1, 'stu-1', 'fri-class', '2026-07-27', '2026-08-02', client, 1, expect.any(Set), true,
     )
     // A excedente (segunda, mais nova) processa depois e não sobra orçamento,
     // mesmo caindo antes na semana.
     expect(reconcileEnrollmentCredits).toHaveBeenNthCalledWith(
-      2, 'stu-1', 'mon-class', '2026-07-27', '2026-08-02', client, 0, expect.any(Set),
+      2, 'stu-1', 'mon-class', '2026-07-27', '2026-08-02', client, 0, expect.any(Set), true,
     )
   })
 
@@ -239,7 +239,7 @@ describe('reconcileAllActiveEnrollments', () => {
 
     expect(getActivePlan).not.toHaveBeenCalled()
     expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
-      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null, expect.any(Set),
+      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null, expect.any(Set), true,
     )
   })
 
@@ -301,7 +301,7 @@ describe('reconcileAllActiveEnrollments', () => {
 
     expect(getActivePlan).not.toHaveBeenCalled()
     expect(reconcileEnrollmentCredits).toHaveBeenCalledWith(
-      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null, expect.any(Set),
+      'stu-1', 'class-1', '2026-07-27', '2026-08-02', client, null, expect.any(Set), true,
     )
   })
 

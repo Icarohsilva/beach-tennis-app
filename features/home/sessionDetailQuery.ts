@@ -181,6 +181,12 @@ export async function buildAgendaSessions(
   const myWaitlistBySession = new Map<string, string>()
   /** sessionId → (studentId do dependente → id da entrada dele na fila) */
   const depWaitlistBySession = new Map<string, Map<string, string>>()
+  /**
+   * sessionId → ids na fila. Fixo sem reserva que caiu aqui (turma cheia na
+   * reconciliação) não é "esperado" — está esperando vaga, não ocupando uma.
+   * Sem isto ele contava dobrado: presente na lista E na fila ao mesmo tempo.
+   */
+  const waitlistedIdsBySession = new Map<string, Set<string>>()
 
   for (const w of (waitlistRaw ?? []) as unknown as {
     id: string
@@ -193,6 +199,9 @@ export async function buildAgendaSessions(
       ...(waitlistBySession.get(w.session_id) ?? []),
       p?.full_name ?? 'Aluno',
     ])
+    const ids = waitlistedIdsBySession.get(w.session_id) ?? new Set<string>()
+    ids.add(w.student_id)
+    waitlistedIdsBySession.set(w.session_id, ids)
     if (w.student_id === userId) {
       myWaitlistBySession.set(w.session_id, w.id)
     } else if (dependentIds.has(w.student_id)) {
@@ -208,9 +217,11 @@ export async function buildAgendaSessions(
       // Aula cancelada não tem presença a confirmar.
       if (r.status === 'cancelled') return false
       if (myBookingBySession.has(r.id)) return true
-      // Fixo sem reserva conta, a menos que tenha avisado que não vem — mesma
+      // Fixo sem reserva conta, a menos que tenha avisado que não vem ou esteja
+      // na fila (turma cheia — sem vaga, não há presença a confirmar) — mesma
       // regra de isStudentExpectedInSession, que a action reaplica.
       if (!input.enrolledClassIds.has(r.class_id)) return false
+      if (myWaitlistBySession.has(r.id)) return false
       return !optedOutBySession.get(r.id)?.has(userId)
     })
     .map((r) => {
@@ -229,12 +240,13 @@ export async function buildAgendaSessions(
     enabled: input.selfCheckinEnabled,
   })
 
-  /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram. */
+  /** Quem é esperado numa sessão: reservas confirmadas + fixos que não recusaram nem estão na fila. */
   function attendeesOf(sessionId: string, classId: string): string[] {
     return mergeSessionAttendees({
       booked: bookedBySession.get(sessionId) ?? [],
       enrolled: enrolledByClass.get(classId) ?? [],
       optedOut: optedOutBySession.get(sessionId) ?? new Set<string>(),
+      waitlisted: waitlistedIdsBySession.get(sessionId) ?? new Set<string>(),
     }).map((a) => a.name)
   }
 
@@ -255,8 +267,12 @@ export async function buildAgendaSessions(
       // `mergeSessionAttendees`, que já tira o nome dele da lista de presentes.
       // Sem este corte, `fixed` continuava true depois da saída e a ficha
       // insistia em "Sua aula fixa", sem nunca oferecer entrar nem a fila.
+      // Mesmo raciocínio para quem a reconciliação não conseguiu encaixar
+      // (turma cheia) e pôs na fila: `fixed` true ali mostraria "Sua aula fixa"
+      // ao mesmo tempo em que ele está, de fato, esperando vaga.
       const enrolledHere = input.enrolledClassIds.has(row.class_id)
       const iOptedOut = optedOutBySession.get(row.id)?.has(userId) ?? false
+      const iAmWaitlisted = myWaitlistBySession.has(row.id)
 
       const guardianOptions: GuardianOption[] = dependents.map((d) => ({
         id: d.id,
@@ -274,7 +290,7 @@ export async function buildAgendaSessions(
         booked: bookedCount.get(row.id) ?? 0,
         capacity: resolved.maxStudents,
         mine: !!myBooking,
-        fixed: enrolledHere && !iOptedOut,
+        fixed: enrolledHere && !iOptedOut && !iAmWaitlisted,
         fixedOptedOut: (enrolledHere && !myBooking && iOptedOut) || undefined,
         kids: cls.type === 'kids',
         sport: cls.sport ?? null,

@@ -28,7 +28,9 @@ export function buildSessionRows(
  * Mesma regra que monta a lista da chamada e a agenda do aluno — enunciada em
  * `mergeSessionAttendees` (lib/utils/attendees.ts): reserva `confirmed` vence;
  * na falta dela, matrícula fixa ativa na turma conta, a menos que o aluno tenha
- * avisado que não vem (reserva `cancelled` nesta sessão).
+ * avisado que não vem (reserva `cancelled` nesta sessão) ou esteja na fila de
+ * espera desta sessão — turma cheia que não conseguiu encaixá-lo dá fila, não
+ * vaga, e a fila não é "estar na aula" (mesma exclusão de mergeSessionAttendees).
  *
  * Existe porque a confirmação de presença pelo app precisa do mesmo veredito
  * para UM aluno, enquanto a chamada precisa da lista inteira.
@@ -51,6 +53,15 @@ export async function isStudentExpectedInSession(
   if (status === 'confirmed') return true
   if (status === 'cancelled') return false
 
+  const { count: waitlistCount } = await client
+    .from('waitlists')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('session_id', sessionId)
+    .eq('student_id', studentId)
+    .in('status', ['waiting', 'offered'])
+  if ((waitlistCount ?? 0) > 0) return false
+
   const { data: enrollment } = await client
     .from('enrollments')
     .select('id')
@@ -69,10 +80,14 @@ export async function isStudentExpectedInSession(
  * Mesma regra de `isStudentExpectedInSession`, no plural, e pelo mesmo motivo de
  * `mergeSessionAttendees` existir: as duas fontes são PARCIAIS. O aluno fixo só
  * ganha linha em `session_bookings` quando a reconciliação roda e ele está
- * elegível, então uma turma convive normalmente com fixos sem reserva.
+ * elegível, então uma turma convive normalmente com fixos sem reserva. Fixo sem
+ * reserva que está na fila de espera desta sessão (turma cheia na hora da
+ * reconciliação) não entra: ele não tem vaga, só a vez — mesma exclusão de
+ * `mergeSessionAttendees`, senão a chamada mostra mais gente que `max_students`
+ * permite.
  *
- * Avisar de aula cancelada olhando só `session_bookings` deixava justamente esse
- * aluno de fora — ele é esperado na quadra e não recebia nada.
+ * Avisar de aula cancelada olhando só `session_bookings` deixava de fora o fixo
+ * sem reserva — ele é esperado na quadra e não recebia nada.
  */
 export async function expectedStudentIds(
   client: AdminClient,
@@ -80,7 +95,7 @@ export async function expectedStudentIds(
 ): Promise<string[]> {
   const { orgId, sessionId, classId } = input
 
-  const [{ data: bookingsRaw }, { data: enrollRaw }] = await Promise.all([
+  const [{ data: bookingsRaw }, { data: enrollRaw }, { data: waitlistRaw }] = await Promise.all([
     client
       .from('session_bookings')
       .select('student_id, status')
@@ -93,6 +108,12 @@ export async function expectedStudentIds(
       .eq('organization_id', orgId)
       .eq('class_id', classId)
       .eq('is_active', true),
+    client
+      .from('waitlists')
+      .select('student_id')
+      .eq('organization_id', orgId)
+      .eq('session_id', sessionId)
+      .in('status', ['waiting', 'offered']),
   ])
 
   const bookings = (bookingsRaw ?? []) as { student_id: string; status: string }[]
@@ -103,11 +124,14 @@ export async function expectedStudentIds(
     if (b.status === 'confirmed') confirmed.add(b.student_id)
     else optedOut.add(b.student_id)
   }
+  const waitlisted = new Set(
+    ((waitlistRaw ?? []) as { student_id: string }[]).map((w) => w.student_id),
+  )
 
   const ids = new Set(confirmed)
   for (const e of (enrollRaw ?? []) as { student_id: string }[]) {
-    // Reserva confirmada vence o opt-out (mesma precedência de mergeSessionAttendees).
-    if (confirmed.has(e.student_id) || optedOut.has(e.student_id)) continue
+    // Reserva confirmada vence o opt-out e a fila (mesma precedência de mergeSessionAttendees).
+    if (confirmed.has(e.student_id) || optedOut.has(e.student_id) || waitlisted.has(e.student_id)) continue
     ids.add(e.student_id)
   }
 

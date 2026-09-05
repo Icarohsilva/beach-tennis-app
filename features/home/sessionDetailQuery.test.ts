@@ -187,4 +187,26 @@ describe('buildAgendaSessions — aluno fixo e o opt-out da data', () => {
     expect(s.capacity).toBe(4)
     expect(s.booked >= s.capacity).toBe(true)
   })
+
+  it('fixo sem reserva, mas na fila (turma cheia): sai da lista de presentes e não é mais "fixed"', async () => {
+    // Bug relatado: turma com capacidade 4, 3 confirmados, e um fixo sem
+    // reserva ainda contava como presente — "de 4" mostrava 3 mas a lista
+    // mostrava 4 nomes. Ele deveria só aparecer na fila.
+    const [s] = await build(
+      makeClient({
+        enrollments: [{ class_id: 'turma-1', student_id: ME, nome: 'Eu' }],
+        bookings: [
+          { id: 'b3', session_id: 'sess-1', student_id: 'a', status: 'confirmed', nome: 'A' },
+          { id: 'b4', session_id: 'sess-1', student_id: 'b', status: 'confirmed', nome: 'B' },
+          { id: 'b5', session_id: 'sess-1', student_id: 'c', status: 'confirmed', nome: 'C' },
+        ],
+        waitlists: [{ id: 'w1', session_id: 'sess-1', student_id: ME }],
+      }),
+    )
+    expect(s.attendees).toEqual(['A', 'B', 'C'])
+    expect(s.attendees).not.toContain('Eu')
+    expect(s.fixed).toBe(false)
+    expect(s.waitlistEntryId).toBe('w1')
+    expect(s.mine).toBe(false)
+  })
 })

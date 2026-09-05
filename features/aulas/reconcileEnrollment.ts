@@ -47,12 +47,16 @@ export async function reconcileEnrollmentCredits(
   vacationDates: Set<string> = new Set(),
   /**
    * Sessão já lotada vira fila de espera em vez de ser silenciosamente
-   * pulada. Só liga em quem o admin vinculou às aulas já geradas de propósito
-   * (enrollStudentInClass com confirmação) — a reconciliação em lote do cron
-   * (reconcileAllActiveEnrollments) continua com o comportamento de sempre
-   * (skip), que já é escala diferente e não pediu esta mudança.
+   * pulada. Default TRUE: um fixo sem reserva e sem fila fica preso num limbo
+   * que nenhuma tela mostra — nem "vaga" (a reconciliação nunca reoferece
+   * sozinha) nem "fila" (`promoteFromWaitlist` não o alcança), e ele segue
+   * contando como presente em `mergeSessionAttendees`/`expectedStudentIds` para
+   * sempre, empurrando a chamada e a agenda do aluno para além de
+   * `max_students`. Foi assim que uma turma de 8 vagas chegou a mostrar 9
+   * pessoas na chamada. Só `false` explícito volta ao skip silencioso — nenhum
+   * chamador usa hoje, é só a saída de emergência.
    */
-  waitlistOnFull = false,
+  waitlistOnFull = true,
 ): Promise<ReconcileResult> {
   const adminClient = injectedClient ?? createAdminClient()
   const result: ReconcileResult = { ...EMPTY }
