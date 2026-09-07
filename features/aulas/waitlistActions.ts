@@ -3,8 +3,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
-import type { WaitlistStatus, StudentLevel, ClassType } from '@/types'
+import type { WaitlistStatus, StudentLevel, ClassType, Gender } from '@/types'
 import type { AccessDenial } from '@/lib/utils/accessRules'
+import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { resolveSession, type SessionOverrides } from '@/lib/aulas/sessionOverride'
@@ -387,7 +388,7 @@ export async function joinWaitlistAs(
   const { data: session } = await adminClient
     .from('class_sessions')
     .select(
-      'id, status, session_date, max_students, start_time, end_time, court, class:classes(max_students, level, type, start_time, end_time, court)',
+      'id, status, session_date, max_students, start_time, end_time, court, class:classes(max_students, level, type, gender_restriction, start_time, end_time, court)',
     )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
@@ -400,6 +401,7 @@ export async function joinWaitlistAs(
     max_students: number
     level: StudentLevel
     type: ClassType
+    gender_restriction: Gender | null
     start_time: string
     end_time: string
     court: number | null
@@ -417,6 +419,22 @@ export async function joinWaitlistAs(
     return {
       error:
         'Turma exclusiva para alunos kids. Se você é responsável, coloque o seu dependente na fila.',
+    }
+  }
+
+  // Turma com restrição de sexo: sem exceção, mesmo tratamento de bookSessionAs.
+  // Sem isso o aluno entrava na fila com dívida de sexo incompatível e só
+  // descobria na hora da promoção — o mesmo defeito que o corte de dívida/cota
+  // aqui embaixo já existe para resolver.
+  if (clsInfo.gender_restriction) {
+    const { data: genderProfile } = await adminClient
+      .from('profiles')
+      .select('gender')
+      .eq('id', studentId)
+      .maybeSingle()
+    const studentGender = (genderProfile as { gender: Gender | null } | null)?.gender ?? null
+    if (!canEnterByGender(studentGender, clsInfo.gender_restriction)) {
+      return { error: classGenderDenialMessage(clsInfo.gender_restriction, studentGender !== null) }
     }
   }
 

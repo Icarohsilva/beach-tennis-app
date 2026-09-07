@@ -54,6 +54,7 @@ describe('createClass', () => {
     name: 'Turma Iniciante',
     description: '',
     type: 'adult',
+    gender_restriction: null,
     sport: null,
     day_of_week: 1,
     start_time: '08:00',

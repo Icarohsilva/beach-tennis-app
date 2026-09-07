@@ -12,7 +12,8 @@ import { computeQuotaBudget } from './quotaBudget'
 import { getQuotaSnapshot } from './quotaUsage'
 import { resolveClassAccess, exceedsDailyCap } from '@/lib/utils/accessRules'
 import { getSingleClassPrice } from '@/features/financeiro/classDebt'
-import type { AddStudentReason, CheckinPartner } from '@/types'
+import type { AddStudentReason, CheckinPartner, Gender } from '@/types'
+import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
 import { requireAdmin } from './authGuards'
@@ -148,12 +149,30 @@ export async function enrollStudentInClass(
   // Check class exists and is active (escopado pela academia ativa)
   const { data: cls } = await adminClient
     .from('classes')
-    .select('id, is_active, max_students')
+    .select('id, is_active, max_students, gender_restriction')
     .eq('id', classId)
     .eq('organization_id', orgId)
     .single()
 
   if (!cls || !cls.is_active) return { error: 'Turma não encontrada ou inativa.' }
+
+  // Turma com restrição de sexo: sem exceção — nem o admin fura, mesmo
+  // tratamento de bookSessionAs/joinWaitlistAs. Bloquear aqui (na CRIAÇÃO da
+  // matrícula fixa) é o que impede uma matrícula incompatível de sequer
+  // existir, então a reconciliação (cron semanal) nunca precisa saber disto.
+  if (cls.gender_restriction) {
+    const { data: genderProfile } = await adminClient
+      .from('profiles')
+      .select('gender')
+      .eq('id', studentId)
+      .maybeSingle()
+    const studentGender = (genderProfile as { gender: Gender | null } | null)?.gender ?? null
+    if (!canEnterByGender(studentGender, cls.gender_restriction as Gender | null)) {
+      return {
+        error: classGenderDenialMessage(cls.gender_restriction as Gender, studentGender !== null),
+      }
+    }
+  }
 
   // Fixa exige plano ou parceiro (spec §2). Crédito não compra vaga fixa.
   const { data: membership } = await adminClient
@@ -745,7 +764,7 @@ export async function addStudentToSession(
 
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, status, session_date, class:classes(max_students)')
+    .select('id, status, session_date, class:classes(max_students, gender_restriction)')
     .eq('id', sessionId)
     .eq('organization_id', orgId)
     .single()
@@ -756,8 +775,30 @@ export async function addStudentToSession(
   }
   const sessionDate = (session as { session_date: string }).session_date
 
-  const clsRaw = (session as { class: { max_students: number } | { max_students: number }[] }).class
+  const clsRaw = (
+    session as {
+      class:
+        | { max_students: number; gender_restriction: Gender | null }
+        | { max_students: number; gender_restriction: Gender | null }[]
+    }
+  ).class
   const cls = Array.isArray(clsRaw) ? clsRaw[0] : clsRaw
+
+  // Turma com restrição de sexo: sem exceção, nem com force — mesmo tratamento
+  // de bookSessionAs/joinWaitlistAs/enrollStudentInClass. O `force` existente
+  // aqui é para negações de CUSTO (cota, teto diário, pendência); isto é
+  // elegibilidade de audiência, categoria diferente.
+  if (cls.gender_restriction) {
+    const { data: genderProfile } = await adminClient
+      .from('profiles')
+      .select('gender')
+      .eq('id', studentId)
+      .maybeSingle()
+    const studentGender = (genderProfile as { gender: Gender | null } | null)?.gender ?? null
+    if (!canEnterByGender(studentGender, cls.gender_restriction)) {
+      return { error: classGenderDenialMessage(cls.gender_restriction, studentGender !== null) }
+    }
+  }
 
   const { data: membership } = await adminClient
     .from('memberships')

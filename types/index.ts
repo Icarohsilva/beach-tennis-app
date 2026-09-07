@@ -212,6 +212,9 @@ export interface Class {
   level: StudentLevel
   sport: string | null // modalidade da turma; informativa, nunca bloqueia reserva
   type: ClassType
+  // Restrição de sexo: null = livre (qualquer aluno). Turma Kids ignora este campo —
+  // quem entra é sempre o dependente. Ver lib/aulas/classGenderRule.ts.
+  gender_restriction: Gender | null
   day_of_week: number // 0=Sunday, 6=Saturday
   start_time: string // HH:MM
   end_time: string

@@ -11,6 +11,7 @@ const BASE: ClassRulesInput = {
   selfCheckinEnabled: true,
   ligaEnabled: true,
   hasDependents: false,
+  hasGenderRestrictedClasses: false,
 }
 
 /** Todo o texto das seções, achatado — o jeito mais direto de perguntar "isso aparece?". */
@@ -163,6 +164,11 @@ describe('buildClassRules — blocos que dependem da academia', () => {
   it('sem dependentes, o bloco kids some', () => {
     expect(temSecao(BASE, 'kids')).toBe(false)
     expect(temSecao({ ...BASE, hasDependents: true }, 'kids')).toBe(true)
+  })
+
+  it('sem turma restrita por sexo na academia, o bloco some', () => {
+    expect(temSecao(BASE, 'sexo')).toBe(false)
+    expect(temSecao({ ...BASE, hasGenderRestrictedClasses: true }, 'sexo')).toBe(true)
   })
 
   it('check-in pelo app só quando a academia ativou', () => {

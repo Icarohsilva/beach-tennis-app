@@ -427,6 +427,8 @@ function makeEnrollClient(opts: {
   activeEnrollments: number
   quotaEnforced: boolean
   maxStudents?: number
+  genderRestriction?: 'M' | 'F' | null
+  studentGender?: 'M' | 'F' | null
   sessionBookings?: {
     status: string
     cancelled_at: string | null
@@ -450,7 +452,12 @@ function makeEnrollClient(opts: {
       single: () => {
         if (table === 'classes') {
           return Promise.resolve({
-            data: { id: 'class-x', is_active: true, max_students: opts.maxStudents ?? 10 },
+            data: {
+              id: 'class-x',
+              is_active: true,
+              max_students: opts.maxStudents ?? 10,
+              gender_restriction: opts.genderRestriction ?? null,
+            },
           })
         }
         return Promise.resolve({ data: null, error: null })
@@ -458,6 +465,9 @@ function makeEnrollClient(opts: {
       maybeSingle: () => {
         if (table === 'memberships') {
           return Promise.resolve({ data: { partner: null } })
+        }
+        if (table === 'profiles') {
+          return Promise.resolve({ data: { gender: opts.studentGender ?? null } })
         }
         if (table === 'system_settings') {
           return Promise.resolve({ data: { value: String(opts.quotaEnforced) } })
@@ -550,6 +560,61 @@ describe('enrollStudentInClass — cota de fixas', () => {
   })
 })
 
+describe('enrollStudentInClass — restrição de sexo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+  })
+
+  const PLANO: PlanQuota = {
+    classesPerWeek: 2, cycle: 'monthly', maxClassesPerDay: 2, refundOnLateCancel: true, rolloverUnused: false,
+  }
+
+  it('recusa matricular aluno de sexo diferente do exigido pela turma', async () => {
+    const client = makeEnrollClient({
+      plan: PLANO, activeEnrollments: 0, quotaEnforced: false,
+      genderRestriction: 'F', studentGender: 'M',
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await enrollStudentInClass('stu-1', 'class-2')
+
+    expect(result.error).toBe('Esta turma é exclusiva para o público feminino.')
+  })
+
+  it('recusa quando o sexo do aluno não está preenchido no perfil', async () => {
+    const client = makeEnrollClient({
+      plan: PLANO, activeEnrollments: 0, quotaEnforced: false,
+      genderRestriction: 'M', studentGender: null,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await enrollStudentInClass('stu-1', 'class-2')
+
+    expect(result.error).toBe('Complete seu sexo no seu perfil para entrar nesta turma.')
+  })
+
+  it('aceita quando o sexo do aluno bate com a restrição da turma', async () => {
+    const client = makeEnrollClient({
+      plan: PLANO, activeEnrollments: 0, quotaEnforced: false,
+      genderRestriction: 'F', studentGender: 'F',
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await expect(enrollStudentInClass('stu-1', 'class-2')).resolves.toEqual({})
+  })
+
+  it('turma livre (sem restrição) aceita qualquer aluno, mesmo sem sexo preenchido', async () => {
+    const client = makeEnrollClient({
+      plan: PLANO, activeEnrollments: 0, quotaEnforced: false,
+      genderRestriction: null, studentGender: null,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    await expect(enrollStudentInClass('stu-1', 'class-2')).resolves.toEqual({})
+  })
+})
+
 describe('enrollStudentInClass — orçamento de cota na reconciliação', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -623,6 +688,8 @@ function makeAddStudentClient(opts: {
   membership: { partner: string | null; credits_balance: number }
   plan: PlanQuota | null
   quotaEnforced: boolean
+  genderRestriction?: 'M' | 'F' | null
+  studentGender?: 'M' | 'F' | null
   /** Reservas confirmadas do aluno na data alvo — alimenta o check universal
    *  de teto diário (novo), que roda ANTES do getQuotaSnapshot. */
   dailyBookingCount?: number
@@ -657,7 +724,10 @@ function makeAddStudentClient(opts: {
               id: opts.session.id,
               status: opts.session.status,
               session_date: opts.session.session_date,
-              class: { max_students: opts.session.max_students },
+              class: {
+                max_students: opts.session.max_students,
+                gender_restriction: opts.genderRestriction ?? null,
+              },
             },
           })
         }
@@ -665,6 +735,9 @@ function makeAddStudentClient(opts: {
       },
       maybeSingle: () => {
         if (table === 'memberships') return Promise.resolve({ data: opts.membership })
+        if (table === 'profiles') {
+          return Promise.resolve({ data: { gender: opts.studentGender ?? null } })
+        }
         if (table === 'system_settings') {
           return Promise.resolve({ data: { value: String(opts.quotaEnforced) } })
         }
@@ -814,5 +887,84 @@ describe('addStudentToSession — cota e teto diário', () => {
       'book_session_atomic',
       expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
     )
+  })
+})
+
+describe('addStudentToSession — restrição de sexo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requireAdmin).mockResolvedValue(ADMIN)
+  })
+
+  it('bloqueia sem exceção quando o sexo do aluno não bate — nem force fura', async () => {
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: null,
+      quotaEnforced: false,
+      genderRestriction: 'M',
+      studentGender: 'F',
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const blocked = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(blocked.error).toBe('Esta turma é exclusiva para o público masculino.')
+    expect(rpc).not.toHaveBeenCalled()
+
+    // Diferente de cota/teto: não existe um `force` que fure isto.
+    const stillBlocked = await addStudentToSession('session-1', 'stu-1', 'open', true)
+    expect(stillBlocked.error).toBe('Esta turma é exclusiva para o público masculino.')
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('bloqueia quando o aluno não tem sexo preenchido no perfil', async () => {
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: null,
+      quotaEnforced: false,
+      genderRestriction: 'F',
+      studentGender: null,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(result.error).toBe('Complete seu sexo no seu perfil para entrar nesta turma.')
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('libera quando o sexo do aluno bate com a restrição da turma', async () => {
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: null,
+      quotaEnforced: false,
+      genderRestriction: 'F',
+      studentGender: 'F',
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(result.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith(
+      'book_session_atomic',
+      expect.objectContaining({ p_student_id: 'stu-1', p_session_id: 'session-1' }),
+    )
+  })
+
+  it('turma livre não valida sexo nenhum', async () => {
+    const { client, rpc } = makeAddStudentClient({
+      session: { id: 'session-1', status: 'scheduled', session_date: '2026-07-15', max_students: 10 },
+      membership: { partner: null, credits_balance: 0 },
+      plan: null,
+      quotaEnforced: false,
+      genderRestriction: null,
+      studentGender: null,
+    })
+    vi.mocked(createAdminClient).mockReturnValue(client)
+
+    const result = await addStudentToSession('session-1', 'stu-1', 'open')
+    expect(result.error).toBeUndefined()
+    expect(rpc).toHaveBeenCalled()
   })
 })

@@ -227,6 +227,8 @@ export function SessionModal({
                 {session.className}
               </h2>
               {session.kids && <Badge variant="kids">KIDS</Badge>}
+              {session.genderRestriction === 'F' && <Badge variant="level">FEMININO</Badge>}
+              {session.genderRestriction === 'M' && <Badge variant="level">MASCULINO</Badge>}
               {session.sport && (
                 <span className="shrink-0 text-xs text-slate-400">
                   {sportEmoji(session.sport)} {sportLabel(session.sport)}
@@ -498,6 +500,13 @@ export function SessionModal({
                 Sair desta aula
               </button>
             </div>
+          ) : session.genderDenialMessage ? (
+            // Turma com restrição de sexo que este aluno não atende — sem
+            // exceção, então nem "entrar" nem "fila de espera" são oferecidos
+            // (os dois seriam recusados pelo servidor do mesmo jeito).
+            <p className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center text-xs text-slate-300">
+              {session.genderDenialMessage}
+            </p>
           ) : isFull && session.waitlistEntryId ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">

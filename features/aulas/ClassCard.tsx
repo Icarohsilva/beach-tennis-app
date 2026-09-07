@@ -16,6 +16,7 @@ export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCa
   const spotsLeft = c.max_students - enrolledCount
   const isFull = spotsLeft <= 0
   const isKids = c.type === 'kids'
+  const genderLabel = c.gender_restriction === 'F' ? 'FEMININO' : c.gender_restriction === 'M' ? 'MASCULINO' : null
 
   const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
@@ -26,6 +27,7 @@ export function ClassCard({ class_: c, enrolledCount, onClick, accent }: ClassCa
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <h3 className="text-white font-semibold text-sm truncate">{c.name}</h3>
             {isKids && <Badge variant="kids">KIDS</Badge>}
+            {genderLabel && <Badge variant="level">{genderLabel}</Badge>}
           </div>
 
           {c.description && (

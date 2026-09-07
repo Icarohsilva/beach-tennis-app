@@ -3,6 +3,7 @@
 // compartilhada entre a faixa da semana, a ficha em modal e o calendário — e um
 // deles importar o outro só pelo tipo criaria ciclo.
 import type { SelfCheckinView } from '@/features/checkin/selfCheckinQueries'
+import type { Gender } from '@/types'
 
 /**
  * Um dependente do responsável, com o que ele já tem NESTA sessão.
@@ -48,6 +49,15 @@ export interface AgendaSession {
    */
   fixedOptedOut?: boolean
   kids: boolean
+  /** Restrição de sexo da turma (M/F), ou null quando é livre. */
+  genderRestriction: Gender | null
+  /**
+   * Por que ESTE aluno não pode entrar por causa do sexo — presente só quando
+   * a turma tem restrição E ele não bate (sexo diferente, ou ainda não
+   * preencheu o campo no perfil). Pronta para exibir, computada no servidor
+   * com `lib/aulas/classGenderRule.ts` (mesma regra de bookSessionAs).
+   */
+  genderDenialMessage?: string
   /** Modalidade da turma (slug). Rótulo — não restringe quem pode reservar. */
   sport: string | null
   /** Nomes de quem é esperado na aula (fixos + reservas). */

@@ -104,7 +104,7 @@ export default async function HomePage() {
   const [{ data: profileData }, { count: weeklyClassesCount }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name')
+      .select('full_name, gender')
       .eq('id', user.id)
       .single(),
     supabase
@@ -115,7 +115,7 @@ export default async function HomePage() {
       .eq('is_active', true),
   ])
 
-  const profile = profileData as Pick<Profile, 'full_name'> | null
+  const profile = profileData as Pick<Profile, 'full_name' | 'gender'> | null
   const showCredits = !membership?.partner
   const isPartner = !!membership?.partner
   // Não mostra o CTA genérico se já existe uma recomendação de plano do admin
@@ -231,6 +231,7 @@ export default async function HomePage() {
     // Com a cota desligada o plano é ilimitado, então ele sempre é um caminho
     // possível; com ela ligada, só enquanto sobrar cota.
     hasPlanQuota: plan !== null && (!quotaOn || (quota?.remaining ?? 0) > 0),
+    studentGender: profile?.gender ?? null,
   })
 
   // Destaque: as aulas do aluno vêm primeiro; sem nenhuma, oferece as que ainda

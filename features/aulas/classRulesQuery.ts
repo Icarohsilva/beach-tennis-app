@@ -24,18 +24,29 @@ export async function getClassRules(
   client: AdminClient,
   ctx: ClassRulesContext,
 ): Promise<RuleSection[]> {
-  const [{ cancellationWindowHours, creditExpiryDays }, orgMaxClassesPerDay, dependents, ligaRow] =
-    await Promise.all([
-      getOrgClassSettings(client, ctx.orgId),
-      getOrgMaxClassesPerDay(client, ctx.orgId),
-      listGuardianDependents(),
-      client
-        .from('system_settings')
-        .select('value')
-        .eq('organization_id', ctx.orgId)
-        .eq('key', 'liga_enabled')
-        .maybeSingle(),
-    ])
+  const [
+    { cancellationWindowHours, creditExpiryDays },
+    orgMaxClassesPerDay,
+    dependents,
+    ligaRow,
+    genderRestrictedCount,
+  ] = await Promise.all([
+    getOrgClassSettings(client, ctx.orgId),
+    getOrgMaxClassesPerDay(client, ctx.orgId),
+    listGuardianDependents(),
+    client
+      .from('system_settings')
+      .select('value')
+      .eq('organization_id', ctx.orgId)
+      .eq('key', 'liga_enabled')
+      .maybeSingle(),
+    client
+      .from('classes')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', ctx.orgId)
+      .eq('is_active', true)
+      .not('gender_restriction', 'is', null),
+  ])
 
   const ligaEnabled = (ligaRow.data as { value: string } | null)?.value === 'true'
 
@@ -56,5 +67,6 @@ export async function getClassRules(
     selfCheckinEnabled: ctx.selfCheckinEnabled,
     ligaEnabled,
     hasDependents: dependents.length > 0,
+    hasGenderRestrictedClasses: (genderRestrictedCount.count ?? 0) > 0,
   })
 }
