@@ -26,7 +26,7 @@ export async function createTrialBooking(
   // Sessão precisa existir E pertencer a esta academia.
   const { data: session } = await adminClient
     .from('class_sessions')
-    .select('id, session_date, status, class:classes(id, name, max_students, type, is_active)')
+    .select('id, session_date, status, class:classes(id, name, max_students, type, gender_restriction, is_active)')
     .eq('id', sessionId)
     .eq('organization_id', organizationId)
     .single()
@@ -37,6 +37,12 @@ export async function createTrialBooking(
   const cls = Array.isArray(session.class) ? session.class[0] : session.class
   if (!cls?.is_active) return { error: 'Turma inativa.' }
   if (cls?.type === 'kids') return { error: 'Aula experimental disponível apenas para adultos.' }
+  // Trial não coleta sexo do visitante (só nome/e-mail/telefone), então turma
+  // restrita por sexo simplesmente não aceita agendamento experimental — mesmo
+  // tratamento que Kids já recebe aqui em cima.
+  if (cls?.gender_restriction) {
+    return { error: 'Aula experimental não disponível para esta turma.' }
+  }
 
   // Duplicidade por e-mail na sessão (dentro da org).
   const { count: dupCount } = await adminClient

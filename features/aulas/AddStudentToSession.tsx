@@ -5,7 +5,8 @@ import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ageGroupWarning } from '@/lib/aulas/ageGroup'
-import type { AddStudentReason, AgeGroup, ClassType } from '@/types'
+import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
+import type { AddStudentReason, AgeGroup, ClassType, Gender } from '@/types'
 
 export interface AddableStudent {
   id: string
@@ -16,12 +17,16 @@ export interface AddableStudent {
   openMissedCheckins: number
   /** Adulto ou kids nesta academia — só para avisar se destoa da turma. */
   ageGroup: AgeGroup
+  /** Sexo do aluno (profiles.gender) — para turma com restrição. */
+  gender: Gender | null
 }
 
 interface Props {
   sessionId: string
   /** Tipo da turma desta sessão; casado com o do aluno só para avisar. */
   classType: ClassType
+  /** Restrição de sexo da turma (M/F), ou null quando é livre. */
+  classGenderRestriction: Gender | null
   students: AddableStudent[]
   onAdd: (
     sessionId: string,
@@ -42,7 +47,13 @@ const REASONS: { value: AddStudentReason; label: string; hint: string }[] = [
   { value: 'open', label: 'Deixar em aberto', hint: 'Vira pendência a cobrar.' },
 ]
 
-export function AddStudentToSession({ sessionId, classType, students, onAdd }: Props) {
+export function AddStudentToSession({
+  sessionId,
+  classType,
+  classGenderRestriction,
+  students,
+  onAdd,
+}: Props) {
   const [studentId, setStudentId] = useState('')
   const [reason, setReason] = useState<AddStudentReason>('experimental')
   const [error, setError] = useState<string | null>(null)
@@ -61,6 +72,13 @@ export function AddStudentToSession({ sessionId, classType, students, onAdd }: P
   const needsReason = selected?.wouldOweDebt ?? false
   // Aviso, não trava: o adolescente que treina com adulto é caso legítimo.
   const avisoTipo = selected ? ageGroupWarning(selected.ageGroup, classType) : null
+  // Trava de verdade, sem exceção — diferente do aviso de idade acima. O
+  // servidor recusaria do mesmo jeito (addStudentToSession), então nem tenta:
+  // o botão já nasce desabilitado para este candidato.
+  const genderBlockMessage =
+    selected && classGenderRestriction && !canEnterByGender(selected.gender, classGenderRestriction)
+      ? classGenderDenialMessage(classGenderRestriction, selected.gender !== null)
+      : null
 
   function handleSelectStudent(id: string) {
     setStudentId(id)
@@ -113,6 +131,9 @@ export function AddStudentToSession({ sessionId, classType, students, onAdd }: P
       </select>
 
       {avisoTipo && <p className="mb-3 text-xs text-yellow-400">⚠️ {avisoTipo}.</p>}
+      {genderBlockMessage && (
+        <p className="mb-3 text-xs text-red-400">🚫 {genderBlockMessage}</p>
+      )}
 
       {needsReason && (
         <div className="space-y-2 mb-3">
@@ -143,7 +164,14 @@ export function AddStudentToSession({ sessionId, classType, students, onAdd }: P
 
       {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
 
-      {quotaBlocked || missedBlocked || fullBlocked ? (
+      {genderBlockMessage ? (
+        // Sem exceção: diferente de cota/teto/pendência, aqui não existe botão
+        // "mesmo assim" — o servidor recusaria igual, e forçar defenderia a
+        // própria razão de ser da turma restrita.
+        <Button size="sm" disabled className="w-full">
+          Adicionar à aula
+        </Button>
+      ) : quotaBlocked || missedBlocked || fullBlocked ? (
         <Button
           size="sm"
           variant="danger"

@@ -45,7 +45,9 @@ import type {
   SessionStatus,
   Membership,
   PayWith,
+  Gender,
 } from '@/types'
+import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
 import * as Sentry from '@sentry/nextjs'
 
 // A próxima ocorrência de um dia-da-semana saiu daqui para
@@ -195,7 +197,7 @@ export async function bookSessionAs(
   const { data: session, error: sessionErr } = await adminClient
     .from('class_sessions')
     .select(
-      'id, class_id, session_date, status, start_time, end_time, court, max_students, class:classes(id, level, type, max_students, name, sport, start_time, end_time, court)',
+      'id, class_id, session_date, status, start_time, end_time, court, max_students, class:classes(id, level, type, gender_restriction, max_students, name, sport, start_time, end_time, court)',
     )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
@@ -212,6 +214,7 @@ export async function bookSessionAs(
     id: string
     level: StudentLevel
     type: ClassType
+    gender_restriction: Gender | null
     max_students: number
     name: string
     sport: string | null
@@ -232,6 +235,21 @@ export async function bookSessionAs(
     return {
       error:
         'Turma exclusiva para alunos kids. Se você é responsável, inscreva o seu dependente na ficha da aula.',
+    }
+  }
+
+  // 3.5. Turma com restrição de sexo (Feminino/Masculino). Sem exceção — nem o
+  // admin fura isso (ver addStudentToSession/enrollStudentInClass). Sexo vive em
+  // profiles, não na membership, então é uma busca à parte.
+  if (cls.gender_restriction) {
+    const { data: genderProfile } = await adminClient
+      .from('profiles')
+      .select('gender')
+      .eq('id', studentId)
+      .maybeSingle()
+    const studentGender = (genderProfile as { gender: Gender | null } | null)?.gender ?? null
+    if (!canEnterByGender(studentGender, cls.gender_restriction)) {
+      return { error: classGenderDenialMessage(cls.gender_restriction, studentGender !== null) }
     }
   }
 

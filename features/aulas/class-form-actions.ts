@@ -6,12 +6,15 @@ import { generateGrid } from './gridGeneration'
 import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { normalizeSportForOrg } from '@/lib/arenas/sports'
-import type { ClassType } from '@/types'
+import type { ClassType, Gender } from '@/types'
 
 export interface ClassFormData {
   name: string
   description: string
   type: ClassType
+  // Restrição de sexo (M/F) ou null (livre). Kids ignora este campo. Ver
+  // lib/aulas/classGenderRule.ts para a regra e os pontos que a aplicam.
+  gender_restriction: Gender | null
   /**
    * Modalidade da turma (slug de lib/arenas/sports.ts). null = sem modalidade.
    * É rótulo, não regra: NENHUM ponto de reserva (bookSession, joinWaitlist,

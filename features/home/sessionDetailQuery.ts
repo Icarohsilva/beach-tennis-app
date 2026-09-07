@@ -11,7 +11,8 @@ import { mergeSessionAttendees, type AttendeeRef } from '@/lib/utils/attendees'
 import { getSelfCheckinViews } from '@/features/checkin/selfCheckinQueries'
 import { listGuardianDependents } from '@/features/aulas/guardianQueries'
 import { resolveSession, hasOverride } from '@/lib/aulas/sessionOverride'
-import type { CheckinPartner } from '@/types'
+import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
+import type { CheckinPartner, Gender } from '@/types'
 import type { AgendaSession, GuardianOption } from './agendaTypes'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -45,6 +46,7 @@ interface ClassRef {
   start_time: string
   end_time: string
   type: string
+  gender_restriction: Gender | null
   sport: string | null
   max_students: number
   court?: number | null
@@ -71,6 +73,8 @@ export interface BuildAgendaInput {
   creditsBalance: number
   /** Tem plano vigente com cota sobrando — o outro caminho de pagamento. */
   hasPlanQuota: boolean
+  /** Sexo do aluno logado (profiles.gender), para turma com restrição. */
+  studentGender: Gender | null
 }
 
 /**
@@ -293,6 +297,12 @@ export async function buildAgendaSessions(
         fixed: enrolledHere && !iOptedOut && !iAmWaitlisted,
         fixedOptedOut: (enrolledHere && !myBooking && iOptedOut) || undefined,
         kids: cls.type === 'kids',
+        genderRestriction: cls.gender_restriction,
+        genderDenialMessage: cls.gender_restriction
+          ? canEnterByGender(input.studentGender, cls.gender_restriction)
+            ? undefined
+            : classGenderDenialMessage(cls.gender_restriction, input.studentGender !== null)
+          : undefined,
         sport: cls.sport ?? null,
         attendees: attendeesOf(row.id, row.class_id),
         waitlist: waitlistBySession.get(row.id) ?? [],

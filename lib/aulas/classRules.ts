@@ -55,6 +55,8 @@ export interface ClassRulesInput {
   ligaEnabled: boolean
   /** O aluno é responsável por alguma criança. */
   hasDependents: boolean
+  /** A academia tem pelo menos uma turma ativa restrita por sexo (Feminino/Masculino). */
+  hasGenderRestrictedClasses: boolean
 }
 
 /** "nesta semana" / "neste mês", conforme o ciclo do plano. */
@@ -257,6 +259,24 @@ export function buildClassRules(input: ClassRulesInput): RuleSection[] {
         {
           text: 'Turma kids é só para criança',
           detail: 'Adulto vê a aula na agenda, mas quem entra é o dependente.',
+        },
+      ],
+    })
+  }
+
+  // ── Turma restrita por sexo ────────────────────────────────────────────
+  if (input.hasGenderRestrictedClasses) {
+    sections.push({
+      id: 'sexo',
+      title: 'Turmas Feminino/Masculino',
+      items: [
+        {
+          text: 'Algumas turmas são exclusivas para um sexo',
+          detail: 'A ficha da aula avisa quando for o caso — sem exceção, nem para quem tem plano.',
+        },
+        {
+          text: 'Sem o sexo preenchido no perfil, você não entra nessas turmas',
+          detail: 'Complete o campo em Perfil para poder reservar.',
         },
       ],
     })

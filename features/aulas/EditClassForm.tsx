@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { updateClass } from './class-form-actions'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
-import type { Class, ClassType } from '@/types'
+import { AUDIENCE_OPTIONS, audienceOf, decodeAudience, type Audience } from './classAudience'
+import type { Class } from '@/types'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
@@ -31,10 +32,12 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
     setPending(true)
     setError(null)
     const fd = new FormData(e.currentTarget)
+    const { type, gender_restriction } = decodeAudience(fd.get('audience') as Audience)
     const result = await updateClass(c.id, {
       name: fd.get('name') as string,
       description: fd.get('description') as string,
-      type: fd.get('type') as ClassType,
+      type,
+      gender_restriction,
       sport: (fd.get('sport') as string) || null,
       day_of_week: Number(fd.get('day_of_week')),
       start_time: fd.get('start_time') as string,
@@ -60,10 +63,19 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
       </div>
       <div>
         <label className="text-sm text-slate-400 block mb-1">Tipo</label>
-        <select name="type" required className={SELECT_CLS} defaultValue={c.type}>
-          <option value="adult">Adulto</option>
-          <option value="kids">Kids</option>
+        <select
+          name="audience"
+          required
+          className={SELECT_CLS}
+          defaultValue={audienceOf(c.type, c.gender_restriction)}
+        >
+          {AUDIENCE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
+        <p className="text-xs text-slate-500 mt-1">
+          Feminino/Masculino barram qualquer aluno do outro sexo, sem exceção.
+        </p>
       </div>
       <div>
         <label className="text-sm text-slate-400 block mb-1">Modalidade</label>

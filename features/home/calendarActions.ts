@@ -59,7 +59,7 @@ export async function loadSessionDetail(sessionId: string): Promise<AgendaSessio
   const { data: row } = await adminClient
     .from('class_sessions')
     .select(
-      'id, session_date, class_id, status, cancelled_reason, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, sport, max_students, court)',
+      'id, session_date, class_id, status, cancelled_reason, start_time, end_time, court, max_students, classes(name, start_time, end_time, type, gender_restriction, sport, max_students, court)',
     )
     .eq('id', sessionId)
     .eq('organization_id', orgId)
@@ -79,6 +79,12 @@ export async function loadSessionDetail(sessionId: string): Promise<AgendaSessio
     .from('organizations')
     .select('self_checkin_enabled')
     .eq('id', orgId)
+    .maybeSingle()
+
+  const { data: profileRow } = await adminClient
+    .from('profiles')
+    .select('gender')
+    .eq('id', user.id)
     .maybeSingle()
 
   // Mesma leitura de cota que a home faz para o cabeçalho — aqui ela decide se a
@@ -102,6 +108,7 @@ export async function loadSessionDetail(sessionId: string): Promise<AgendaSessio
     rows: [row as unknown as SessionRowWithClass],
     creditsBalance: membership?.credits_balance ?? 0,
     hasPlanQuota: plan !== null && (!quotaOn || (quota?.remaining ?? 0) > 0),
+    studentGender: (profileRow as { gender: 'M' | 'F' | null } | null)?.gender ?? null,
   })
 
   return sessions[0] ?? null

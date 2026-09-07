@@ -41,6 +41,7 @@ const TURMA: Class = {
   level: 'B',
   sport: 'beach_tennis',
   type: 'adult',
+  gender_restriction: null,
   day_of_week: 1,
   start_time: '07:00',
   end_time: '08:00',

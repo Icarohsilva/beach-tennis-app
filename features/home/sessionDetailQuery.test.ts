@@ -72,6 +72,7 @@ const ROW: SessionRowWithClass = {
     start_time: '07:00',
     end_time: '08:00',
     type: 'adult',
+    gender_restriction: null,
     sport: 'beach_tennis',
     max_students: 4,
   },
@@ -87,6 +88,7 @@ async function build(client: never, rows: SessionRowWithClass[] = [ROW]) {
     rows,
     creditsBalance: 0,
     hasPlanQuota: false,
+    studentGender: null,
   })
 }
 
@@ -163,6 +165,7 @@ describe('buildAgendaSessions — aluno fixo e o opt-out da data', () => {
         rows: [ROW],
         creditsBalance: 0,
         hasPlanQuota: false,
+        studentGender: null,
       },
     )
     expect(sessions[0].fixed).toBe(false)
@@ -208,5 +211,58 @@ describe('buildAgendaSessions — aluno fixo e o opt-out da data', () => {
     expect(s.fixed).toBe(false)
     expect(s.waitlistEntryId).toBe('w1')
     expect(s.mine).toBe(false)
+  })
+})
+
+describe('buildAgendaSessions — restrição de sexo', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const ROW_FEMININO: SessionRowWithClass = {
+    ...ROW,
+    classes: {
+      name: 'Beach Tennis Iniciante',
+      start_time: '07:00',
+      end_time: '08:00',
+      type: 'adult',
+      gender_restriction: 'F',
+      sport: 'beach_tennis',
+      max_students: 4,
+    },
+  }
+
+  async function buildWithGender(studentGender: 'M' | 'F' | null, row = ROW_FEMININO) {
+    return buildAgendaSessions(makeClient({}), {
+      orgId: 'org-1',
+      userId: ME,
+      partner: null,
+      selfCheckinEnabled: false,
+      enrolledClassIds: new Set<string>(),
+      rows: [row],
+      creditsBalance: 0,
+      hasPlanQuota: false,
+      studentGender,
+    })
+  }
+
+  it('sexo incompatível: genderDenialMessage explica o motivo', async () => {
+    const [s] = await buildWithGender('M')
+    expect(s.genderRestriction).toBe('F')
+    expect(s.genderDenialMessage).toBe('Esta turma é exclusiva para o público feminino.')
+  })
+
+  it('sexo desconhecido: pede para completar o perfil', async () => {
+    const [s] = await buildWithGender(null)
+    expect(s.genderDenialMessage).toBe('Complete seu sexo no seu perfil para entrar nesta turma.')
+  })
+
+  it('sexo compatível: sem mensagem de recusa', async () => {
+    const [s] = await buildWithGender('F')
+    expect(s.genderDenialMessage).toBeUndefined()
+  })
+
+  it('turma livre: sem restrição nem mensagem, mesmo sem sexo preenchido', async () => {
+    const [s] = await buildWithGender(null, ROW)
+    expect(s.genderRestriction).toBeNull()
+    expect(s.genderDenialMessage).toBeUndefined()
   })
 })

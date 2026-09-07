@@ -22,6 +22,7 @@ import type {
   CheckinPartner,
   SelfCheckinStatus,
   SelfCheckinGeoError,
+  Gender,
 } from '@/types'
 import { RegenerateTodayButton } from '../RegenerateTodayButton'
 import { brtToday } from '@/lib/utils/gridSchedule'
@@ -56,6 +57,7 @@ export default async function SessionDetailPage({ params }: Props) {
       name: string
       level: string
       type: string
+      gender_restriction: Gender | null
       start_time: string
       end_time: string
       max_students: number
@@ -254,7 +256,7 @@ export default async function SessionDetailPage({ params }: Props) {
 
   const { data: candidateProfiles } =
     candidateIds.length > 0
-      ? await adminClient.from('profiles').select('id, full_name').in('id', candidateIds)
+      ? await adminClient.from('profiles').select('id, full_name, gender').in('id', candidateIds)
       : { data: [] }
 
   const openMissedByCandidate = await countOpenMissedCheckinsByStudent(
@@ -264,12 +266,13 @@ export default async function SessionDetailPage({ params }: Props) {
   )
 
   const addableStudents: AddableStudent[] = (candidateProfiles ?? [])
-    .map((p: Pick<Profile, 'id' | 'full_name'>) => ({
+    .map((p: Pick<Profile, 'id' | 'full_name' | 'gender'>) => ({
       id: p.id,
       full_name: p.full_name,
       wouldOweDebt: !hasAccess(p.id),
       openMissedCheckins: openMissedByCandidate.get(p.id) ?? 0,
       ageGroup: memById.get(p.id)?.ageGroup ?? 'adult',
+      gender: p.gender,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'))
 
@@ -333,6 +336,7 @@ export default async function SessionDetailPage({ params }: Props) {
       <AddStudentToSession
         sessionId={params.sessionId}
         classType={cls.type === 'kids' ? 'kids' : 'adult'}
+        classGenderRestriction={cls.gender_restriction}
         students={addableStudents}
         onAdd={addStudentToSession}
       />
