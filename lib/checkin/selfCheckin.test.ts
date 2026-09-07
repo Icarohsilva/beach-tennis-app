@@ -7,7 +7,11 @@ import {
   resolveSelfCheckinStatus,
   selfCheckinGeoErrorLabel,
   formatDistance,
+  isAccurateEnough,
+  pickBetterReading,
+  canRetrySelfCheckin,
   DEFAULT_CHECKIN_RADIUS_M,
+  GOOD_ACCURACY_M,
 } from './selfCheckin'
 
 // Ponto de referência arbitrário (orla de Copacabana) — só precisa ser estável.
@@ -205,5 +209,56 @@ describe('selfCheckinGeoErrorLabel', () => {
 
   it('cai num texto neutro sem motivo', () => {
     expect(selfCheckinGeoErrorLabel(null, null)).toBe('confirmou pelo app')
+  })
+})
+
+describe('isAccurateEnough', () => {
+  it('aceita o fix de satélite típico de quadra aberta', () => {
+    expect(isAccurateEnough(8)).toBe(true)
+    expect(isAccurateEnough(GOOD_ACCURACY_M)).toBe(true)
+  })
+
+  it('recusa o fix de rede, que é o que fazia o aluno na quadra cair como pendente', () => {
+    expect(isAccurateEnough(GOOD_ACCURACY_M + 1)).toBe(false)
+    expect(isAccurateEnough(1200)).toBe(false)
+  })
+})
+
+describe('pickBetterReading', () => {
+  it('a primeira leitura sempre entra', () => {
+    expect(pickBetterReading(null, { accuracyM: 900 })).toEqual({ accuracyM: 900 })
+  })
+
+  it('troca quando a nova é mais precisa (o caso do GPS esquentando)', () => {
+    expect(pickBetterReading({ accuracyM: 900 }, { accuracyM: 12 })).toEqual({ accuracyM: 12 })
+  })
+
+  it('mantém a atual quando a nova é pior ou igual', () => {
+    expect(pickBetterReading({ accuracyM: 12 }, { accuracyM: 800 })).toEqual({ accuracyM: 12 })
+    expect(pickBetterReading({ accuracyM: 12 }, { accuracyM: 12 })).toEqual({ accuracyM: 12 })
+  })
+
+  it('preserva os outros campos da leitura escolhida', () => {
+    const melhor = { accuracyM: 10, latitude: -22.97, longitude: -43.18 }
+    expect(pickBetterReading({ accuracyM: 500, latitude: 0, longitude: 0 }, melhor)).toBe(melhor)
+  })
+})
+
+describe('canRetrySelfCheckin', () => {
+  it('deixa tentar de novo o que depende do aparelho ou do lugar', () => {
+    expect(canRetrySelfCheckin('out_of_range')).toBe(true)
+    expect(canRetrySelfCheckin('inaccurate')).toBe(true)
+    expect(canRetrySelfCheckin('timeout')).toBe(true)
+    expect(canRetrySelfCheckin('unavailable')).toBe(true)
+    expect(canRetrySelfCheckin('denied')).toBe(true)
+    expect(canRetrySelfCheckin('unsupported')).toBe(true)
+  })
+
+  it('não oferece nova tentativa quando o problema é a academia sem ponto', () => {
+    expect(canRetrySelfCheckin('org_unset')).toBe(false)
+  })
+
+  it('sem motivo nenhum não há o que repetir', () => {
+    expect(canRetrySelfCheckin(null)).toBe(false)
   })
 })

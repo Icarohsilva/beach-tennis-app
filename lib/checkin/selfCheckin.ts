@@ -26,6 +26,63 @@ export const ACCURACY_SLACK_MAX_M = 100
 /** Acima disso a leitura não afirma nada útil — trata como se não houvesse GPS. */
 export const ACCURACY_UNRELIABLE_M = 1500
 
+/**
+ * Precisão boa o suficiente para parar de esperar o GPS melhorar.
+ *
+ * O primeiro `getCurrentPosition` do celular quase sempre devolve o fix de REDE
+ * (wifi/torre), com precisão de centenas de metros a quilômetros; o fix de
+ * satélite (±5–20m) só chega alguns segundos depois. Enviar a primeira leitura
+ * era o que fazia o aluno NA QUADRA cair como pendente — a distância medida
+ * vinha do fix ruim, não do lugar onde ele está.
+ *
+ * 30m é folgado o bastante para um fix de satélite normal em quadra aberta
+ * (tipicamente 5–15m) e apertado o bastante para descartar fix de rede.
+ */
+export const GOOD_ACCURACY_M = 30
+
+/** Quanto tempo, no máximo, vale a pena esperar o sinal melhorar. */
+export const GEO_SETTLE_MS = 9000
+
+/** Uma leitura do aparelho com precisão conhecida (o que dá para comparar). */
+export interface AccuracyReading {
+  accuracyM: number
+}
+
+/**
+ * A leitura já é boa o bastante para parar de esperar?
+ *
+ * Separado de `resolveSelfCheckinStatus` porque decide OUTRA coisa: aquela
+ * julga o resultado final, esta só diz se vale continuar ouvindo o GPS.
+ */
+export function isAccurateEnough(accuracyM: number): boolean {
+  return accuracyM <= GOOD_ACCURACY_M
+}
+
+/**
+ * Entre a melhor leitura até agora e uma nova, qual fica.
+ *
+ * Menor precisão (menos metros de erro) ganha. Empate mantém a atual — a
+ * primeira leitura de uma precisão já é a mais antiga, e trocar por igual só
+ * gastaria render.
+ */
+export function pickBetterReading<T extends AccuracyReading>(current: T | null, candidate: T): T {
+  if (!current) return candidate
+  return candidate.accuracyM < current.accuracyM ? candidate : current
+}
+
+/**
+ * O aluno pode tentar confirmar de novo e ter chance de mudar o resultado?
+ *
+ * Sim para tudo que é do aparelho/momento (sinal ruim, fora do raio porque o
+ * fix era de rede, permissão que ele acabou de conceder): andar até a quadra e
+ * tentar de novo resolve. Não para `org_unset`, que é configuração da academia
+ * — insistir ali só geraria frustração, o professor é que resolve.
+ */
+export function canRetrySelfCheckin(geoError: SelfCheckinGeoError | null): boolean {
+  if (geoError === null) return false
+  return geoError !== 'org_unset'
+}
+
 const MINUTE_MS = 60 * 1000
 const EARTH_RADIUS_M = 6_371_008.8
 
