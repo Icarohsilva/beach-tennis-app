@@ -6,13 +6,20 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { selfCheckinWindow } from '@/lib/checkin/selfCheckin'
-import type { CheckinPartner, SelfCheckinStatus } from '@/types'
+import type { CheckinPartner, SelfCheckinGeoError, SelfCheckinStatus } from '@/types'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
 export interface SelfCheckinView {
-  /** Confirmação já feita pelo aluno nesta sessão. */
-  mine: { status: SelfCheckinStatus } | null
+  /**
+   * Confirmação já feita pelo aluno nesta sessão.
+   *
+   * `geoError` acompanha o status porque é ele que decide se a tela oferece
+   * uma nova tentativa: pendente por sinal ruim ou fora do raio o aluno
+   * resolve andando até a quadra e tentando de novo; pendente por academia sem
+   * ponto configurado, não (ver canRetrySelfCheckin).
+   */
+  mine: { status: SelfCheckinStatus; geoError: SelfCheckinGeoError | null } | null
   /** Check-in do parceiro cobre esta data — o botão do app não aparece. */
   partnerCovered: boolean
   /** Instantes ISO da janela. O cliente decide a abertura pelo relógio dele. */
@@ -51,16 +58,19 @@ export async function getSelfCheckinViews(
 
   const { data: mineRaw } = await client
     .from('self_checkins')
-    .select('session_id, status')
+    .select('session_id, status, geo_error')
     .eq('organization_id', orgId)
     .eq('student_id', studentId)
     .in('session_id', sessionIds)
 
   const mineBySession = new Map(
-    ((mineRaw ?? []) as { session_id: string; status: SelfCheckinStatus }[]).map((r) => [
-      r.session_id,
-      { status: r.status },
-    ]),
+    (
+      (mineRaw ?? []) as {
+        session_id: string
+        status: SelfCheckinStatus
+        geo_error: SelfCheckinGeoError | null
+      }[]
+    ).map((r) => [r.session_id, { status: r.status, geoError: r.geo_error }]),
   )
 
   // Datas com check-in do parceiro. Só faz sentido consultar para quem é de parceiro.

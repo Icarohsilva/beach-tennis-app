@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { updateOrgSelfCheckin } from '@/features/financeiro/actions'
-import { DEFAULT_CHECKIN_RADIUS_M } from '@/lib/checkin/selfCheckin'
+import { DEFAULT_CHECKIN_RADIUS_M, isAccurateEnough } from '@/lib/checkin/selfCheckin'
 
 interface Props {
   settings: {
@@ -47,9 +47,18 @@ export function SelfCheckinForm({ settings }: Props) {
         setLocating(false)
         setLatitude(pos.coords.latitude.toFixed(6))
         setLongitude(pos.coords.longitude.toFixed(6))
-        setSuccess(
-          `Localização capturada (precisão de ${Math.round(pos.coords.accuracy)} m). Salve para aplicar.`,
-        )
+        const precisao = Math.round(pos.coords.accuracy)
+        // Ponto capturado com precisão ruim desloca o CENTRO do raio, e aí todo
+        // aluno na quadra cai como pendente — a falha mais difícil de
+        // diagnosticar depois, porque nada na tela do professor aponta para cá.
+        if (!isAccurateEnough(pos.coords.accuracy)) {
+          setError(
+            `Localização capturada com precisão de apenas ${precisao} m — provavelmente pelo wifi, não pelo GPS. ` +
+              'Capture de novo na quadra, ao ar livre, ou o raio vai ficar centrado no lugar errado.',
+          )
+          return
+        }
+        setSuccess(`Localização capturada (precisão de ${precisao} m). Salve para aplicar.`)
       },
       (err) => {
         setLocating(false)

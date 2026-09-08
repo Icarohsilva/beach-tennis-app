@@ -10,7 +10,13 @@
 import { useEffect, useState, useTransition } from 'react'
 import { Check, Clock, MapPin, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { formatDistance } from '@/lib/checkin/selfCheckin'
+import {
+  formatDistance,
+  isAccurateEnough,
+  pickBetterReading,
+  canRetrySelfCheckin,
+  GEO_SETTLE_MS,
+} from '@/lib/checkin/selfCheckin'
 import {
   confirmSelfAttendance,
   type ClientGeoError,
@@ -31,30 +37,69 @@ type Reading =
   | { latitude: number; longitude: number; accuracyM: number }
   | { geoError: ClientGeoError }
 
-/** Nunca rejeita: o motivo da falha faz parte do resultado. */
+/**
+ * Lê a localização esperando o sinal MELHORAR, e não a primeira resposta.
+ *
+ * `getCurrentPosition` devolvia o primeiro fix disponível — que no celular
+ * quase sempre é o de rede (wifi/torre), com precisão de centenas de metros a
+ * quilômetros. Era isso que fazia o aluno DENTRO da quadra cair como pendente:
+ * a distância era medida a partir de um ponto que não é onde ele está.
+ *
+ * Com `watchPosition`, cada atualização é comparada e fica a mais precisa;
+ * assim que a precisão fica boa (`isAccurateEnough`) devolve na hora — em
+ * quadra aberta isso costuma ser 2–4s. Se em `GEO_SETTLE_MS` nenhuma leitura
+ * ficou boa, manda a melhor que apareceu: pendente com uma leitura ruim ainda é
+ * melhor que pendente sem leitura nenhuma, e o `slack` de precisão do servidor
+ * ainda pode salvar.
+ *
+ * Nunca rejeita: o motivo da falha faz parte do resultado.
+ */
 function readPosition(): Promise<Reading> {
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     return Promise.resolve({ geoError: 'unsupported' })
   }
 
   return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
+    let best: { latitude: number; longitude: number; accuracyM: number } | null = null
+    let done = false
+    let watchId: number | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    function finish(reading: Reading) {
+      if (done) return
+      done = true
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      if (timer !== null) clearTimeout(timer)
+      resolve(reading)
+    }
+
+    // Teto de tempo: o aluno está de pé na quadra esperando o botão responder.
+    timer = setTimeout(() => finish(best ?? { geoError: 'timeout' }), GEO_SETTLE_MS)
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        best = pickBetterReading(best, {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracyM: pos.coords.accuracy,
-        }),
+        })
+        if (isAccurateEnough(best.accuracyM)) finish(best)
+      },
       (err) => {
+        // Erro depois de já ter uma leitura boa não descarta o que temos.
+        if (best) {
+          finish(best)
+          return
+        }
         const geoError: ClientGeoError =
           err.code === err.PERMISSION_DENIED
             ? 'denied'
             : err.code === err.TIMEOUT
               ? 'timeout'
               : 'unavailable'
-        resolve({ geoError })
+        finish({ geoError })
       },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: GEO_SETTLE_MS, maximumAge: 0 },
     )
   })
 }
@@ -117,19 +162,53 @@ export function SelfCheckinPanel({
     )
   }
 
+  const opensAt = new Date(view.opensAt).getTime()
+  const closesAt = new Date(view.closesAt).getTime()
+  const windowOpen = now >= opensAt && now <= closesAt
+
   if (status === 'pending') {
+    // Nova tentativa: o servidor SOBE pendente → validada quando a leitura
+    // nova bate (confirmSelfAttendance §7). Antes esta tela era um beco sem
+    // saída — quem confirmou com o GPS ainda frio ficava dependendo do
+    // professor mesmo estando na quadra, sem nada para fazer a respeito.
+    const canRetry = windowOpen && canRetrySelfCheckin(view.mine?.geoError ?? null)
     return (
       <Shell variant={variant} className={className}>
         <p className="text-sm font-semibold text-amber-300">Presença enviada</p>
         <p className="mt-0.5 text-xs text-slate-400">
-          Não deu para conferir sua localização. O professor valida na chamada.
+          {canRetry
+            ? 'Não deu para conferir sua localização. Se você já está na quadra, tente de novo.'
+            : 'Não deu para conferir sua localização. O professor valida na chamada.'}
         </p>
+        {canRetry && (
+          <>
+            <Button
+              variant="secondary"
+              className="mt-3 w-full"
+              loading={locating || isPending}
+              disabled={locating || isPending}
+              onClick={handleConfirm}
+            >
+              {locating ? 'Localizando…' : 'Tentar de novo'}
+            </Button>
+            {feedback && (
+              <p
+                role="status"
+                className={
+                  'mt-3 rounded-lg px-3 py-2 text-xs ' +
+                  (feedback.kind === 'ok'
+                    ? 'bg-emerald-500/10 text-emerald-300'
+                    : 'border border-red-500/30 bg-red-500/10 text-red-300')
+                }
+              >
+                {feedback.text}
+              </p>
+            )}
+          </>
+        )}
       </Shell>
     )
   }
-
-  const opensAt = new Date(view.opensAt).getTime()
-  const closesAt = new Date(view.closesAt).getTime()
 
   if (now > closesAt) return null
 
