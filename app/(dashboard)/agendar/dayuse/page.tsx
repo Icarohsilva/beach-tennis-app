@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Sun } from 'lucide-react'
-import { createClient, createAdminClient, getAuthUser } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getAuthUser, getActiveOrgId } from '@/lib/supabase/server'
 import { DayUseBookingCard } from '@/features/dayuse/DayUseBookingCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -19,6 +19,12 @@ export default async function AgendarDayUsePage({
   const user = await getAuthUser()
   if (!user) redirect('/login')
 
+  // Academia ATIVA, explícita: a RLS libera todas as orgs em que o aluno é
+  // membro, então quem treina em duas arenas via os day use das duas
+  // embaralhados, sem nada dizendo de qual arena era cada um.
+  const orgId = await getActiveOrgId()
+  if (!orgId) redirect('/selecionar-academia')
+
   // BRT: com o UTC cru o day use de hoje desaparecia da lista depois das 21h.
   const today = brtToday(new Date())
 
@@ -27,15 +33,20 @@ export default async function AgendarDayUsePage({
 
   const freshLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString()
   // Reservas pendentes vencidas (>30min sem pagamento) são canceladas ao listar.
+  // Escopado à academia ativa: sem o filtro, abrir esta página varria e escrevia
+  // em reserva de TODAS as academias da plataforma. Cada arena limpa a sua
+  // quando alguém abre a lista dela.
   await adminClient
     .from('dayuse_bookings')
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .eq('organization_id', orgId)
     .eq('status', 'pending_payment')
     .lt('booked_at', freshLimit)
 
   const { data: slots } = await supabase
     .from('dayuse_slots')
     .select('*')
+    .eq('organization_id', orgId)
     .eq('is_active', true)
     .gte('date', today)
     .order('date', { ascending: true })

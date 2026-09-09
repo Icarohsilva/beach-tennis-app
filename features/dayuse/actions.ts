@@ -2,8 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { awardLigaExtra } from '@/features/liga/extraPoints'
-import { createAdminClient, createClient, getActiveOrgId } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { validateDayUseSlot } from './validation'
+import { requireAdmin } from '@/features/aulas/authGuards'
+import { brtToday } from '@/lib/utils/gridSchedule'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { mpCreatePreference } from '@/lib/billing/mpClient'
 import { computeMarketplaceFee } from '@/lib/billing/fees'
@@ -21,22 +23,41 @@ export interface CreateDayUseSlotData {
 }
 
 export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ error?: string }> {
-  const validation = validateDayUseSlot(data.start_time, data.end_time, data.capacity)
+  // requireAdmin e não getActiveOrgId: criar day use é ato de admin, e sem esta
+  // guarda qualquer aluno logado criava slot na academia dele — o resto das
+  // actions administrativas (features/aulas/adminActions.ts) já entra por aqui.
+  const { orgId, userId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+
+  // Conflito de horário na MESMA quadra e data. A regra é pura
+  // (validation.ts); aqui só se busca o que ela precisa comparar.
+  const { data: sameCourtRaw } = await adminClient
+    .from('dayuse_slots')
+    .select('start_time, end_time')
+    .eq('organization_id', orgId)
+    .eq('date', data.date)
+    .eq('court', data.court)
+    .eq('is_active', true)
+
+  const validation = validateDayUseSlot({
+    start_time: data.start_time,
+    end_time: data.end_time,
+    capacity: data.capacity,
+    date: data.date,
+    today: brtToday(new Date()),
+    sameCourtSlots: (sameCourtRaw ?? []) as { start_time: string; end_time: string }[],
+  })
   if (validation.error) return validation
 
   // organization_id é informado explicitamente: o trigger trg_set_org de dayuse_slots
   // foi removido no cutover de identidade (plano 3).
-  const orgId = await getActiveOrgId()
-  if (!orgId) return { error: 'Academia ativa não encontrada.' }
-
-  const adminClient = createAdminClient()
-  const { data: { user } } = await adminClient.auth.getUser()
-
   const { error } = await adminClient.from('dayuse_slots').insert({
     ...data,
     organization_id: orgId,
     notes: data.notes || null,
-    created_by: user?.id,
+    created_by: userId,
     is_active: true,
   })
 
@@ -46,11 +67,17 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
 }
 
 export async function deactivateDayUseSlot(slotId: string): Promise<{ error?: string }> {
+  // Sem requireAdmin + escopo por organização, esta action desativava slot de
+  // QUALQUER academia para qualquer usuário logado que soubesse o id.
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
   const adminClient = createAdminClient()
   const { error } = await adminClient
     .from('dayuse_slots')
     .update({ is_active: false })
     .eq('id', slotId)
+    .eq('organization_id', orgId)
   if (error) return { error: error.message }
   revalidatePath('/admin/grade/dayuse')
   return {}
