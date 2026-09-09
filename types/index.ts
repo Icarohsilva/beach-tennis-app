@@ -626,7 +626,34 @@ export interface DayUseSlot {
   price_cents: number | null
   notes: string | null
   is_active: boolean
+  /** Recorrência que gerou este slot. null = criado à mão pelo admin. */
+  recurrence_id: string | null
   created_by: string
+  created_at: string
+}
+
+/**
+ * Molde de day use fixo semanal — "todo domingo, 9h às 12h, quadra 1".
+ *
+ * Mesmo formato de `Class` (day_of_week + horário + court) de propósito: é o
+ * que faz o day use recorrente ser gerado pela mesma passada do cron da grade.
+ * A linha aqui não é reservável; o que o aluno vê é o `DayUseSlot` que ela gera.
+ */
+export interface DayUseRecurrence {
+  id: string
+  organization_id: string
+  /** 0=domingo..6=sábado, igual a Class.day_of_week (getDay do JS). */
+  day_of_week: number
+  start_time: string
+  end_time: string
+  court: number
+  sport: string | null
+  kind: DayUseKind
+  capacity: number
+  price_cents: number | null
+  notes: string | null
+  is_active: boolean
+  created_by: string | null
   created_at: string
 }
 

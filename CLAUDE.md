@@ -172,6 +172,25 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   é `cancelled_by_session`, **nunca** `admin_waived`: essa coluna também marca o
   aluno que o professor tirou daquela data, e ressuscitá-lo desfaria uma decisão da
   academia
+- **Day use tem o mesmo par molde→instância das aulas**, com uma diferença deliberada:
+  `dayuse_recurrences` é o horário fixo semanal e `dayuse_slots` a data reservável, gerada
+  por `generateDayUse` ([features/dayuse/generation.ts](features/dayuse/generation.ts)) na
+  mesma passada do cron `weekly-grid-generation` (o Hobby da Vercel só dá um cron diário),
+  mas em varredura PRÓPRIA — o laço da grade só entra em academia com `grid_auto_enabled`,
+  e pendurar o day use ali faria a recorrência não gerar para quem monta a grade na mão.
+  Horizonte rolante de 28 dias, sem marca d'água: a idempotência vem do índice único
+  `(organization_id, court, date, start_time)`. **Data removida NÃO é ressuscitada pela
+  geração seguinte** — o oposto de `generateGrid`, porque no day use remover uma data é
+  decisão explícita da academia (feriado, quadra em manutenção). Aquele índice cobre slot
+  inativo também, então `createDayUseSlot` REATIVA o horário removido em vez de inserir
+  outro. Desligar a recorrência recolhe as datas futuras que ela gerou (`recurrence_id`),
+  menos as que já têm reserva — apagá-las mataria reserva paga em silêncio.
+- Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
+  A resolução mora em `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
+  + `getDayUsePricing` ([features/dayuse/pricing.ts](features/dayuse/pricing.ts)), e **tela e
+  cobrança têm de sair dessa mesma chamada**: "gratuito" é o caso em que a venda está
+  desligada ou o Mercado Pago não está conectado, que é exatamente quando `bookDayUse`
+  grava `confirmed` sem checkout.
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - **Fila de espera é entrada AUTOMÁTICA.** Vaga aberta → `promoteFromWaitlist`
   ([features/aulas/waitlistActions.ts](features/aulas/waitlistActions.ts)) coloca o primeiro

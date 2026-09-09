@@ -21,7 +21,13 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
   const isFull = bookingsCount >= slot.capacity
 
   async function handleRemove() {
-    if (!confirm('Remover este slot de day use?')) return
+    // O texto muda para slot gerado por recorrência: a geração NÃO ressuscita
+    // data removida (ver features/dayuse/generation.ts), e o admin precisa
+    // saber que remover aqui não desliga a recorrência inteira.
+    const msg = slot.recurrence_id
+      ? 'Remover só esta data do day use recorrente?\n\nA recorrência continua ligada e as outras datas não mudam. Esta data não volta na geração automática.'
+      : 'Remover este slot de day use?'
+    if (!confirm(msg)) return
     setLoading(true)
     await deactivateDayUseSlot(slot.id)
   }
@@ -40,6 +46,7 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
             ? <Badge variant="danger">Lotado</Badge>
             : <Badge variant="success">Disponível</Badge>
           }
+          {slot.recurrence_id && <Badge variant="default">Recorrente</Badge>}
         </div>
         <p className="text-white text-sm font-medium">
           {formatTime(slot.start_time)} – {formatTime(slot.end_time)}

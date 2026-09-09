@@ -14,11 +14,16 @@
 // ser atingido na terça de madrugada.
 //
 // Se o plano virar Pro, trocar o schedule de volta para "0 * * * *".
+//
+// A rota faz DUAS varreduras independentes: a grade de aulas (acima) e o day
+// use recorrente (dayuse_recurrences → dayuse_slots), na mesma passada porque
+// o Hobby só dá um cron. Ver o bloco "Day use recorrente" mais abaixo.
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/cronAuth'
 import { generateGrid } from '@/features/aulas/gridGeneration'
+import { dayUseWindow, generateDayUse } from '@/features/dayuse/generation'
 import { notifyGridGenerated } from '@/features/aulas/gridNotify'
 import { brtToday, shouldRunGridNow, autoGridWindow } from '@/lib/utils/gridSchedule'
 import { fetchAllPages } from '@/lib/supabase/paginate'
@@ -141,6 +146,65 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // ---- Day use recorrente -------------------------------------------------
+    // Passada PRÓPRIA, e não dentro do laço acima, porque o laço só entra em
+    // academia com grid_auto_enabled: pendurar o day use ali faria a
+    // recorrência simplesmente não gerar para quem monta a grade de aulas na
+    // mão. Aqui a lista de academias vem dos próprios moldes ativos.
+    //
+    // Sem marca d'água: o horizonte é rolante (hoje..+28) e o upsert é
+    // idempotente pelo índice único, então rodar todo dia é o desenho, não um
+    // efeito colateral tolerado.
+    let dayUseOrgs = 0
+    let dayUseSlotsCreated = 0
+    let dayUseFailed = 0
+    try {
+      const recRows = await fetchAllPages<{ organization_id: string }>(
+        (from, to) =>
+          admin
+            .from('dayuse_recurrences')
+            .select('organization_id')
+            .eq('is_active', true)
+            .order('organization_id', { ascending: true })
+            .range(from, to),
+        { label: 'cron/weekly-grid:dayuse-recorrencias' },
+      )
+      const dayUseOrgIds = Array.from(new Set(recRows.map((r) => r.organization_id)))
+      const { from, to } = dayUseWindow(brtToday(now))
+
+      for (const orgId of dayUseOrgIds) {
+        if (Date.now() >= deadline) {
+          skipped++
+          continue
+        }
+        try {
+          const r = await generateDayUse(orgId, from, to, admin)
+          if (r.error) {
+            dayUseFailed++
+            Sentry.captureMessage('[cron/weekly-grid-generation] day use recorrente falhou', {
+              level: 'error',
+              tags: { cron: 'weekly-grid-generation' },
+              extra: { organizationId: orgId, error: r.error },
+            })
+            continue
+          }
+          dayUseOrgs++
+          dayUseSlotsCreated += r.slotsCreated
+        } catch (err) {
+          dayUseFailed++
+          Sentry.captureException(err, {
+            tags: { cron: 'weekly-grid-generation', step: 'dayuse' },
+            extra: { organizationId: orgId },
+          })
+        }
+      }
+    } catch (err) {
+      // A varredura de day use falhando não pode derrubar o resultado da grade,
+      // que já foi gravado acima.
+      dayUseFailed++
+      Sentry.captureException(err, { tags: { cron: 'weekly-grid-generation', step: 'dayuse' } })
+    }
+
     if (skipped > 0) {
       Sentry.captureMessage('[cron/weekly-grid-generation] varredura incompleta no orçamento de tempo', {
         level: 'warning',
@@ -148,7 +212,17 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ orgs: byOrg.size, orgsProcessed, sessionsCreated, sessionsReopened, failed, skipped })
+    return NextResponse.json({
+      orgs: byOrg.size,
+      orgsProcessed,
+      sessionsCreated,
+      sessionsReopened,
+      failed,
+      skipped,
+      dayUseOrgs,
+      dayUseSlotsCreated,
+      dayUseFailed,
+    })
   } catch (e) {
     Sentry.captureException(e, { tags: { cron: 'weekly-grid-generation' } })
     return NextResponse.json({ error: 'Cron failed' }, { status: 500 })

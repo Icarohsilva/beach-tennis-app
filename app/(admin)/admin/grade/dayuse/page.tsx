@@ -2,14 +2,16 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { CreateDayUseForm } from '@/features/dayuse/CreateDayUseForm'
+import { DayUseRecurrencePanel } from '@/features/dayuse/DayUseRecurrencePanel'
 import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
-import type { DayUseSlot } from '@/types'
+import type { DayUseRecurrence, DayUseSlot } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
 import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { DAY_USE_HORIZON_DAYS } from '@/features/dayuse/generation'
 
 export default async function AdminDayUsePage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -27,6 +29,14 @@ export default async function AdminDayUsePage() {
     getOrgSports(orgId),
     getDayUsePricing(orgId),
   ])
+
+  const { data: recurrencesRaw } = await adminClient
+    .from('dayuse_recurrences')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+    .order('day_of_week', { ascending: true })
+    .order('start_time', { ascending: true })
 
   const { data: slots } = await adminClient
     .from('dayuse_slots')
@@ -73,7 +83,18 @@ export default async function AdminDayUsePage() {
         <h1 className="text-2xl font-bold text-white">Day Use</h1>
         <p className="text-slate-400 text-sm">{slotList.length} slots futuros</p>
       </div>
-      <CreateDayUseForm orgSports={orgSports} orgDefaultPriceCents={pricing.defaultCents} />
+      <DayUseRecurrencePanel
+        recurrences={(recurrencesRaw ?? []) as DayUseRecurrence[]}
+        orgSports={orgSports}
+        orgDefaultPriceCents={pricing.defaultCents}
+        horizonDays={DAY_USE_HORIZON_DAYS}
+      />
+      <div>
+        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
+          Data avulsa
+        </h2>
+        <CreateDayUseForm orgSports={orgSports} orgDefaultPriceCents={pricing.defaultCents} />
+      </div>
       <div className="space-y-6">
         {byDate.size === 0 ? (
           <p className="text-slate-400 text-sm">Nenhum slot agendado. Crie um acima.</p>

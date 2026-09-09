@@ -73,25 +73,56 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
   const priceRaw = (data.price ?? '').trim()
   const priceCents = priceRaw === '' ? null : reaisToCents(priceRaw)
 
-  // organization_id é informado explicitamente: o trigger trg_set_org de dayuse_slots
-  // foi removido no cutover de identidade (plano 3).
-  const { error } = await adminClient.from('dayuse_slots').insert({
-    court: data.court,
-    date: data.date,
-    start_time: data.start_time,
-    end_time: data.end_time,
+  const fields = {
     capacity: data.capacity,
+    end_time: data.end_time,
     sport: data.sport || null,
     kind: data.kind ?? 'scheduled',
     price_cents: priceCents,
-    organization_id: orgId,
     notes: data.notes || null,
+  }
+
+  // Slot REMOVIDO no mesmo espaço, data e horário de início: reativa em vez de
+  // inserir. Sem isto o admin que remove um day use e recria o mesmo horário
+  // levava violação do índice único dayuse_slots_org_court_date_start_key
+  // ("duplicate key value") — a validação de conflito acima só olha slot ativo,
+  // e o índice, o horário físico, ativo ou não.
+  const { data: removed } = await adminClient
+    .from('dayuse_slots')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('date', data.date)
+    .eq('court', data.court)
+    .eq('start_time', data.start_time)
+    .eq('is_active', false)
+    .maybeSingle()
+
+  if (removed) {
+    const { error: reErr } = await adminClient
+      .from('dayuse_slots')
+      .update({ ...fields, is_active: true, created_by: userId })
+      .eq('id', (removed as { id: string }).id)
+    if (reErr) return { error: reErr.message }
+    revalidatePath('/admin/grade/dayuse')
+    revalidatePath('/agendar/dayuse')
+    return {}
+  }
+
+  // organization_id é informado explicitamente: o trigger trg_set_org de dayuse_slots
+  // foi removido no cutover de identidade (plano 3).
+  const { error } = await adminClient.from('dayuse_slots').insert({
+    ...fields,
+    court: data.court,
+    date: data.date,
+    start_time: data.start_time,
+    organization_id: orgId,
     created_by: userId,
     is_active: true,
   })
 
   if (error) return { error: error.message }
   revalidatePath('/admin/grade/dayuse')
+  revalidatePath('/agendar/dayuse')
   return {}
 }
 
