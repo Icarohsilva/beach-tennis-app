@@ -603,6 +603,14 @@ export interface Notification {
   created_at: string
 }
 
+/**
+ * Os dois modelos de day use que as arenas usam de fato.
+ * - `scheduled`: horário marcado, a vaga é do aluno (o que sempre existiu)
+ * - `open`: livre no período, com rotação de quadra; `capacity` vira teto de
+ *   pessoas no espaço, não de vagas num jogo
+ */
+export type DayUseKind = 'scheduled' | 'open'
+
 export interface DayUseSlot {
   id: string
   organization_id: string
@@ -611,6 +619,11 @@ export interface DayUseSlot {
   start_time: string  // HH:MM
   end_time: string
   capacity: number
+  /** Modalidade (slug de lib/arenas/sports.ts). Rótulo, não restrição. */
+  sport: string | null
+  kind: DayUseKind
+  /** Preço deste slot em centavos. null = usa o padrão da academia. */
+  price_cents: number | null
   notes: string | null
   is_active: boolean
   created_by: string

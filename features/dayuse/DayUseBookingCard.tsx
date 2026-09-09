@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { bookDayUse, cancelDayUseBooking } from './actions'
+import { DayUseBadges } from './DayUseBadges'
+import { dayUseKindHint } from '@/lib/dayuse/dayUseKind'
 import type { DayUseSlot } from '@/types'
 
 interface Props {
@@ -14,9 +16,14 @@ interface Props {
   myBookingId: string | null
   myBookingStatus?: string | null
   attendees: string[]
+  /**
+   * Preço já resolvido pela MESMA regra do checkout (dayUseChargeCents). Antes
+   * o card dizia "Gratuito" fixo, então day use pago aparecia como de graça.
+   */
+  priceCents: number
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
@@ -63,25 +70,26 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
     <Card>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs bg-blue-900/40 text-blue-300 border border-blue-700/50 px-2 py-0.5 rounded-full">
-              Espaço {slot.court}
-            </span>
-            <span className="text-xs bg-green-900/40 text-green-300 border border-green-700/50 px-2 py-0.5 rounded-full">
-              Day Use · Gratuito
-            </span>
-            {isFull && !bookingId && <Badge variant="danger">Lotado</Badge>}
-          </div>
+          <DayUseBadges
+            court={slot.court}
+            sport={slot.sport}
+            kind={slot.kind}
+            priceCents={priceCents}
+          />
+          {isFull && !bookingId && (
+            <div className="mb-1"><Badge variant="danger">Lotado</Badge></div>
+          )}
           <p className="text-white text-sm font-medium">
             {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
           </p>
+          <p className="text-slate-500 text-xs mt-0.5">{dayUseKindHint(slot.kind)}</p>
           {slot.notes && <p className="text-slate-400 text-xs mt-0.5">{slot.notes}</p>}
           <button
             type="button"
             onClick={() => setShowAttendees((v) => !v)}
             className="text-slate-500 text-xs mt-1 hover:text-slate-300 transition-colors flex items-center gap-1"
           >
-            <span>👥 {localCount}/{slot.capacity} reservas</span>
+            <span>👥 {localCount}/{slot.capacity} {slot.kind === 'open' ? 'pessoas' : 'reservas'}</span>
             <span>{showAttendees ? '▲' : '▼'}</span>
           </button>
           {showAttendees && (

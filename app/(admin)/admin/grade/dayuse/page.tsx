@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { CreateDayUseForm } from '@/features/dayuse/CreateDayUseForm'
 import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
@@ -6,12 +7,26 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getOrgSports } from '@/lib/arenas/orgSports'
+import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
 
 export default async function AdminDayUsePage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
+  // Sem academia ativa não há day use para listar nem criar — e o preço padrão
+  // (getDayUsePricing) é por academia.
+  if (!orgId) redirect('/selecionar-academia')
   const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
+
+  // Preço vem da MESMA resolução do checkout: o admin tem de ver na lista o
+  // número que o aluno vai pagar, inclusive o "Gratuito" de quando a venda está
+  // desligada ou o Mercado Pago não está conectado.
+  const [orgSports, pricing] = await Promise.all([
+    getOrgSports(orgId),
+    getDayUsePricing(orgId),
+  ])
 
   const { data: slots } = await adminClient
     .from('dayuse_slots')
@@ -58,7 +73,7 @@ export default async function AdminDayUsePage() {
         <h1 className="text-2xl font-bold text-white">Day Use</h1>
         <p className="text-slate-400 text-sm">{slotList.length} slots futuros</p>
       </div>
-      <CreateDayUseForm />
+      <CreateDayUseForm orgSports={orgSports} orgDefaultPriceCents={pricing.defaultCents} />
       <div className="space-y-6">
         {byDate.size === 0 ? (
           <p className="text-slate-400 text-sm">Nenhum slot agendado. Crie um acima.</p>
@@ -74,6 +89,7 @@ export default async function AdminDayUsePage() {
                     key={slot.id}
                     slot={slot}
                     bookingsCount={countMap.get(slot.id) ?? 0}
+                    priceCents={dayUseChargeCents(slot, pricing)}
                   />
                 ))}
               </div>

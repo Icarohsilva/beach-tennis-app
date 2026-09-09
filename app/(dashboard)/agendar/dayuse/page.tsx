@@ -9,6 +9,8 @@ import { Card } from '@/components/ui/Card'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -42,6 +44,10 @@ export default async function AgendarDayUsePage({
     .eq('organization_id', orgId)
     .eq('status', 'pending_payment')
     .lt('booked_at', freshLimit)
+
+  // Preço na tela pela MESMA regra do checkout (dayUseChargeCents): o card
+  // dizia "Gratuito" fixo, então day use pago aparecia como de graça.
+  const pricing = await getDayUsePricing(orgId)
 
   const { data: slots } = await supabase
     .from('dayuse_slots')
@@ -132,6 +138,7 @@ export default async function AgendarDayUsePage({
                   myBookingId={myBookings.get(slot.id) ?? null}
                   myBookingStatus={myBookingStatus.get(slot.id) ?? null}
                   attendees={attendeesMap.get(slot.id) ?? []}
+                  priceCents={dayUseChargeCents(slot, pricing)}
                 />
               ))}
             </div>

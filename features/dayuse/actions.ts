@@ -6,10 +6,17 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { validateDayUseSlot } from './validation'
 import { requireAdmin } from '@/features/aulas/authGuards'
 import { brtToday } from '@/lib/utils/gridSchedule'
-import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { mpCreatePreference } from '@/lib/billing/mpClient'
 import { computeMarketplaceFee } from '@/lib/billing/fees'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
+import {
+  dayUseChargeCents,
+  dayUseChargeTitle,
+  reaisToCents,
+} from '@/lib/dayuse/dayUseKind'
+import { getDayUsePricing } from './pricing'
+import { sportLabel } from '@/lib/arenas/sports'
+import type { DayUseKind } from '@/types'
 
 export { validateDayUseSlot }
 
@@ -19,6 +26,16 @@ export interface CreateDayUseSlotData {
   start_time: string
   end_time: string
   capacity: number
+  /** Slug de lib/arenas/sports.ts. null = sem modalidade declarada. */
+  sport?: string | null
+  kind?: DayUseKind
+  /**
+   * Preço em REAIS como o admin digitou ('40', '39,90', '0'). String vazia ou
+   * null = herda o padrão da academia; '0' = este day use é gratuito. A
+   * distinção entre "não configurei" e "é de graça" é o que se perderia
+   * mandando número direto.
+   */
+  price?: string | null
   notes?: string
 }
 
@@ -51,10 +68,22 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
   })
   if (validation.error) return validation
 
+  // Preço: vazio herda o padrão da academia (price_cents null), '0' é escolha
+  // explícita de day use gratuito. Ver reaisToCents/dayUsePriceCents.
+  const priceRaw = (data.price ?? '').trim()
+  const priceCents = priceRaw === '' ? null : reaisToCents(priceRaw)
+
   // organization_id é informado explicitamente: o trigger trg_set_org de dayuse_slots
   // foi removido no cutover de identidade (plano 3).
   const { error } = await adminClient.from('dayuse_slots').insert({
-    ...data,
+    court: data.court,
+    date: data.date,
+    start_time: data.start_time,
+    end_time: data.end_time,
+    capacity: data.capacity,
+    sport: data.sport || null,
+    kind: data.kind ?? 'scheduled',
+    price_cents: priceCents,
     organization_id: orgId,
     notes: data.notes || null,
     created_by: userId,
@@ -90,15 +119,22 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
 
   const adminClient = createAdminClient()
 
-  // Org do slot (day use pago é configuração por academia).
+  // Org, preço e modalidade do slot: o preço é DESTE day use quando ele tem um,
+  // e o da academia quando não (dayUsePriceCents).
   const { data: slot } = await adminClient
     .from('dayuse_slots')
-    .select('organization_id')
+    .select('organization_id, sport, date, price_cents')
     .eq('id', slotId)
     .eq('is_active', true)
     .maybeSingle()
   if (!slot) return { error: 'Slot não encontrado' }
-  const orgId = slot.organization_id as string
+  const slotRow = slot as {
+    organization_id: string
+    sport: string | null
+    date: string
+    price_cents: number | null
+  }
+  const orgId = slotRow.organization_id
 
   // Quem reserva vindo de fora (conta livre, descoberta pela aba Explorar) vira
   // ATLETA daquela academia. O vínculo é o que a RLS usa para ele enxergar a
@@ -113,18 +149,14 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
       { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
     )
 
-  const { data: settingsRaw } = await adminClient
-    .from('system_settings')
-    .select('key, value')
-    .eq('organization_id', orgId)
-    .in('key', ['day_use_price', 'day_use_sale_enabled'])
-  const settings = Object.fromEntries(
-    ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
-  )
-  const price = parseFloat(settings.day_use_price ?? '0') || 0
-  const token = settings.day_use_sale_enabled === 'true' && price > 0
-    ? await getConnectedMpToken(orgId)
-    : null
+  // Mesma resolução que o card do aluno e a página pública usam para EXIBIR o
+  // preço, para tela e cobrança não divergirem.
+  const pricing = await getDayUsePricing(orgId)
+  // Centavos são a unidade de verdade (price_cents do slot); os reais só existem
+  // porque a preferência do Mercado Pago e payments.amount são em reais.
+  const priceCents = dayUseChargeCents(slotRow, pricing)
+  const price = priceCents / 100
+  const token = priceCents > 0 ? pricing.mpToken : null
   const isPaid = Boolean(token)
 
   // Capacidade + insert atômicos via RPC (advisory lock por slot). Caminho
@@ -195,7 +227,15 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
 
   try {
     const pref = await mpCreatePreference(token as string, {
-      items: [{ title: 'Day Use', quantity: 1, unit_price: price, currency_id: 'BRL' }],
+      items: [{
+        title: dayUseChargeTitle({
+          sportLabel: slotRow.sport ? sportLabel(slotRow.sport) : null,
+          date: slotRow.date,
+        }),
+        quantity: 1,
+        unit_price: price,
+        currency_id: 'BRL',
+      }],
       external_reference: payment.id as string,
       notification_url: `${getSiteUrl()}/api/webhooks/mercadopago?org=${orgId}`,
       back_urls: { success: getSiteUrl(), pending: getSiteUrl(), failure: getSiteUrl() },

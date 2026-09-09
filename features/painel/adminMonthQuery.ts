@@ -74,7 +74,7 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       (a, b) =>
         admin
           .from('dayuse_slots')
-          .select('id, date, start_time, end_time, court, capacity, notes, is_active')
+          .select('id, date, start_time, end_time, court, capacity, notes, is_active, sport')
           .eq('organization_id', orgId)
           .gte('date', from)
           .lte('date', to)
@@ -158,7 +158,7 @@ export async function getAdminMonth({ orgId, monthISO, todayISO }: Args): Promis
       end: d.end_time,
       title: `Quadra ${d.court}`,
       subtitle: d.notes?.trim() || `${formatTime(d.start_time)} às ${formatTime(d.end_time)}`,
-      sport: null,
+      sport: d.sport,
       mine: !d.is_active,
       href: '/admin/grade/dayuse',
       flag: d.is_active ? null : 'cancelada',
@@ -312,6 +312,7 @@ interface DayUseRow {
   capacity: number
   notes: string | null
   is_active: boolean
+  sport: string | null
 }
 
 interface ClassRow {
