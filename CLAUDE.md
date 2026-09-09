@@ -185,6 +185,18 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   inativo também, então `createDayUseSlot` REATIVA o horário removido em vez de inserir
   outro. Desligar a recorrência recolhe as datas futuras que ela gerou (`recurrence_id`),
   menos as que já têm reserva — apagá-las mataria reserva paga em silêncio.
+- **Day use tem página pública própria** (`/d/[id]`, em `app/(public)/d/[id]/`, liberada em
+  `middleware.ts`): é o link que a arena manda no WhatsApp, e a lista da página da arena
+  aponta para lá em vez de mandar visitante para `/cadastro`. Quem não tem conta reserva
+  criando uma na hora (`/d/[id]/cadastrar`), e essa conta é **só do aplicativo**: o formulário
+  não manda `org_invite_code`, então `handle_new_user` cria perfil com ZERO memberships. Por
+  isso `bookDayUse` **não** cria vínculo (o `upsert` de `athlete` que existia foi removido —
+  ler a própria reserva nunca dependeu de membership, `dayuse_bookings_select` é
+  `student_id = auth.uid()`), a Liga só credita quem É da academia, e o estado "sua reserva"
+  mora na própria página pública, porque o avulso não tem `/home`. Isto contradiz de propósito
+  o que o cabeçalho de `20260810000200_signup_without_org.sql` previa ("reserva de day use →
+  membership athlete"); o torneio (`registerExternal`) continua criando vínculo, e a
+  divergência entre os dois fluxos é conhecida.
 - Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
   A resolução mora em `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
   + `getDayUsePricing` ([features/dayuse/pricing.ts](features/dayuse/pricing.ts)), e **tela e

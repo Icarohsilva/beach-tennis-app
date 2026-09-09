@@ -167,18 +167,24 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   }
   const orgId = slotRow.organization_id
 
-  // Quem reserva vindo de fora (conta livre, descoberta pela aba Explorar) vira
-  // ATLETA daquela academia. O vínculo é o que a RLS usa para ele enxergar a
-  // própria reserva depois — e o papel distinto mantém quem só passou por um
-  // day use fora da lista de alunos do professor.
+  // Reservar day use NÃO cria vínculo com a arena. Antes daqui saía um upsert
+  // de membership 'athlete', justificado por RLS — e a justificativa não se
+  // sustenta: `dayuse_bookings_select` é `student_id = auth.uid() or
+  // is_org_admin(...)`, então ler a própria reserva nunca dependeu de vínculo,
+  // e o insert passa pela RPC `book_dayuse_atomic` com service role.
   //
-  // `ignoreDuplicates` protege quem já é aluno (ou admin) de ser rebaixado.
-  await adminClient
+  // A decisão é do produto: quem paga um avulso ganha conta no APLICATIVO, não
+  // matrícula na academia. Criar o vínculo colocava essa pessoa nas listas da
+  // arena e no motor da Liga sem ela ter se tornado aluna de ninguém.
+  //
+  // Consequência tratada logo abaixo: sem membership não há Liga a creditar.
+  const { data: membership } = await adminClient
     .from('memberships')
-    .upsert(
-      { user_id: user.id, organization_id: orgId, role: 'athlete' },
-      { onConflict: 'user_id,organization_id', ignoreDuplicates: true },
-    )
+    .select('user_id')
+    .eq('user_id', user.id)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  const isMember = Boolean(membership)
 
   // Mesma resolução que o card do aluno e a página pública usam para EXIBIR o
   // preço, para tela e cobrança não divergirem.
@@ -207,18 +213,25 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   }
 
   if (!isPaid) {
-    // Liga: só o caminho gratuito credita aqui. No caminho pago a reserva nasce
-    // pending_payment e ainda pode não virar nada — quem credita é o webhook, ao
-    // confirmar o pagamento.
-    await awardLigaExtra(adminClient, {
-      orgId,
-      studentId: user.id,
-      reason: 'dayuse',
-      sourceId: bookingId as string,
-    })
+    // Liga: só o caminho gratuito credita. No caminho pago a reserva nasce
+    // pending_payment e ainda pode não virar nada, e hoje NADA credita depois —
+    // o webhook (checkoutHandlers.ts) só confirma a reserva. Day use pago não
+    // pontua na Liga; está anotado aqui para não parecer esquecimento.
+    //
+    // E só para quem É da academia: a Liga é o ranking DELA, e pontuar avulso
+    // sem vínculo criaria extrato de pontos de quem não está em ranking nenhum.
+    if (isMember) {
+      await awardLigaExtra(adminClient, {
+        orgId,
+        studentId: user.id,
+        reason: 'dayuse',
+        sourceId: bookingId as string,
+      })
+    }
 
     revalidatePath('/agendar/dayuse')
     revalidatePath('/home')
+    revalidatePath(`/d/${slotId}`)
     return {}
   }
 
@@ -273,6 +286,7 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
       marketplace_fee: computeMarketplaceFee(price, feePct),
     })
     revalidatePath('/agendar/dayuse')
+    revalidatePath(`/d/${slotId}`)
     return { initPoint: pref.init_point }
   } catch (e) {
     console.error('[dayuse] preference falhou', e)
@@ -290,14 +304,22 @@ export async function cancelDayUseBooking(bookingId: string): Promise<{ error?: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
-  const { error } = await supabase
+  // Devolve o slot para revalidar a página pública dele. A policy de update é
+  // `student_id = auth.uid()`, então o `.select()` só volta se a reserva for
+  // mesmo desta pessoa — a checagem de dono continua no banco.
+  const { data: cancelled, error } = await supabase
     .from('dayuse_bookings')
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
     .eq('id', bookingId)
     .eq('student_id', user.id)
+    .select('slot_id')
+    .maybeSingle()
 
   if (error) return { error: error.message }
   revalidatePath('/agendar/dayuse')
   revalidatePath('/home')
+  // A página pública mostra vagas e "quem já vai": sem isto o cancelamento só
+  // aparecia lá depois de o cache expirar.
+  if (cancelled) revalidatePath(`/d/${(cancelled as { slot_id: string }).slot_id}`)
   return {}
 }

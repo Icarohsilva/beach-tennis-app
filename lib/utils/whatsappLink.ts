@@ -13,3 +13,15 @@ export function buildWhatsAppUrl(phone: string, message: string): string {
   const intl = digits.startsWith('55') ? digits : `55${digits}`
   return `https://wa.me/${intl}?text=${encodeURIComponent(message)}`
 }
+
+/**
+ * Link de compartilhamento SEM destinatário: o WhatsApp abre a lista de
+ * contatos/grupos para a pessoa escolher.
+ *
+ * Existe separado de `buildWhatsAppUrl` porque lá o telefone é obrigatório
+ * (cobrança de pendência, convite de dupla) e aqui não há a quem endereçar —
+ * quem divulga o day use é a arena, no próprio grupo dela.
+ */
+export function buildWhatsAppShareUrl(message: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`
+}
