@@ -5,6 +5,7 @@
 // mesma passada do cron.
 import { eachDayOfInterval, format, getDay, parseISO } from 'date-fns'
 import type { DayUseKind } from '@/types'
+import type { DayUsePaymentTiming } from './paymentMethod'
 
 /** O molde: uma linha de dayuse_recurrences, só o que a geração precisa. */
 export interface DayUseRecurrence {
@@ -17,6 +18,7 @@ export interface DayUseRecurrence {
   sport?: string | null
   kind?: DayUseKind
   price_cents?: number | null
+  payment_timing?: DayUsePaymentTiming
   notes?: string | null
 }
 
@@ -31,6 +33,7 @@ export interface DayUseSlotRow {
   sport: string | null
   kind: DayUseKind
   price_cents: number | null
+  payment_timing: DayUsePaymentTiming
   notes: string | null
 }
 
@@ -72,6 +75,7 @@ export function buildDayUseRows(
         sport: rec.sport ?? null,
         kind: rec.kind ?? 'scheduled',
         price_cents: rec.price_cents ?? null,
+        payment_timing: rec.payment_timing ?? 'on_site',
         notes: rec.notes ?? null,
       })
     }

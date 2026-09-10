@@ -20,6 +20,12 @@ import {
   generateDayUseNow,
 } from './recurrenceActions'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import {
+  DAY_USE_PAYMENT_TIMINGS,
+  DAY_USE_TIMING_LABEL,
+  timingHint,
+} from '@/lib/dayuse/paymentMethod'
+import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseKind, DayUseRecurrence } from '@/types'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -30,11 +36,14 @@ export function DayUseRecurrencePanel({
   orgSports,
   orgDefaultPriceCents,
   horizonDays,
+  canCollectOnline,
 }: {
   recurrences: DayUseRecurrence[]
   orgSports: string[]
   orgDefaultPriceCents: number
   horizonDays: number
+  /** A academia tem Mercado Pago conectado ou chave PIX? */
+  canCollectOnline: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(recurrences.length === 0)
@@ -42,6 +51,7 @@ export function DayUseRecurrencePanel({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [kind, setKind] = useState<DayUseKind>('scheduled')
+  const [timing, setTiming] = useState<DayUsePaymentTiming>('on_site')
   const { confirm, dialog } = useConfirm()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -59,6 +69,7 @@ export function DayUseRecurrencePanel({
       sport: (fd.get('sport') as string) || null,
       kind: fd.get('kind') as DayUseKind,
       price: (fd.get('price') as string) || null,
+      payment_timing: fd.get('payment_timing') as DayUsePaymentTiming,
       notes: (fd.get('notes') as string) || null,
     })
     setPending(false)
@@ -69,6 +80,7 @@ export function DayUseRecurrencePanel({
         : 'Recorrência criada.',
     )
     setKind('scheduled')
+    setTiming('on_site')
     ;(e.target as HTMLFormElement).reset()
     router.refresh()
   }
@@ -165,6 +177,9 @@ export function DayUseRecurrencePanel({
                       ? `Padrão (${formatDayUsePrice(orgDefaultPriceCents)})`
                       : formatDayUsePrice(rec.price_cents)}
                   </span>
+                  <span className="text-xs text-slate-400">
+                    {DAY_USE_TIMING_LABEL[rec.payment_timing ?? 'on_site']}
+                  </span>
                 </div>
               </div>
               <div className="shrink-0">
@@ -248,6 +263,26 @@ export function DayUseRecurrencePanel({
                 ? `Vazio usa o padrão da academia (${formatDayUsePrice(orgDefaultPriceCents)}).`
                 : 'A academia não tem preço padrão, então vazio deixa o day use gratuito.'}
             </p>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">Pagamento</label>
+            <select
+              name="payment_timing"
+              className={SELECT_CLS}
+              value={timing}
+              onChange={(e) => setTiming(e.target.value as DayUsePaymentTiming)}
+            >
+              {DAY_USE_PAYMENT_TIMINGS.map((t) => (
+                <option key={t} value={t}>{DAY_USE_TIMING_LABEL[t]}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">{timingHint(timing)}</p>
+            {timing === 'on_booking' && !canCollectOnline && (
+              <p className="text-xs text-yellow-400 mt-1">
+                Sem Mercado Pago conectado nem chave PIX, não há como receber na inscrição —
+                as datas geradas vão ser cobradas na arena.
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs text-slate-400 block mb-1">Observação (opcional)</label>

@@ -11,6 +11,12 @@ import {
   dayUseKindHint,
   formatDayUsePrice,
 } from '@/lib/dayuse/dayUseKind'
+import {
+  DAY_USE_PAYMENT_TIMINGS,
+  DAY_USE_TIMING_LABEL,
+  timingHint,
+} from '@/lib/dayuse/paymentMethod'
+import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseKind } from '@/types'
 
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
@@ -18,10 +24,13 @@ const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px
 export function CreateDayUseForm({
   orgSports,
   orgDefaultPriceCents,
+  canCollectOnline,
 }: {
   orgSports: string[]
   /** system_settings.day_use_price da academia, para o admin saber no que cai o vazio. */
   orgDefaultPriceCents: number
+  /** A academia tem Mercado Pago conectado ou chave PIX? */
+  canCollectOnline: boolean
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -30,6 +39,10 @@ export function CreateDayUseForm({
   // mudam com ele: em "livre no período" o número é teto de PESSOAS no espaço,
   // não vaga num jogo — e o admin precisa ler isso antes de digitar.
   const [kind, setKind] = useState<DayUseKind>('scheduled')
+  // Onde se paga também mora no estado: a dica muda com a escolha, e "pagar na
+  // inscrição" numa academia sem forma de receber online precisa avisar ANTES
+  // de o day use existir — depois de criado, o aluno é quem descobre.
+  const [timing, setTiming] = useState<DayUsePaymentTiming>('on_site')
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -46,12 +59,14 @@ export function CreateDayUseForm({
       sport: (fd.get('sport') as string) || null,
       kind: fd.get('kind') as DayUseKind,
       price: (fd.get('price') as string) || null,
+      payment_timing: fd.get('payment_timing') as DayUsePaymentTiming,
       notes: (fd.get('notes') as string) || undefined,
     })
     setPending(false)
     if (result.error) { setError(result.error); return }
     setSuccess(true)
     setKind('scheduled')
+    setTiming('on_site')
     ;(e.target as HTMLFormElement).reset()
   }
 
@@ -122,6 +137,27 @@ export function CreateDayUseForm({
             : 'A academia não tem preço padrão, então vazio deixa este day use gratuito.'}
           {' '}Digite <span className="text-slate-400">0</span> para gratuito de propósito.
         </p>
+      </div>
+      <div>
+        <label className="text-xs text-slate-400 block mb-1">Pagamento</label>
+        <select
+          name="payment_timing"
+          className={SELECT_CLS}
+          value={timing}
+          onChange={(e) => setTiming(e.target.value as DayUsePaymentTiming)}
+        >
+          {DAY_USE_PAYMENT_TIMINGS.map((t) => (
+            <option key={t} value={t}>{DAY_USE_TIMING_LABEL[t]}</option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500 mt-1">{timingHint(timing)}</p>
+        {timing === 'on_booking' && !canCollectOnline && (
+          <p className="text-xs text-yellow-400 mt-1">
+            A academia não tem Mercado Pago conectado nem chave PIX cadastrada, então não há
+            como receber na inscrição — este day use vai ser cobrado na arena. Configure em
+            Financeiro › Integrações ou em Configurações.
+          </p>
+        )}
       </div>
       <div>
         <label className="text-xs text-slate-400 block mb-1">Observação (opcional)</label>

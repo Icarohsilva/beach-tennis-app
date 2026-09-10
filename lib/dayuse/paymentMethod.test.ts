@@ -47,7 +47,32 @@ describe('needsManualConfirmation', () => {
 })
 
 describe('resolveDayUsePaymentMethod', () => {
-  const base = { gatewayCents: 4000, walletCents: 0, hasMpToken: true, hasPixKey: true }
+  // `timing: 'on_booking'` no base porque a escolha da academia vem ANTES da
+  // configuração: sem ela, toda cobrança cai em 'on_site' (o default da coluna)
+  // e nenhum destes casos de gateway existiria.
+  const base = {
+    gatewayCents: 4000, walletCents: 0,
+    hasMpToken: true, hasPixKey: true,
+    timing: 'on_booking' as const,
+  }
+
+  it('a escolha da academia vence o gateway conectado', () => {
+    // Arena com Mercado Pago ligado que cobra na porta: exigir pagamento online
+    // aqui prendia o aluno num checkout que a arena não queria.
+    expect(resolveDayUsePaymentMethod({ ...base, timing: 'on_site' })).toBe('on_site')
+  })
+
+  it('timing ausente é "na arena" — o default da coluna', () => {
+    const { timing: _ignored, ...noTiming } = base
+    expect(resolveDayUsePaymentMethod(noTiming)).toBe('on_site')
+  })
+
+  it('pedir pagamento na inscrição sem como receber cai na arena, não barra', () => {
+    // Barrar a reserva puniria o aluno por uma configuração da academia; a tela
+    // do admin é que avisa que falta conectar (dayUsePriceView.needsSetup).
+    expect(resolveDayUsePaymentMethod({ ...base, hasMpToken: false, hasPixKey: false }))
+      .toBe('on_site')
+  })
 
   it('gateway conectado vence: confirma sozinho', () => {
     expect(resolveDayUsePaymentMethod(base)).toBe('mercadopago')

@@ -9,6 +9,12 @@ import { bookDayUse, cancelDayUseBooking } from './actions'
 import { DayUseBadges } from './DayUseBadges'
 import { dayUseKindHint } from '@/lib/dayuse/dayUseKind'
 import { formatWalletCents, splitWithWallet } from '@/lib/wallet/wallet'
+import {
+  DAY_USE_TIMING_STUDENT_LABEL,
+  timingNoticeForStudent,
+  type DayUsePaymentTiming,
+} from '@/lib/dayuse/paymentMethod'
+import { PAYMENT_REFUND_PROMISE } from '@/lib/dayuse/refundRules'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseSlot } from '@/types'
 
@@ -23,13 +29,18 @@ interface Props {
    * o card dizia "Gratuito" fixo, então day use pago aparecia como de graça.
    */
   priceCents: number
+  /**
+   * Onde o pagamento acontece (dayUsePriceView.timing). Vai para o chip e para
+   * a linha de apoio: sem isso o aluno lê o preço sem saber se paga agora.
+   */
+  paymentTiming?: DayUsePaymentTiming
   /** O que acontece com o dinheiro ao cancelar (cancelNoticeForStudent). */
   cancelNotice?: string | null
   /** Saldo em dinheiro do aluno nesta academia, para mostrar o abatimento. */
   walletCents?: number
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, cancelNotice = null, walletCents = 0 }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, paymentTiming = 'on_site', cancelNotice = null, walletCents = 0 }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
@@ -97,6 +108,7 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
             sport={slot.sport}
             kind={slot.kind}
             priceCents={priceCents}
+            payOnSite={priceCents > 0 && paymentTiming === 'on_site'}
           />
           {isFull && !bookingId && (
             <div className="mb-1"><Badge variant="danger">Lotado</Badge></div>
@@ -105,6 +117,15 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
             {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
           </p>
           <p className="text-slate-500 text-xs mt-0.5">{dayUseKindHint(slot.kind)}</p>
+          {priceCents > 0 && (
+            <p className="text-slate-400 text-xs mt-0.5">
+              {DAY_USE_TIMING_STUDENT_LABEL[paymentTiming]} ·{' '}
+              {timingNoticeForStudent(paymentTiming)}
+            </p>
+          )}
+          {priceCents > 0 && paymentTiming === 'on_booking' && !bookingId && (
+            <p className="text-green-400 text-xs mt-0.5">{PAYMENT_REFUND_PROMISE}</p>
+          )}
           {!bookingId && split.walletCents > 0 && (
             <p className="text-green-400 text-xs mt-0.5">
               {split.gatewayCents === 0

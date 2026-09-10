@@ -8,6 +8,7 @@ import { recurrenceConflict } from '@/lib/dayuse/recurrence'
 import { reaisToCents } from '@/lib/dayuse/dayUseKind'
 import { dayUseWindow, generateDayUse } from './generation'
 import type { DayUseKind } from '@/types'
+import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 
 export interface CreateDayUseRecurrenceData {
   day_of_week: number
@@ -19,6 +20,7 @@ export interface CreateDayUseRecurrenceData {
   kind?: DayUseKind
   /** Reais como o admin digitou. Vazio herda o padrão da academia. */
   price?: string | null
+  payment_timing?: DayUsePaymentTiming
   notes?: string | null
 }
 
@@ -65,6 +67,7 @@ export async function createDayUseRecurrence(
       sport: data.sport || null,
       kind: data.kind ?? 'scheduled',
       price_cents: priceRaw === '' ? null : reaisToCents(priceRaw),
+      payment_timing: data.payment_timing ?? 'on_site',
       notes: data.notes || null,
       is_active: true,
       created_by: userId,

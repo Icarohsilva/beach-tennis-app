@@ -20,7 +20,12 @@ describe('resolveDayUseCta', () => {
     expect(cta.state).toBe('open')
     expect(cta.actionable).toBe(true)
     expect(cta.label).toBe('Reservar minha vaga')
-    expect(cta.note).toBe('R$ 40,00 por pessoa · 5 vagas')
+    expect(cta.note).toBe('R$ 40,00 por pessoa · pagamento na arena · 5 vagas')
+  })
+
+  it('diz na linha de apoio que o pagamento é na reserva', () => {
+    const cta = resolveDayUseCta({ ...BASE, paymentTiming: 'on_booking' })
+    expect(cta.note).toBe('R$ 40,00 por pessoa · pagamento na reserva · 5 vagas')
   })
 
   it('convida quem não está logado a criar conta, sem esconder que dá para reservar', () => {
@@ -33,8 +38,10 @@ describe('resolveDayUseCta', () => {
     expect(resolveDayUseCta({ ...BASE, occupied: 7 }).note).toContain('última vaga')
   })
 
-  it('diz Gratuito quando não há preço', () => {
-    expect(resolveDayUseCta({ ...BASE, priceCents: 0 }).note).toBe('Gratuito · 5 vagas')
+  it('diz Gratuito quando não há preço, sem falar de pagamento', () => {
+    // Gratuito com "pagamento na arena" ao lado seria a tela se contradizendo.
+    expect(resolveDayUseCta({ ...BASE, priceCents: 0, paymentTiming: 'on_booking' }).note)
+      .toBe('Gratuito · 5 vagas')
   })
 
   it('lota quando a ocupação alcança a capacidade', () => {
@@ -101,7 +108,7 @@ describe('dayUseShareMessage', () => {
     expect(dayUseShareMessage(input)).toBe(
       'Day use de Beach Tennis na Arena Sol\n'
       + 'domingo, 27 de setembro, das 09:00 às 12:00\n'
-      + 'R$ 40,00 por pessoa\n'
+      + 'R$ 40,00 por pessoa (pago na arena)\n'
       + '\n'
       + 'Reserve sua vaga: https://arenahub.website/d/abc',
     )
@@ -109,6 +116,17 @@ describe('dayUseShareMessage', () => {
 
   it('marca o tipo livre no período, que não se explica sozinho', () => {
     expect(dayUseShareMessage({ ...input, kind: 'open' })).toContain('(livre no período)')
+  })
+
+  it('diz onde se paga, que é o que decide se a pessoa clica', () => {
+    expect(dayUseShareMessage({ ...input, paymentTiming: 'on_booking' }))
+      .toContain('R$ 40,00 por pessoa (pago na reserva)')
+  })
+
+  it('day use gratuito não fala de pagamento nenhum', () => {
+    const msg = dayUseShareMessage({ ...input, priceCents: 0, paymentTiming: 'on_booking' })
+    expect(msg).toContain('Entrada gratuita')
+    expect(msg).not.toContain('pago na')
   })
 
   it('funciona sem modalidade e sem preço', () => {

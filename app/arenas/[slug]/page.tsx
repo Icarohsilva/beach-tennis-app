@@ -38,7 +38,8 @@ import type { BrowseTournament } from '@/lib/torneios/browse'
 import { TrialBookingForm } from './TrialBookingForm'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
-import { DAY_USE_KIND_LABEL, dayUseChargeCents, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
+import { DAY_USE_KIND_LABEL, dayUsePriceView, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
+import { DAY_USE_TIMING_STUDENT_LABEL } from '@/lib/dayuse/paymentMethod'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 
 const ARENA_COLUMNS =
@@ -317,7 +318,8 @@ export default async function ArenaPage({ params }: PageProps) {
             <Card>
               <ul className="divide-y divide-white/[0.06]">
                 {showcase.dayUse.map((slot) => {
-                  const priceCents = dayUseChargeCents(slot, dayUsePricing)
+                  const price = dayUsePriceView(slot, dayUsePricing)
+                  const priceCents = price.priceCents
                   const left = Math.max(slot.capacity - slot.occupied, 0)
                   return (
                     <li key={slot.id} className="py-2.5 first:pt-0 last:pb-0">
@@ -347,6 +349,11 @@ export default async function ArenaPage({ params }: PageProps) {
                           <p className="text-sm font-bold text-white">
                             {formatDayUsePrice(priceCents)}
                           </p>
+                          {priceCents > 0 && (
+                            <p className="text-xs text-slate-500">
+                              {DAY_USE_TIMING_STUDENT_LABEL[price.timing].toLowerCase()}
+                            </p>
+                          )}
                           <p className="text-xs text-slate-500">
                             {left === 0 ? 'Lotado' : left === 1 ? 'Última vaga' : `${left} vagas`}
                           </p>

@@ -6,7 +6,8 @@
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { formatDayUsePrice } from './dayUseKind'
 import type { DayUseKind } from '@/types'
-import type { DayUsePaymentMethod } from './paymentMethod'
+import { DAY_USE_TIMING_STUDENT_LABEL } from './paymentMethod'
+import type { DayUsePaymentMethod, DayUsePaymentTiming } from './paymentMethod'
 
 export type DayUseCtaState =
   /** Dá para reservar agora. */
@@ -45,6 +46,12 @@ export interface DayUseCtaInput {
    * pagar na chave da arena é prometer que a vaga cai antes de a arena olhar.
    */
   myPaymentMethod?: DayUsePaymentMethod | null
+  /**
+   * Onde o pagamento acontece. Entra no `note` porque é a primeira pergunta de
+   * quem vê um preço num link do WhatsApp: pago agora ou na quadra? Ausente =
+   * 'on_site', o default da coluna.
+   */
+  paymentTiming?: DayUsePaymentTiming | null
   /** Está logado? Muda só o texto: quem não está passa pela conta rápida. */
   signedIn: boolean
   /** Preço já resolvido (dayUseChargeCents). 0 = gratuito. */
@@ -101,12 +108,14 @@ export function resolveDayUseCta(input: DayUseCtaInput): DayUseCta {
   }
 
   const left = input.capacity - input.occupied
+  const timing = input.paymentTiming ?? 'on_site'
   return {
     state: 'open',
     label: input.signedIn ? 'Reservar minha vaga' : 'Criar conta e reservar',
     note:
       input.priceCents > 0
-        ? `${formatDayUsePrice(input.priceCents)} por pessoa · ${vagasLabel(left)}`
+        ? `${formatDayUsePrice(input.priceCents)} por pessoa · `
+          + `${DAY_USE_TIMING_STUDENT_LABEL[timing].toLowerCase()} · ${vagasLabel(left)}`
         : `Gratuito · ${vagasLabel(left)}`,
     actionable: true,
   }
@@ -134,12 +143,18 @@ export function dayUseShareMessage(input: {
   startLabel: string
   endLabel: string
   priceCents: number
+  /** Onde se paga — vai na mensagem porque é o que decide se a pessoa clica. */
+  paymentTiming?: DayUsePaymentTiming | null
   url: string
 }): string {
   const what = input.sportLabel ? `Day use de ${input.sportLabel}` : 'Day use'
   const how = input.kind === 'open' ? ' (livre no período)' : ''
+  const onde =
+    (input.paymentTiming ?? 'on_site') === 'on_site' ? ' (pago na arena)' : ' (pago na reserva)'
   const price =
-    input.priceCents > 0 ? `${formatDayUsePrice(input.priceCents)} por pessoa` : 'Entrada gratuita'
+    input.priceCents > 0
+      ? `${formatDayUsePrice(input.priceCents)} por pessoa${onde}`
+      : 'Entrada gratuita'
   return [
     `${what}${how} na ${input.orgName}`,
     `${input.dateLabel}, das ${input.startLabel} às ${input.endLabel}`,

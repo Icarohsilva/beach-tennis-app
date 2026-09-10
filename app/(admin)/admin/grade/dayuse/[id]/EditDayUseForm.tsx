@@ -17,6 +17,12 @@ import {
 } from '@/lib/dayuse/dayUseKind'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { deactivateDayUseSlot, updateDayUseSlot } from '@/features/dayuse/actions'
+import {
+  DAY_USE_PAYMENT_TIMINGS,
+  DAY_USE_TIMING_LABEL,
+  timingHint,
+} from '@/lib/dayuse/paymentMethod'
+import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseKind, DayUseSlot } from '@/types'
 
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
@@ -26,18 +32,22 @@ export function EditDayUseForm({
   orgSports,
   orgDefaultPriceCents,
   activeBookings,
+  canCollectOnline,
 }: {
   slot: DayUseSlot
   orgSports: string[]
   orgDefaultPriceCents: number
   /** Reservas que ainda valem — o texto do cancelamento depende delas. */
   activeBookings: number
+  /** A academia tem Mercado Pago conectado ou chave PIX? */
+  canCollectOnline: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [kind, setKind] = useState<DayUseKind>(slot.kind)
+  const [timing, setTiming] = useState<DayUsePaymentTiming>(slot.payment_timing ?? 'on_site')
   const { confirm, dialog } = useConfirm()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -51,6 +61,7 @@ export function EditDayUseForm({
         sport: (fd.get('sport') as string) || null,
         kind: fd.get('kind') as DayUseKind,
         price: (fd.get('price') as string) || null,
+        payment_timing: fd.get('payment_timing') as DayUsePaymentTiming,
         notes: (fd.get('notes') as string) || null,
       })
       if (r.error) { setError(r.error); return }
@@ -145,6 +156,34 @@ export function EditDayUseForm({
             ? `Vazio volta a usar o padrão da academia (${formatDayUsePrice(orgDefaultPriceCents)}).`
             : 'A academia não tem preço padrão, então vazio deixa este day use gratuito.'}
         </p>
+
+        <div>
+          <label className="mb-1 block text-xs text-slate-400">Pagamento</label>
+          <select
+            name="payment_timing"
+            className={SELECT_CLS}
+            value={timing}
+            onChange={(e) => setTiming(e.target.value as DayUsePaymentTiming)}
+          >
+            {DAY_USE_PAYMENT_TIMINGS.map((t) => (
+              <option key={t} value={t}>{DAY_USE_TIMING_LABEL[t]}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">{timingHint(timing)}</p>
+          {timing === 'on_booking' && !canCollectOnline && (
+            <p className="mt-1 text-xs text-yellow-400">
+              Sem Mercado Pago conectado nem chave PIX, não há como receber na inscrição —
+              este day use continua sendo cobrado na arena.
+            </p>
+          )}
+          {timing !== (slot.payment_timing ?? 'on_site') && activeBookings > 0 && (
+            <p className="mt-1 text-xs text-yellow-400">
+              {activeBookings} pessoa(s) já reservaram sob a regra anterior. A mudança vale para
+              quem entrar de agora em diante — quem já está dentro mantém a forma de pagamento
+              da reserva dele.
+            </p>
+          )}
+        </div>
 
         <div>
           <label className="mb-1 block text-xs text-slate-400">Observação</label>

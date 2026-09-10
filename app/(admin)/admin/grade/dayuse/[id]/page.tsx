@@ -20,7 +20,7 @@ import {
   formatDayUsePrice,
 } from '@/lib/dayuse/dayUseKind'
 import { dayUseShareMessage } from '@/lib/dayuse/publicPage'
-import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { canCollectOnline, getDayUsePricing } from '@/features/dayuse/pricing'
 import { getAdminDayUse } from '@/features/dayuse/adminSlotQuery'
 import { DayUseShareCard } from './DayUseShareCard'
 import { EditDayUseForm } from './EditDayUseForm'
@@ -45,6 +45,7 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
   const { slot, attendees, occupied } = data
   // O preço é o preço; o que varia é onde ele é pago (dayUsePriceView).
   const price = dayUsePriceView(slot, pricing)
+  const podeCobrarOnline = canCollectOnline(pricing)
 
   const dateLabel = formatDate(slot.date, "EEEE, dd 'de' MMMM")
   const shareUrl = `${getSiteUrl()}/d/${slot.id}`
@@ -56,6 +57,7 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
     startLabel: formatTime(slot.start_time),
     endLabel: formatTime(slot.end_time),
     priceCents: price.priceCents,
+    paymentTiming: price.timing,
     url: shareUrl,
   })
 
@@ -84,9 +86,15 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
           <span className="text-lg font-bold text-white">
             {formatDayUsePrice(price.priceCents)}
           </span>
-          {price.payOnSite && (
-            <span className="rounded-full border border-yellow-700/50 bg-yellow-900/40 px-2 py-0.5 text-xs text-yellow-300">
-              Pago na arena
+          {price.priceCents > 0 && (
+            <span
+              className={
+                price.payOnSite
+                  ? 'rounded-full border border-yellow-700/50 bg-yellow-900/40 px-2 py-0.5 text-xs text-yellow-300'
+                  : 'rounded-full border border-brand-700/50 bg-brand-900/40 px-2 py-0.5 text-xs text-brand-300'
+              }
+            >
+              {price.payOnSite ? 'Pago na arena' : 'Pago na inscrição'}
             </span>
           )}
           <span className="text-sm text-slate-400">
@@ -96,14 +104,28 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
         {price.payOnSite && (
           <p className="mt-1 text-xs text-slate-400">
             O aluno vê o preço e reserva pelo app, mas paga na porta — dê baixa na lista
-            de inscritos. Para receber online,{' '}
+            de inscritos.
+          </p>
+        )}
+        {/* Pediu pagamento na inscrição e não há como receber: o app caiu para
+            "na arena" sozinho, e sem esta linha isso parece defeito da tela. */}
+        {price.needsSetup && (
+          <p className="mt-1 text-xs text-yellow-300">
+            Este day use está marcado para pagar na inscrição, mas a academia não tem como
+            receber online — então ele está sendo cobrado na arena.{' '}
             <Link href="/admin/financeiro/integracoes" className="text-brand-400 hover:text-brand-300">
-              conecte o Mercado Pago
+              Conecte o Mercado Pago
             </Link>
             {' ou '}
             <Link href="/admin/configuracoes" className="text-brand-400 hover:text-brand-300">
-              cadastrar chave PIX
+              cadastre a chave PIX
             </Link>.
+          </p>
+        )}
+        {price.collectedInApp && (
+          <p className="mt-1 text-xs text-slate-400">
+            O aluno paga ao reservar. Confira o comprovante na lista de inscritos — se o
+            pagamento não vier, cobre por WhatsApp ou cancele a inscrição por ali.
           </p>
         )}
         {slot.notes && <p className="mt-2 text-sm text-slate-300">{slot.notes}</p>}
@@ -143,7 +165,13 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
             </p>
           ) : (
             <ul className="divide-y divide-white/[0.06]">
-              {attendees.map((a) => <AttendeeRow key={a.bookingId} item={a} />)}
+              {attendees.map((a) => (
+                <AttendeeRow
+                  key={a.bookingId}
+                  item={a}
+                  slotLabel={`${formatDate(slot.date, 'dd/MM')} às ${formatTime(slot.start_time)}`}
+                />
+              ))}
             </ul>
           )}
         </Card>
@@ -161,6 +189,7 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
         orgSports={orgSports}
         orgDefaultPriceCents={pricing.defaultCents}
         activeBookings={ativos.length}
+        canCollectOnline={podeCobrarOnline}
       />
     </div>
   )

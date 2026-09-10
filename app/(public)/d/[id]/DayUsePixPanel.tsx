@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/Input'
 import { formatWalletCents } from '@/lib/wallet/wallet'
 import { uploadDayUseReceipt } from '@/features/dayuse/receiptActions'
 import { setBookingRefundPixKey } from '@/features/dayuse/refundActions'
+import { PAYMENT_REFUND_PROMISE } from '@/lib/dayuse/refundRules'
 
 export function DayUsePixPanel({
   bookingId,
@@ -48,7 +49,10 @@ export function DayUsePixPanel({
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       },
-      () => window.prompt('Copie a chave PIX:', pixKey),
+      // Sem `window.prompt` (ver CLAUDE.md): a chave já está na tela acima,
+      // então o caminho de erro é pedir a cópia manual, não abrir um diálogo do
+      // sistema operacional em cima da página.
+      () => setError('Não foi possível copiar. Selecione a chave acima e copie manualmente.'),
     )
   }
 
@@ -123,6 +127,9 @@ export function DayUsePixPanel({
       )}
 
       <div className="space-y-2 border-t border-surface-border pt-3">
+        {/* A promessa de devolução vem junto do campo que a torna possível: sem
+            chave informada, o estorno abre sem para onde ir. */}
+        <p className="text-xs text-green-400">{PAYMENT_REFUND_PROMISE}</p>
         <p className="text-xs text-slate-400">
           {savedMyKey
             ? 'Sua chave PIX de estorno está registrada. Você pode trocá-la.'

@@ -17,10 +17,15 @@ import {
 import { getDayUsePricing } from './pricing'
 import { cancelDayUseSlotBookings } from './cancelSlot'
 import { openRefundForBooking } from './refunds'
+import { notifyUsers } from '@/lib/notifications/dispatch'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
 import { refundWalletSpend, spendWallet } from '@/features/wallet/spendWallet'
 import { splitWithWallet, WALLET_REASONS } from '@/lib/wallet/wallet'
-import { holdUntilIso, resolveDayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
+import {
+  holdUntilIso,
+  resolveDayUsePaymentMethod,
+  type DayUsePaymentTiming,
+} from '@/lib/dayuse/paymentMethod'
 import { sportLabel } from '@/lib/arenas/sports'
 import type { DayUseKind } from '@/types'
 
@@ -42,6 +47,8 @@ export interface CreateDayUseSlotData {
    * mandando número direto.
    */
   price?: string | null
+  /** Quando se paga. Default 'on_site', igual à coluna. */
+  payment_timing?: DayUsePaymentTiming
   notes?: string
 }
 
@@ -85,6 +92,7 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
     sport: data.sport || null,
     kind: data.kind ?? 'scheduled',
     price_cents: priceCents,
+    payment_timing: data.payment_timing ?? 'on_site',
     notes: data.notes || null,
   }
 
@@ -189,7 +197,7 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   // e o da academia quando não (dayUsePriceCents).
   const { data: slot } = await adminClient
     .from('dayuse_slots')
-    .select('organization_id, sport, date, price_cents')
+    .select('organization_id, sport, date, price_cents, payment_timing')
     .eq('id', slotId)
     .eq('is_active', true)
     .maybeSingle()
@@ -199,6 +207,7 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
     sport: string | null
     date: string
     price_cents: number | null
+    payment_timing: DayUsePaymentTiming
   }
   const orgId = slotRow.organization_id
 
@@ -250,6 +259,9 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
     walletCents: split.walletCents,
     hasMpToken: Boolean(pricing.mpToken),
     hasPixKey: Boolean(pricing.pixKey),
+    // A escolha da academia manda: day use marcado para pagar na arena não
+    // abre cobrança online nem com gateway conectado.
+    timing: slotRow.payment_timing,
   })
   const token = method === 'mercadopago' ? pricing.mpToken : null
   // Só o Checkout Pro abre preferência aqui; o PIX manual espera comprovante.
@@ -576,6 +588,7 @@ export interface UpdateDayUseSlotData {
   kind?: DayUseKind
   /** Reais como o admin digitou. Vazio volta a herdar o padrão da academia. */
   price?: string | null
+  payment_timing?: DayUsePaymentTiming
   notes?: string | null
 }
 
@@ -618,6 +631,7 @@ export async function updateDayUseSlot(
       sport: data.sport || null,
       kind: data.kind ?? 'scheduled',
       price_cents: priceRaw === '' ? null : reaisToCents(priceRaw),
+      payment_timing: data.payment_timing ?? 'on_site',
       notes: data.notes || null,
     })
     .eq('id', slotId)
@@ -687,5 +701,96 @@ export async function markDayUsePaidOnSite(
   if (!updated) return { error: 'Não há pagamento pendente nesta reserva.' }
 
   revalidatePath(`/admin/grade/dayuse/${(booking as { slot_id: string }).slot_id}`)
+  return {}
+}
+
+/**
+ * Admin cancela a inscrição de UMA pessoa por falta de pagamento.
+ *
+ * O terceiro caminho de "não pagou", ao lado de cobrar por WhatsApp e de
+ * recusar um comprovante (`rejectDayUseReceipt`). Existe porque os dois que já
+ * havia não cobriam o caso mais comum do day use cobrado na inscrição: quem
+ * reservou, nunca pagou e **nem comprovante enviou** — não há comprovante a
+ * recusar, e a vaga ficava presa até o horário passar.
+ *
+ * Serve também a reserva `confirmed` de pagamento na arena: quem não apareceu
+ * nem acertou continua ocupando vaga.
+ *
+ * Passa por `openRefundForBooking` (`cause: 'arena_cancelou'`) pelo mesmo
+ * motivo da recusa de comprovante: o aluno pode ter abatido crédito da carteira
+ * antes de deixar de pagar o resto, e cancelar sem devolver esse crédito é
+ * ficar com dinheiro dele. Sem nada pago por gateway, nenhum estorno PIX abre.
+ */
+export async function cancelDayUseBookingAsAdmin(
+  bookingId: string,
+  reason: string,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { data: bookingRaw } = await adminClient
+    .from('dayuse_bookings')
+    .select('id, slot_id, student_id, booked_at, status, refund_pix_key, refund_pix_owner, dayuse_slots(date, start_time)')
+    .eq('id', bookingId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!bookingRaw) return { error: 'Reserva não encontrada.' }
+  const booking = bookingRaw as {
+    slot_id: string
+    student_id: string
+    booked_at: string
+    refund_pix_key: string | null
+    refund_pix_owner: string | null
+    dayuse_slots: { date: string; start_time: string } | { date: string; start_time: string }[] | null
+  }
+
+  // A troca de status é a trava de concorrência: dois admins clicando, ou o
+  // aluno cancelando junto, e só o primeiro encontra a linha para atualizar.
+  const { data: cancelled } = await adminClient
+    .from('dayuse_bookings')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), hold_until: null })
+    .eq('id', bookingId)
+    .in('status', ['confirmed', 'pending_payment'])
+    .select('id')
+    .maybeSingle()
+  if (!cancelled) return { error: 'Esta reserva já não está ativa.' }
+
+  await adminClient
+    .from('payments')
+    .update({ status: 'failed' })
+    .eq('dayuse_booking_id', bookingId)
+    .eq('status', 'pending')
+
+  const slot = Array.isArray(booking.dayuse_slots) ? booking.dayuse_slots[0] : booking.dayuse_slots
+  if (slot) {
+    await openRefundForBooking(adminClient, {
+      orgId,
+      bookingId,
+      studentId: booking.student_id,
+      slot,
+      bookedAtIso: booking.booked_at,
+      cause: 'arena_cancelou',
+      pixKey: booking.refund_pix_key,
+      pixOwner: booking.refund_pix_owner,
+    })
+  }
+
+  const motivo = reason.trim().slice(0, 200)
+  await notifyUsers(adminClient, {
+    orgId,
+    recipients: [{ userId: booking.student_id }],
+    type: 'dayuse_cancelled',
+    title: 'Reserva de day use cancelada',
+    body: 'A academia cancelou sua reserva de day use por falta de pagamento.'
+      + (motivo ? ` Motivo: ${motivo}` : '')
+      + ' Fale com a arena se você já pagou.',
+    channels: ['inapp', 'push'],
+  })
+
+  revalidatePath(`/admin/grade/dayuse/${booking.slot_id}`)
+  revalidatePath('/admin/financeiro/day-use')
+  revalidatePath(`/d/${booking.slot_id}`)
+  revalidatePath('/agendar/dayuse')
   return {}
 }

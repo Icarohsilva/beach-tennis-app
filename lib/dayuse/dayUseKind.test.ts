@@ -92,19 +92,50 @@ describe('formatDayUsePrice', () => {
 })
 
 describe('dayUsePriceView', () => {
+  const naArena = { defaultCents: 0, canCharge: false }
+  const online = { defaultCents: 0, canCharge: true }
+
   it('o preço é o preço, com ou sem cobrança no app', () => {
     // O defeito relatado: o admin definia R$ 20 e TODA tela — inclusive o link
     // do aluno — dizia "Gratuito", porque a leitura de preço era condicionada a
     // conseguir cobrar dentro do app.
-    expect(dayUsePriceView({ price_cents: 2000 }, { defaultCents: 0, canCharge: true }))
-      .toEqual({ priceCents: 2000, collectedInApp: true, payOnSite: false })
-    expect(dayUsePriceView({ price_cents: 2000 }, { defaultCents: 0, canCharge: false }))
-      .toEqual({ priceCents: 2000, collectedInApp: false, payOnSite: true })
+    expect(dayUsePriceView({ price_cents: 2000, payment_timing: 'on_booking' }, online))
+      .toEqual({
+        priceCents: 2000, timing: 'on_booking',
+        collectedInApp: true, payOnSite: false, needsSetup: false,
+      })
+    expect(dayUsePriceView({ price_cents: 2000, payment_timing: 'on_site' }, online))
+      .toEqual({
+        priceCents: 2000, timing: 'on_site',
+        collectedInApp: false, payOnSite: true, needsSetup: false,
+      })
   })
 
-  it('sem cobrança no app, preço zero segue gratuito e não "pague na arena"', () => {
-    expect(dayUsePriceView({ price_cents: 0 }, { defaultCents: 0, canCharge: false }))
-      .toEqual({ priceCents: 0, collectedInApp: false, payOnSite: false })
+  it('a escolha da academia manda, mesmo com cobrança online disponível', () => {
+    // Arena com Mercado Pago ligado que cobra na porta. Antes de `payment_timing`
+    // isto era deduzido da configuração e não havia como dizer "cobro na porta".
+    const v = dayUsePriceView({ price_cents: 4000, payment_timing: 'on_site' }, online)
+    expect(v.payOnSite).toBe(true)
+    expect(v.collectedInApp).toBe(false)
+  })
+
+  it('pedir na inscrição sem como receber cai na arena e pede configuração', () => {
+    const v = dayUsePriceView({ price_cents: 4000, payment_timing: 'on_booking' }, naArena)
+    expect(v.timing).toBe('on_site')
+    expect(v.payOnSite).toBe(true)
+    expect(v.needsSetup).toBe(true)
+  })
+
+  it('timing ausente é "na arena" — o default da coluna', () => {
+    expect(dayUsePriceView({ price_cents: 4000 }, online).timing).toBe('on_site')
+  })
+
+  it('preço zero segue gratuito e não "pague na arena"', () => {
+    expect(dayUsePriceView({ price_cents: 0, payment_timing: 'on_booking' }, naArena))
+      .toEqual({
+        priceCents: 0, timing: 'on_site',
+        collectedInApp: false, payOnSite: false, needsSetup: false,
+      })
   })
 
   it('herda o padrão da academia', () => {

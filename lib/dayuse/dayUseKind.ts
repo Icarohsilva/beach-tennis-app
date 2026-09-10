@@ -4,6 +4,7 @@
 // Mercado Pago — e o preço em particular não pode divergir entre o que a tela
 // promete e o que a cobrança gera.
 import type { DayUseKind } from '@/types'
+import type { DayUsePaymentTiming } from './paymentMethod'
 
 export const DAY_USE_KINDS: readonly DayUseKind[] = ['scheduled', 'open']
 
@@ -69,26 +70,42 @@ export function dayUseChargeCents(
  *
  * Uma leitura só de preço (`priceCents`), porque preço na tela e preço cobrado
  * não podem divergir — foi essa divergência que fez o app anunciar "Gratuito"
- * um day use de R$ 20. O que muda por academia é a forma de pagar:
- * `collectedInApp` falso quer dizer "combine na arena", não "de graça".
+ * um day use de R$ 20. O que muda é ONDE se paga, e isso agora é **escolha da
+ * academia** (`payment_timing`), não dedução da configuração dela: arena com
+ * PIX cadastrado que cobra na porta marca `on_site`, e quem quer receber antes
+ * marca `on_booking`.
+ *
+ * A configuração ainda entra como TETO: marcado para pagar na inscrição sem
+ * gateway nem chave PIX, não há como receber online, e o efetivo cai para
+ * `on_site` com `needsSetup` ligado — a tela do admin avisa em vez de a reserva
+ * quebrar na frente do aluno.
  */
 export interface DayUsePriceView {
   priceCents: number
+  /** O que vale de fato, depois do teto da configuração. */
+  timing: DayUsePaymentTiming
   /** Dá para pagar dentro do app (Checkout Pro ou PIX na chave da arena)? */
   collectedInApp: boolean
   /** Tem preço e o pagamento acontece na arena. */
   payOnSite: boolean
+  /** Pedia pagamento na inscrição, mas a academia não tem como receber online. */
+  needsSetup: boolean
 }
 
 export function dayUsePriceView(
-  slot: { price_cents?: number | null },
+  slot: { price_cents?: number | null; payment_timing?: DayUsePaymentTiming | null },
   opts: { defaultCents: number; canCharge: boolean },
 ): DayUsePriceView {
   const priceCents = dayUsePriceCents(slot, opts.defaultCents)
+  const wanted: DayUsePaymentTiming = slot.payment_timing ?? 'on_site'
+  const timing: DayUsePaymentTiming =
+    wanted === 'on_booking' && opts.canCharge ? 'on_booking' : 'on_site'
   return {
     priceCents,
-    collectedInApp: opts.canCharge,
-    payOnSite: priceCents > 0 && !opts.canCharge,
+    timing,
+    collectedInApp: priceCents > 0 && timing === 'on_booking',
+    payOnSite: priceCents > 0 && timing === 'on_site',
+    needsSetup: priceCents > 0 && wanted === 'on_booking' && !opts.canCharge,
   }
 }
 

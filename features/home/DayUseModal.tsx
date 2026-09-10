@@ -24,8 +24,12 @@ import {
   dayUseKindHint,
   formatDayUsePrice,
 } from '@/lib/dayuse/dayUseKind'
-import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
+import { cancelNoticeForStudent, PAYMENT_REFUND_PROMISE } from '@/lib/dayuse/refundRules'
 import { resolveDayUseCta } from '@/lib/dayuse/publicPage'
+import {
+  DAY_USE_TIMING_STUDENT_LABEL,
+  timingNoticeForStudent,
+} from '@/lib/dayuse/paymentMethod'
 import { formatWalletCents, splitWithWallet } from '@/lib/wallet/wallet'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { bookDayUse, cancelDayUseBooking } from '@/features/dayuse/actions'
@@ -54,7 +58,7 @@ export function DayUseModal({
    */
   const [detail, setDetail] = useState(initialDetail)
 
-  const { slot, priceCents, walletCents, occupied, attendees, mine } = detail
+  const { slot, priceCents, paymentTiming, walletCents, occupied, attendees, mine } = detail
 
   async function reload() {
     const fresh = await loadDayUseDetail(slot.id)
@@ -72,6 +76,7 @@ export function DayUseModal({
     occupied,
     myStatus: mine?.status ?? null,
     myPaymentMethod: mine?.paymentMethod ?? null,
+    paymentTiming,
     signedIn: true,
     priceCents,
     now: new Date(),
@@ -192,8 +197,23 @@ export function DayUseModal({
           <Badge variant="default">{DAY_USE_KIND_LABEL[slot.kind]}</Badge>
           <span className="text-lg font-bold text-white">{formatDayUsePrice(priceCents)}</span>
           {priceCents > 0 && <span className="text-xs text-slate-500">por pessoa</span>}
+          {priceCents > 0 && (
+            <Badge variant={paymentTiming === 'on_site' ? 'warning' : 'default'}>
+              {DAY_USE_TIMING_STUDENT_LABEL[paymentTiming]}
+            </Badge>
+          )}
         </div>
         <p className="mt-1 text-xs text-slate-400">{dayUseKindHint(slot.kind)}</p>
+        {/* Onde se paga, antes do botão. O aluno que lê "R$ 40" precisa saber
+            se vai passar cartão agora ou acertar na quadra. */}
+        {priceCents > 0 && (
+          <p className="mt-1 text-xs text-slate-400">
+            {timingNoticeForStudent(paymentTiming)}
+          </p>
+        )}
+        {priceCents > 0 && paymentTiming === 'on_booking' && (
+          <p className="mt-1 text-xs text-green-400">{PAYMENT_REFUND_PROMISE}</p>
+        )}
 
         <ul className="mt-3 space-y-2 text-sm text-slate-300">
           <li className="flex items-center gap-2">

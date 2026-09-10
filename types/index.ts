@@ -3,7 +3,7 @@
 // DayUsePaymentMethod é importado de lib/dayuse/paymentMethod.ts em vez de
 // declarado aqui: o tipo e as janelas de hold que dependem dele andam juntos, e
 // separá-los faria a janela ser decidida longe de quem define os métodos.
-import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
+import type { DayUsePaymentMethod, DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 
 // 'athlete' = tem relação com a academia (jogou torneio, usou day use) sem ser
 // aluno dela. As telas do admin filtram 'student', então o atleta não aparece
@@ -631,6 +631,8 @@ export interface DayUseSlot {
   price_cents: number | null
   /** Capa pública (bucket dayuse-images), usada no preview do link. */
   cover_image_url: string | null
+  /** Quando se paga: na inscrição ou na arena. Escolha do admin. */
+  payment_timing: DayUsePaymentTiming
   notes: string | null
   is_active: boolean
   /** Recorrência que gerou este slot. null = criado à mão pelo admin. */
@@ -658,6 +660,7 @@ export interface DayUseRecurrence {
   kind: DayUseKind
   capacity: number
   price_cents: number | null
+  payment_timing: DayUsePaymentTiming
   notes: string | null
   is_active: boolean
   created_by: string | null

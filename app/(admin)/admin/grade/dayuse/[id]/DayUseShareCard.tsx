@@ -9,6 +9,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import { createClient } from '@/lib/supabase/client'
 import { buildWhatsAppShareUrl } from '@/lib/utils/whatsappLink'
 import { updateDayUseCover } from '@/features/dayuse/actions'
@@ -105,14 +106,9 @@ export function DayUseShareCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <a
-          href={buildWhatsAppShareUrl(shareMessage)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-9 items-center rounded-lg bg-green-600 px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-        >
+        <WhatsAppButton href={buildWhatsAppShareUrl(shareMessage)}>
           Enviar no WhatsApp
-        </a>
+        </WhatsAppButton>
         <Button variant="secondary" size="sm" onClick={() => copy('link')}>
           {copied === 'link' ? 'Link copiado!' : 'Copiar link'}
         </Button>

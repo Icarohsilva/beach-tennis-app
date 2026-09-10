@@ -20,14 +20,19 @@ import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { DAY_USE_KIND_LABEL, dayUseKindHint, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
 import { dayUseShareMessage, resolveDayUseCta } from '@/lib/dayuse/publicPage'
 import { splitWithWallet, formatWalletCents } from '@/lib/wallet/wallet'
+import {
+  DAY_USE_TIMING_STUDENT_LABEL,
+  timingNoticeForStudent,
+} from '@/lib/dayuse/paymentMethod'
 import { getPublicDayUse } from '@/features/dayuse/publicQuery'
 import { getStudentRefunds } from '@/features/dayuse/refundQueries'
 import { RefundCard } from '@/features/dayuse/RefundCard'
-import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
+import { cancelNoticeForStudent, PAYMENT_REFUND_PROMISE } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { DayUseBookButton, DayUseCancelButton } from './DayUseBookButton'
 import { ShareDayUse } from './ShareDayUse'
 import { DayUsePixPanel } from './DayUsePixPanel'
+import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { DayUseSlot } from '@/types'
 
 interface PageProps { params: { id: string } }
@@ -83,7 +88,7 @@ export default async function PublicDayUsePage({ params }: PageProps) {
   const data = await getPublicDayUse(params.id, user?.id ?? null)
   if (!data) notFound()
 
-  const { slot, org, priceCents, walletCents, occupied, attendees, mine } = data
+  const { slot, org, priceCents, paymentTiming, walletCents, occupied, attendees, mine } = data
   // Divisão saldo/cartão pela MESMA função que a reserva usa (splitWithWallet):
   // prometer um abatimento na tela e cobrar outro no Mercado Pago é o defeito
   // que essa função existe para impedir.
@@ -103,6 +108,7 @@ export default async function PublicDayUsePage({ params }: PageProps) {
     occupied,
     myStatus: mine?.status ?? null,
     myPaymentMethod: mine?.paymentMethod ?? null,
+    paymentTiming,
     signedIn: Boolean(user),
     priceCents,
     now: new Date(),
@@ -117,6 +123,7 @@ export default async function PublicDayUsePage({ params }: PageProps) {
     startLabel: formatTime(slot.start_time),
     endLabel: formatTime(slot.end_time),
     priceCents,
+    paymentTiming,
     url: `${getSiteUrl()}/d/${slot.id}`,
   })
 
@@ -143,7 +150,11 @@ export default async function PublicDayUsePage({ params }: PageProps) {
         </h1>
         <p className="mt-1 text-sm text-white/80 first-letter:uppercase">{dateLabel}</p>
         <p className="mt-3 text-2xl font-bold text-white">{formatDayUsePrice(priceCents)}</p>
-        {priceCents > 0 && <p className="text-xs text-white/70">por pessoa</p>}
+        {priceCents > 0 && (
+          <p className="text-xs text-white/70">
+            por pessoa · {DAY_USE_TIMING_STUDENT_LABEL[paymentTiming].toLowerCase()}
+          </p>
+        )}
       </div>
 
       <Card className="space-y-3">
@@ -176,6 +187,21 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           </li>
         </ul>
         {slot.notes && <p className="text-sm text-slate-400">{slot.notes}</p>}
+        {/* Onde se paga, escrito por extenso. Um preço num link do WhatsApp sem
+            isso deixa a pessoa sem saber se vai passar cartão agora. */}
+        {priceCents > 0 && (
+          <div className="rounded-lg border border-surface-border bg-surface p-3">
+            <p className="text-sm font-semibold text-white">
+              {DAY_USE_TIMING_STUDENT_LABEL[paymentTiming]}
+            </p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {timingNoticeForStudent(paymentTiming)}
+            </p>
+            {paymentTiming === 'on_booking' && (
+              <p className="mt-1 text-xs text-green-400">{PAYMENT_REFUND_PROMISE}</p>
+            )}
+          </div>
+        )}
       </Card>
 
       <Card className="space-y-3">
@@ -219,17 +245,16 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           />
         )}
         {cta.state === 'full' && org.whatsapp && (
-          <a
-            href={buildWhatsAppUrl(
-              org.whatsapp,
-              `Olá! O day use de ${dateLabel} às ${formatTime(slot.start_time)} está lotado. Consigo entrar se alguém desistir?`,
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-center text-xs text-green-400 hover:text-green-300"
-          >
-            Falar com a arena no WhatsApp
-          </a>
+          <div className="flex justify-center">
+            <WhatsAppButton
+              href={buildWhatsAppUrl(
+                org.whatsapp,
+                `Olá! O day use de ${dateLabel} às ${formatTime(slot.start_time)} está lotado. Consigo entrar se alguém desistir?`,
+              )}
+            >
+              Falar com a arena
+            </WhatsAppButton>
+          </div>
         )}
         {!user && cta.actionable && (
           <p className="text-center text-xs text-slate-500">
