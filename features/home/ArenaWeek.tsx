@@ -6,7 +6,7 @@
 // sexta, via "nenhuma aula neste dia" e não descobria que no sábado tinha
 // torneio — a informação existia, só estava em outra tela. Aqui o dia mostra o
 // que a arena tem, e a bolinha diz de que tipo antes de o aluno tocar.
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { ArrowRight, CalendarDays, Check, Sun, Trophy, Users } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -22,6 +22,8 @@ import { Badge } from '@/components/ui/Badge'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { eventTone } from './eventTone'
 import { SessionModal } from './SessionModal'
+import { DayUseModal } from './DayUseModal'
+import { loadDayUseDetail, type DayUseDetail } from './calendarActions'
 import type { AgendaSession } from './agendaTypes'
 
 const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
@@ -43,6 +45,21 @@ interface ArenaWeekProps {
 export function ArenaWeek({ todayISO, sessions, events }: ArenaWeekProps) {
   const [selected, setSelected] = useState(todayISO)
   const [openSessionId, setOpenSessionId] = useState<string | null>(null)
+  // Day use abre a MESMA ficha do calendário do mês. Ele levava para a lista de
+  // day use, que é outra tela e faz o aluno procurar de novo o horário que
+  // acabou de tocar.
+  const [openDayUse, setOpenDayUse] = useState<DayUseDetail | null>(null)
+  const [loadingDayUse, setLoadingDayUse] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+
+  function openDayUseDetail(slotId: string) {
+    setLoadingDayUse(slotId)
+    startTransition(async () => {
+      const detail = await loadDayUseDetail(slotId)
+      setLoadingDayUse(null)
+      if (detail) setOpenDayUse(detail)
+    })
+  }
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(todayISO, i))
   const sessionsByDate = groupByDate(
@@ -151,11 +168,20 @@ export function ArenaWeek({ todayISO, sessions, events }: ArenaWeekProps) {
               />
             ))}
             {dayEvents.map((event) => (
-              <EventRow key={`${event.kind}-${event.id}`} event={event} />
+              <EventRow
+                key={`${event.kind}-${event.id}`}
+                event={event}
+                onOpenDayUse={openDayUseDetail}
+                loading={loadingDayUse === event.id}
+              />
             ))}
           </>
         )}
       </div>
+
+      {openDayUse && (
+        <DayUseModal detail={openDayUse} onClose={() => setOpenDayUse(null)} />
+      )}
 
       {openSession && (
         <SessionModal
@@ -297,7 +323,16 @@ function SessionRow({
 }
 
 /** Torneio ou day use: leva para a página do item, não abre ficha de aula. */
-export function EventRow({ event }: { event: ArenaEvent }) {
+export function EventRow({
+  event,
+  onOpenDayUse,
+  loading = false,
+}: {
+  event: ArenaEvent
+  /** Ausente nas telas que só listam (ex.: vitrine da arena). */
+  onOpenDayUse?: (slotId: string) => void
+  loading?: boolean
+}) {
   const tone = eventTone(event.kind)
   const Icon = event.kind === 'torneio' ? Trophy : Sun
 
@@ -363,6 +398,21 @@ export function EventRow({ event }: { event: ArenaEvent }) {
       </div>
     </div>
   )
+
+  // Day use abre modal quando a tela sabe abrir um; senão cai no link, que é o
+  // comportamento das telas que só listam.
+  if (event.kind === 'dayuse' && onOpenDayUse) {
+    return (
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => onOpenDayUse(event.id)}
+        className="group block w-full text-left disabled:opacity-70"
+      >
+        {body}
+      </button>
+    )
+  }
 
   if (!event.href) return body
   return (

@@ -22,8 +22,14 @@ import {
   type ArenaEvent,
 } from '@/lib/home/arenaAgenda'
 import { eventTone } from './eventTone'
-import { loadArenaMonth, loadSessionDetail } from './calendarActions'
+import {
+  loadArenaMonth,
+  loadDayUseDetail,
+  loadSessionDetail,
+  type DayUseDetail,
+} from './calendarActions'
 import { SessionModal } from './SessionModal'
+import { DayUseModal } from './DayUseModal'
 import type { AgendaSession } from './agendaTypes'
 
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
@@ -47,6 +53,20 @@ export function ArenaCalendar({ todayISO, initialMonth, initialEvents }: ArenaCa
   // demanda. Carregar isso para o mês inteiro seria caro e quase tudo iria fora.
   const [openSession, setOpenSession] = useState<AgendaSession | null>(null)
   const [loadingSession, setLoadingSession] = useState<string | null>(null)
+  // Day use abre ficha aqui também: antes ele levava para a LISTA de day use, e
+  // o aluno perdia o dia que acabou de tocar.
+  const [openDayUse, setOpenDayUse] = useState<DayUseDetail | null>(null)
+
+  function openDayUseDetail(slotId: string) {
+    setLoadingSession(slotId)
+    startTransition(async () => {
+      const detail = await loadDayUseDetail(slotId)
+      setLoadingSession(null)
+      if (!detail) return
+      setOpenDay(null)
+      setOpenDayUse(detail)
+    })
+  }
 
   function openAula(sessionId: string) {
     setLoadingSession(sessionId)
@@ -191,12 +211,17 @@ export function ArenaCalendar({ todayISO, initialMonth, initialEvents }: ArenaCa
           events={dayEvents}
           onClose={() => setOpenDay(null)}
           onOpenAula={openAula}
+          onOpenDayUse={openDayUseDetail}
           loadingSession={loadingSession}
         />
       )}
 
       {/* A MESMA ficha da faixa da semana. O calendário levava para /agendar, que
           é outra tela e não mostra nem quem vai nem a fila de espera. */}
+      {openDayUse && (
+        <DayUseModal detail={openDayUse} onClose={() => setOpenDayUse(null)} />
+      )}
+
       {openSession && (
         <SessionModal
           session={openSession}
@@ -213,12 +238,14 @@ function DayModal({
   events,
   onClose,
   onOpenAula,
+  onOpenDayUse,
   loadingSession,
 }: {
   date: string
   events: ArenaEvent[]
   onClose: () => void
   onOpenAula: (sessionId: string) => void
+  onOpenDayUse: (slotId: string) => void
   loadingSession: string | null
 }) {
   const [mounted, setMounted] = useState(false)
@@ -285,6 +312,7 @@ function DayModal({
                 event={event}
                 onNavigate={onClose}
                 onOpenAula={onOpenAula}
+                onOpenDayUse={onOpenDayUse}
                 loading={loadingSession === event.id}
               />
             </li>
@@ -300,11 +328,13 @@ function DayRow({
   event,
   onNavigate,
   onOpenAula,
+  onOpenDayUse,
   loading,
 }: {
   event: ArenaEvent
   onNavigate: () => void
   onOpenAula: (sessionId: string) => void
+  onOpenDayUse: (slotId: string) => void
   loading: boolean
 }) {
   const tone = eventTone(event.kind)
@@ -376,14 +406,16 @@ function DayRow({
     </div>
   )
 
-  // Aula abre a ficha aqui mesmo; torneio e day use continuam levando para a
-  // página deles, que é onde a inscrição de verdade acontece.
-  if (event.kind === 'aula') {
+  // Aula e day use abrem a ficha aqui mesmo. Só o torneio continua levando para
+  // a página dele, que tem chave, grupos e regulamento — coisa que não cabe num
+  // modal.
+  if (event.kind === 'aula' || event.kind === 'dayuse') {
+    const open = event.kind === 'aula' ? onOpenAula : onOpenDayUse
     return (
       <button
         type="button"
         disabled={loading}
-        onClick={() => onOpenAula(event.id)}
+        onClick={() => open(event.id)}
         className="block w-full text-left disabled:opacity-70"
       >
         {body}

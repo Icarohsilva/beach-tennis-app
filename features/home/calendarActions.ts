@@ -18,6 +18,9 @@ import { getActivePlan } from '@/lib/billing/planEligibility'
 import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { getQuotaSnapshot } from '@/features/aulas/quotaUsage'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getPublicDayUse, type PublicDayUse } from '@/features/dayuse/publicQuery'
+import { getRefundWindowHours } from '@/features/dayuse/refunds'
+import type { DayUseSlot } from '@/types'
 import type { AgendaSession } from './agendaTypes'
 import type { ArenaEvent } from '@/lib/home/arenaAgenda'
 
@@ -112,4 +115,52 @@ export async function loadSessionDetail(sessionId: string): Promise<AgendaSessio
   })
 
   return sessions[0] ?? null
+}
+
+/**
+ * Ficha de um day use, para o calendário abrir modal em vez de jogar o aluno na
+ * lista de `/agendar/dayuse`.
+ *
+ * Reusa `getPublicDayUse` — a mesma leitura da página pública /d/[id]. O modal
+ * mostra preço, ocupação e o estado da reserva de quem está vendo, e uma
+ * segunda consulta para isso divergiria da página no primeiro ajuste de preço.
+ */
+export async function loadDayUseDetail(slotId: string): Promise<DayUseDetail | null> {
+  const user = await getAuthUser()
+  if (!user) return null
+  const orgId = await getActiveOrgId()
+  if (!orgId) return null
+
+  const data = await getPublicDayUse(slotId, user.id)
+  // Day use de OUTRA academia não abre aqui: o calendário é da academia ativa,
+  // e abrir a ficha de um horário de fora daria a entender que ele é reservável
+  // por este vínculo.
+  if (!data || data.slot.organization_id !== orgId) return null
+
+  const admin = createAdminClient()
+  const windowHours = await getRefundWindowHours(admin, orgId)
+
+  return {
+    slot: data.slot,
+    priceCents: data.priceCents,
+    walletCents: data.walletCents,
+    occupied: data.occupied,
+    attendees: data.attendees,
+    mine: data.mine,
+    pixKey: data.pixKey,
+    pixOwner: data.pixOwner,
+    refundWindowHours: windowHours,
+  }
+}
+
+export interface DayUseDetail {
+  slot: DayUseSlot
+  priceCents: number
+  walletCents: number
+  occupied: number
+  attendees: string[]
+  mine: PublicDayUse['mine']
+  pixKey: string | null
+  pixOwner: string | null
+  refundWindowHours: number
 }

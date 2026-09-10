@@ -39,14 +39,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const admin = createAdminClient()
   const { data: slotRaw } = await admin
     .from('dayuse_slots')
-    .select('date, start_time, end_time, sport, organization_id')
+    .select('date, start_time, end_time, sport, organization_id, cover_image_url')
     .eq('id', params.id)
     .eq('is_active', true)
     .maybeSingle()
   if (!slotRaw) return { title: 'Day Use | ArenaHub' }
-  const slot = slotRaw as Pick<DayUseSlot, 'date' | 'start_time' | 'end_time' | 'sport'> & {
-    organization_id: string
-  }
+  const slot = slotRaw as Pick<
+    DayUseSlot, 'date' | 'start_time' | 'end_time' | 'sport' | 'cover_image_url'
+  > & { organization_id: string }
 
   const { data: org } = await admin
     .from('organizations')
@@ -65,10 +65,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title,
       description,
       url: `${getSiteUrl()}/d/${params.id}`,
-      images: org?.logo_url ? [{ url: org.logo_url as string }] : [],
+      // Capa do day use primeiro, logo da academia como reserva: a foto da
+      // areia daquele domingo vende o day use, o logo não.
+      images: slot.cover_image_url
+        ? [{ url: slot.cover_image_url }]
+        : org?.logo_url
+          ? [{ url: org.logo_url as string }]
+          : [],
       type: 'website',
     },
-    twitter: { card: 'summary', title },
+    twitter: { card: slot.cover_image_url ? 'summary_large_image' : 'summary', title },
   }
 }
 
@@ -118,6 +124,16 @@ export default async function PublicDayUsePage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 space-y-4">
+      {slot.cover_image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={slot.cover_image_url}
+          alt=""
+          aria-hidden
+          className="h-44 w-full rounded-2xl object-cover"
+        />
+      )}
+
       {/* Hero: quem organiza vem primeiro. Quem abre pelo WhatsApp muitas vezes
           não sabe de qual arena é o link. */}
       <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 p-5">

@@ -629,6 +629,8 @@ export interface DayUseSlot {
   kind: DayUseKind
   /** Preço deste slot em centavos. null = usa o padrão da academia. */
   price_cents: number | null
+  /** Capa pública (bucket dayuse-images), usada no preview do link. */
+  cover_image_url: string | null
   notes: string | null
   is_active: boolean
   /** Recorrência que gerou este slot. null = criado à mão pelo admin. */

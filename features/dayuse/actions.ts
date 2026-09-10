@@ -534,3 +534,84 @@ async function undoWalletSpend(
     })
   }
 }
+
+export interface UpdateDayUseSlotData {
+  capacity: number
+  sport?: string | null
+  kind?: DayUseKind
+  /** Reais como o admin digitou. Vazio volta a herdar o padrão da academia. */
+  price?: string | null
+  notes?: string | null
+}
+
+/**
+ * Edita um day use já criado.
+ *
+ * Data, horário e quadra ficam FORA de propósito: mudar isso com gente
+ * reservada é remarcar a vida de outras pessoas sem avisar, e o índice único
+ * (org, quadra, data, início) faria a mudança colidir em silêncio com outro
+ * horário. Para mover o day use, cancele e crie — assim os alunos são avisados
+ * e o estorno acontece.
+ */
+export async function updateDayUseSlot(
+  slotId: string,
+  data: UpdateDayUseSlotData,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+  if (data.capacity < 1) return { error: 'capacidade mínima é 1' }
+
+  const adminClient = createAdminClient()
+
+  // Reduzir capacidade abaixo de quem já está dentro deixaria a aula "lotada
+  // negativa" e a fila do admin sem explicação.
+  const { count } = await adminClient
+    .from('dayuse_bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('slot_id', slotId)
+    .in('status', ['confirmed', 'pending_payment'])
+  if ((count ?? 0) > data.capacity) {
+    return { error: `Já há ${count} reservas neste horário. A capacidade não pode ser menor.` }
+  }
+
+  const priceRaw = (data.price ?? '').trim()
+
+  const { error } = await adminClient
+    .from('dayuse_slots')
+    .update({
+      capacity: data.capacity,
+      sport: data.sport || null,
+      kind: data.kind ?? 'scheduled',
+      price_cents: priceRaw === '' ? null : reaisToCents(priceRaw),
+      notes: data.notes || null,
+    })
+    .eq('id', slotId)
+    .eq('organization_id', orgId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/admin/grade/dayuse/${slotId}`)
+  revalidatePath('/admin/grade/dayuse')
+  revalidatePath('/agendar/dayuse')
+  revalidatePath(`/d/${slotId}`)
+  return {}
+}
+
+/** Capa do day use (bucket público dayuse-images). */
+export async function updateDayUseCover(
+  slotId: string,
+  coverImageUrl: string | null,
+): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const { error } = await createAdminClient()
+    .from('dayuse_slots')
+    .update({ cover_image_url: coverImageUrl })
+    .eq('id', slotId)
+    .eq('organization_id', orgId)
+  if (error) return { error: error.message }
+
+  revalidatePath(`/admin/grade/dayuse/${slotId}`)
+  revalidatePath(`/d/${slotId}`)
+  return {}
+}
