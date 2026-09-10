@@ -44,52 +44,51 @@ export function dayUsePriceCents(
 }
 
 /**
- * Centavos que este day use realmente cobra.
+ * Centavos que este day use cobra. É `dayUsePriceCents` — **o preço é o preço**.
  *
- * `canCharge` é "a academia consegue cobrar" — venda ligada E gateway conectado.
- * Sem isso a tela mostrava R$ 40 e a reserva saía gratuita (o caminho sem token
- * de `bookDayUse` grava `confirmed` na hora), então preço na tela e cobrança de
- * verdade divergiam justamente para a academia mal configurada.
+ * Isto já foi condicionado a "a academia consegue cobrar dentro do app" (gateway
+ * conectado ou chave PIX), e devolvia 0 quando não conseguia. O resultado é o
+ * defeito que o uso real encontrou: o admin definia R$ 20 e TODA tela — inclusive
+ * o link que o aluno abre — dizia "Gratuito". A cobrança na porta da arena, que é
+ * como a maioria dos day use é paga, ficava invisível para o app.
+ *
+ * Agora o preço é sempre o preço, e o que varia é **como se cobra**:
+ * `resolveDayUsePaymentMethod` escolhe entre carteira, Checkout Pro, PIX na chave
+ * da arena e `on_site` (pagar na arena). Gratuito passou a significar só uma
+ * coisa: preço zero.
  */
 export function dayUseChargeCents(
   slot: { price_cents?: number | null },
-  opts: { defaultCents: number; canCharge: boolean },
+  opts: { defaultCents: number },
 ): number {
-  if (!opts.canCharge) return 0
   return dayUsePriceCents(slot, opts.defaultCents)
 }
 
 /**
- * O preço deste day use em DUAS leituras, porque elas divergem e a diferença
- * importa para gente diferente.
+ * O preço e ONDE ele é pago.
  *
- * `intendedCents` é o que a academia definiu; `chargeCents` é o que o aluno vai
- * pagar de fato. Eles só divergem quando há preço e não há como cobrar (venda
- * desligada, ou sem Mercado Pago e sem chave PIX) — e aí o app precisa dizer
- * coisas OPOSTAS para os dois lados:
- *
- * - ao ALUNO, "Gratuito", porque é o que a reserva vai custar de verdade;
- * - ao ADMIN, o preço que ele definiu MAIS o aviso de que não está sendo
- *   cobrado. Mostrar "Gratuito" a quem acabou de digitar R$ 40 esconde a
- *   configuração que falta e faz a arena trabalhar de graça sem saber.
+ * Uma leitura só de preço (`priceCents`), porque preço na tela e preço cobrado
+ * não podem divergir — foi essa divergência que fez o app anunciar "Gratuito"
+ * um day use de R$ 20. O que muda por academia é a forma de pagar:
+ * `collectedInApp` falso quer dizer "combine na arena", não "de graça".
  */
 export interface DayUsePriceView {
-  intendedCents: number
-  chargeCents: number
-  /** Tem preço definido e nenhuma forma de cobrar. */
-  unchargeable: boolean
+  priceCents: number
+  /** Dá para pagar dentro do app (Checkout Pro ou PIX na chave da arena)? */
+  collectedInApp: boolean
+  /** Tem preço e o pagamento acontece na arena. */
+  payOnSite: boolean
 }
 
 export function dayUsePriceView(
   slot: { price_cents?: number | null },
   opts: { defaultCents: number; canCharge: boolean },
 ): DayUsePriceView {
-  const intendedCents = dayUsePriceCents(slot, opts.defaultCents)
-  const chargeCents = dayUseChargeCents(slot, opts)
+  const priceCents = dayUsePriceCents(slot, opts.defaultCents)
   return {
-    intendedCents,
-    chargeCents,
-    unchargeable: intendedCents > 0 && chargeCents === 0,
+    priceCents,
+    collectedInApp: opts.canCharge,
+    payOnSite: priceCents > 0 && !opts.canCharge,
   }
 }
 

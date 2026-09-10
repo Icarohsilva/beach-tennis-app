@@ -14,18 +14,15 @@ export function DayUseBadges({
   sport,
   kind,
   priceCents,
-  unchargeable = false,
+  payOnSite = false,
 }: {
   court: number
   sport: string | null
   kind: DayUseKind
   /** Já resolvido por dayUseChargeCents — 0 = gratuito de verdade. */
   priceCents: number
-  /**
-   * Tem preço definido e a academia não consegue cobrar (dayUsePriceView).
-   * Só o admin recebe isto: para o aluno o preço mostrado é o que ele paga.
-   */
-  unchargeable?: boolean
+  /** Tem preço e o pagamento é na arena (dayUsePriceView.payOnSite). */
+  payOnSite?: boolean
 }) {
   return (
     <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -49,12 +46,12 @@ export function DayUseBadges({
       >
         {formatDayUsePrice(priceCents)}
       </span>
-      {unchargeable && (
+      {payOnSite && (
         <span
           className={`${CHIP} bg-yellow-900/40 text-yellow-300 border-yellow-700/50`}
-          title="Preço definido, mas a academia não tem Mercado Pago conectado nem chave PIX."
+          title="O aluno paga na arena: a academia não recebe este valor pelo app."
         >
-          Sem cobrança
+          Pagar na arena
         </span>
       )}
     </div>

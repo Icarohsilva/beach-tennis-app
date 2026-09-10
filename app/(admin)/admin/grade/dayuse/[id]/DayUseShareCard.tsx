@@ -8,6 +8,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
 import { buildWhatsAppShareUrl } from '@/lib/utils/whatsappLink'
 import { updateDayUseCover } from '@/features/dayuse/actions'
@@ -112,20 +113,12 @@ export function DayUseShareCard({
         >
           Enviar no WhatsApp
         </a>
-        <button
-          type="button"
-          onClick={() => copy('link')}
-          className="inline-flex h-9 items-center rounded-lg border border-surface-border px-3 text-xs text-slate-300 hover:border-brand-500"
-        >
+        <Button variant="secondary" size="sm" onClick={() => copy('link')}>
           {copied === 'link' ? 'Link copiado!' : 'Copiar link'}
-        </button>
-        <button
-          type="button"
-          onClick={() => copy('texto')}
-          className="inline-flex h-9 items-center rounded-lg border border-surface-border px-3 text-xs text-slate-300 hover:border-brand-500"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => copy('texto')}>
           {copied === 'texto' ? 'Texto copiado!' : 'Copiar mensagem'}
-        </button>
+        </Button>
       </div>
 
       {error && <p className="text-xs text-red-400">{error}</p>}

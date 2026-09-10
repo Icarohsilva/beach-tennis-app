@@ -19,6 +19,7 @@ import {
   deactivateDayUseRecurrence,
   generateDayUseNow,
 } from './recurrenceActions'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseKind, DayUseRecurrence } from '@/types'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -41,6 +42,7 @@ export function DayUseRecurrencePanel({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [kind, setKind] = useState<DayUseKind>('scheduled')
+  const { confirm, dialog } = useConfirm()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -72,11 +74,16 @@ export function DayUseRecurrencePanel({
   }
 
   async function handleRemove(rec: DayUseRecurrence) {
-    if (!confirm(
-      `Desligar o day use de toda ${DAYS[rec.day_of_week].toLowerCase()}?\n\n`
-      + 'As datas futuras sem ninguém reservado saem da agenda. As que já têm '
-      + 'reserva ficam no ar — remova uma a uma se precisar.',
-    )) return
+    const { ok } = await confirm({
+      title: `Desligar o day use de toda ${DAYS[rec.day_of_week].toLowerCase()}?`,
+      message:
+        'As datas futuras sem ninguém reservado saem da agenda.\n'
+        + 'As que já têm reserva ficam no ar — remova uma a uma se precisar.',
+      confirmLabel: 'Desligar',
+      cancelLabel: 'Manter',
+      destructive: true,
+    })
+    if (!ok) return
     setPending(true)
     setError(null)
     setMessage(null)
@@ -120,14 +127,9 @@ export function DayUseRecurrencePanel({
             {open ? 'Fechar' : 'Nova recorrência'}
           </Button>
           {recurrences.length > 0 && (
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={pending}
-              className="text-xs text-slate-400 hover:text-white transition-colors"
-            >
+            <Button size="sm" variant="ghost" disabled={pending} onClick={handleGenerate}>
               Gerar agora
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -259,6 +261,7 @@ export function DayUseRecurrencePanel({
 
       {error && <p className="text-red-400 text-xs">{error}</p>}
       {message && <p className="text-green-400 text-xs">{message}</p>}
+      {dialog}
     </Card>
   )
 }

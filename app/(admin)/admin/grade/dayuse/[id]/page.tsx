@@ -43,9 +43,7 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
   if (!data) notFound()
 
   const { slot, attendees, occupied } = data
-  // Preço em duas leituras: o admin vê o que DEFINIU, mais o aviso quando não
-  // há como cobrar — mostrar "Gratuito" a quem digitou um preço esconde a
-  // configuração que falta.
+  // O preço é o preço; o que varia é onde ele é pago (dayUsePriceView).
   const price = dayUsePriceView(slot, pricing)
 
   const dateLabel = formatDate(slot.date, "EEEE, dd 'de' MMMM")
@@ -57,7 +55,7 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
     dateLabel,
     startLabel: formatTime(slot.start_time),
     endLabel: formatTime(slot.end_time),
-    priceCents: price.chargeCents,
+    priceCents: price.priceCents,
     url: shareUrl,
   })
 
@@ -84,23 +82,23 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-lg font-bold text-white">
-            {formatDayUsePrice(price.intendedCents)}
+            {formatDayUsePrice(price.priceCents)}
           </span>
-          {price.unchargeable && (
+          {price.payOnSite && (
             <span className="rounded-full border border-yellow-700/50 bg-yellow-900/40 px-2 py-0.5 text-xs text-yellow-300">
-              Não está sendo cobrado
+              Pago na arena
             </span>
           )}
           <span className="text-sm text-slate-400">
             {occupied}/{slot.capacity} {slot.kind === 'open' ? 'pessoas' : 'vagas'}
           </span>
         </div>
-        {price.unchargeable && (
+        {price.payOnSite && (
           <p className="mt-1 text-xs text-slate-400">
-            Sem Mercado Pago conectado e sem chave PIX, a reserva sai gratuita mesmo com
-            preço definido.{' '}
+            O aluno vê o preço e reserva pelo app, mas paga na porta — dê baixa na lista
+            de inscritos. Para receber online,{' '}
             <Link href="/admin/financeiro/integracoes" className="text-brand-400 hover:text-brand-300">
-              Conectar
+              conecte o Mercado Pago
             </Link>
             {' ou '}
             <Link href="/admin/configuracoes" className="text-brand-400 hover:text-brand-300">

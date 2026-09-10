@@ -95,13 +95,9 @@ export function DayUsePixPanel({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Chave PIX da arena</p>
         <div className="mt-0.5 flex items-center gap-2">
           <p className="min-w-0 flex-1 break-all font-mono text-sm text-white">{pixKey}</p>
-          <button
-            type="button"
-            onClick={copyKey}
-            className="shrink-0 rounded-lg border border-surface-border px-2 py-1 text-xs text-brand-400 hover:border-brand-500"
-          >
+          <Button variant="secondary" size="sm" className="shrink-0" onClick={copyKey}>
             {copied ? 'Copiado!' : 'Copiar'}
-          </button>
+          </Button>
         </div>
         {pixOwner && <p className="text-xs text-slate-500">{pixOwner}</p>}
       </div>
