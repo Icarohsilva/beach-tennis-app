@@ -1,7 +1,14 @@
 'use client'
 // app/(public)/p/[token]/EntryPaymentCard.tsx
 import { useState, useTransition } from 'react'
-import { startEntryCheckout, uploadEntryPaymentReceipt, type PublicEntryPayment } from '@/features/torneios/entryPaymentActions'
+import { useRouter } from 'next/navigation'
+import {
+  payEntryWithWallet,
+  startEntryCheckout,
+  uploadEntryPaymentReceipt,
+  type PublicEntryPayment,
+} from '@/features/torneios/entryPaymentActions'
+import { formatWalletCents, walletCoversAll } from '@/lib/wallet/wallet'
 
 interface Props {
   token: string
@@ -13,6 +20,7 @@ function formatCents(cents: number): string {
 }
 
 export function EntryPaymentCard({ token, data }: Props) {
+  const router = useRouter()
   const [uploaded, setUploaded] = useState(!!data.receiptUrl)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +32,21 @@ export function EntryPaymentCard({ token, data }: Props) {
       const res = await startEntryCheckout(token)
       if (res.error) setError(res.error)
       else if (res.initPoint) window.location.href = res.initPoint
+    })
+  }
+
+  // Tudo ou nada, e só para o próprio pagador logado: o token deste link é
+  // credencial de portador, então quem o tem pode pagar com o dinheiro DELE —
+  // não gastar o crédito guardado de outra pessoa.
+  const canPayWithWallet =
+    data.viewerIsPayee && walletCoversAll(data.finalPriceCents, data.walletCents)
+
+  function payWithWallet() {
+    setError(null)
+    startTransition(async () => {
+      const res = await payEntryWithWallet(token)
+      if (res.error) { setError(res.error); return }
+      router.refresh()
     })
   }
 
@@ -74,6 +97,26 @@ export function EntryPaymentCard({ token, data }: Props) {
           <p className="text-green-400 text-xs mt-0.5">{data.discountPct}% de desconto já aplicado</p>
         )}
       </div>
+
+      {canPayWithWallet && (
+        <button
+          type="button"
+          onClick={payWithWallet}
+          disabled={isPending}
+          className="block w-full rounded-xl border border-green-700/50 bg-green-900/30 py-3 text-center text-sm font-semibold text-green-300 hover:bg-green-900/50 disabled:opacity-60"
+        >
+          {isPending
+            ? 'Pagando...'
+            : `Usar meu crédito (${formatWalletCents(data.finalPriceCents)})`}
+        </button>
+      )}
+
+      {data.viewerIsPayee && data.walletCents > 0 && !canPayWithWallet && (
+        <p className="text-xs text-slate-400">
+          Você tem {formatWalletCents(data.walletCents)} de crédito, abaixo do valor desta
+          inscrição. O crédito é usado de uma vez, sem parcelar com o cartão.
+        </p>
+      )}
 
       {data.hasCheckoutPro && (
         <button

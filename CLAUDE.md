@@ -213,6 +213,18 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   `on conflict do nothing` engoliria a devolução. **Crédito em dinheiro não vence** (é valor
   pago), ao contrário do crédito de aula. Divisão saldo/gateway em `splitWithWallet`
   ([lib/wallet/wallet.ts](lib/wallet/wallet.ts)) — tela e cobrança saem dela.
+- **Gastar o crédito**: day use, compra de aula avulsa e inscrição de torneio. O abatimento é
+  **parcial só no day use** e **tudo-ou-nada** nos outros dois, e a diferença não é capricho:
+  a reserva de day use expira em 30 min e `expireStalePendingDayUse` devolve o saldo ao
+  expirar. Pagamento de aula avulsa ou de inscrição pendente **não expira nunca** — debitar
+  parte e o aluno abandonar o checkout deixaria o dinheiro preso sem nada que o devolvesse.
+  Os dois caminhos com saldo reusam a MESMA RPC do caminho pago
+  (`record_checkout_credit_purchase`, `record_tournament_entry_checkout_payment`) com
+  `gateway: 'wallet'`; reimplementar a concessão abriria espaço para os caminhos divergirem.
+  No torneio, o saldo só é gasto pelo **próprio pagador logado**: o token de `/p/[token]` é
+  credencial de portador, e quem o tem pode pagar com o dinheiro dele, não com o crédito
+  guardado de outra pessoa. Compra paga com saldo **não passa pelo gateway**, então não gera
+  `marketplace_fee` — a plataforma não fatura sobre ela.
 - **Estorno de day use** (`dayuse_refunds`, um por reserva): cancelamento **da arena** devolve
   sempre; **do aluno**, só dentro da janela (`system_settings.dayuse_refund_window_hours`,
   default = a mesma da aula), reusando `canCancelWithRefund` — duas réguas de "cancelei em

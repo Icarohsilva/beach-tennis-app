@@ -8,6 +8,7 @@ import { formatTime } from '@/lib/utils/dateHelpers'
 import { bookDayUse, cancelDayUseBooking } from './actions'
 import { DayUseBadges } from './DayUseBadges'
 import { dayUseKindHint } from '@/lib/dayuse/dayUseKind'
+import { formatWalletCents, splitWithWallet } from '@/lib/wallet/wallet'
 import type { DayUseSlot } from '@/types'
 
 interface Props {
@@ -23,9 +24,11 @@ interface Props {
   priceCents: number
   /** O que acontece com o dinheiro ao cancelar (cancelNoticeForStudent). */
   cancelNotice?: string | null
+  /** Saldo em dinheiro do aluno nesta academia, para mostrar o abatimento. */
+  walletCents?: number
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, cancelNotice = null }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, cancelNotice = null, walletCents = 0 }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
@@ -33,6 +36,9 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
   const [localCount, setLocalCount] = useState(bookingsCount)
   const [showAttendees, setShowAttendees] = useState(false)
   const isFull = localCount >= slot.capacity
+  // Mesma conta da reserva (splitWithWallet): o card não pode prometer um
+  // abatimento diferente do que bookDayUse aplica.
+  const split = splitWithWallet(priceCents, walletCents)
 
   async function handleBook() {
     setLoading(true)
@@ -88,6 +94,13 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
             {formatTime(slot.start_time)} – {formatTime(slot.end_time)}
           </p>
           <p className="text-slate-500 text-xs mt-0.5">{dayUseKindHint(slot.kind)}</p>
+          {!bookingId && split.walletCents > 0 && (
+            <p className="text-green-400 text-xs mt-0.5">
+              {split.gatewayCents === 0
+                ? `Seu crédito cobre: ${formatWalletCents(split.walletCents)}`
+                : `${formatWalletCents(split.walletCents)} de crédito + ${formatWalletCents(split.gatewayCents)}`}
+            </p>
+          )}
           {slot.notes && <p className="text-slate-400 text-xs mt-0.5">{slot.notes}</p>}
           <button
             type="button"

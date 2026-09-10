@@ -10,8 +10,19 @@ vi.mock('@/features/wallet/spendWallet', () => ({
   creditWallet: vi.fn().mockResolvedValue({ balanceCents: 4000 }),
 }))
 
-import { openRefundForBooking, getBookingPayment } from './refunds'
+import {
+  openRefundForBooking,
+  getBookingPayment,
+  expireStalePendingDayUse,
+} from './refunds'
 import { creditWallet } from '@/features/wallet/spendWallet'
+
+interface StaleBooking {
+  id: string
+  student_id: string
+  booked_at: string
+  dayuse_slots: { date: string; start_time: string } | null
+}
 
 interface FakeOpts {
   /** payments com status 'paid' desta reserva, em REAIS (como no banco). */
@@ -23,12 +34,16 @@ interface FakeOpts {
   /** insert em dayuse_refunds falha com unique_violation (estorno já existe). */
   duplicateRefund?: boolean
   existingRefundId?: string
+  /** Reservas pendentes vencidas devolvidas pela varredura de expiração. */
+  stale?: StaleBooking[]
 }
 
 function makeClient(opts: FakeOpts = {}) {
   const inserted: Record<string, unknown>[] = []
   /** Filtros aplicados na leitura de payments, para o teste do "só pago". */
   const paymentFilters: Record<string, unknown> = {}
+  /** Updates de cancelamento aplicados pela varredura. */
+  const cancelled: { ids: string[]; payload: Record<string, unknown> }[] = []
 
   const from = vi.fn((table: string) => {
     if (table === 'payments') {
@@ -67,6 +82,21 @@ function makeClient(opts: FakeOpts = {}) {
         })
       return b
     }
+    if (table === 'dayuse_bookings') {
+      const b: Record<string, unknown> = {}
+      b.select = () => b
+      b.eq = () => b
+      b.lt = () => b
+      b.then = (resolve: (v: unknown) => unknown) =>
+        Promise.resolve({ data: opts.stale ?? [], error: null }).then(resolve)
+      b.update = (payload: Record<string, unknown>) => ({
+        in: (_field: string, ids: string[]) => {
+          cancelled.push({ ids, payload })
+          return Promise.resolve({ data: null, error: null })
+        },
+      })
+      return b
+    }
     if (table === 'dayuse_refunds') {
       return {
         insert: (row: Record<string, unknown>) => {
@@ -96,7 +126,7 @@ function makeClient(opts: FakeOpts = {}) {
     throw new Error(`tabela inesperada: ${table}`)
   })
 
-  return { client: { from } as never, inserted, paymentFilters }
+  return { client: { from } as never, inserted, paymentFilters, cancelled }
 }
 
 const SLOT = { date: '2026-09-27', start_time: '09:00' }
@@ -220,5 +250,39 @@ describe('openRefundForBooking', () => {
       ...BASE, cause: 'arena_cancelou', pixKey: '11999990000', pixOwner: 'Maria',
     })
     expect(inserted[0]).toMatchObject({ pix_key: '11999990000', pix_owner: 'Maria' })
+  })
+})
+
+describe('expireStalePendingDayUse', () => {
+  const stale: StaleBooking[] = [{
+    id: 'book-1',
+    student_id: 'stu-1',
+    booked_at: '2026-09-26T13:00:00Z',
+    dayuse_slots: SLOT,
+  }]
+
+  it('cancela a reserva vencida E devolve o saldo que ela debitou', async () => {
+    // O update em massa que existia aqui liberava a vaga e deixava o saldo
+    // debitado: quem abatia crédito e abandonava o checkout ficava sem os dois.
+    const { client, cancelled } = makeClient({ stale, walletSpends: [-4000] })
+    const r = await expireStalePendingDayUse(client, 'org-1')
+    expect(r.expired).toBe(1)
+    expect(r.walletRestoredCents).toBe(4000)
+    expect(cancelled[0].ids).toEqual(['book-1'])
+    expect(cancelled[0].payload).toMatchObject({ status: 'cancelled' })
+    expect(creditWallet).toHaveBeenCalledTimes(1)
+  })
+
+  it('não abre estorno: o pagamento nunca confirmou', async () => {
+    const { client, inserted } = makeClient({ stale, walletSpends: [-4000] })
+    await expireStalePendingDayUse(client, 'org-1')
+    expect(inserted).toHaveLength(0)
+  })
+
+  it('sem reserva vencida não escreve nada', async () => {
+    const { client, cancelled } = makeClient({ stale: [] })
+    const r = await expireStalePendingDayUse(client, 'org-1')
+    expect(r).toEqual({ expired: 0, walletRestoredCents: 0 })
+    expect(cancelled).toHaveLength(0)
   })
 })

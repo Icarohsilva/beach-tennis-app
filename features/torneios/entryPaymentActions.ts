@@ -9,7 +9,10 @@
 // .ics em app/api/calendar/[token]).
 import { randomBytes } from 'crypto'
 import { revalidatePath } from 'next/cache'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient, getAuthUser } from '@/lib/supabase/server'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
+import { refundWalletSpend, spendWallet } from '@/features/wallet/spendWallet'
+import { WALLET_REASONS, walletCoversAll } from '@/lib/wallet/wallet'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { mpCreatePreference } from '@/lib/billing/mpClient'
 import { computeMarketplaceFee } from '@/lib/billing/fees'
@@ -75,6 +78,10 @@ export interface PublicEntryPayment {
   pixKey: string | null
   receiptUrl: string | null
   hasCheckoutPro: boolean
+  /** Crédito em dinheiro do pagador — 0 para quem não é ele. */
+  walletCents: number
+  /** Quem está vendo é o próprio pagador (logado)? Gate do pagamento com saldo. */
+  viewerIsPayee: boolean
 }
 
 export async function getPublicEntryPayment(token: string): Promise<PublicEntryPayment | null> {
@@ -118,6 +125,16 @@ export async function getPublicEntryPayment(token: string): Promise<PublicEntryP
 
   const mpToken = await getConnectedMpToken(tep.organization_id as string)
 
+  // Saldo em dinheiro só aparece (e só pode ser gasto) para o PRÓPRIO pagador
+  // logado. O token deste link é credencial de portador: quem o tem pode pagar
+  // esta inscrição com o dinheiro DELE, não gastar o crédito guardado de outra
+  // pessoa.
+  const viewer = await getAuthUser()
+  const viewerIsPayee = Boolean(viewer && payeeId && viewer.id === payeeId)
+  const walletCents = viewerIsPayee
+    ? await getWalletBalance(adminClient, tep.organization_id as string, payeeId as string)
+    : 0
+
   return {
     tournamentId: tep.tournament_id as string,
     tournamentName: tournament.name as string,
@@ -128,7 +145,119 @@ export async function getPublicEntryPayment(token: string): Promise<PublicEntryP
     pixKey: tournament.pix_key as string | null,
     receiptUrl: charge.receiptUrl,
     hasCheckoutPro: mpToken !== null,
+    walletCents,
+    viewerIsPayee,
   }
+}
+
+// ---------------------------------------------------------------------------
+// payEntryWithWallet — quita ESTE lado com o crédito em dinheiro do pagador.
+//
+// Tudo ou nada, como a compra de aula avulsa e ao contrário do day use: um
+// pagamento de inscrição pendente não expira, então debitar parte do saldo e o
+// atleta abandonar o checkout deixaria o dinheiro preso sem inscrição paga.
+// ---------------------------------------------------------------------------
+
+export async function payEntryWithWallet(token: string): Promise<{ error?: string; paid?: boolean }> {
+  const user = await getAuthUser()
+  if (!user) return { error: 'Entre na sua conta para pagar com crédito.' }
+
+  const adminClient = createAdminClient()
+  const { data: tep } = await adminClient
+    .from('tournament_entry_payments')
+    .select('organization_id, tournament_id, entry_id, side')
+    .eq('token', token)
+    .maybeSingle()
+  if (!tep) return { error: 'Link não encontrado.' }
+
+  const orgId = tep.organization_id as string
+  const entryId = tep.entry_id as string
+  const side = tep.side as EntrySide
+
+  const { data: entryRaw } = await adminClient
+    .from('tournament_entries')
+    .select(
+      'player_id, partner_id, payment_status, discount_pct, final_price_cents, receipt_url, partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url',
+    )
+    .eq('id', entryId)
+    .maybeSingle()
+  if (!entryRaw) return { error: 'Inscrição não encontrada.' }
+  const entry = entryRaw as PayableEntry
+  const charge = chargeFor(side, entry)
+  if (charge.paymentStatus !== 'pending') return { error: 'Não há pagamento pendente para este link.' }
+
+  const payeeId = side === 'partner' ? entry.partner_id : entry.player_id
+  // A trava que importa: o saldo é de quem paga, e só ele mesmo o gasta.
+  if (!payeeId || payeeId !== user.id) {
+    return { error: 'Só o próprio atleta pode pagar esta parte com o crédito dele.' }
+  }
+
+  const amountCents = charge.finalPriceCents
+  const balanceCents = await getWalletBalance(adminClient, orgId, user.id)
+  if (!walletCoversAll(amountCents, balanceCents)) {
+    return { error: 'Seu crédito não cobre o valor desta inscrição.' }
+  }
+
+  const { data: payment, error: payErr } = await adminClient
+    .from('payments')
+    .insert({
+      organization_id: orgId,
+      student_id: user.id,
+      subscription_id: null,
+      session_id: null,
+      amount: amountCents / 100,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'tournament_entry',
+      gateway: 'wallet',
+      gateway_payment_id: null,
+      tournament_entry_id: entryId,
+      tournament_entry_side: side,
+      settled_method: 'wallet',
+    })
+    .select('id')
+    .single()
+  if (payErr || !payment) return { error: 'Erro ao registrar o pagamento. Tente novamente.' }
+
+  const paymentId = payment.id as string
+  const w = await spendWallet(adminClient, {
+    orgId,
+    studentId: user.id,
+    cents: amountCents,
+    reason: WALLET_REASONS.tournamentEntry,
+    sourceTable: 'payments',
+    sourceId: paymentId,
+  })
+  if (w.error) {
+    await adminClient.from('payments').update({ status: 'failed' }).eq('id', paymentId)
+    return { error: w.error }
+  }
+
+  // Mesma RPC do caminho pago: marca o pagamento e o LADO certo da dupla na
+  // mesma transação. Dar baixa aqui na mão sobrescreveria a metade errada.
+  const { data: applied, error: rpcErr } = await adminClient.rpc(
+    'record_tournament_entry_checkout_payment',
+    { p_payment_id: paymentId, p_gateway_payment_id: `wallet:${paymentId}` },
+  )
+  if (rpcErr || applied === false) {
+    await refundWalletSpend(adminClient, {
+      orgId,
+      studentId: user.id,
+      cents: amountCents,
+      reason: WALLET_REASONS.tournamentEntry,
+      sourceTable: 'payments',
+      sourceId: paymentId,
+    })
+    await adminClient.from('payments').update({ status: 'failed' }).eq('id', paymentId)
+    console.error('[payEntryWithWallet] baixa falhou', {
+      paymentId, error: rpcErr?.message ?? 'RPC devolveu false',
+    })
+    return { error: 'Não foi possível concluir o pagamento. Seu saldo foi devolvido.' }
+  }
+
+  revalidatePath(`/p/${token}`)
+  revalidatePath('/financeiro')
+  return { paid: true }
 }
 
 // ---------------------------------------------------------------------------

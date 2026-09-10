@@ -96,21 +96,6 @@ export default async function FinanceiroAlunoPage({
     .limit(50)
   const payments: Payment[] = paymentsRaw ?? []
 
-  const { data: salesRaw } = await admin
-    .from('system_settings')
-    .select('key, value')
-    .eq('organization_id', orgId)
-    .in('key', ['single_class_price', 'single_class_sale_enabled'])
-  const sales = Object.fromEntries(
-    ((salesRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
-  )
-  const singleClassPrice = parseFloat(sales.single_class_price ?? '0') || 0
-  const singleClassEnabled =
-    sales.single_class_sale_enabled === 'true' && singleClassPrice > 0 && mpConnected
-
-  const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
-  const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
-
   // Carteira: saldo e extrato juntos — quem tem saldo quer saber de onde veio.
   const [walletBalance, walletEntries, refunds] = await Promise.all([
     getWalletBalance(admin, orgId, user.id),
@@ -120,6 +105,25 @@ export default async function FinanceiroAlunoPage({
   // Encerrado não some da lista, mas vai para o fim: o aluno precisa achar o
   // estorno que já recebeu quando for conferir o extrato do banco.
   const refundsAbertos = refunds.filter((r) => r.status === 'pendente' || r.status === 'pago')
+
+  const { data: salesRaw } = await admin
+    .from('system_settings')
+    .select('key, value')
+    .eq('organization_id', orgId)
+    .in('key', ['single_class_price', 'single_class_sale_enabled'])
+  const sales = Object.fromEntries(
+    ((salesRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
+  )
+  const singleClassPrice = parseFloat(sales.single_class_price ?? '0') || 0
+  // Saldo cobrindo o valor dispensa o gateway: quem tem crédito em dinheiro
+  // compra aula avulsa mesmo em academia sem Mercado Pago conectado.
+  const singleClassEnabled =
+    sales.single_class_sale_enabled === 'true'
+    && singleClassPrice > 0
+    && (mpConnected || walletBalance >= Math.round(singleClassPrice * 100))
+
+  const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
+  const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
 
   const { data: recRaw } = await admin
     .from('plan_recommendations')
@@ -211,7 +215,7 @@ export default async function FinanceiroAlunoPage({
       {singleClassEnabled && (
         <section>
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Aula avulsa</h2>
-          <BuyCreditsCard unitPrice={singleClassPrice} />
+          <BuyCreditsCard unitPrice={singleClassPrice} walletCents={walletBalance} />
         </section>
       )}
 

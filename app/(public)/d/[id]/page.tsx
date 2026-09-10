@@ -19,6 +19,7 @@ import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { DAY_USE_KIND_LABEL, dayUseKindHint, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
 import { dayUseShareMessage, resolveDayUseCta } from '@/lib/dayuse/publicPage'
+import { splitWithWallet, formatWalletCents } from '@/lib/wallet/wallet'
 import { getPublicDayUse } from '@/features/dayuse/publicQuery'
 import { getStudentRefunds } from '@/features/dayuse/refundQueries'
 import { RefundCard } from '@/features/dayuse/RefundCard'
@@ -75,7 +76,11 @@ export default async function PublicDayUsePage({ params }: PageProps) {
   const data = await getPublicDayUse(params.id, user?.id ?? null)
   if (!data) notFound()
 
-  const { slot, org, priceCents, occupied, attendees, mine } = data
+  const { slot, org, priceCents, walletCents, occupied, attendees, mine } = data
+  // Divisão saldo/cartão pela MESMA função que a reserva usa (splitWithWallet):
+  // prometer um abatimento na tela e cobrar outro no Mercado Pago é o defeito
+  // que essa função existe para impedir.
+  const split = splitWithWallet(priceCents, walletCents)
 
   // Estorno DESTE horário. Vive aqui porque o avulso não tem /financeiro: é
   // nesta página que ele informa a chave PIX, troca por crédito e confirma o
@@ -170,6 +175,14 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           </p>
         )}
         <p className="text-center text-xs text-slate-500">{cta.note}</p>
+        {cta.actionable && split.walletCents > 0 && (
+          <p className="text-center text-xs text-green-400">
+            {split.gatewayCents === 0
+              ? `Pago com seu crédito de ${formatWalletCents(split.walletCents)} — sem cartão.`
+              : `${formatWalletCents(split.walletCents)} do seu crédito + `
+                + `${formatWalletCents(split.gatewayCents)} no cartão.`}
+          </p>
+        )}
         {mine && cta.state === 'booked' && (
           <DayUseCancelButton
             bookingId={mine.id}

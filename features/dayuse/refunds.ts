@@ -187,3 +187,66 @@ export async function openRefundForBooking(
 
   return { eligibility, refundId: created.id as string, walletRestoredCents }
 }
+
+/** Minutos que uma reserva pendente de pagamento ocupa a vaga. Igual à RPC. */
+export const PENDING_HOLD_MINUTES = 30
+
+/**
+ * Cancela as reservas pendentes vencidas de uma academia e devolve o saldo que
+ * elas tinham debitado.
+ *
+ * Substitui o update em massa que existia nas páginas de day use. O update
+ * bruto liberava a vaga mas deixava o saldo debitado: quem abatia crédito e
+ * abandonava o checkout ficava sem a vaga E sem o dinheiro — o único jeito de
+ * a carteira "sumir" com valor.
+ *
+ * `openRefundForBooking` faz o trabalho certo aqui sem precisar de exceção:
+ * como o pagamento nunca confirmou, ele calcula gateway = 0, devolve a parte da
+ * carteira e não abre estorno nenhum.
+ */
+export async function expireStalePendingDayUse(
+  client: AdminClient,
+  orgId: string,
+): Promise<{ expired: number; walletRestoredCents: number }> {
+  const limit = new Date(Date.now() - PENDING_HOLD_MINUTES * 60 * 1000).toISOString()
+
+  const { data: staleRaw } = await client
+    .from('dayuse_bookings')
+    .select('id, student_id, booked_at, dayuse_slots(date, start_time)')
+    .eq('organization_id', orgId)
+    .eq('status', 'pending_payment')
+    .lt('booked_at', limit)
+
+  const stale = (staleRaw ?? []) as {
+    id: string
+    student_id: string
+    booked_at: string
+    dayuse_slots:
+      | { date: string; start_time: string }
+      | { date: string; start_time: string }[]
+      | null
+  }[]
+  if (stale.length === 0) return { expired: 0, walletRestoredCents: 0 }
+
+  await client
+    .from('dayuse_bookings')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .in('id', stale.map((b) => b.id))
+
+  let walletRestoredCents = 0
+  for (const b of stale) {
+    const slot = Array.isArray(b.dayuse_slots) ? b.dayuse_slots[0] : b.dayuse_slots
+    if (!slot) continue
+    const r = await openRefundForBooking(client, {
+      orgId,
+      bookingId: b.id,
+      studentId: b.student_id,
+      slot,
+      bookedAtIso: b.booked_at,
+      cause: 'arena_cancelou',
+    })
+    walletRestoredCents += r.walletRestoredCents
+  }
+
+  return { expired: stale.length, walletRestoredCents }
+}

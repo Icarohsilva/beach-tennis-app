@@ -12,7 +12,8 @@ import { brtToday } from '@/lib/utils/gridSchedule'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
 import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
 import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
-import { getRefundWindowHours } from '@/features/dayuse/refunds'
+import { PENDING_HOLD_MINUTES, expireStalePendingDayUse, getRefundWindowHours } from '@/features/dayuse/refunds'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -35,17 +36,16 @@ export default async function AgendarDayUsePage({
   // Use adminClient to bypass RLS and see all bookings + names
   const adminClient = createAdminClient()
 
-  const freshLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  const freshLimit = new Date(Date.now() - PENDING_HOLD_MINUTES * 60 * 1000).toISOString()
   // Reservas pendentes vencidas (>30min sem pagamento) são canceladas ao listar.
   // Escopado à academia ativa: sem o filtro, abrir esta página varria e escrevia
   // em reserva de TODAS as academias da plataforma. Cada arena limpa a sua
   // quando alguém abre a lista dela.
-  await adminClient
-    .from('dayuse_bookings')
-    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-    .eq('organization_id', orgId)
-    .eq('status', 'pending_payment')
-    .lt('booked_at', freshLimit)
+  //
+  // Passa por expireStalePendingDayUse e não por um update em massa porque a
+  // reserva pode ter abatido crédito da carteira: liberar a vaga sem devolver o
+  // saldo deixaria o aluno sem os dois.
+  await expireStalePendingDayUse(adminClient, orgId)
 
   // Preço na tela pela MESMA regra do checkout (dayUseChargeCents): o card
   // dizia "Gratuito" fixo, então day use pago aparecia como de graça.
@@ -53,6 +53,7 @@ export default async function AgendarDayUsePage({
   // Janela de estorno da academia: o aviso de cancelamento tem de citar o prazo
   // real dela, não o default.
   const refundWindowHours = await getRefundWindowHours(adminClient, orgId)
+  const walletCents = await getWalletBalance(adminClient, orgId, user.id)
   const nowIso = new Date().toISOString()
 
   const { data: slots } = await supabase
@@ -147,6 +148,7 @@ export default async function AgendarDayUsePage({
                   myBookingStatus={myBookingStatus.get(slot.id) ?? null}
                   attendees={attendeesMap.get(slot.id) ?? []}
                   priceCents={dayUseChargeCents(slot, pricing)}
+                  walletCents={walletCents}
                   cancelNotice={cancelNoticeForStudent({
                     date: slot.date,
                     start_time: slot.start_time,

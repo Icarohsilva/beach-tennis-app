@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/nextjs'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getMpAccount } from '@/lib/billing/gatewayAccounts'
 import { mpGetPayment } from '@/lib/billing/mpClient'
+import { openRefundForBooking } from '@/features/dayuse/refunds'
 
 interface PaymentRow {
   id: string
@@ -121,6 +122,44 @@ export async function handleOrgCheckoutPayment(
     })
     if (rpcErr) {
       throw new Error(`[webhook/mp] record_dayuse_checkout_payment falhou: ${rpcErr.message}`)
+    }
+
+    // O pagamento pode ter chegado DEPOIS de a reserva expirar: a RPC cancela
+    // nesse caso (a vaga já pode ter sido retomada) e o dinheiro fica pago sem
+    // reserva. O comentário da própria RPC previa "aparece como reembolso
+    // pendente no financeiro" — desde dayuse_refunds isso deixou de ser
+    // previsão e passou a ter tabela.
+    const { data: bookingRaw } = await admin
+      .from('dayuse_bookings')
+      .select('id, student_id, status, booked_at, refund_pix_key, refund_pix_owner, dayuse_slots(date, start_time)')
+      .eq('id', pay.dayuse_booking_id)
+      .maybeSingle()
+    const booking = bookingRaw as {
+      id: string
+      student_id: string
+      status: string
+      booked_at: string
+      refund_pix_key: string | null
+      refund_pix_owner: string | null
+      dayuse_slots: { date: string; start_time: string } | { date: string; start_time: string }[] | null
+    } | null
+
+    if (booking?.status === 'cancelled') {
+      const slot = Array.isArray(booking.dayuse_slots) ? booking.dayuse_slots[0] : booking.dayuse_slots
+      if (slot) {
+        // `arena_cancelou` de propósito: quem perdeu a vaga não escolheu nada,
+        // então a janela de cancelamento do aluno não pode barrar a devolução.
+        await openRefundForBooking(admin, {
+          orgId,
+          bookingId: booking.id,
+          studentId: booking.student_id,
+          slot,
+          bookedAtIso: booking.booked_at,
+          cause: 'arena_cancelou',
+          pixKey: booking.refund_pix_key,
+          pixOwner: booking.refund_pix_owner,
+        })
+      }
     }
     return
   }

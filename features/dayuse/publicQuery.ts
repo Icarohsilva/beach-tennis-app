@@ -5,6 +5,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { getDayUsePricing } from './pricing'
 import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
 import type { DayUseSlot } from '@/types'
 
 export interface PublicDayUse {
@@ -20,6 +21,8 @@ export interface PublicDayUse {
   }
   /** Preço a cobrar, já resolvido pela mesma regra do checkout. */
   priceCents: number
+  /** Saldo em dinheiro de quem está vendo, na academia deste day use. */
+  walletCents: number
   /** Reservas que ocupam vaga: confirmadas + pendentes de pagamento frescas. */
   occupied: number
   /**
@@ -101,11 +104,17 @@ export async function getPublicDayUse(
   }
 
   const pricing = await getDayUsePricing(slot.organization_id)
+  // Saldo de quem está vendo: a tela precisa dizer quanto o crédito abate ANTES
+  // do clique, e o abatimento é a mesma conta que bookDayUse aplica.
+  const walletCents = viewerId
+    ? await getWalletBalance(admin, slot.organization_id, viewerId)
+    : 0
 
   return {
     slot,
     org: orgRaw as PublicDayUse['org'],
     priceCents: dayUseChargeCents(slot, pricing),
+    walletCents,
     occupied: bookings.length,
     attendees,
     mine,

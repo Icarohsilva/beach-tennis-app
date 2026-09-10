@@ -17,6 +17,9 @@ import {
 import { getDayUsePricing } from './pricing'
 import { cancelDayUseSlotBookings } from './cancelSlot'
 import { openRefundForBooking } from './refunds'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
+import { refundWalletSpend, spendWallet } from '@/features/wallet/spendWallet'
+import { splitWithWallet, WALLET_REASONS } from '@/lib/wallet/wallet'
 import { sportLabel } from '@/lib/arenas/sports'
 import type { DayUseKind } from '@/types'
 
@@ -160,7 +163,14 @@ export async function deactivateDayUseSlot(slotId: string): Promise<{
   return { cancelled: result.cancelled, refundsOpened: result.refundsOpened }
 }
 
-export async function bookDayUse(slotId: string): Promise<{ error?: string; initPoint?: string }> {
+export interface BookDayUseResult {
+  error?: string
+  initPoint?: string
+  /** Centavos abatidos do saldo quando ele cobriu a reserva inteira. */
+  paidWithWalletCents?: number
+}
+
+export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -209,9 +219,24 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   // Centavos são a unidade de verdade (price_cents do slot); os reais só existem
   // porque a preferência do Mercado Pago e payments.amount são em reais.
   const priceCents = dayUseChargeCents(slotRow, pricing)
-  const price = priceCents / 100
-  const token = priceCents > 0 ? pricing.mpToken : null
+
+  // Carteira: crédito em dinheiro abate o day use antes do cartão. Aqui o
+  // abatimento pode ser PARCIAL (ao contrário da compra de créditos e da
+  // inscrição de torneio) porque day use é o único dos três com prazo: a
+  // reserva pendente expira em 30 min e o caminho de expiração devolve o saldo
+  // (expireStalePendingDayUse). Sem esse prazo, aluno abandonando o checkout
+  // deixaria o saldo preso para sempre.
+  const balanceCents = await getWalletBalance(adminClient, orgId, user.id)
+  const split = splitWithWallet(priceCents, balanceCents)
+
+  const gatewayCents = split.gatewayCents
+  const price = gatewayCents / 100
+  const token = gatewayCents > 0 ? pricing.mpToken : null
   const isPaid = Boolean(token)
+
+  // Saldo cobrindo o total, ou academia sem gateway com saldo suficiente: a
+  // reserva nasce confirmada e não há checkout a abrir.
+  const paidByWalletOnly = split.walletCents > 0 && gatewayCents === 0
 
   // Capacidade + insert atômicos via RPC (advisory lock por slot). Caminho
   // pago reserva como pending_payment: ocupa a vaga por 30 min (a RPC conta
@@ -227,6 +252,29 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
     if (error.message.includes('ALREADY_BOOKED')) return { error: 'Você já tem uma reserva neste horário' }
     if (error.message.includes('SLOT_NOT_FOUND')) return { error: 'Slot não encontrado' }
     return { error: 'Erro ao reservar. Tente novamente.' }
+  }
+
+  // Debita o saldo DEPOIS de a vaga estar garantida: a capacidade é o recurso
+  // escasso e é ela que pode falhar (SLOT_FULL). Debitar antes e não conseguir
+  // a vaga exigiria desfazer dinheiro por causa de lotação.
+  if (split.walletCents > 0) {
+    const w = await spendWallet(adminClient, {
+      orgId,
+      studentId: user.id,
+      cents: split.walletCents,
+      reason: WALLET_REASONS.dayuseBooking,
+      sourceTable: 'dayuse_bookings',
+      sourceId: bookingId as string,
+    })
+    if (w.error) {
+      // Saldo gasto em outra aba entre a leitura e agora: desfaz a reserva em
+      // vez de dar a vaga de graça.
+      await adminClient
+        .from('dayuse_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId as string)
+      return { error: w.error }
+    }
   }
 
   if (!isPaid) {
@@ -248,8 +296,9 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
 
     revalidatePath('/agendar/dayuse')
     revalidatePath('/home')
+    revalidatePath('/financeiro')
     revalidatePath(`/d/${slotId}`)
-    return {}
+    return { paidWithWalletCents: paidByWalletOnly ? split.walletCents : 0 }
   }
 
   // Caminho pago: payment pending + preferência de checkout.
@@ -260,6 +309,9 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
       student_id: user.id,
       subscription_id: null,
       session_id: null,
+      // Só a parte do GATEWAY: `amount` é o que o Mercado Pago vai cobrar, e é
+      // esse número que o estorno devolve por PIX. A parte paga com saldo tem
+      // extrato próprio (wallet_transactions) e volta para o saldo.
       amount: price,
       currency: 'BRL',
       status: 'pending',
@@ -276,6 +328,9 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
       .from('dayuse_bookings')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
       .eq('id', bookingId as string)
+    await undoWalletSpend(adminClient, {
+      orgId, studentId: user.id, cents: split.walletCents, bookingId: bookingId as string,
+    })
     return { error: 'Erro ao iniciar o pagamento. Tente novamente.' }
   }
 
@@ -312,6 +367,9 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
       .eq('id', bookingId as string)
     await adminClient.from('payments').update({ status: 'failed' }).eq('id', payment.id)
+    await undoWalletSpend(adminClient, {
+      orgId, studentId: user.id, cents: split.walletCents, bookingId: bookingId as string,
+    })
     return { error: 'Não foi possível iniciar o pagamento. Tente novamente.' }
   }
 }
@@ -389,4 +447,30 @@ export async function cancelDayUseBooking(bookingId: string): Promise<CancelDayU
   // aparecia lá depois de o cache expirar.
   revalidatePath(`/d/${row.slot_id}`)
   return { refundDue: refund.due, refundId: refund.refundId, refundNote: refund.reason }
+}
+
+/**
+ * Devolve o saldo debitado por uma reserva que não vingou.
+ *
+ * Separada porque os dois caminhos de falha do checkout precisam da mesma
+ * compensação, e esquecer um deles significa aluno sem a vaga E sem o saldo.
+ */
+async function undoWalletSpend(
+  client: ReturnType<typeof createAdminClient>,
+  input: { orgId: string; studentId: string; cents: number; bookingId: string },
+): Promise<void> {
+  if (input.cents <= 0) return
+  const r = await refundWalletSpend(client, {
+    orgId: input.orgId,
+    studentId: input.studentId,
+    cents: input.cents,
+    reason: WALLET_REASONS.dayuseBooking,
+    sourceTable: 'dayuse_bookings',
+    sourceId: input.bookingId,
+  })
+  if (r.error) {
+    console.error('[dayuse] devolução do saldo falhou', {
+      bookingId: input.bookingId, error: r.error,
+    })
+  }
 }
