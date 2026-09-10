@@ -12,6 +12,8 @@ import { BuyCreditsCard } from '@/features/financeiro/BuyCreditsCard'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { DebtSection } from '@/features/financeiro/DebtSection'
 import { MissedCheckinSection } from '@/features/checkin/MissedCheckinSection'
+import { WalletCard } from '@/features/wallet/WalletCard'
+import { getWalletBalance, getWalletStatement } from '@/features/wallet/walletQueries'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import type { Payment, Periodicity, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
@@ -107,6 +109,12 @@ export default async function FinanceiroAlunoPage({
   const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
   const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
 
+  // Carteira: saldo e extrato juntos — quem tem saldo quer saber de onde veio.
+  const [walletBalance, walletEntries] = await Promise.all([
+    getWalletBalance(admin, orgId, user.id),
+    getWalletStatement(admin, orgId, user.id),
+  ])
+
   const { data: recRaw } = await admin
     .from('plan_recommendations')
     .select('id, plan_id, billing_option_id, subscription_plans(name), plan_billing_options(periodicity, price)')
@@ -148,6 +156,17 @@ export default async function FinanceiroAlunoPage({
 
       {searchParams.retorno === 'avulso' && (
         <CheckoutReturnBanner message="Recebemos seu pagamento. Os créditos entram no seu saldo assim que o Mercado Pago confirmar, normalmente em segundos." />
+      )}
+
+      {/* Só aparece para quem tem saldo ou já movimentou: card de saldo zero em
+          conta que nunca recebeu estorno é ruído na tela de todo mundo. */}
+      {(walletBalance > 0 || walletEntries.length > 0) && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Meu crédito
+          </h2>
+          <WalletCard balanceCents={walletBalance} entries={walletEntries} />
+        </section>
       )}
 
       <section>

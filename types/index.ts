@@ -657,6 +657,34 @@ export interface DayUseRecurrence {
   created_at: string
 }
 
+/**
+ * Carteira: crédito em DINHEIRO por (academia, aluno).
+ *
+ * Não confundir com `memberships.credits_balance`, que conta AULAS. Cache do
+ * saldo — a verdade é `WalletTransaction`, e a escrita passa só pela RPC
+ * `wallet_apply`. Chaveada por aluno e não por membership porque o avulso do
+ * day use não tem vínculo com a arena.
+ */
+export interface Wallet {
+  organization_id: string
+  student_id: string
+  balance_cents: number
+  updated_at: string
+}
+
+/** Extrato da carteira. Positivo credita, negativo gasta. Não vence. */
+export interface WalletTransaction {
+  id: string
+  organization_id: string
+  student_id: string
+  amount_cents: number
+  reason: string
+  source_table: string | null
+  source_id: string | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface DayUseBooking {
   id: string
   organization_id: string
