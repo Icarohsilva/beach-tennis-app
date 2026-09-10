@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -12,11 +13,13 @@ import type { DayUseSlot } from '@/types'
 interface Props {
   slot: DayUseSlot
   bookingsCount: number
-  /** Preço já resolvido (slot → padrão da academia), em centavos. */
+  /** Preço PRETENDIDO pela academia (slot → padrão), em centavos. */
   priceCents: number
+  /** Preço definido sem forma de cobrar — o card avisa em vez de dizer "Gratuito". */
+  unchargeable?: boolean
 }
 
-export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
+export function DayUseSlotCard({ slot, bookingsCount, priceCents, unchargeable = false }: Props) {
   const [loading, setLoading] = useState(false)
   const isFull = bookingsCount >= slot.capacity
 
@@ -47,6 +50,7 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
           sport={slot.sport}
           kind={slot.kind}
           priceCents={priceCents}
+          unchargeable={unchargeable}
         />
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           {isFull
@@ -63,9 +67,20 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
           {bookingsCount}/{slot.capacity} {slot.kind === 'open' ? 'pessoas' : 'reservas'}
         </p>
       </div>
-      <Button variant="danger" size="sm" disabled={loading} onClick={handleRemove}>
-        {loading ? '...' : 'Remover'}
-      </Button>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {/* A tela do day use é onde o admin vê quem está inscrito, confere
+            comprovante e divulga o link. Antes daqui a lista só dava a
+            contagem. */}
+        <Link
+          href={`/admin/grade/dayuse/${slot.id}`}
+          className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+        >
+          Abrir
+        </Link>
+        <Button variant="danger" size="sm" disabled={loading} onClick={handleRemove}>
+          {loading ? '...' : 'Remover'}
+        </Button>
+      </div>
     </Card>
   )
 }

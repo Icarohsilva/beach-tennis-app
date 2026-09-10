@@ -242,7 +242,9 @@ export function DayUseRecurrencePanel({
             <label className="text-xs text-slate-400 block mb-1">Preço por pessoa (opcional)</label>
             <Input name="price" type="text" inputMode="decimal" placeholder="Ex: 40,00" />
             <p className="text-xs text-slate-500 mt-1">
-              Vazio usa o padrão da academia ({formatDayUsePrice(orgDefaultPriceCents)}).
+              {orgDefaultPriceCents > 0
+                ? `Vazio usa o padrão da academia (${formatDayUsePrice(orgDefaultPriceCents)}).`
+                : 'A academia não tem preço padrão, então vazio deixa o day use gratuito.'}
             </p>
           </div>
           <div>

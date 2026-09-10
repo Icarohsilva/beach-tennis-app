@@ -117,8 +117,10 @@ export function CreateDayUseForm({
         <label className="text-xs text-slate-400 block mb-1">Preço por pessoa (opcional)</label>
         <Input name="price" type="text" inputMode="decimal" placeholder="Ex: 40,00" />
         <p className="text-xs text-slate-500 mt-1">
-          Vazio usa o padrão da academia ({formatDayUsePrice(orgDefaultPriceCents)}). Digite{' '}
-          <span className="text-slate-400">0</span> para deixar este day use gratuito.
+          {orgDefaultPriceCents > 0
+            ? `Vazio usa o padrão da academia (${formatDayUsePrice(orgDefaultPriceCents)}).`
+            : 'A academia não tem preço padrão, então vazio deixa este day use gratuito.'}
+          {' '}Digite <span className="text-slate-400">0</span> para gratuito de propósito.
         </p>
       </div>
       <div>

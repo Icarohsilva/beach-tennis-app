@@ -59,6 +59,40 @@ export function dayUseChargeCents(
   return dayUsePriceCents(slot, opts.defaultCents)
 }
 
+/**
+ * O preço deste day use em DUAS leituras, porque elas divergem e a diferença
+ * importa para gente diferente.
+ *
+ * `intendedCents` é o que a academia definiu; `chargeCents` é o que o aluno vai
+ * pagar de fato. Eles só divergem quando há preço e não há como cobrar (venda
+ * desligada, ou sem Mercado Pago e sem chave PIX) — e aí o app precisa dizer
+ * coisas OPOSTAS para os dois lados:
+ *
+ * - ao ALUNO, "Gratuito", porque é o que a reserva vai custar de verdade;
+ * - ao ADMIN, o preço que ele definiu MAIS o aviso de que não está sendo
+ *   cobrado. Mostrar "Gratuito" a quem acabou de digitar R$ 40 esconde a
+ *   configuração que falta e faz a arena trabalhar de graça sem saber.
+ */
+export interface DayUsePriceView {
+  intendedCents: number
+  chargeCents: number
+  /** Tem preço definido e nenhuma forma de cobrar. */
+  unchargeable: boolean
+}
+
+export function dayUsePriceView(
+  slot: { price_cents?: number | null },
+  opts: { defaultCents: number; canCharge: boolean },
+): DayUsePriceView {
+  const intendedCents = dayUsePriceCents(slot, opts.defaultCents)
+  const chargeCents = dayUseChargeCents(slot, opts)
+  return {
+    intendedCents,
+    chargeCents,
+    unchargeable: intendedCents > 0 && chargeCents === 0,
+  }
+}
+
 /** Reais (system_settings.day_use_price é string de reais) para centavos. */
 export function reaisToCents(reais: string | number | null | undefined): number {
   const n = typeof reais === 'string' ? parseFloat(reais.replace(',', '.')) : (reais ?? 0)

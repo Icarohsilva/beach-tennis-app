@@ -7,6 +7,7 @@ import {
   reaisToCents,
   dayUseChargeTitle,
   formatDayUsePrice,
+  dayUsePriceView,
 } from './dayUseKind'
 
 describe('DAY_USE_KIND_LABEL', () => {
@@ -87,5 +88,33 @@ describe('formatDayUsePrice', () => {
 
   it('diz Gratuito quando não há preço — o mesmo caso em que não abre checkout', () => {
     expect(formatDayUsePrice(0)).toBe('Gratuito')
+  })
+})
+
+describe('dayUsePriceView', () => {
+  it('com gateway, as duas leituras batem', () => {
+    const v = dayUsePriceView({ price_cents: 4000 }, { defaultCents: 0, canCharge: true })
+    expect(v).toEqual({ intendedCents: 4000, chargeCents: 4000, unchargeable: false })
+  })
+
+  it('preço definido SEM forma de cobrar: o admin vê o preço e o aviso', () => {
+    // O defeito relatado: o admin digitou R$ 40 e a tela dizia "Gratuito",
+    // escondendo que faltava conectar o Mercado Pago ou cadastrar a chave PIX.
+    const v = dayUsePriceView({ price_cents: 4000 }, { defaultCents: 0, canCharge: false })
+    expect(v.intendedCents).toBe(4000)
+    expect(v.chargeCents).toBe(0)
+    expect(v.unchargeable).toBe(true)
+  })
+
+  it('day use realmente gratuito não é "sem cobrança"', () => {
+    // Sem preço não há nada a avisar: o admin quis de graça.
+    const v = dayUsePriceView({ price_cents: 0 }, { defaultCents: 0, canCharge: false })
+    expect(v).toEqual({ intendedCents: 0, chargeCents: 0, unchargeable: false })
+  })
+
+  it('herda o padrão da academia na leitura de intenção', () => {
+    const v = dayUsePriceView({ price_cents: null }, { defaultCents: 3000, canCharge: false })
+    expect(v.intendedCents).toBe(3000)
+    expect(v.unchargeable).toBe(true)
   })
 })

@@ -5,12 +5,13 @@ import { CreateDayUseForm } from '@/features/dayuse/CreateDayUseForm'
 import { DayUseRecurrencePanel } from '@/features/dayuse/DayUseRecurrencePanel'
 import { DayUseSlotCard } from '@/features/dayuse/DayUseSlotCard'
 import { formatDate } from '@/lib/utils/dateHelpers'
+import { Card } from '@/components/ui/Card'
 import type { DayUseRecurrence, DayUseSlot } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getOrgSports } from '@/lib/arenas/orgSports'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
-import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { DAY_USE_HORIZON_DAYS } from '@/features/dayuse/generation'
 
 export default async function AdminDayUsePage() {
@@ -65,6 +66,10 @@ export default async function AdminDayUsePage() {
     countMap.set(b.slot_id, (countMap.get(b.slot_id) ?? 0) + 1)
   }
 
+  // Slots com preço que não vão cobrar nada. É a checagem que o defeito
+  // relatado pedia: o admin digitou R$ 40 e a tela dizia "Gratuito".
+  const semCobranca = slotList.filter((s) => dayUsePriceView(s, pricing).unchargeable)
+
   const byDate = new Map<string, DayUseSlot[]>()
   for (const slot of slotList) {
     const arr = byDate.get(slot.date) ?? []
@@ -83,6 +88,36 @@ export default async function AdminDayUsePage() {
         <h1 className="text-2xl font-bold text-white">Day Use</h1>
         <p className="text-slate-400 text-sm">{slotList.length} slots futuros</p>
       </div>
+
+      {/* Preço definido e nenhuma forma de cobrar: sem este aviso a arena
+          trabalha de graça sem saber — a tela dizia só "Gratuito". */}
+      {semCobranca.length > 0 && (
+        <Card className="border-yellow-700/50">
+          <p className="text-sm font-semibold text-yellow-300">
+            {semCobranca.length === 1
+              ? '1 day use com preço não está sendo cobrado'
+              : `${semCobranca.length} day use com preço não estão sendo cobrados`}
+          </p>
+          <p className="mt-1 text-xs text-slate-300">
+            A academia não tem Mercado Pago conectado nem chave PIX cadastrada, então a
+            reserva sai gratuita mesmo com preço definido.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <Link
+              href="/admin/financeiro/integracoes"
+              className="text-xs text-brand-400 hover:text-brand-300"
+            >
+              Conectar Mercado Pago
+            </Link>
+            <Link
+              href="/admin/configuracoes"
+              className="text-xs text-brand-400 hover:text-brand-300"
+            >
+              Cadastrar chave PIX
+            </Link>
+          </div>
+        </Card>
+      )}
       <DayUseRecurrencePanel
         recurrences={(recurrencesRaw ?? []) as DayUseRecurrence[]}
         orgSports={orgSports}
@@ -110,7 +145,8 @@ export default async function AdminDayUsePage() {
                     key={slot.id}
                     slot={slot}
                     bookingsCount={countMap.get(slot.id) ?? 0}
-                    priceCents={dayUseChargeCents(slot, pricing)}
+                    priceCents={dayUsePriceView(slot, pricing).intendedCents}
+                    unchargeable={dayUsePriceView(slot, pricing).unchargeable}
                   />
                 ))}
               </div>
