@@ -27,6 +27,7 @@ import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { DayUseBookButton, DayUseCancelButton } from './DayUseBookButton'
 import { ShareDayUse } from './ShareDayUse'
+import { DayUsePixPanel } from './DayUsePixPanel'
 import type { DayUseSlot } from '@/types'
 
 interface PageProps { params: { id: string } }
@@ -95,6 +96,7 @@ export default async function PublicDayUsePage({ params }: PageProps) {
     capacity: slot.capacity,
     occupied,
     myStatus: mine?.status ?? null,
+    myPaymentMethod: mine?.paymentMethod ?? null,
     signedIn: Boolean(user),
     priceCents,
     now: new Date(),
@@ -222,6 +224,20 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           </p>
         )}
       </Card>
+
+      {mine?.paymentMethod === 'pix_manual'
+        && mine.status === 'pending_payment'
+        && data.pixKey && (
+        <DayUsePixPanel
+          bookingId={mine.id}
+          amountCents={priceCents}
+          pixKey={data.pixKey}
+          pixOwner={data.pixOwner}
+          hasReceipt={mine.hasReceipt}
+          refundPixKey={mine.refundPixKey}
+          refundPixOwner={mine.refundPixOwner}
+        />
+      )}
 
       {refunds.length > 0 && (
         <div className="space-y-2">

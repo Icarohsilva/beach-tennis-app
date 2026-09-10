@@ -74,7 +74,13 @@ export default async function AgendarDayUsePage({
           .from('dayuse_bookings')
           .select('id, slot_id, student_id, status, booked_at, profiles(full_name)')
           .in('slot_id', slotIds)
-          .or(`status.eq.confirmed,and(status.eq.pending_payment,booked_at.gt.${freshLimit})`)
+          // Prazo por MÉTODO (hold_until): o PIX manual segura 24h, e contar
+          // por booked_at o tiraria da ocupação em 30 min.
+          .or(
+            'status.eq.confirmed,'
+            + `and(status.eq.pending_payment,hold_until.gt.${nowIso}),`
+            + `and(status.eq.pending_payment,hold_until.is.null,booked_at.gt.${freshLimit})`,
+          )
       : { data: [] }
 
   const countMap = new Map<string, number>()

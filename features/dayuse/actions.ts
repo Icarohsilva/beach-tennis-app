@@ -20,6 +20,7 @@ import { openRefundForBooking } from './refunds'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
 import { refundWalletSpend, spendWallet } from '@/features/wallet/spendWallet'
 import { splitWithWallet, WALLET_REASONS } from '@/lib/wallet/wallet'
+import { holdUntilIso, resolveDayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
 import { sportLabel } from '@/lib/arenas/sports'
 import type { DayUseKind } from '@/types'
 
@@ -168,6 +169,11 @@ export interface BookDayUseResult {
   initPoint?: string
   /** Centavos abatidos do saldo quando ele cobriu a reserva inteira. */
   paidWithWalletCents?: number
+  /** Caminho PIX manual: a chave da arena e o valor a transferir. */
+  pixKey?: string | null
+  pixOwner?: string | null
+  amountCents?: number
+  bookingId?: string
 }
 
 export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
@@ -231,12 +237,23 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
 
   const gatewayCents = split.gatewayCents
   const price = gatewayCents / 100
-  const token = gatewayCents > 0 ? pricing.mpToken : null
-  const isPaid = Boolean(token)
 
-  // Saldo cobrindo o total, ou academia sem gateway com saldo suficiente: a
-  // reserva nasce confirmada e não há checkout a abrir.
-  const paidByWalletOnly = split.walletCents > 0 && gatewayCents === 0
+  // Qual caminho de cobrança (lib/dayuse/paymentMethod.ts): Checkout Pro quando
+  // há gateway, PIX manual na chave da arena quando não, gratuito quando a
+  // academia não tem nenhuma forma de cobrar.
+  const method = resolveDayUsePaymentMethod({
+    gatewayCents,
+    walletCents: split.walletCents,
+    hasMpToken: Boolean(pricing.mpToken),
+    hasPixKey: Boolean(pricing.pixKey),
+  })
+  const token = method === 'mercadopago' ? pricing.mpToken : null
+  // Só o Checkout Pro abre preferência aqui; o PIX manual espera comprovante.
+  const isPaid = Boolean(token)
+  const pendingPayment = method === 'mercadopago' || method === 'pix_manual'
+
+  // Saldo cobrindo o total: a reserva nasce confirmada e não há cobrança.
+  const paidByWalletOnly = method === 'wallet'
 
   // Capacidade + insert atômicos via RPC (advisory lock por slot). Caminho
   // pago reserva como pending_payment: ocupa a vaga por 30 min (a RPC conta
@@ -244,7 +261,11 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   const { data: bookingId, error } = await adminClient.rpc('book_dayuse_atomic', {
     p_student_id: user.id,
     p_slot_id: slotId,
-    p_status: isPaid ? 'pending_payment' : 'confirmed',
+    p_status: pendingPayment ? 'pending_payment' : 'confirmed',
+    p_payment_method: method,
+    // A janela de hold vem do método: 30 min para o webhook do Checkout Pro,
+    // 24h para o PIX manual, que depende de gente conferir comprovante.
+    p_hold_until: pendingPayment ? holdUntilIso(method) : null,
   })
 
   if (error) {
@@ -274,6 +295,45 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
         .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
         .eq('id', bookingId as string)
       return { error: w.error }
+    }
+  }
+
+  if (method === 'pix_manual') {
+    // Pagamento manual: cria a pendência para o admin conferir depois e devolve
+    // a chave da arena para a tela. Nada de Liga aqui — a reserva ainda pode
+    // não virar nada, igual ao caminho do Checkout Pro.
+    const { error: payErr } = await adminClient.from('payments').insert({
+      organization_id: orgId,
+      student_id: user.id,
+      subscription_id: null,
+      session_id: null,
+      amount: price,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'day_use',
+      gateway: 'pix_manual',
+      gateway_payment_id: null,
+      dayuse_booking_id: bookingId as string,
+    })
+    if (payErr) {
+      await adminClient
+        .from('dayuse_bookings')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', bookingId as string)
+      await undoWalletSpend(adminClient, {
+        orgId, studentId: user.id, cents: split.walletCents, bookingId: bookingId as string,
+      })
+      return { error: 'Erro ao registrar o pagamento. Tente novamente.' }
+    }
+
+    revalidatePath('/agendar/dayuse')
+    revalidatePath('/financeiro')
+    revalidatePath(`/d/${slotId}`)
+    return {
+      pixKey: pricing.pixKey,
+      pixOwner: pricing.pixOwner,
+      amountCents: gatewayCents,
+      bookingId: bookingId as string,
     }
   }
 

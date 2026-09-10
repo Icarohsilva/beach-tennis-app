@@ -144,3 +144,91 @@ export async function getOrgRefunds(
   }
   return out.sort((a, b) => rank[a.status] - rank[b.status])
 }
+
+export interface PendingReceipt {
+  bookingId: string
+  studentName: string
+  amountCents: number
+  bookedAt: string
+  holdUntil: string | null
+  hasReceipt: boolean
+  receiptSignedUrl: string | null
+  slot: { id: string; date: string; start_time: string; end_time: string; court: number } | null
+}
+
+/**
+ * Reservas de day use pagas por PIX manual esperando conferência.
+ *
+ * Quem ainda NÃO anexou comprovante entra na lista também: é informação
+ * operacional ("reservou e não pagou"), e some sozinho quando `hold_until`
+ * vence. Esconder essa metade daria à arena a impressão de fila vazia com vaga
+ * presa.
+ */
+export async function getPendingDayUseReceipts(
+  client: AdminClient,
+  orgId: string,
+): Promise<PendingReceipt[]> {
+  const rows = await fetchAllPages<{
+    id: string
+    booked_at: string
+    hold_until: string | null
+    receipt_url: string | null
+    profiles: { full_name: string } | { full_name: string }[] | null
+    dayuse_slots: unknown
+    payments: { amount: number; status: string }[] | null
+  }>(
+    (from, to) =>
+      client
+        .from('dayuse_bookings')
+        .select(`
+          id, booked_at, hold_until, receipt_url,
+          profiles(full_name),
+          dayuse_slots(id, date, start_time, end_time, court),
+          payments(amount, status)
+        `)
+        .eq('organization_id', orgId)
+        .eq('status', 'pending_payment')
+        .eq('payment_method', 'pix_manual')
+        .order('booked_at', { ascending: true })
+        .range(from, to) as unknown as Page<{
+          id: string
+          booked_at: string
+          hold_until: string | null
+          receipt_url: string | null
+          profiles: { full_name: string } | { full_name: string }[] | null
+          dayuse_slots: unknown
+          payments: { amount: number; status: string }[] | null
+        }>,
+    { label: 'dayuse/comprovantes-admin' },
+  )
+
+  const out: PendingReceipt[] = []
+  for (const r of rows) {
+    const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
+    const slotRaw = r.dayuse_slots
+    const slot = (Array.isArray(slotRaw) ? slotRaw[0] : slotRaw) as PendingReceipt['slot']
+    const pending = (r.payments ?? []).find((p) => p.status === 'pending')
+
+    let receiptSignedUrl: string | null = null
+    if (r.receipt_url) {
+      const { data: signed } = await client.storage
+        .from('payment-receipts')
+        .createSignedUrl(r.receipt_url, 60 * 10)
+      receiptSignedUrl = signed?.signedUrl ?? null
+    }
+
+    out.push({
+      bookingId: r.id,
+      studentName: prof?.full_name ?? 'Aluno',
+      amountCents: Math.round(Number(pending?.amount ?? 0) * 100),
+      bookedAt: r.booked_at,
+      holdUntil: r.hold_until,
+      hasReceipt: Boolean(r.receipt_url),
+      receiptSignedUrl,
+      slot: slot ?? null,
+    })
+  }
+
+  // Com comprovante primeiro: é a metade em que a arena tem trabalho a fazer.
+  return out.sort((a, b) => Number(b.hasReceipt) - Number(a.hasReceipt))
+}

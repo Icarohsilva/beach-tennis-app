@@ -13,6 +13,7 @@ import {
 import { CANCELLATION_WINDOW_HOURS } from '@/lib/utils/creditRules'
 import { WALLET_REASONS } from '@/lib/wallet/wallet'
 import { creditWallet } from '@/features/wallet/spendWallet'
+import { holdMinutesFor } from '@/lib/dayuse/paymentMethod'
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
@@ -188,8 +189,15 @@ export async function openRefundForBooking(
   return { eligibility, refundId: created.id as string, walletRestoredCents }
 }
 
-/** Minutos que uma reserva pendente de pagamento ocupa a vaga. Igual à RPC. */
-export const PENDING_HOLD_MINUTES = 30
+/**
+ * Minutos que uma reserva pendente do Checkout Pro ocupa a vaga.
+ *
+ * Mantido só para o fallback de linha antiga (anterior a `hold_until`) e para a
+ * leitura de reservas "frescas" nas listagens. O prazo de verdade é a coluna
+ * `hold_until`, preenchida por método (lib/dayuse/paymentMethod.ts) — PIX
+ * manual segura 24h, não 30 minutos.
+ */
+export const PENDING_HOLD_MINUTES = holdMinutesFor('mercadopago')
 
 /**
  * Cancela as reservas pendentes vencidas de uma academia e devolve o saldo que
@@ -208,14 +216,18 @@ export async function expireStalePendingDayUse(
   client: AdminClient,
   orgId: string,
 ): Promise<{ expired: number; walletRestoredCents: number }> {
-  const limit = new Date(Date.now() - PENDING_HOLD_MINUTES * 60 * 1000).toISOString()
+  const nowIso = new Date().toISOString()
 
+  // Vencidas por `hold_until`, que é o prazo do MÉTODO: filtrar por
+  // `booked_at` mataria o PIX manual em 30 minutos, antes de qualquer pessoa da
+  // arena conferir o comprovante.
   const { data: staleRaw } = await client
     .from('dayuse_bookings')
     .select('id, student_id, booked_at, dayuse_slots(date, start_time)')
     .eq('organization_id', orgId)
     .eq('status', 'pending_payment')
-    .lt('booked_at', limit)
+    .not('hold_until', 'is', null)
+    .lt('hold_until', nowIso)
 
   const stale = (staleRaw ?? []) as {
     id: string

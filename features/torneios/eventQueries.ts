@@ -204,11 +204,18 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
   )
   if (dayUse.length > 0) {
     const freshLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const nowIso = new Date().toISOString()
     const { data: bookingRows } = await admin
       .from('dayuse_bookings')
       .select('slot_id')
       .in('slot_id', dayUse.map((d) => d.id))
-      .or(`status.eq.confirmed,and(status.eq.pending_payment,booked_at.gt.${freshLimit})`)
+      // Prazo por método (hold_until); booked_at só como fallback de linha
+      // anterior a 20260910150000.
+      .or(
+        'status.eq.confirmed,'
+        + `and(status.eq.pending_payment,hold_until.gt.${nowIso}),`
+        + `and(status.eq.pending_payment,hold_until.is.null,booked_at.gt.${freshLimit})`,
+      )
     const counts = new Map<string, number>()
     for (const r of (bookingRows ?? []) as { slot_id: string }[]) {
       counts.set(r.slot_id, (counts.get(r.slot_id) ?? 0) + 1)

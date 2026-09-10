@@ -6,6 +6,7 @@
 import { sessionStartIso } from '@/lib/utils/sessionTime'
 import { formatDayUsePrice } from './dayUseKind'
 import type { DayUseKind } from '@/types'
+import type { DayUsePaymentMethod } from './paymentMethod'
 
 export type DayUseCtaState =
   /** Dá para reservar agora. */
@@ -38,6 +39,12 @@ export interface DayUseCtaInput {
   occupied: number
   /** Reserva de quem está vendo a página, se houver. */
   myStatus?: 'confirmed' | 'pending_payment' | null
+  /**
+   * Como essa reserva está sendo paga. Muda o prazo que a tela promete: o
+   * Checkout Pro segura 30 min, o PIX manual 24h — dizer 30 min para quem vai
+   * pagar na chave da arena é prometer que a vaga cai antes de a arena olhar.
+   */
+  myPaymentMethod?: DayUsePaymentMethod | null
   /** Está logado? Muda só o texto: quem não está passa pela conta rápida. */
   signedIn: boolean
   /** Preço já resolvido (dayUseChargeCents). 0 = gratuito. */
@@ -64,10 +71,13 @@ export function resolveDayUseCta(input: DayUseCtaInput): DayUseCta {
   }
 
   if (input.myStatus === 'pending_payment') {
+    const manual = input.myPaymentMethod === 'pix_manual'
     return {
       state: 'pending',
-      label: 'Aguardando pagamento',
-      note: 'Sua vaga fica reservada por 30 minutos até o pagamento ser confirmado.',
+      label: manual ? 'Aguardando o PIX' : 'Aguardando pagamento',
+      note: manual
+        ? 'Sua vaga fica reservada por 24 horas até a academia conferir o comprovante.'
+        : 'Sua vaga fica reservada por 30 minutos até o pagamento ser confirmado.',
       actionable: false,
     }
   }

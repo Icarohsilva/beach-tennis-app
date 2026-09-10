@@ -9,16 +9,21 @@ import { redirect } from 'next/navigation'
 import { createAdminClient, getCurrentOrgId } from '@/lib/supabase/server'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { Card } from '@/components/ui/Card'
-import { getOrgRefunds } from '@/features/dayuse/refundQueries'
+import { getOrgRefunds, getPendingDayUseReceipts } from '@/features/dayuse/refundQueries'
 import { formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
 import { RefundQueueRow } from './RefundQueueRow'
+import { ReceiptQueueRow } from './ReceiptQueueRow'
 
 export default async function AdminDayUseFinanceiroPage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
   const orgId = await getCurrentOrgId()
   if (!orgId) redirect('/selecionar-academia')
 
-  const refunds = await getOrgRefunds(createAdminClient(), orgId)
+  const admin = createAdminClient()
+  const [refunds, receipts] = await Promise.all([
+    getOrgRefunds(admin, orgId),
+    getPendingDayUseReceipts(admin, orgId),
+  ])
   const aPagar = refunds.filter((r) => r.status === 'pendente')
   const aguardando = refunds.filter((r) => r.status === 'pago')
   const encerrados = refunds.filter((r) => r.status === 'confirmado' || r.status === 'creditado')
@@ -34,7 +39,7 @@ export default async function AdminDayUseFinanceiroPage() {
       </div>
 
       <div className="flex flex-col gap-1 xs:flex-row xs:items-baseline xs:justify-between">
-        <h1 className="text-2xl font-bold text-white">Estornos de day use</h1>
+        <h1 className="text-2xl font-bold text-white">Day use · dinheiro</h1>
         <p className="shrink-0 text-sm text-slate-400">
           {aPagar.length > 0
             ? `${formatDayUsePrice(totalDevido)} a devolver`
@@ -44,7 +49,24 @@ export default async function AdminDayUseFinanceiroPage() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
-          A pagar
+          Comprovantes a conferir
+        </h2>
+        <Card>
+          {receipts.length === 0 ? (
+            <p className="text-sm text-slate-400">
+              Nenhum PIX aguardando conferência.
+            </p>
+          ) : (
+            <ul className="divide-y divide-white/[0.06]">
+              {receipts.map((r) => <ReceiptQueueRow key={r.bookingId} item={r} />)}
+            </ul>
+          )}
+        </Card>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Estornos a pagar
         </h2>
         <Card>
           {aPagar.length === 0 ? (

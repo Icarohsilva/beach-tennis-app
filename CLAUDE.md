@@ -203,6 +203,18 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   cobrança têm de sair dessa mesma chamada**: "gratuito" é o caso em que a venda está
   desligada ou o Mercado Pago não está conectado, que é exatamente quando `bookDayUse`
   grava `confirmed` sem checkout.
+- **Pagamento de day use tem MÉTODO e prazo por método** (`dayuse_bookings.payment_method`
+  + `hold_until`, regras em [lib/dayuse/paymentMethod.ts](lib/dayuse/paymentMethod.ts)):
+  `mercadopago` segura a vaga 30 min (o webhook confirma em segundos) e `pix_manual` segura
+  **24h**, porque ali o gargalo é humano — a arena confere comprovante quando abre o painel.
+  Os 30 min eram cravados dentro de `book_dayuse_atomic`; virar coluna deixou o prazo
+  consultável e corrigível. **Toda leitura de ocupação filtra `hold_until > now()`**, nunca
+  `booked_at`: contar por `booked_at` tiraria a reserva de PIX manual da contagem em 30 min e
+  a vaga seria vendida duas vezes. `canCharge` de `getDayUsePricing` passou a incluir a chave
+  PIX da academia — antes disso, arena com venda ligada, preço definido e só PIX entregava day
+  use **de graça**. Recusar um comprovante passa por `openRefundForBooking` de propósito: o
+  pagamento nunca virou `paid`, então nenhum estorno PIX abre, mas a parte que o aluno tinha
+  abatido da carteira volta para ele.
 - **Carteira (crédito em DINHEIRO)**: `wallet_transactions` é a verdade e `wallets.balance_cents`
   o cache, mesmo par de `credit_transactions`→`memberships.credits_balance` — mas conta reais,
   não aulas. Escrita **só** pela RPC `wallet_apply` (o `select ... for update` nela é o que

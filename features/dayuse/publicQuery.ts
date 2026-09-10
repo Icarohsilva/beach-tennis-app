@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getDayUsePricing } from './pricing'
 import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
+import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
 import type { DayUseSlot } from '@/types'
 
 export interface PublicDayUse {
@@ -23,6 +24,9 @@ export interface PublicDayUse {
   priceCents: number
   /** Saldo em dinheiro de quem está vendo, na academia deste day use. */
   walletCents: number
+  /** Chave PIX da arena — só usada no caminho de pagamento manual. */
+  pixKey: string | null
+  pixOwner: string | null
   /** Reservas que ocupam vaga: confirmadas + pendentes de pagamento frescas. */
   occupied: number
   /**
@@ -37,6 +41,10 @@ export interface PublicDayUse {
     status: 'confirmed' | 'pending_payment'
     /** Para a carência de arrependimento de 1h (resolveRefundEligibility). */
     bookedAt: string
+    /** Como está sendo pago — 'pix_manual' pede comprovante na própria tela. */
+    paymentMethod: DayUsePaymentMethod
+    /** Comprovante do PIX manual já enviado? */
+    hasReceipt: boolean
     refundPixKey: string | null
     refundPixOwner: string | null
   } | null
@@ -68,19 +76,32 @@ export async function getPublicDayUse(
   if (!orgRaw) return null
 
   const freshLimit = new Date(Date.now() - PENDING_WINDOW_MS).toISOString()
+  const nowIso = new Date().toISOString()
   // Teto natural (uma capacidade de slot), então `.select()` direto — ver
   // lib/supabase/paginate.ts.
+  //
+  // Ocupa vaga: confirmada, ou pendente ainda dentro do prazo do MÉTODO
+  // (`hold_until`). Filtrar por `booked_at` daria 30 min para todos e apagaria
+  // da contagem a reserva por PIX manual, que segura 24h — a vaga apareceria
+  // livre e seria vendida duas vezes. O fallback por `booked_at` cobre linha
+  // anterior a 20260910150000.
   const { data: bookingsRaw } = await admin
     .from('dayuse_bookings')
-    .select('id, student_id, status, booked_at, refund_pix_key, refund_pix_owner, profiles(full_name)')
+    .select('id, student_id, status, booked_at, payment_method, receipt_url, refund_pix_key, refund_pix_owner, profiles(full_name)')
     .eq('slot_id', slotId)
-    .or(`status.eq.confirmed,and(status.eq.pending_payment,booked_at.gt.${freshLimit})`)
+    .or(
+      'status.eq.confirmed,'
+      + `and(status.eq.pending_payment,hold_until.gt.${nowIso}),`
+      + `and(status.eq.pending_payment,hold_until.is.null,booked_at.gt.${freshLimit})`,
+    )
 
   const bookings = (bookingsRaw ?? []) as {
     id: string
     student_id: string
     status: 'confirmed' | 'pending_payment'
     booked_at: string
+    payment_method: DayUsePaymentMethod
+    receipt_url: string | null
     refund_pix_key: string | null
     refund_pix_owner: string | null
     profiles: { full_name: string } | { full_name: string }[] | null
@@ -97,6 +118,8 @@ export async function getPublicDayUse(
         id: b.id,
         status: b.status,
         bookedAt: b.booked_at,
+        paymentMethod: b.payment_method,
+        hasReceipt: Boolean(b.receipt_url),
         refundPixKey: b.refund_pix_key,
         refundPixOwner: b.refund_pix_owner,
       }
@@ -115,6 +138,8 @@ export async function getPublicDayUse(
     org: orgRaw as PublicDayUse['org'],
     priceCents: dayUseChargeCents(slot, pricing),
     walletCents,
+    pixKey: pricing.pixKey,
+    pixOwner: pricing.pixOwner,
     occupied: bookings.length,
     attendees,
     mine,

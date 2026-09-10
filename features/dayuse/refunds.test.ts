@@ -44,6 +44,8 @@ function makeClient(opts: FakeOpts = {}) {
   const paymentFilters: Record<string, unknown> = {}
   /** Updates de cancelamento aplicados pela varredura. */
   const cancelled: { ids: string[]; payload: Record<string, unknown> }[] = []
+  /** Filtros da varredura de expiração, para travar o corte por hold_until. */
+  const staleFilters: Record<string, unknown> = {}
 
   const from = vi.fn((table: string) => {
     if (table === 'payments') {
@@ -86,7 +88,11 @@ function makeClient(opts: FakeOpts = {}) {
       const b: Record<string, unknown> = {}
       b.select = () => b
       b.eq = () => b
-      b.lt = () => b
+      b.not = () => b
+      b.lt = (field: string, value: unknown) => {
+        staleFilters[field] = value
+        return b
+      }
       b.then = (resolve: (v: unknown) => unknown) =>
         Promise.resolve({ data: opts.stale ?? [], error: null }).then(resolve)
       b.update = (payload: Record<string, unknown>) => ({
@@ -126,7 +132,7 @@ function makeClient(opts: FakeOpts = {}) {
     throw new Error(`tabela inesperada: ${table}`)
   })
 
-  return { client: { from } as never, inserted, paymentFilters, cancelled }
+  return { client: { from } as never, inserted, paymentFilters, cancelled, staleFilters }
 }
 
 const SLOT = { date: '2026-09-27', start_time: '09:00' }
@@ -277,6 +283,14 @@ describe('expireStalePendingDayUse', () => {
     const { client, inserted } = makeClient({ stale, walletSpends: [-4000] })
     await expireStalePendingDayUse(client, 'org-1')
     expect(inserted).toHaveLength(0)
+  })
+
+  it('corta por hold_until, não por booked_at', async () => {
+    // Filtrar por booked_at daria 30 min a todos e mataria o PIX manual antes
+    // de a arena conferir o comprovante (a janela dele é 24h).
+    const { client, staleFilters } = makeClient({ stale })
+    await expireStalePendingDayUse(client, 'org-1')
+    expect(Object.keys(staleFilters)).toEqual(['hold_until'])
   })
 
   it('sem reserva vencida não escreve nada', async () => {

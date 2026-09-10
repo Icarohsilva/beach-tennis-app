@@ -69,6 +69,16 @@ describe('resolveDayUseCta', () => {
     expect(cta.note).toContain('30 minutos')
   })
 
+  it('promete 24h, não 30 min, para quem vai pagar na chave da arena', () => {
+    // Dizer 30 min a quem paga por PIX manual é prometer que a vaga cai antes
+    // de a arena conferir o comprovante.
+    const cta = resolveDayUseCta({
+      ...BASE, myStatus: 'pending_payment', myPaymentMethod: 'pix_manual',
+    })
+    expect(cta.note).toContain('24 horas')
+    expect(cta.label).toContain('PIX')
+  })
+
   it('aceita HH:MM:SS do banco tanto quanto HH:MM do formulário', () => {
     expect(resolveDayUseCta({ ...BASE, date: '2026-09-20', end_time: '09:00:00' }).state)
       .toBe('ended')

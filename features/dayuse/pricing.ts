@@ -10,10 +10,20 @@ import { reaisToCents } from '@/lib/dayuse/dayUseKind'
 export interface DayUsePricing {
   /** system_settings.day_use_price em centavos — o padrão da academia. */
   defaultCents: number
-  /** Venda ligada E gateway conectado: sem os dois, todo day use sai gratuito. */
+  /**
+   * A academia consegue cobrar: venda ligada E (gateway conectado OU chave PIX
+   * configurada). Sem nenhuma forma de cobrar, todo day use sai gratuito.
+   *
+   * A chave PIX entrou aqui com o pagamento manual: antes disso, arena com
+   * venda ligada, preço definido e só PIX entregava day use DE GRAÇA — a tela
+   * mostrava o preço e a reserva nascia `confirmed` sem cobrança nenhuma.
+   */
   canCharge: boolean
-  /** Token do Mercado Pago já decriptado, quando `canCharge`. */
+  /** Token do Mercado Pago já decriptado, quando há conta conectada. */
   mpToken: string | null
+  /** Chave PIX da academia (system_settings.pix_key), para o pagamento manual. */
+  pixKey: string | null
+  pixOwner: string | null
 }
 
 export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
@@ -22,7 +32,7 @@ export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
     .from('system_settings')
     .select('key, value')
     .eq('organization_id', orgId)
-    .in('key', ['day_use_price', 'day_use_sale_enabled'])
+    .in('key', ['day_use_price', 'day_use_sale_enabled', 'pix_key', 'pix_key_owner'])
   const settings = Object.fromEntries(
     ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
   )
@@ -32,5 +42,12 @@ export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
   // for zero: com preço por slot, um slot pago pode existir numa academia cujo
   // padrão é gratuito.
   const mpToken = saleEnabled ? await getConnectedMpToken(orgId) : null
-  return { defaultCents, canCharge: Boolean(mpToken), mpToken }
+  const pixKey = saleEnabled ? (settings.pix_key?.trim() || null) : null
+  return {
+    defaultCents,
+    canCharge: Boolean(mpToken) || Boolean(pixKey),
+    mpToken,
+    pixKey,
+    pixOwner: settings.pix_key_owner?.trim() || null,
+  }
 }

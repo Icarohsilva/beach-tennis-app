@@ -1,4 +1,9 @@
 // types/index.ts
+//
+// DayUsePaymentMethod é importado de lib/dayuse/paymentMethod.ts em vez de
+// declarado aqui: o tipo e as janelas de hold que dependem dele andam juntos, e
+// separá-los faria a janela ser decidida longe de quem define os métodos.
+import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
 
 // 'athlete' = tem relação com a academia (jogou torneio, usou day use) sem ser
 // aluno dela. As telas do admin filtram 'student', então o atleta não aparece
@@ -696,6 +701,16 @@ export interface DayUseBooking {
   /** Chave PIX de estorno informada na reserva. Copiada para DayUseRefund. */
   refund_pix_key: string | null
   refund_pix_owner: string | null
+  /** Como foi paga — define o prazo de hold_until (lib/dayuse/paymentMethod.ts). */
+  payment_method: DayUsePaymentMethod
+  /**
+   * Até quando a reserva pendente ocupa vaga. null = confirmada (sem prazo).
+   * 30 min no Checkout Pro, 24h no PIX manual: o gargalo do segundo é humano.
+   */
+  hold_until: string | null
+  /** Comprovante do PIX manual (bucket payment-receipts), conferido por admin. */
+  receipt_url: string | null
+  receipt_uploaded_at: string | null
 }
 
 /**
