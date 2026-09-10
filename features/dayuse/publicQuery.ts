@@ -4,9 +4,9 @@
 // página é justamente abrir para quem não é membro de nada.
 import { createAdminClient } from '@/lib/supabase/server'
 import { getDayUsePricing } from './pricing'
-import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { dayUseChargeCents, dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
-import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
+import type { DayUsePaymentMethod, DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseSlot } from '@/types'
 
 export interface PublicDayUse {
@@ -22,6 +22,14 @@ export interface PublicDayUse {
   }
   /** Preço a cobrar, já resolvido pela mesma regra do checkout. */
   priceCents: number
+  /**
+   * Onde o pagamento acontece, DEPOIS do teto da configuração
+   * (dayUsePriceView): a academia pode pedir pagamento na inscrição sem ter
+   * como receber online, e nesse caso o que vale é a arena. A tela precisa do
+   * valor efetivo, não do desejado — prometer "pague aqui" sem checkout é
+   * deixar o aluno parado.
+   */
+  paymentTiming: DayUsePaymentTiming
   /** Saldo em dinheiro de quem está vendo, na academia deste day use. */
   walletCents: number
   /** Chave PIX da arena — só usada no caminho de pagamento manual. */
@@ -137,6 +145,7 @@ export async function getPublicDayUse(
     slot,
     org: orgRaw as PublicDayUse['org'],
     priceCents: dayUseChargeCents(slot, pricing),
+    paymentTiming: dayUsePriceView(slot, pricing).timing,
     walletCents,
     pixKey: pricing.pixKey,
     pixOwner: pricing.pixOwner,

@@ -11,8 +11,9 @@ import { paymentMethodLabel } from '@/lib/dayuse/paymentMethod'
 import { refundStatusLabel } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { confirmDayUseReceipt, rejectDayUseReceipt } from '@/features/dayuse/receiptActions'
-import { markDayUsePaidOnSite } from '@/features/dayuse/actions'
+import { cancelDayUseBookingAsAdmin, markDayUsePaidOnSite } from '@/features/dayuse/actions'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { AdminAttendee } from '@/features/dayuse/adminSlotQuery'
 
 /** O rótulo de pagamento é o do PAGAMENTO, não o da reserva. */
@@ -29,7 +30,14 @@ function paymentBadge(a: AdminAttendee) {
   return <Badge variant="warning">Aguardando pagamento</Badge>
 }
 
-export function AttendeeRow({ item }: { item: AdminAttendee }) {
+export function AttendeeRow({
+  item,
+  slotLabel,
+}: {
+  item: AdminAttendee
+  /** "11/09 às 21:00", para a mensagem de cobrança citar o horário. */
+  slotLabel?: string
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +71,39 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
     run(() => rejectDayUseReceipt(item.bookingId, text))
   }
 
+  async function handleCancelUnpaid() {
+    const { ok, text } = await confirm({
+      title: 'Cancelar esta inscrição por falta de pagamento?',
+      message:
+        'A vaga volta para a arena e o aluno é avisado por notificação.\n'
+        + 'Se ele já tinha abatido crédito, o valor volta para o saldo dele.',
+      input: {
+        label: 'Motivo (aparece na notificação do aluno)',
+        placeholder: 'Ex: não pagou até a data',
+      },
+      confirmLabel: 'Cancelar inscrição',
+      cancelLabel: 'Voltar',
+      destructive: true,
+    })
+    if (!ok) return
+    run(() => cancelDayUseBookingAsAdmin(item.bookingId, text))
+  }
+
   const cancelado = item.status === 'cancelled'
+  /** Reservou e ainda não pagou — é quem a arena precisa cobrar. */
+  const devendo = !cancelado
+    && item.payment?.status === 'pending'
+    && (item.paymentMethod === 'on_site' || item.paymentMethod === 'pix_manual')
+  // Mensagem de cobrança pronta: o professor não deve ter de redigir o mesmo
+  // pedido de pagamento a cada aluno.
+  const cobrancaMessage = devendo
+    ? `Olá, ${item.name.split(' ')[0]}! Falta o pagamento`
+      + `${item.payment ? ` de ${formatDayUsePrice(item.payment.amountCents)}` : ''}`
+      + ` do day use${slotLabel ? ` de ${slotLabel}` : ''}.`
+      + (item.paymentMethod === 'pix_manual'
+        ? ' Pode enviar o comprovante do PIX pelo app?'
+        : ' Pode acertar na chegada?')
+    : `Olá, ${item.name.split(' ')[0]}!`
   const podeConferir = item.paymentMethod === 'pix_manual'
     && item.status === 'pending_payment'
   // Pago na arena: a baixa é do admin, e a reserva já está confirmada.
@@ -128,14 +168,9 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
           </a>
         )}
         {item.phone && (
-          <a
-            href={buildWhatsAppUrl(item.phone, `Olá, ${item.name.split(' ')[0]}!`)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-green-400 hover:text-green-300"
-          >
-            WhatsApp
-          </a>
+          <WhatsAppButton href={buildWhatsAppUrl(item.phone, cobrancaMessage)}>
+            {devendo ? 'Cobrar' : 'WhatsApp'}
+          </WhatsAppButton>
         )}
         {podeDarBaixa && (
           <Button
@@ -146,8 +181,21 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
             Marcar como pago
           </Button>
         )}
+        {/* Não pagou e não há comprovante a recusar: o caminho de "recusar
+            comprovante" não cobre quem simplesmente nunca pagou, e sem isto a
+            vaga ficava presa até o horário passar. */}
+        {devendo && !podeConferir && (
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={isPending}
+            onClick={handleCancelUnpaid}
+          >
+            Cancelar inscrição
+          </Button>
+        )}
         {podeConferir && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               disabled={isPending || !item.hasReceipt}

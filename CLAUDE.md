@@ -207,6 +207,29 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   `payments` pendente com `gateway: 'on_site'` para o admin dar baixa (`markDayUsePaidOnSite`)
   na tela do day use. `dayUsePriceView` devolve `payOnSite` para a tela dizer "pago na arena"
   em vez de "gratuito"; "Gratuito" passou a significar só preço zero.
+- **ONDE se paga é escolha da academia, por horário** (`dayuse_slots.payment_timing` e
+  `dayuse_recurrences.payment_timing`, `'on_booking' | 'on_site'`, default `on_site`):
+  "Pagar na inscrição" ou "Pagar na arena", nos três formulários do admin (criar data,
+  recorrência, editar). Antes disso o app **deduzia** da configuração — tinha PIX ou gateway,
+  cobrava na inscrição —, e deduzir erra nas duas direções: a arena que tem chave PIX mas
+  cobra na porta prendia o aluno num pagamento indesejado, e quem quer receber antes não
+  tinha como exigir. A escolha vem **antes** da configuração em `resolveDayUsePaymentMethod`:
+  `on_site` não abre cobrança online nem com Mercado Pago conectado. A configuração entra
+  como **teto**: pedir `on_booking` sem forma de receber cai para `on_site` com
+  `dayUsePriceView().needsSetup` ligado — a tela do admin avisa em vez de a reserva quebrar na
+  frente do aluno. Nunca leia `slot.payment_timing` cru numa tela; use
+  `dayUsePriceView().timing`, que é o efetivo. O aluno lê isso em toda superfície (link
+  público, modal da agenda, card de `/agendar/dayuse`, vitrine da arena e mensagem de
+  WhatsApp), com `PAYMENT_REFUND_PROMISE` ao lado quando paga adiantado: quem paga antes de
+  jogar precisa ler que day use cancelado devolve o dinheiro pelo PIX informado.
+- **Não pagar tem três saídas para o admin**, todas na tela do day use: cobrar por WhatsApp
+  (mensagem pronta em `AttendeeRow`), recusar o comprovante (`rejectDayUseReceipt`, só quando
+  existe comprovante) e **cancelar a inscrição por falta de pagamento**
+  (`cancelDayUseBookingAsAdmin`). A terceira existe porque as duas primeiras não cobriam o
+  caso mais comum — reservou, nunca pagou e nem comprovante enviou: não havia comprovante a
+  recusar, e a vaga ficava presa até o horário passar. Ela também alcança a reserva
+  `confirmed` de pagamento na arena, e passa por `openRefundForBooking` pelo mesmo motivo da
+  recusa: o aluno pode ter abatido crédito da carteira antes de parar de pagar o resto.
 - **Pagamento de day use tem MÉTODO e prazo por método** (`dayuse_bookings.payment_method`
   + `hold_until`, regras em [lib/dayuse/paymentMethod.ts](lib/dayuse/paymentMethod.ts)):
   `mercadopago` segura a vaga 30 min (o webhook confirma em segundos) e `pix_manual` segura

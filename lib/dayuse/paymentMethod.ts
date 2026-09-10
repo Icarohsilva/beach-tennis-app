@@ -9,6 +9,49 @@
 // alguém da arena conferir. Com uma janela só (os 30 min que existiam), o PIX
 // manual perdia a vaga antes de qualquer humano olhar para ele.
 
+/**
+ * Quando o day use é pago. Escolha da ACADEMIA, por horário — não dedução da
+ * configuração dela, que errava nas duas direções: a arena com PIX cadastrado
+ * mas que cobra na porta prendia o aluno num pagamento indesejado, e a que quer
+ * receber antes não tinha como exigir.
+ */
+export type DayUsePaymentTiming =
+  /** Paga ao reservar: Checkout Pro, PIX na chave da arena ou crédito no app. */
+  | 'on_booking'
+  /** Reserva confirma na hora; o dinheiro é acertado na quadra. */
+  | 'on_site'
+
+export const DAY_USE_PAYMENT_TIMINGS: readonly DayUsePaymentTiming[] = ['on_booking', 'on_site']
+
+export const DAY_USE_TIMING_LABEL: Record<DayUsePaymentTiming, string> = {
+  on_booking: 'Pagar na inscrição',
+  on_site: 'Pagar na arena',
+}
+
+/** O que cada escolha promete ao aluno — frase, não rótulo. */
+export function timingHint(timing: DayUsePaymentTiming): string {
+  return timing === 'on_booking'
+    ? 'O aluno paga ao reservar e a vaga só é garantida com o pagamento.'
+    : 'O aluno reserva pelo app e paga na quadra, na hora.'
+}
+
+/**
+ * Como o aluno lê a escolha da academia. Rótulo próprio, e não o do admin:
+ * "Pagar na inscrição" é instrução para quem cria o day use; para quem vai
+ * jogar, o fato é onde ele vai passar o dinheiro.
+ */
+export const DAY_USE_TIMING_STUDENT_LABEL: Record<DayUsePaymentTiming, string> = {
+  on_booking: 'Pagamento na reserva',
+  on_site: 'Pagamento na arena',
+}
+
+/** A frase que o aluno lê antes de reservar. */
+export function timingNoticeForStudent(timing: DayUsePaymentTiming): string {
+  return timing === 'on_booking'
+    ? 'O pagamento é feito aqui, ao reservar — a vaga é confirmada quando a academia conferir.'
+    : 'Você reserva pelo app e paga na arena, na hora. Nada é cobrado agora.'
+}
+
 export type DayUsePaymentMethod =
   /** Gratuito: nada a pagar. */
   | 'free'
@@ -97,11 +140,19 @@ export function resolveDayUsePaymentMethod(input: {
   walletCents: number
   hasMpToken: boolean
   hasPixKey: boolean
+  /** Escolha da academia. Ausente = 'on_site', o default da coluna. */
+  timing?: DayUsePaymentTiming
 }): DayUsePaymentMethod {
   if (input.gatewayCents <= 0) return input.walletCents > 0 ? 'wallet' : 'free'
+
+  // A escolha da academia vem primeiro: mesmo com gateway conectado, day use
+  // marcado para pagar na arena NÃO abre cobrança online.
+  if ((input.timing ?? 'on_site') === 'on_site') return 'on_site'
+
   if (input.hasMpToken) return 'mercadopago'
   if (input.hasPixKey) return 'pix_manual'
-  // Sem cobrança online: paga na arena. Antes isto devolvia 'free', e era daí
-  // que saía o "Gratuito" num day use com preço definido.
+  // Marcado para pagar na inscrição, mas a academia não tem como receber
+  // online. Cai na arena em vez de barrar a reserva — e a tela do admin avisa
+  // que falta configurar.
   return 'on_site'
 }

@@ -11,6 +11,7 @@ const SUNDAY: DayUseRecurrence = {
   sport: 'beach_tennis',
   kind: 'open',
   price_cents: 4000,
+  payment_timing: 'on_booking',
   notes: 'Traga o seu boné',
 }
 
@@ -21,7 +22,7 @@ describe('buildDayUseRows', () => {
     expect(rows.map((r) => r.date)).toEqual(['2026-09-13', '2026-09-20', '2026-09-27'])
   })
 
-  it('copia modalidade, tipo, preço e capacidade do molde para cada data', () => {
+  it('copia modalidade, tipo, preço, pagamento e capacidade do molde para cada data', () => {
     const [row] = buildDayUseRows([SUNDAY], '2026-09-13', '2026-09-13')
     expect(row).toEqual({
       recurrence_id: 'rec-1',
@@ -33,6 +34,7 @@ describe('buildDayUseRows', () => {
       sport: 'beach_tennis',
       kind: 'open',
       price_cents: 4000,
+      payment_timing: 'on_booking',
       notes: 'Traga o seu boné',
     })
   })
@@ -59,6 +61,8 @@ describe('buildDayUseRows', () => {
     expect(row.kind).toBe('scheduled')
     expect(row.sport).toBeNull()
     expect(row.price_cents).toBeNull()
+    // Molde antigo (anterior à coluna) não passa a cobrar online sozinho.
+    expect(row.payment_timing).toBe('on_site')
   })
 
   it('combina vários moldes', () => {

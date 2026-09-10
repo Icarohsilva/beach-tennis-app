@@ -63,7 +63,7 @@ export async function generateDayUse(
     (a, b) =>
       client
         .from('dayuse_recurrences')
-        .select('id, day_of_week, start_time, end_time, court, capacity, sport, kind, price_cents, notes, created_by')
+        .select('id, day_of_week, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing, notes, created_by')
         .eq('organization_id', orgId)
         .eq('is_active', true)
         .order('id', { ascending: true })

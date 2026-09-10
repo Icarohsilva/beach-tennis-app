@@ -26,6 +26,11 @@ export interface DayUsePricing {
   pixOwner: string | null
 }
 
+/** A academia consegue receber ONLINE (gateway ou chave PIX)? */
+export function canCollectOnline(pricing: DayUsePricing): boolean {
+  return Boolean(pricing.mpToken) || Boolean(pricing.pixKey)
+}
+
 export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
   const admin = createAdminClient()
   const { data: settingsRaw } = await admin

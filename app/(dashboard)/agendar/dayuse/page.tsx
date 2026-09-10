@@ -10,7 +10,7 @@ import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
-import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { dayUseChargeCents, dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
 import { PENDING_HOLD_MINUTES, expireStalePendingDayUse, getRefundWindowHours } from '@/features/dayuse/refunds'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
@@ -154,6 +154,7 @@ export default async function AgendarDayUsePage({
                   myBookingStatus={myBookingStatus.get(slot.id) ?? null}
                   attendees={attendeesMap.get(slot.id) ?? []}
                   priceCents={dayUseChargeCents(slot, pricing)}
+                  paymentTiming={dayUsePriceView(slot, pricing).timing}
                   walletCents={walletCents}
                   cancelNotice={cancelNoticeForStudent({
                     date: slot.date,

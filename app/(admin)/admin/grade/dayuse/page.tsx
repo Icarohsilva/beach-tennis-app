@@ -10,7 +10,7 @@ import type { DayUseRecurrence, DayUseSlot } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getOrgSports } from '@/lib/arenas/orgSports'
-import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { canCollectOnline, getDayUsePricing } from '@/features/dayuse/pricing'
 import { dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { DAY_USE_HORIZON_DAYS } from '@/features/dayuse/generation'
 
@@ -69,6 +69,10 @@ export default async function AdminDayUsePage() {
   // Slots cobrados na arena (sem pagamento online). Não é defeito — é o modo
   // mais comum —, mas a arena precisa saber que o app não recolhe esse dinheiro.
   const naArena = slotList.filter((s) => dayUsePriceView(s, pricing).payOnSite)
+  // Marcados para pagar na inscrição sem forma de receber online: o app cobra
+  // na arena e o admin precisa saber POR QUÊ, senão parece defeito.
+  const semComoCobrar = slotList.filter((s) => dayUsePriceView(s, pricing).needsSetup)
+  const podeCobrarOnline = canCollectOnline(pricing)
 
   const byDate = new Map<string, DayUseSlot[]>()
   for (const slot of slotList) {
@@ -101,9 +105,18 @@ export default async function AdminDayUsePage() {
           </p>
           <p className="mt-1 text-xs text-slate-300">
             O aluno vê o preço e reserva pelo app, mas o pagamento acontece na porta —
-            a academia dá baixa na tela de cada day use. Para receber online, conecte o
-            Mercado Pago ou cadastre a chave PIX.
+            a academia dá baixa na tela de cada day use. Para receber na inscrição, marque
+            &quot;Pagar na inscrição&quot; no day use
+            {podeCobrarOnline ? '.' : ' e conecte o Mercado Pago ou cadastre a chave PIX.'}
           </p>
+          {semComoCobrar.length > 0 && (
+            <p className="mt-1 text-xs text-yellow-300">
+              {semComoCobrar.length === 1
+                ? '1 deles pede pagamento na inscrição'
+                : `${semComoCobrar.length} deles pedem pagamento na inscrição`}
+              , mas não há Mercado Pago conectado nem chave PIX — por isso caíram na arena.
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-3">
             <Link
               href="/admin/financeiro/integracoes"
@@ -125,12 +138,17 @@ export default async function AdminDayUsePage() {
         orgSports={orgSports}
         orgDefaultPriceCents={pricing.defaultCents}
         horizonDays={DAY_USE_HORIZON_DAYS}
+        canCollectOnline={podeCobrarOnline}
       />
       <div>
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">
           Data avulsa
         </h2>
-        <CreateDayUseForm orgSports={orgSports} orgDefaultPriceCents={pricing.defaultCents} />
+        <CreateDayUseForm
+          orgSports={orgSports}
+          orgDefaultPriceCents={pricing.defaultCents}
+          canCollectOnline={podeCobrarOnline}
+        />
       </div>
       <div className="space-y-6">
         {byDate.size === 0 ? (

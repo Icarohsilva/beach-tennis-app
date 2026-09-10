@@ -143,6 +143,7 @@ export async function loadDayUseDetail(slotId: string): Promise<DayUseDetail | n
   return {
     slot: data.slot,
     priceCents: data.priceCents,
+    paymentTiming: data.paymentTiming,
     walletCents: data.walletCents,
     occupied: data.occupied,
     attendees: data.attendees,
@@ -156,6 +157,8 @@ export async function loadDayUseDetail(slotId: string): Promise<DayUseDetail | n
 export interface DayUseDetail {
   slot: DayUseSlot
   priceCents: number
+  /** Onde o pagamento acontece, já com o teto da configuração aplicado. */
+  paymentTiming: PublicDayUse['paymentTiming']
   walletCents: number
   occupied: number
   attendees: string[]

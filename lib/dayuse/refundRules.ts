@@ -111,6 +111,20 @@ export function refundStatusLabel(status: RefundStatus): string {
   return STATUS_LABEL[status] ?? 'Estorno'
 }
 
+/**
+ * A promessa que o aluno lê ao PAGAR — não ao cancelar.
+ *
+ * Ela é verdadeira no código: quando a arena desmarca o horário,
+ * `cancelDayUseSlotBookings` abre estorno com `cause: 'arena_cancelou'`, que
+ * devolve **sempre** (`resolveRefundEligibility`), sem janela nenhuma. Precisa
+ * estar escrita na tela porque quem paga antes de jogar não tem como saber
+ * disso — e sem a frase, pagar adiantado se parece com dar dinheiro para um
+ * link do WhatsApp.
+ */
+export const PAYMENT_REFUND_PROMISE =
+  'Se o day use não acontecer, o valor é devolvido pelo PIX que você informa na inscrição '
+  + '(ou vira crédito no app, se preferir).'
+
 /** Frase que o aluno lê ANTES de cancelar — o prazo tem de vir antes do clique. */
 export function cancelNoticeForStudent(input: {
   date: string

@@ -8,6 +8,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { IN_CHUNK_SIZE, chunk, fetchAllPages } from '@/lib/supabase/paginate'
 import type { EventTournament } from '@/lib/torneios/event'
+import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseKind, TournamentEvent } from '@/types'
 
 export interface EventPageData {
@@ -124,6 +125,8 @@ export interface ArenaShowcase {
     sport: string | null
     kind: DayUseKind
     price_cents: number | null
+    /** Escolha da academia sobre onde se paga (dayuse_slots.payment_timing). */
+    payment_timing: DayUsePaymentTiming | null
     occupied: number
   }>
   /** Comunicados fixados pela academia no mural. */
@@ -162,7 +165,7 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
         .limit(8),
       admin
         .from('dayuse_slots')
-        .select('id, date, start_time, end_time, court, capacity, sport, kind, price_cents')
+        .select('id, date, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing')
         .eq('organization_id', orgId)
         .eq('is_active', true)
         .gte('date', today)
