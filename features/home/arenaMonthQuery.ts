@@ -54,7 +54,7 @@ export async function getArenaExtras({
       (a, b) =>
         admin
           .from('dayuse_slots')
-          .select('id, date, start_time, end_time, court, notes')
+          .select('id, date, start_time, end_time, court, notes, sport')
           .eq('organization_id', orgId)
           .eq('is_active', true)
           .gte('date', from)
@@ -116,7 +116,9 @@ export async function getArenaExtras({
       // largura do celular até o nome virar "Day use · Qua…".
       title: `Quadra ${d.court}`,
       subtitle: d.notes?.trim() || `${formatTime(d.start_time)} às ${formatTime(d.end_time)}`,
-      sport: null,
+      // Day use agora tem modalidade, então a pastilha de esporte da agenda vale
+      // para ele como vale para turma e torneio.
+      sport: d.sport,
       mine: myDayUse.has(d.id),
       href: '/agendar/dayuse',
       booked: null,
@@ -279,4 +281,5 @@ interface DayUseRow {
   end_time: string
   court: number
   notes: string | null
+  sport: string | null
 }

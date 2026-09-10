@@ -172,6 +172,83 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   é `cancelled_by_session`, **nunca** `admin_waived`: essa coluna também marca o
   aluno que o professor tirou daquela data, e ressuscitá-lo desfaria uma decisão da
   academia
+- **Day use tem o mesmo par molde→instância das aulas**, com uma diferença deliberada:
+  `dayuse_recurrences` é o horário fixo semanal e `dayuse_slots` a data reservável, gerada
+  por `generateDayUse` ([features/dayuse/generation.ts](features/dayuse/generation.ts)) na
+  mesma passada do cron `weekly-grid-generation` (o Hobby da Vercel só dá um cron diário),
+  mas em varredura PRÓPRIA — o laço da grade só entra em academia com `grid_auto_enabled`,
+  e pendurar o day use ali faria a recorrência não gerar para quem monta a grade na mão.
+  Horizonte rolante de 28 dias, sem marca d'água: a idempotência vem do índice único
+  `(organization_id, court, date, start_time)`. **Data removida NÃO é ressuscitada pela
+  geração seguinte** — o oposto de `generateGrid`, porque no day use remover uma data é
+  decisão explícita da academia (feriado, quadra em manutenção). Aquele índice cobre slot
+  inativo também, então `createDayUseSlot` REATIVA o horário removido em vez de inserir
+  outro. Desligar a recorrência recolhe as datas futuras que ela gerou (`recurrence_id`),
+  menos as que já têm reserva — apagá-las mataria reserva paga em silêncio.
+- **Day use tem página pública própria** (`/d/[id]`, em `app/(public)/d/[id]/`, liberada em
+  `middleware.ts`): é o link que a arena manda no WhatsApp, e a lista da página da arena
+  aponta para lá em vez de mandar visitante para `/cadastro`. Quem não tem conta reserva
+  criando uma na hora (`/d/[id]/cadastrar`), e essa conta é **só do aplicativo**: o formulário
+  não manda `org_invite_code`, então `handle_new_user` cria perfil com ZERO memberships. Por
+  isso `bookDayUse` **não** cria vínculo (o `upsert` de `athlete` que existia foi removido —
+  ler a própria reserva nunca dependeu de membership, `dayuse_bookings_select` é
+  `student_id = auth.uid()`), a Liga só credita quem É da academia, e o estado "sua reserva"
+  mora na própria página pública, porque o avulso não tem `/home`. Isto contradiz de propósito
+  o que o cabeçalho de `20260810000200_signup_without_org.sql` previa ("reserva de day use →
+  membership athlete"); o torneio (`registerExternal`) continua criando vínculo, e a
+  divergência entre os dois fluxos é conhecida.
+- Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
+  A resolução mora em `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
+  + `getDayUsePricing` ([features/dayuse/pricing.ts](features/dayuse/pricing.ts)), e **tela e
+  cobrança têm de sair dessa mesma chamada**: "gratuito" é o caso em que a venda está
+  desligada ou o Mercado Pago não está conectado, que é exatamente quando `bookDayUse`
+  grava `confirmed` sem checkout.
+- **Pagamento de day use tem MÉTODO e prazo por método** (`dayuse_bookings.payment_method`
+  + `hold_until`, regras em [lib/dayuse/paymentMethod.ts](lib/dayuse/paymentMethod.ts)):
+  `mercadopago` segura a vaga 30 min (o webhook confirma em segundos) e `pix_manual` segura
+  **24h**, porque ali o gargalo é humano — a arena confere comprovante quando abre o painel.
+  Os 30 min eram cravados dentro de `book_dayuse_atomic`; virar coluna deixou o prazo
+  consultável e corrigível. **Toda leitura de ocupação filtra `hold_until > now()`**, nunca
+  `booked_at`: contar por `booked_at` tiraria a reserva de PIX manual da contagem em 30 min e
+  a vaga seria vendida duas vezes. `canCharge` de `getDayUsePricing` passou a incluir a chave
+  PIX da academia — antes disso, arena com venda ligada, preço definido e só PIX entregava day
+  use **de graça**. Recusar um comprovante passa por `openRefundForBooking` de propósito: o
+  pagamento nunca virou `paid`, então nenhum estorno PIX abre, mas a parte que o aluno tinha
+  abatido da carteira volta para ele.
+- **Carteira (crédito em DINHEIRO)**: `wallet_transactions` é a verdade e `wallets.balance_cents`
+  o cache, mesmo par de `credit_transactions`→`memberships.credits_balance` — mas conta reais,
+  não aulas. Escrita **só** pela RPC `wallet_apply` (o `select ... for update` nela é o que
+  impede duas compras simultâneas de gastarem o mesmo saldo). Chaveada por
+  `(organization_id, student_id)` e **não** em `memberships`, porque o avulso do day use não
+  tem vínculo e precisa de saldo igual. Índice parcial por origem torna o lançamento
+  idempotente; devolver um débito usa a origem com sufixo `:reversal`, senão o
+  `on conflict do nothing` engoliria a devolução. **Crédito em dinheiro não vence** (é valor
+  pago), ao contrário do crédito de aula. Divisão saldo/gateway em `splitWithWallet`
+  ([lib/wallet/wallet.ts](lib/wallet/wallet.ts)) — tela e cobrança saem dela.
+- **Gastar o crédito**: day use, compra de aula avulsa e inscrição de torneio. O abatimento é
+  **parcial só no day use** e **tudo-ou-nada** nos outros dois, e a diferença não é capricho:
+  a reserva de day use expira em 30 min e `expireStalePendingDayUse` devolve o saldo ao
+  expirar. Pagamento de aula avulsa ou de inscrição pendente **não expira nunca** — debitar
+  parte e o aluno abandonar o checkout deixaria o dinheiro preso sem nada que o devolvesse.
+  Os dois caminhos com saldo reusam a MESMA RPC do caminho pago
+  (`record_checkout_credit_purchase`, `record_tournament_entry_checkout_payment`) com
+  `gateway: 'wallet'`; reimplementar a concessão abriria espaço para os caminhos divergirem.
+  No torneio, o saldo só é gasto pelo **próprio pagador logado**: o token de `/p/[token]` é
+  credencial de portador, e quem o tem pode pagar com o dinheiro dele, não com o crédito
+  guardado de outra pessoa. Compra paga com saldo **não passa pelo gateway**, então não gera
+  `marketplace_fee` — a plataforma não fatura sobre ela.
+- **Estorno de day use** (`dayuse_refunds`, um por reserva): cancelamento **da arena** devolve
+  sempre; **do aluno**, só dentro da janela (`system_settings.dayuse_refund_window_hours`,
+  default = a mesma da aula), reusando `canCancelWithRefund` — duas réguas de "cancelei em
+  tempo" fariam o aluno descobrir a diferença no bolso. A regra pura está em
+  [lib/dayuse/refundRules.ts](lib/dayuse/refundRules.ts) e a abertura em
+  `openRefundForBooking` ([features/dayuse/refunds.ts](features/dayuse/refunds.ts)),
+  idempotente pela unicidade de `booking_id`. `amount_cents` cobre só o que entrou por
+  **gateway**: o que foi pago com carteira volta para a carteira na hora. Mover dinheiro segue
+  humano — o admin anexa o comprovante, o aluno recebe push e **confirma**; nada de chamar a
+  API de refund do gateway. **Só o aluno** troca PIX por crédito, e só enquanto `pendente`.
+  `deactivateDayUseSlot` passa por `cancelDayUseSlotBookings`: antes ela só marcava
+  `is_active = false` e deixava reserva paga órfã, sem aviso e sem devolução.
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - **Fila de espera é entrada AUTOMÁTICA.** Vaga aberta → `promoteFromWaitlist`
   ([features/aulas/waitlistActions.ts](features/aulas/waitlistActions.ts)) coloca o primeiro

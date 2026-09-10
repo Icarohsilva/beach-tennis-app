@@ -37,6 +37,9 @@ import { TournamentCard } from '@/features/torneios/TournamentCard'
 import type { BrowseTournament } from '@/lib/torneios/browse'
 import { TrialBookingForm } from './TrialBookingForm'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { DAY_USE_KIND_LABEL, dayUseChargeCents, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
+import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 
 const ARENA_COLUMNS =
   'id, name, slug, status, is_listed, city, state, neighborhood, address_line, address_number, no_number, sports, whatsapp, instagram, brand_color, logo_url'
@@ -112,16 +115,19 @@ export default async function ArenaPage({ params }: PageProps) {
 
   const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
-  const [showcase, sessions, photos, memberships] = await Promise.all([
+  const [showcase, sessions, photos, memberships, dayUsePricing] = await Promise.all([
     getArenaShowcase(org.id, today),
     getOpenTrialSessions(org.id),
     getRecentOrgPhotos(org.id, 6),
     getMemberships(),
+    // Preço do day use pela mesma resolução do checkout: a vitrine não pode
+    // anunciar um valor e a reserva cobrar outro.
+    getDayUsePricing(org.id),
   ])
 
-  // Quem já é da casa vai direto para a reserva; visitante precisa de conta
-  // antes, e mandá-lo para uma página que a RLS deixa vazia seria pior que
-  // pedir o cadastro.
+  // Quem já é da casa tem a lista completa em /agendar/dayuse. Visitante não é
+  // mais mandado para /cadastro: cada horário agora tem página pública própria
+  // (/d/[id]), que é onde ele reserva — era exatamente aqui que o funil vazava.
   const isMember = memberships.some((m) => m.organization_id === org.id)
 
   const whatsapp = org.whatsapp?.replace(/\D/g, '') ?? ''
@@ -310,27 +316,54 @@ export default async function ArenaPage({ params }: PageProps) {
             <SectionTitle icon={Sun}>Day use</SectionTitle>
             <Card>
               <ul className="divide-y divide-white/[0.06]">
-                {showcase.dayUse.map((slot) => (
-                  <li key={slot.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white first-letter:uppercase">
-                        {formatDate(slot.date, "EEEE, dd 'de' MMMM")}
-                      </p>
-                      <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
-                        <Clock className="h-3.5 w-3.5" aria-hidden />
-                        {formatTime(slot.start_time)} às {formatTime(slot.end_time)} · Quadra{' '}
-                        {slot.court}
-                      </p>
-                    </div>
-                  </li>
-                ))}
+                {showcase.dayUse.map((slot) => {
+                  const priceCents = dayUseChargeCents(slot, dayUsePricing)
+                  const left = Math.max(slot.capacity - slot.occupied, 0)
+                  return (
+                    <li key={slot.id} className="py-2.5 first:pt-0 last:pb-0">
+                      {/* Cada horário é um link para a própria página, que é o
+                          que a arena manda no WhatsApp. */}
+                      <Link
+                        href={`/d/${slot.id}`}
+                        className="flex flex-col gap-2 xs:flex-row xs:items-center xs:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white first-letter:uppercase">
+                            {formatDate(slot.date, "EEEE, dd 'de' MMMM")}
+                          </p>
+                          <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
+                            <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            {formatTime(slot.start_time)} às {formatTime(slot.end_time)} · Espaço{' '}
+                            {slot.court}
+                          </p>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                            {slot.sport && (
+                              <span>{sportEmoji(slot.sport)} {sportLabel(slot.sport)}</span>
+                            )}
+                            <span>{DAY_USE_KIND_LABEL[slot.kind]}</span>
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-left xs:text-right">
+                          <p className="text-sm font-bold text-white">
+                            {formatDayUsePrice(priceCents)}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {left === 0 ? 'Lotado' : left === 1 ? 'Última vaga' : `${left} vagas`}
+                          </p>
+                        </div>
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
-              <Link
-                href={isMember ? '/agendar/dayuse' : '/cadastro'}
-                className="mt-3 flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90"
-              >
-                {isMember ? 'Reservar day use' : 'Criar conta grátis para reservar'}
-              </Link>
+              {isMember && (
+                <Link
+                  href="/agendar/dayuse"
+                  className="mt-3 flex w-full items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-brand-800 px-4 py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90"
+                >
+                  Ver todos os horários
+                </Link>
+              )}
             </Card>
           </section>
         )}

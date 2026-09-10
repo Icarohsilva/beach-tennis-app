@@ -2,8 +2,12 @@
 // features/financeiro/checkoutActions.ts
 // Checkouts do aluno com o token MP da ACADEMIA (OAuth marketplace).
 // Nenhum efeito de crédito/ativação acontece aqui — só o webhook confirma.
+import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
+import { refundWalletSpend, spendWallet } from '@/features/wallet/spendWallet'
+import { WALLET_REASONS, walletCoversAll } from '@/lib/wallet/wallet'
 import { mpCancelPreapproval, mpCreatePreapproval, mpCreatePreference } from '@/lib/billing/mpClient'
 import { computeMarketplaceFee } from '@/lib/billing/fees'
 import { addPeriod, PERIODICITY_MONTHS, PERIODICITY_LABELS } from '@/lib/billing/periodicity'
@@ -13,6 +17,8 @@ import type { Periodicity } from '@/types'
 interface CheckoutResult {
   initPoint?: string
   error?: string
+  /** Compra fechada com o crédito em dinheiro — não há checkout a abrir. */
+  paidWithWalletCents?: number
 }
 
 // Assina um plano com recorrência automática (MP Assinaturas).
@@ -199,10 +205,21 @@ export async function buySingleClassCredits(qty: number): Promise<CheckoutResult
     return { error: 'Venda de aula avulsa indisponível. Fale com a academia.' }
   }
 
+  const amountCents = Math.round(qty * price * 100)
+  const amount = amountCents / 100
+
+  // Crédito em dinheiro: aqui o abatimento é TUDO OU NADA, ao contrário do day
+  // use. A diferença não é capricho — a reserva de day use expira em 30 min e o
+  // caminho de expiração devolve o saldo. Um pagamento de aula avulsa pendente
+  // não expira nunca: debitar metade e o aluno abandonar o checkout deixaria o
+  // dinheiro preso sem crédito entregue e sem nada que o devolvesse.
+  const balanceCents = await getWalletBalance(admin, orgId, user.id)
+  if (walletCoversAll(amountCents, balanceCents)) {
+    return buyCreditsWithWallet({ orgId, studentId: user.id, qty, amount, amountCents })
+  }
+
   const token = await getConnectedMpToken(orgId)
   if (!token) return { error: 'Pagamento online indisponível. Fale com a academia.' }
-
-  const amount = Math.round(qty * price * 100) / 100
 
   const { data: payment, error: payErr } = await admin
     .from('payments')
@@ -248,4 +265,85 @@ export async function buySingleClassCredits(qty: number): Promise<CheckoutResult
     await admin.from('payments').update({ status: 'failed' }).eq('id', payment.id)
     return { error: 'Não foi possível iniciar o pagamento. Tente novamente.' }
   }
+}
+
+/**
+ * Compra de aula avulsa paga inteiramente com o crédito em dinheiro.
+ *
+ * Reusa a MESMA RPC do caminho pago (`record_checkout_credit_purchase`), que
+ * marca o pagamento e concede os créditos na mesma transação. Reimplementar a
+ * concessão aqui abriria a porta para os dois caminhos divergirem — e é sempre
+ * a divergência que engole crédito de aluno.
+ *
+ * `gateway: 'wallet'` distingue no histórico o que foi pago com saldo do que
+ * passou pelo Mercado Pago.
+ */
+async function buyCreditsWithWallet(input: {
+  orgId: string
+  studentId: string
+  qty: number
+  amount: number
+  amountCents: number
+}): Promise<CheckoutResult> {
+  const admin = createAdminClient()
+
+  const { data: payment, error: payErr } = await admin
+    .from('payments')
+    .insert({
+      organization_id: input.orgId,
+      student_id: input.studentId,
+      subscription_id: null,
+      session_id: null,
+      amount: input.amount,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'per_class',
+      gateway: 'wallet',
+      gateway_payment_id: null,
+      credits_qty: input.qty,
+      settled_method: 'wallet',
+    })
+    .select('id')
+    .single()
+  if (payErr || !payment) return { error: 'Erro ao iniciar a compra. Tente novamente.' }
+
+  const paymentId = payment.id as string
+  const w = await spendWallet(admin, {
+    orgId: input.orgId,
+    studentId: input.studentId,
+    cents: input.amountCents,
+    reason: WALLET_REASONS.classCredits,
+    sourceTable: 'payments',
+    sourceId: paymentId,
+  })
+  if (w.error) {
+    await admin.from('payments').update({ status: 'failed' }).eq('id', paymentId)
+    return { error: w.error }
+  }
+
+  const { data: applied, error: rpcErr } = await admin.rpc('record_checkout_credit_purchase', {
+    p_payment_id: paymentId,
+    p_gateway_payment_id: `wallet:${paymentId}`,
+  })
+  if (rpcErr || applied === false) {
+    // Créditos não entregues: devolve o dinheiro em vez de deixar o aluno sem
+    // os dois.
+    await refundWalletSpend(admin, {
+      orgId: input.orgId,
+      studentId: input.studentId,
+      cents: input.amountCents,
+      reason: WALLET_REASONS.classCredits,
+      sourceTable: 'payments',
+      sourceId: paymentId,
+    })
+    await admin.from('payments').update({ status: 'failed' }).eq('id', paymentId)
+    console.error('[checkout] compra com saldo falhou', {
+      paymentId, error: rpcErr?.message ?? 'RPC devolveu false',
+    })
+    return { error: 'Não foi possível concluir a compra. Seu saldo foi devolvido.' }
+  }
+
+  revalidatePath('/financeiro')
+  revalidatePath('/home')
+  return { paidWithWalletCents: input.amountCents }
 }

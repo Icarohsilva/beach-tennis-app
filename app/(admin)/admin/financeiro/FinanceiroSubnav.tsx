@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils/cn'
 const tabs = [
   { href: '/admin/financeiro', label: 'Visão geral' },
   { href: '/admin/financeiro/cobranca', label: 'Cobrança' },
+  { href: '/admin/financeiro/day-use', label: 'Day use' },
   { href: '/admin/financeiro/planos', label: 'Planos e preços' },
   { href: '/admin/financeiro/integracoes', label: 'Integrações' },
 ]

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Sun } from 'lucide-react'
-import { createClient, createAdminClient, getAuthUser } from '@/lib/supabase/server'
+import { createClient, createAdminClient, getAuthUser, getActiveOrgId } from '@/lib/supabase/server'
 import { DayUseBookingCard } from '@/features/dayuse/DayUseBookingCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -9,6 +9,11 @@ import { Card } from '@/components/ui/Card'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import type { DayUseSlot } from '@/types'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { getDayUsePricing } from '@/features/dayuse/pricing'
+import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
+import { PENDING_HOLD_MINUTES, expireStalePendingDayUse, getRefundWindowHours } from '@/features/dayuse/refunds'
+import { getWalletBalance } from '@/features/wallet/walletQueries'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -19,23 +24,42 @@ export default async function AgendarDayUsePage({
   const user = await getAuthUser()
   if (!user) redirect('/login')
 
+  // Academia ATIVA, explícita: a RLS libera todas as orgs em que o aluno é
+  // membro, então quem treina em duas arenas via os day use das duas
+  // embaralhados, sem nada dizendo de qual arena era cada um.
+  const orgId = await getActiveOrgId()
+  if (!orgId) redirect('/selecionar-academia')
+
   // BRT: com o UTC cru o day use de hoje desaparecia da lista depois das 21h.
   const today = brtToday(new Date())
 
   // Use adminClient to bypass RLS and see all bookings + names
   const adminClient = createAdminClient()
 
-  const freshLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  const freshLimit = new Date(Date.now() - PENDING_HOLD_MINUTES * 60 * 1000).toISOString()
   // Reservas pendentes vencidas (>30min sem pagamento) são canceladas ao listar.
-  await adminClient
-    .from('dayuse_bookings')
-    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
-    .eq('status', 'pending_payment')
-    .lt('booked_at', freshLimit)
+  // Escopado à academia ativa: sem o filtro, abrir esta página varria e escrevia
+  // em reserva de TODAS as academias da plataforma. Cada arena limpa a sua
+  // quando alguém abre a lista dela.
+  //
+  // Passa por expireStalePendingDayUse e não por um update em massa porque a
+  // reserva pode ter abatido crédito da carteira: liberar a vaga sem devolver o
+  // saldo deixaria o aluno sem os dois.
+  await expireStalePendingDayUse(adminClient, orgId)
+
+  // Preço na tela pela MESMA regra do checkout (dayUseChargeCents): o card
+  // dizia "Gratuito" fixo, então day use pago aparecia como de graça.
+  const pricing = await getDayUsePricing(orgId)
+  // Janela de estorno da academia: o aviso de cancelamento tem de citar o prazo
+  // real dela, não o default.
+  const refundWindowHours = await getRefundWindowHours(adminClient, orgId)
+  const walletCents = await getWalletBalance(adminClient, orgId, user.id)
+  const nowIso = new Date().toISOString()
 
   const { data: slots } = await supabase
     .from('dayuse_slots')
     .select('*')
+    .eq('organization_id', orgId)
     .eq('is_active', true)
     .gte('date', today)
     .order('date', { ascending: true })
@@ -50,12 +74,19 @@ export default async function AgendarDayUsePage({
           .from('dayuse_bookings')
           .select('id, slot_id, student_id, status, booked_at, profiles(full_name)')
           .in('slot_id', slotIds)
-          .or(`status.eq.confirmed,and(status.eq.pending_payment,booked_at.gt.${freshLimit})`)
+          // Prazo por MÉTODO (hold_until): o PIX manual segura 24h, e contar
+          // por booked_at o tiraria da ocupação em 30 min.
+          .or(
+            'status.eq.confirmed,'
+            + `and(status.eq.pending_payment,hold_until.gt.${nowIso}),`
+            + `and(status.eq.pending_payment,hold_until.is.null,booked_at.gt.${freshLimit})`,
+          )
       : { data: [] }
 
   const countMap = new Map<string, number>()
   const myBookings = new Map<string, string>()
   const myBookingStatus = new Map<string, string>()
+  const myBookedAt = new Map<string, string>()
   const attendeesMap = new Map<string, string[]>()
 
   for (const b of (allBookings ?? []) as {
@@ -70,6 +101,7 @@ export default async function AgendarDayUsePage({
     if (b.student_id === user.id) {
       myBookings.set(b.slot_id, b.id)
       myBookingStatus.set(b.slot_id, b.status)
+      myBookedAt.set(b.slot_id, b.booked_at)
     }
     const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
     if (profile?.full_name) {
@@ -121,6 +153,16 @@ export default async function AgendarDayUsePage({
                   myBookingId={myBookings.get(slot.id) ?? null}
                   myBookingStatus={myBookingStatus.get(slot.id) ?? null}
                   attendees={attendeesMap.get(slot.id) ?? []}
+                  priceCents={dayUseChargeCents(slot, pricing)}
+                  walletCents={walletCents}
+                  cancelNotice={cancelNoticeForStudent({
+                    date: slot.date,
+                    start_time: slot.start_time,
+                    bookedAtIso: myBookedAt.get(slot.id) ?? null,
+                    nowIso,
+                    paidCents: dayUseChargeCents(slot, pricing),
+                    windowHours: refundWindowHours,
+                  })}
                 />
               ))}
             </div>

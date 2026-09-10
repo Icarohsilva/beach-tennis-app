@@ -1,4 +1,9 @@
 // types/index.ts
+//
+// DayUsePaymentMethod é importado de lib/dayuse/paymentMethod.ts em vez de
+// declarado aqui: o tipo e as janelas de hold que dependem dele andam juntos, e
+// separá-los faria a janela ser decidida longe de quem define os métodos.
+import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
 
 // 'athlete' = tem relação com a academia (jogou torneio, usou day use) sem ser
 // aluno dela. As telas do admin filtram 'student', então o atleta não aparece
@@ -603,6 +608,14 @@ export interface Notification {
   created_at: string
 }
 
+/**
+ * Os dois modelos de day use que as arenas usam de fato.
+ * - `scheduled`: horário marcado, a vaga é do aluno (o que sempre existiu)
+ * - `open`: livre no período, com rotação de quadra; `capacity` vira teto de
+ *   pessoas no espaço, não de vagas num jogo
+ */
+export type DayUseKind = 'scheduled' | 'open'
+
 export interface DayUseSlot {
   id: string
   organization_id: string
@@ -611,9 +624,69 @@ export interface DayUseSlot {
   start_time: string  // HH:MM
   end_time: string
   capacity: number
+  /** Modalidade (slug de lib/arenas/sports.ts). Rótulo, não restrição. */
+  sport: string | null
+  kind: DayUseKind
+  /** Preço deste slot em centavos. null = usa o padrão da academia. */
+  price_cents: number | null
   notes: string | null
   is_active: boolean
+  /** Recorrência que gerou este slot. null = criado à mão pelo admin. */
+  recurrence_id: string | null
   created_by: string
+  created_at: string
+}
+
+/**
+ * Molde de day use fixo semanal — "todo domingo, 9h às 12h, quadra 1".
+ *
+ * Mesmo formato de `Class` (day_of_week + horário + court) de propósito: é o
+ * que faz o day use recorrente ser gerado pela mesma passada do cron da grade.
+ * A linha aqui não é reservável; o que o aluno vê é o `DayUseSlot` que ela gera.
+ */
+export interface DayUseRecurrence {
+  id: string
+  organization_id: string
+  /** 0=domingo..6=sábado, igual a Class.day_of_week (getDay do JS). */
+  day_of_week: number
+  start_time: string
+  end_time: string
+  court: number
+  sport: string | null
+  kind: DayUseKind
+  capacity: number
+  price_cents: number | null
+  notes: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+}
+
+/**
+ * Carteira: crédito em DINHEIRO por (academia, aluno).
+ *
+ * Não confundir com `memberships.credits_balance`, que conta AULAS. Cache do
+ * saldo — a verdade é `WalletTransaction`, e a escrita passa só pela RPC
+ * `wallet_apply`. Chaveada por aluno e não por membership porque o avulso do
+ * day use não tem vínculo com a arena.
+ */
+export interface Wallet {
+  organization_id: string
+  student_id: string
+  balance_cents: number
+  updated_at: string
+}
+
+/** Extrato da carteira. Positivo credita, negativo gasta. Não vence. */
+export interface WalletTransaction {
+  id: string
+  organization_id: string
+  student_id: string
+  amount_cents: number
+  reason: string
+  source_table: string | null
+  source_id: string | null
+  created_by: string | null
   created_at: string
 }
 
@@ -625,6 +698,48 @@ export interface DayUseBooking {
   status: 'confirmed' | 'cancelled' | 'pending_payment'
   booked_at: string
   cancelled_at: string | null
+  /** Chave PIX de estorno informada na reserva. Copiada para DayUseRefund. */
+  refund_pix_key: string | null
+  refund_pix_owner: string | null
+  /** Como foi paga — define o prazo de hold_until (lib/dayuse/paymentMethod.ts). */
+  payment_method: DayUsePaymentMethod
+  /**
+   * Até quando a reserva pendente ocupa vaga. null = confirmada (sem prazo).
+   * 30 min no Checkout Pro, 24h no PIX manual: o gargalo do segundo é humano.
+   */
+  hold_until: string | null
+  /** Comprovante do PIX manual (bucket payment-receipts), conferido por admin. */
+  receipt_url: string | null
+  receipt_uploaded_at: string | null
+}
+
+/**
+ * O que a academia DEVE devolver por um day use pago e cancelado.
+ *
+ * `amount_cents` cobre só a parte que entrou por gateway: o que foi pago com
+ * saldo da carteira volta direto para a carteira no cancelamento, porque não há
+ * PIX a fazer para devolver crédito interno.
+ *
+ * Mover dinheiro é ato humano — o app registra, guarda o comprovante e cobra a
+ * confirmação do aluno; nada de chamar a API de refund do gateway sozinho.
+ */
+export interface DayUseRefund {
+  id: string
+  organization_id: string
+  booking_id: string
+  student_id: string
+  amount_cents: number
+  cause: 'arena_cancelou' | 'aluno_cancelou'
+  /** Só o ALUNO troca para 'credito', e só enquanto pendente. */
+  method: 'pix' | 'credito'
+  pix_key: string | null
+  pix_owner: string | null
+  status: 'pendente' | 'pago' | 'confirmado' | 'creditado'
+  proof_url: string | null
+  paid_at: string | null
+  paid_by: string | null
+  confirmed_at: string | null
+  created_at: string
 }
 
 export type WaitlistStatus = 'waiting' | 'offered' | 'accepted' | 'expired' | 'cancelled'

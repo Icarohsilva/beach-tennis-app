@@ -8,10 +8,25 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 
+/**
+ * Só caminho relativo desta origem. `//host` e `https://host` são recusados:
+ * `next` vem da URL, e repassá-lo cru é redirect aberto — a mesma guarda de
+ * app/(public)/t/[id]/cadastrar/page.tsx.
+ */
+function safeNext(raw: string | null): string | null {
+  if (!raw) return null
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null
+  return raw
+}
+
 function LoginInner() {
   const searchParams = useSearchParams()
   // Convite na URL: depois do login, volta pro fluxo de entrar na academia.
   const inviteCode = (searchParams.get('convite') ?? '').trim()
+  // `?next=` é o destino de quem clicou "Entrar" numa página pública (day use,
+  // torneio) — sem honrar isto, a pessoa que abriu o link do day use caía em
+  // /home, que para quem não é aluno de academia nenhuma não tem nada.
+  const next = safeNext(searchParams.get('next'))
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -53,7 +68,8 @@ function LoginInner() {
     // client-side — produz tela em branco (RSC stream incompleto) até um reload
     // manual. Um hard nav sempre completa a cadeia de redirect corretamente,
     // igual a um F5. Ver github.com/vercel/next.js/issues/43464 e /issues/67427.
-    window.location.href = isAdmin ? '/admin/dashboard' : '/home'
+    // `next` vence o destino padrão: a pessoa disse para onde queria voltar.
+    window.location.href = next ?? (isAdmin ? '/admin/dashboard' : '/home')
   }
 
   const cadastroHref = inviteCode ? `/cadastro?convite=${encodeURIComponent(inviteCode)}` : '/cadastro'

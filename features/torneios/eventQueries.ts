@@ -8,7 +8,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { IN_CHUNK_SIZE, chunk, fetchAllPages } from '@/lib/supabase/paginate'
 import type { EventTournament } from '@/lib/torneios/event'
-import type { TournamentEvent } from '@/types'
+import type { DayUseKind, TournamentEvent } from '@/types'
 
 export interface EventPageData {
   event: TournamentEvent
@@ -110,8 +110,22 @@ export interface ArenaShowcase {
   }>
   /** Torneios abertos que NÃO estão dentro de um evento (esses aparecem na capa do evento). */
   looseTournaments: EventTournament[]
-  /** Horários de day use ainda disponíveis. */
-  dayUse: Array<{ id: string; date: string; start_time: string; end_time: string; court: number }>
+  /**
+   * Horários de day use ainda disponíveis, com o que a vitrine precisa dizer
+   * antes do clique: modalidade, tipo, preço e quantas vagas sobraram.
+   */
+  dayUse: Array<{
+    id: string
+    date: string
+    start_time: string
+    end_time: string
+    court: number
+    capacity: number
+    sport: string | null
+    kind: DayUseKind
+    price_cents: number | null
+    occupied: number
+  }>
   /** Comunicados fixados pela academia no mural. */
   notices: Array<{ id: string; content: string; created_at: string }>
 }
@@ -148,7 +162,7 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
         .limit(8),
       admin
         .from('dayuse_slots')
-        .select('id, date, start_time, end_time, court')
+        .select('id, date, start_time, end_time, court, capacity, sport, kind, price_cents')
         .eq('organization_id', orgId)
         .eq('is_active', true)
         .gte('date', today)
@@ -183,10 +197,36 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
   // aqui só há torneio solto.
   const looseTournaments = await withEntryCounts((tournamentRows ?? []) as RawTournament[])
 
+  // Ocupação dos day use listados: "3 vagas" e "lotado" são a diferença entre
+  // a pessoa clicar e não clicar, e a vitrine não pode prometer vaga que não há.
+  const dayUse = ((dayUseRows ?? []) as Omit<ArenaShowcase['dayUse'][number], 'occupied'>[]).map(
+    (d) => ({ ...d, occupied: 0 }),
+  )
+  if (dayUse.length > 0) {
+    const freshLimit = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const nowIso = new Date().toISOString()
+    const { data: bookingRows } = await admin
+      .from('dayuse_bookings')
+      .select('slot_id')
+      .in('slot_id', dayUse.map((d) => d.id))
+      // Prazo por método (hold_until); booked_at só como fallback de linha
+      // anterior a 20260910150000.
+      .or(
+        'status.eq.confirmed,'
+        + `and(status.eq.pending_payment,hold_until.gt.${nowIso}),`
+        + `and(status.eq.pending_payment,hold_until.is.null,booked_at.gt.${freshLimit})`,
+      )
+    const counts = new Map<string, number>()
+    for (const r of (bookingRows ?? []) as { slot_id: string }[]) {
+      counts.set(r.slot_id, (counts.get(r.slot_id) ?? 0) + 1)
+    }
+    for (const d of dayUse) d.occupied = counts.get(d.id) ?? 0
+  }
+
   return {
     events,
     looseTournaments,
-    dayUse: (dayUseRows ?? []) as ArenaShowcase['dayUse'],
+    dayUse,
     notices: (noticeRows ?? []) as ArenaShowcase['notices'],
   }
 }

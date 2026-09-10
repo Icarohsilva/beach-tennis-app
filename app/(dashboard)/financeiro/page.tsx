@@ -12,6 +12,10 @@ import { BuyCreditsCard } from '@/features/financeiro/BuyCreditsCard'
 import { RecommendationBanner } from '@/features/financeiro/RecommendationBanner'
 import { DebtSection } from '@/features/financeiro/DebtSection'
 import { MissedCheckinSection } from '@/features/checkin/MissedCheckinSection'
+import { WalletCard } from '@/features/wallet/WalletCard'
+import { getWalletBalance, getWalletStatement } from '@/features/wallet/walletQueries'
+import { RefundCard } from '@/features/dayuse/RefundCard'
+import { getStudentRefunds } from '@/features/dayuse/refundQueries'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import type { Payment, Periodicity, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
@@ -92,6 +96,16 @@ export default async function FinanceiroAlunoPage({
     .limit(50)
   const payments: Payment[] = paymentsRaw ?? []
 
+  // Carteira: saldo e extrato juntos — quem tem saldo quer saber de onde veio.
+  const [walletBalance, walletEntries, refunds] = await Promise.all([
+    getWalletBalance(admin, orgId, user.id),
+    getWalletStatement(admin, orgId, user.id),
+    getStudentRefunds(admin, { studentId: user.id, orgId }),
+  ])
+  // Encerrado não some da lista, mas vai para o fim: o aluno precisa achar o
+  // estorno que já recebeu quando for conferir o extrato do banco.
+  const refundsAbertos = refunds.filter((r) => r.status === 'pendente' || r.status === 'pago')
+
   const { data: salesRaw } = await admin
     .from('system_settings')
     .select('key, value')
@@ -101,8 +115,12 @@ export default async function FinanceiroAlunoPage({
     ((salesRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
   )
   const singleClassPrice = parseFloat(sales.single_class_price ?? '0') || 0
+  // Saldo cobrindo o valor dispensa o gateway: quem tem crédito em dinheiro
+  // compra aula avulsa mesmo em academia sem Mercado Pago conectado.
   const singleClassEnabled =
-    sales.single_class_sale_enabled === 'true' && singleClassPrice > 0 && mpConnected
+    sales.single_class_sale_enabled === 'true'
+    && singleClassPrice > 0
+    && (mpConnected || walletBalance >= Math.round(singleClassPrice * 100))
 
   const hasActivePlan = subscription?.status === 'active' || subscription?.status === 'past_due'
   const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
@@ -133,6 +151,19 @@ export default async function FinanceiroAlunoPage({
 
       <DebtSection userId={user.id} orgId={orgId} mpConnected={mpConnected} />
 
+      {/* Antes do plano e da vitrine: dinheiro que a academia DEVE ao aluno vem
+          antes de qualquer coisa que ela queira vender a ele. */}
+      {refundsAbertos.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Estornos de day use
+          </h2>
+          <div className="space-y-2">
+            {refundsAbertos.map((r) => <RefundCard key={r.id} refund={r} />)}
+          </div>
+        </section>
+      )}
+
       {recRaw && (
         <RecommendationBanner
           recommendationId={recRaw.id as string}
@@ -148,6 +179,17 @@ export default async function FinanceiroAlunoPage({
 
       {searchParams.retorno === 'avulso' && (
         <CheckoutReturnBanner message="Recebemos seu pagamento. Os créditos entram no seu saldo assim que o Mercado Pago confirmar, normalmente em segundos." />
+      )}
+
+      {/* Só aparece para quem tem saldo ou já movimentou: card de saldo zero em
+          conta que nunca recebeu estorno é ruído na tela de todo mundo. */}
+      {(walletBalance > 0 || walletEntries.length > 0) && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Meu crédito
+          </h2>
+          <WalletCard balanceCents={walletBalance} entries={walletEntries} />
+        </section>
       )}
 
       <section>
@@ -173,7 +215,7 @@ export default async function FinanceiroAlunoPage({
       {singleClassEnabled && (
         <section>
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Aula avulsa</h2>
-          <BuyCreditsCard unitPrice={singleClassPrice} />
+          <BuyCreditsCard unitPrice={singleClassPrice} walletCents={walletBalance} />
         </section>
       )}
 

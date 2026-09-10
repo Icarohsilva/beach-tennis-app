@@ -99,7 +99,11 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/e/') ||
     // Link pessoal de pagamento de inscrição de torneio (quem paga pode ser
     // o parceiro convidado, sem sessão nesta aba).
-    pathname.startsWith('/p/')
+    pathname.startsWith('/p/') ||
+    // Página de UM day use, o link que a arena divulga no WhatsApp. Reservar
+    // exige conta, mas LER a página não — sem isto o link cai no /login e o
+    // convite não diz mais o que era.
+    pathname.startsWith('/d/')
   ) {
     return finalizar(NextResponse.next())
   }
