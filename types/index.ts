@@ -693,6 +693,38 @@ export interface DayUseBooking {
   status: 'confirmed' | 'cancelled' | 'pending_payment'
   booked_at: string
   cancelled_at: string | null
+  /** Chave PIX de estorno informada na reserva. Copiada para DayUseRefund. */
+  refund_pix_key: string | null
+  refund_pix_owner: string | null
+}
+
+/**
+ * O que a academia DEVE devolver por um day use pago e cancelado.
+ *
+ * `amount_cents` cobre só a parte que entrou por gateway: o que foi pago com
+ * saldo da carteira volta direto para a carteira no cancelamento, porque não há
+ * PIX a fazer para devolver crédito interno.
+ *
+ * Mover dinheiro é ato humano — o app registra, guarda o comprovante e cobra a
+ * confirmação do aluno; nada de chamar a API de refund do gateway sozinho.
+ */
+export interface DayUseRefund {
+  id: string
+  organization_id: string
+  booking_id: string
+  student_id: string
+  amount_cents: number
+  cause: 'arena_cancelou' | 'aluno_cancelou'
+  /** Só o ALUNO troca para 'credito', e só enquanto pendente. */
+  method: 'pix' | 'credito'
+  pix_key: string | null
+  pix_owner: string | null
+  status: 'pendente' | 'pago' | 'confirmado' | 'creditado'
+  proof_url: string | null
+  paid_at: string | null
+  paid_by: string | null
+  confirmed_at: string | null
+  created_at: string
 }
 
 export type WaitlistStatus = 'waiting' | 'offered' | 'accepted' | 'expired' | 'cancelled'

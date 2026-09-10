@@ -20,6 +20,9 @@ import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import { DAY_USE_KIND_LABEL, dayUseKindHint, formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
 import { dayUseShareMessage, resolveDayUseCta } from '@/lib/dayuse/publicPage'
 import { getPublicDayUse } from '@/features/dayuse/publicQuery'
+import { getStudentRefunds } from '@/features/dayuse/refundQueries'
+import { RefundCard } from '@/features/dayuse/RefundCard'
+import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { DayUseBookButton, DayUseCancelButton } from './DayUseBookButton'
 import { ShareDayUse } from './ShareDayUse'
@@ -73,6 +76,13 @@ export default async function PublicDayUsePage({ params }: PageProps) {
   if (!data) notFound()
 
   const { slot, org, priceCents, occupied, attendees, mine } = data
+
+  // Estorno DESTE horário. Vive aqui porque o avulso não tem /financeiro: é
+  // nesta página que ele informa a chave PIX, troca por crédito e confirma o
+  // recebimento.
+  const refunds = user
+    ? await getStudentRefunds(createAdminClient(), { studentId: user.id, slotId: slot.id })
+    : []
 
   const cta = resolveDayUseCta({
     date: slot.date,
@@ -160,7 +170,23 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           </p>
         )}
         <p className="text-center text-xs text-slate-500">{cta.note}</p>
-        {mine && cta.state === 'booked' && <DayUseCancelButton bookingId={mine.id} />}
+        {mine && cta.state === 'booked' && (
+          <DayUseCancelButton
+            bookingId={mine.id}
+            // O prazo vem ANTES do clique: descobrir que não há devolução
+            // depois de cancelar é o jeito de perder o aluno e o dinheiro.
+            notice={cancelNoticeForStudent({
+              date: slot.date,
+              start_time: slot.start_time,
+              bookedAtIso: mine.bookedAt,
+              nowIso: new Date().toISOString(),
+              paidCents: priceCents,
+            })}
+            pixKey={mine.refundPixKey}
+            pixOwner={mine.refundPixOwner}
+            paid={priceCents > 0}
+          />
+        )}
         {cta.state === 'full' && org.whatsapp && (
           <a
             href={buildWhatsAppUrl(
@@ -183,6 +209,15 @@ export default async function PublicDayUsePage({ params }: PageProps) {
           </p>
         )}
       </Card>
+
+      {refunds.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Seu estorno
+          </p>
+          {refunds.map((r) => <RefundCard key={r.id} refund={r} />)}
+        </div>
+      )}
 
       {attendees.length > 0 && (
         <Card>

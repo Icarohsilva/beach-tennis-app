@@ -29,7 +29,14 @@ export interface PublicDayUse {
    */
   attendees: string[]
   /** Reserva de quem está vendo a página, quando há sessão. */
-  mine: { id: string; status: 'confirmed' | 'pending_payment' } | null
+  mine: {
+    id: string
+    status: 'confirmed' | 'pending_payment'
+    /** Para a carência de arrependimento de 1h (resolveRefundEligibility). */
+    bookedAt: string
+    refundPixKey: string | null
+    refundPixOwner: string | null
+  } | null
 }
 
 /** Janela em que uma reserva pendente ainda ocupa a vaga (igual à RPC). */
@@ -62,7 +69,7 @@ export async function getPublicDayUse(
   // lib/supabase/paginate.ts.
   const { data: bookingsRaw } = await admin
     .from('dayuse_bookings')
-    .select('id, student_id, status, profiles(full_name)')
+    .select('id, student_id, status, booked_at, refund_pix_key, refund_pix_owner, profiles(full_name)')
     .eq('slot_id', slotId)
     .or(`status.eq.confirmed,and(status.eq.pending_payment,booked_at.gt.${freshLimit})`)
 
@@ -70,6 +77,9 @@ export async function getPublicDayUse(
     id: string
     student_id: string
     status: 'confirmed' | 'pending_payment'
+    booked_at: string
+    refund_pix_key: string | null
+    refund_pix_owner: string | null
     profiles: { full_name: string } | { full_name: string }[] | null
   }[]
 
@@ -79,7 +89,15 @@ export async function getPublicDayUse(
     const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
     const first = profile?.full_name?.trim().split(/\s+/)[0]
     if (first) attendees.push(first)
-    if (viewerId && b.student_id === viewerId) mine = { id: b.id, status: b.status }
+    if (viewerId && b.student_id === viewerId) {
+      mine = {
+        id: b.id,
+        status: b.status,
+        bookedAt: b.booked_at,
+        refundPixKey: b.refund_pix_key,
+        refundPixOwner: b.refund_pix_owner,
+      }
+    }
   }
 
   const pricing = await getDayUsePricing(slot.organization_id)

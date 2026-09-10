@@ -203,6 +203,28 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   cobrança têm de sair dessa mesma chamada**: "gratuito" é o caso em que a venda está
   desligada ou o Mercado Pago não está conectado, que é exatamente quando `bookDayUse`
   grava `confirmed` sem checkout.
+- **Carteira (crédito em DINHEIRO)**: `wallet_transactions` é a verdade e `wallets.balance_cents`
+  o cache, mesmo par de `credit_transactions`→`memberships.credits_balance` — mas conta reais,
+  não aulas. Escrita **só** pela RPC `wallet_apply` (o `select ... for update` nela é o que
+  impede duas compras simultâneas de gastarem o mesmo saldo). Chaveada por
+  `(organization_id, student_id)` e **não** em `memberships`, porque o avulso do day use não
+  tem vínculo e precisa de saldo igual. Índice parcial por origem torna o lançamento
+  idempotente; devolver um débito usa a origem com sufixo `:reversal`, senão o
+  `on conflict do nothing` engoliria a devolução. **Crédito em dinheiro não vence** (é valor
+  pago), ao contrário do crédito de aula. Divisão saldo/gateway em `splitWithWallet`
+  ([lib/wallet/wallet.ts](lib/wallet/wallet.ts)) — tela e cobrança saem dela.
+- **Estorno de day use** (`dayuse_refunds`, um por reserva): cancelamento **da arena** devolve
+  sempre; **do aluno**, só dentro da janela (`system_settings.dayuse_refund_window_hours`,
+  default = a mesma da aula), reusando `canCancelWithRefund` — duas réguas de "cancelei em
+  tempo" fariam o aluno descobrir a diferença no bolso. A regra pura está em
+  [lib/dayuse/refundRules.ts](lib/dayuse/refundRules.ts) e a abertura em
+  `openRefundForBooking` ([features/dayuse/refunds.ts](features/dayuse/refunds.ts)),
+  idempotente pela unicidade de `booking_id`. `amount_cents` cobre só o que entrou por
+  **gateway**: o que foi pago com carteira volta para a carteira na hora. Mover dinheiro segue
+  humano — o admin anexa o comprovante, o aluno recebe push e **confirma**; nada de chamar a
+  API de refund do gateway. **Só o aluno** troca PIX por crédito, e só enquanto `pendente`.
+  `deactivateDayUseSlot` passa por `cancelDayUseSlotBookings`: antes ela só marcava
+  `is_active = false` e deixava reserva paga órfã, sem aviso e sem devolução.
 - `enrollments` = fixed weekly schedule; `session_bookings` = per-session bookings (extra, makeup)
 - **Fila de espera é entrada AUTOMÁTICA.** Vaga aberta → `promoteFromWaitlist`
   ([features/aulas/waitlistActions.ts](features/aulas/waitlistActions.ts)) coloca o primeiro

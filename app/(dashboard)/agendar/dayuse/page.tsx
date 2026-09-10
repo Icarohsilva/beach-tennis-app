@@ -11,6 +11,8 @@ import type { DayUseSlot } from '@/types'
 import { brtToday } from '@/lib/utils/gridSchedule'
 import { getDayUsePricing } from '@/features/dayuse/pricing'
 import { dayUseChargeCents } from '@/lib/dayuse/dayUseKind'
+import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
+import { getRefundWindowHours } from '@/features/dayuse/refunds'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -48,6 +50,10 @@ export default async function AgendarDayUsePage({
   // Preço na tela pela MESMA regra do checkout (dayUseChargeCents): o card
   // dizia "Gratuito" fixo, então day use pago aparecia como de graça.
   const pricing = await getDayUsePricing(orgId)
+  // Janela de estorno da academia: o aviso de cancelamento tem de citar o prazo
+  // real dela, não o default.
+  const refundWindowHours = await getRefundWindowHours(adminClient, orgId)
+  const nowIso = new Date().toISOString()
 
   const { data: slots } = await supabase
     .from('dayuse_slots')
@@ -73,6 +79,7 @@ export default async function AgendarDayUsePage({
   const countMap = new Map<string, number>()
   const myBookings = new Map<string, string>()
   const myBookingStatus = new Map<string, string>()
+  const myBookedAt = new Map<string, string>()
   const attendeesMap = new Map<string, string[]>()
 
   for (const b of (allBookings ?? []) as {
@@ -87,6 +94,7 @@ export default async function AgendarDayUsePage({
     if (b.student_id === user.id) {
       myBookings.set(b.slot_id, b.id)
       myBookingStatus.set(b.slot_id, b.status)
+      myBookedAt.set(b.slot_id, b.booked_at)
     }
     const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
     if (profile?.full_name) {
@@ -139,6 +147,14 @@ export default async function AgendarDayUsePage({
                   myBookingStatus={myBookingStatus.get(slot.id) ?? null}
                   attendees={attendeesMap.get(slot.id) ?? []}
                   priceCents={dayUseChargeCents(slot, pricing)}
+                  cancelNotice={cancelNoticeForStudent({
+                    date: slot.date,
+                    start_time: slot.start_time,
+                    bookedAtIso: myBookedAt.get(slot.id) ?? null,
+                    nowIso,
+                    paidCents: dayUseChargeCents(slot, pricing),
+                    windowHours: refundWindowHours,
+                  })}
                 />
               ))}
             </div>

@@ -21,9 +21,11 @@ interface Props {
    * o card dizia "Gratuito" fixo, então day use pago aparecia como de graça.
    */
   priceCents: number
+  /** O que acontece com o dinheiro ao cancelar (cancelNoticeForStudent). */
+  cancelNotice?: string | null
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, cancelNotice = null }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
@@ -54,6 +56,9 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
 
   async function handleCancel() {
     if (!bookingId || bookingId === 'pending') return
+    // Mesmo aviso da página pública (/d/[id]): as duas telas cancelam a mesma
+    // reserva, e prazo diferente em cada uma é o aluno descobrindo no bolso.
+    if (cancelNotice && !confirm(`Cancelar sua reserva?\n\n${cancelNotice}`)) return
     setLoading(true)
     setError(null)
     const result = await cancelDayUseBooking(bookingId)

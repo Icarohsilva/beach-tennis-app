@@ -24,9 +24,16 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents }: Props) {
     // O texto muda para slot gerado por recorrência: a geração NÃO ressuscita
     // data removida (ver features/dayuse/generation.ts), e o admin precisa
     // saber que remover aqui não desliga a recorrência inteira.
-    const msg = slot.recurrence_id
+    const escopo = slot.recurrence_id
       ? 'Remover só esta data do day use recorrente?\n\nA recorrência continua ligada e as outras datas não mudam. Esta data não volta na geração automática.'
       : 'Remover este slot de day use?'
+    // Quem tem reserva é avisado e quem pagou entra na fila de estorno: o admin
+    // precisa saber disso ANTES de clicar, porque a partir daqui a academia
+    // passa a DEVER dinheiro.
+    const consequencia = bookingsCount > 0
+      ? `\n\n${bookingsCount} reserva(s) serão canceladas, os alunos avisados e o estorno de quem pagou entra em Financeiro › Day use.`
+      : ''
+    const msg = `${escopo}${consequencia}`
     if (!confirm(msg)) return
     setLoading(true)
     await deactivateDayUseSlot(slot.id)

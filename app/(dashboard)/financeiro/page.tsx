@@ -14,6 +14,8 @@ import { DebtSection } from '@/features/financeiro/DebtSection'
 import { MissedCheckinSection } from '@/features/checkin/MissedCheckinSection'
 import { WalletCard } from '@/features/wallet/WalletCard'
 import { getWalletBalance, getWalletStatement } from '@/features/wallet/walletQueries'
+import { RefundCard } from '@/features/dayuse/RefundCard'
+import { getStudentRefunds } from '@/features/dayuse/refundQueries'
 import { PERIODICITY_LABELS } from '@/lib/billing/periodicity'
 import type { Payment, Periodicity, PlanBillingOption, StudentSubscription, SubscriptionPlan } from '@/types'
 
@@ -110,10 +112,14 @@ export default async function FinanceiroAlunoPage({
   const canCancel = hasActivePlan || subscription?.status === 'pending_payment'
 
   // Carteira: saldo e extrato juntos — quem tem saldo quer saber de onde veio.
-  const [walletBalance, walletEntries] = await Promise.all([
+  const [walletBalance, walletEntries, refunds] = await Promise.all([
     getWalletBalance(admin, orgId, user.id),
     getWalletStatement(admin, orgId, user.id),
+    getStudentRefunds(admin, { studentId: user.id, orgId }),
   ])
+  // Encerrado não some da lista, mas vai para o fim: o aluno precisa achar o
+  // estorno que já recebeu quando for conferir o extrato do banco.
+  const refundsAbertos = refunds.filter((r) => r.status === 'pendente' || r.status === 'pago')
 
   const { data: recRaw } = await admin
     .from('plan_recommendations')
@@ -140,6 +146,19 @@ export default async function FinanceiroAlunoPage({
       <MissedCheckinSection userId={user.id} orgId={orgId} mpConnected={mpConnected} />
 
       <DebtSection userId={user.id} orgId={orgId} mpConnected={mpConnected} />
+
+      {/* Antes do plano e da vitrine: dinheiro que a academia DEVE ao aluno vem
+          antes de qualquer coisa que ela queira vender a ele. */}
+      {refundsAbertos.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+            Estornos de day use
+          </h2>
+          <div className="space-y-2">
+            {refundsAbertos.map((r) => <RefundCard key={r.id} refund={r} />)}
+          </div>
+        </section>
+      )}
 
       {recRaw && (
         <RecommendationBanner

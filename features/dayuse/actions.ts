@@ -15,6 +15,8 @@ import {
   reaisToCents,
 } from '@/lib/dayuse/dayUseKind'
 import { getDayUsePricing } from './pricing'
+import { cancelDayUseSlotBookings } from './cancelSlot'
+import { openRefundForBooking } from './refunds'
 import { sportLabel } from '@/lib/arenas/sports'
 import type { DayUseKind } from '@/types'
 
@@ -126,21 +128,36 @@ export async function createDayUseSlot(data: CreateDayUseSlotData): Promise<{ er
   return {}
 }
 
-export async function deactivateDayUseSlot(slotId: string): Promise<{ error?: string }> {
+export async function deactivateDayUseSlot(slotId: string): Promise<{
+  error?: string
+  cancelled?: number
+  refundsOpened?: number
+}> {
   // Sem requireAdmin + escopo por organização, esta action desativava slot de
   // QUALQUER academia para qualquer usuário logado que soubesse o id.
   const { orgId, error: authErr } = await requireAdmin()
   if (authErr) return { error: authErr }
 
   const adminClient = createAdminClient()
+
+  // Encerra as reservas e abre o estorno ANTES de desativar o horário: com o
+  // slot já inativo, quem lê `dayuse_slots` para montar o aviso não o encontra.
+  // Até aqui esta action só marcava is_active=false — a reserva ficava
+  // `confirmed` num horário que sumiu da tela, sem aviso e sem devolução.
+  const result = await cancelDayUseSlotBookings(adminClient, { slotId, orgId })
+
   const { error } = await adminClient
     .from('dayuse_slots')
     .update({ is_active: false })
     .eq('id', slotId)
     .eq('organization_id', orgId)
   if (error) return { error: error.message }
+
   revalidatePath('/admin/grade/dayuse')
-  return {}
+  revalidatePath('/admin/financeiro/day-use')
+  revalidatePath('/agendar/dayuse')
+  revalidatePath(`/d/${slotId}`)
+  return { cancelled: result.cancelled, refundsOpened: result.refundsOpened }
 }
 
 export async function bookDayUse(slotId: string): Promise<{ error?: string; initPoint?: string }> {
@@ -299,7 +316,16 @@ export async function bookDayUse(slotId: string): Promise<{ error?: string; init
   }
 }
 
-export async function cancelDayUseBooking(bookingId: string): Promise<{ error?: string }> {
+export interface CancelDayUseResult {
+  error?: string
+  /** Abriu estorno de dinheiro? */
+  refundDue?: boolean
+  refundId?: string | null
+  /** Por que não abriu, quando não abriu (fora do prazo, sem pagamento). */
+  refundNote?: string
+}
+
+export async function cancelDayUseBooking(bookingId: string): Promise<CancelDayUseResult> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -312,14 +338,55 @@ export async function cancelDayUseBooking(bookingId: string): Promise<{ error?: 
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
     .eq('id', bookingId)
     .eq('student_id', user.id)
-    .select('slot_id')
+    .select('slot_id, organization_id, booked_at, refund_pix_key, refund_pix_owner')
     .maybeSingle()
 
   if (error) return { error: error.message }
+  if (!cancelled) return { error: 'Reserva não encontrada.' }
+  const row = cancelled as {
+    slot_id: string
+    organization_id: string
+    booked_at: string
+    refund_pix_key: string | null
+    refund_pix_owner: string | null
+  }
+
+  // Estorno do que foi pago, quando devido. `cause: 'aluno_cancelou'` faz a
+  // janela da academia valer (resolveRefundEligibility) — a arena cancelando é
+  // o outro caminho, em cancelSlot.ts, e lá não há janela.
+  const adminClient = createAdminClient()
+  const { data: slot } = await adminClient
+    .from('dayuse_slots')
+    .select('date, start_time')
+    .eq('id', row.slot_id)
+    .maybeSingle()
+
+  let refund: { due: boolean; refundId: string | null; reason?: string } = {
+    due: false, refundId: null,
+  }
+  if (slot) {
+    const r = await openRefundForBooking(adminClient, {
+      orgId: row.organization_id,
+      bookingId,
+      studentId: user.id,
+      slot: slot as { date: string; start_time: string },
+      bookedAtIso: row.booked_at,
+      cause: 'aluno_cancelou',
+      pixKey: row.refund_pix_key,
+      pixOwner: row.refund_pix_owner,
+    })
+    refund = {
+      due: r.eligibility.due,
+      refundId: r.refundId,
+      reason: r.eligibility.denyReason,
+    }
+  }
+
   revalidatePath('/agendar/dayuse')
   revalidatePath('/home')
+  revalidatePath('/financeiro')
   // A página pública mostra vagas e "quem já vai": sem isto o cancelamento só
   // aparecia lá depois de o cache expirar.
-  if (cancelled) revalidatePath(`/d/${(cancelled as { slot_id: string }).slot_id}`)
-  return {}
+  revalidatePath(`/d/${row.slot_id}`)
+  return { refundDue: refund.due, refundId: refund.refundId, refundNote: refund.reason }
 }
