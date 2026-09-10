@@ -8,36 +8,49 @@ import { Button } from '@/components/ui/Button'
 import { formatTime } from '@/lib/utils/dateHelpers'
 import { deactivateDayUseSlot } from './actions'
 import { DayUseBadges } from './DayUseBadges'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseSlot } from '@/types'
 
 interface Props {
   slot: DayUseSlot
   bookingsCount: number
-  /** Preço PRETENDIDO pela academia (slot → padrão), em centavos. */
+  /** Preço da academia (slot → padrão), em centavos. */
   priceCents: number
-  /** Preço definido sem forma de cobrar — o card avisa em vez de dizer "Gratuito". */
-  unchargeable?: boolean
+  /** Pagamento na arena, sem cobrança online. */
+  payOnSite?: boolean
 }
 
-export function DayUseSlotCard({ slot, bookingsCount, priceCents, unchargeable = false }: Props) {
+export function DayUseSlotCard({ slot, bookingsCount, priceCents, payOnSite = false }: Props) {
   const [loading, setLoading] = useState(false)
+  const { confirm, dialog } = useConfirm()
   const isFull = bookingsCount >= slot.capacity
 
   async function handleRemove() {
     // O texto muda para slot gerado por recorrência: a geração NÃO ressuscita
     // data removida (ver features/dayuse/generation.ts), e o admin precisa
     // saber que remover aqui não desliga a recorrência inteira.
-    const escopo = slot.recurrence_id
-      ? 'Remover só esta data do day use recorrente?\n\nA recorrência continua ligada e as outras datas não mudam. Esta data não volta na geração automática.'
-      : 'Remover este slot de day use?'
+    const linhas: string[] = []
+    if (slot.recurrence_id) {
+      linhas.push(
+        'A recorrência continua ligada e as outras datas não mudam. Esta data não volta na geração automática.',
+      )
+    }
     // Quem tem reserva é avisado e quem pagou entra na fila de estorno: o admin
     // precisa saber disso ANTES de clicar, porque a partir daqui a academia
     // passa a DEVER dinheiro.
-    const consequencia = bookingsCount > 0
-      ? `\n\n${bookingsCount} reserva(s) serão canceladas, os alunos avisados e o estorno de quem pagou entra em Financeiro › Day use.`
-      : ''
-    const msg = `${escopo}${consequencia}`
-    if (!confirm(msg)) return
+    if (bookingsCount > 0) {
+      linhas.push(
+        `${bookingsCount} reserva(s) serão canceladas, os alunos avisados e o estorno de quem pagou entra em Financeiro › Day use.`,
+      )
+    }
+    const { ok } = await confirm({
+      title: slot.recurrence_id ? 'Remover só esta data?' : 'Remover este day use?',
+      message: linhas.join('\n'),
+      confirmLabel: 'Remover',
+      cancelLabel: 'Manter',
+      destructive: true,
+    })
+    if (!ok) return
     setLoading(true)
     await deactivateDayUseSlot(slot.id)
   }
@@ -50,7 +63,7 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents, unchargeable =
           sport={slot.sport}
           kind={slot.kind}
           priceCents={priceCents}
-          unchargeable={unchargeable}
+          payOnSite={payOnSite}
         />
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           {isFull
@@ -67,20 +80,17 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents, unchargeable =
           {bookingsCount}/{slot.capacity} {slot.kind === 'open' ? 'pessoas' : 'reservas'}
         </p>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        {/* A tela do day use é onde o admin vê quem está inscrito, confere
-            comprovante e divulga o link. Antes daqui a lista só dava a
-            contagem. */}
-        <Link
-          href={`/admin/grade/dayuse/${slot.id}`}
-          className="text-xs font-semibold text-brand-400 hover:text-brand-300"
-        >
-          Abrir
+      {/* Os dois na MESMA forma de botão, mudando só a cor. "Abrir" era texto
+          solto ao lado de um botão vermelho — parecia outra coisa. */}
+      <div className="flex shrink-0 flex-col items-stretch gap-2">
+        <Link href={`/admin/grade/dayuse/${slot.id}`} className="block">
+          <Button size="sm" className="w-full">Abrir</Button>
         </Link>
         <Button variant="danger" size="sm" disabled={loading} onClick={handleRemove}>
           {loading ? '...' : 'Remover'}
         </Button>
       </div>
+      {dialog}
     </Card>
   )
 }

@@ -198,11 +198,15 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   membership athlete"); o torneio (`registerExternal`) continua criando vínculo, e a
   divergência entre os dois fluxos é conhecida.
 - Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
-  A resolução mora em `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
-  + `getDayUsePricing` ([features/dayuse/pricing.ts](features/dayuse/pricing.ts)), e **tela e
-  cobrança têm de sair dessa mesma chamada**: "gratuito" é o caso em que a venda está
-  desligada ou o Mercado Pago não está conectado, que é exatamente quando `bookDayUse`
-  grava `confirmed` sem checkout.
+  **O preço é o preço** — `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
+  não é mais condicionado a "consigo cobrar no app". Já foi, e o resultado apareceu em uso
+  real: o admin definia R$ 20 e TODA tela, inclusive o link do aluno, dizia "Gratuito".
+  O que varia é **como se paga** (`resolveDayUsePaymentMethod`): carteira, Checkout Pro,
+  PIX na chave da arena ou **`on_site`** — pagar na porta, que é o caso mais comum e era
+  justamente o que virava "gratuito". `on_site` confirma a reserva na hora e deixa um
+  `payments` pendente com `gateway: 'on_site'` para o admin dar baixa (`markDayUsePaidOnSite`)
+  na tela do day use. `dayUsePriceView` devolve `payOnSite` para a tela dizer "pago na arena"
+  em vez de "gratuito"; "Gratuito" passou a significar só preço zero.
 - **Pagamento de day use tem MÉTODO e prazo por método** (`dayuse_bookings.payment_method`
   + `hold_until`, regras em [lib/dayuse/paymentMethod.ts](lib/dayuse/paymentMethod.ts)):
   `mercadopago` segura a vaga 30 min (o webhook confirma em segundos) e `pix_manual` segura
@@ -326,6 +330,23 @@ dependente (`is_dependent: true`) não tem login, então não ativa isto sozinho
 A mesma página traz mais duas leituras. **Simulação de escala** ([lib/plataforma/projecaoEscala.ts](lib/plataforma/projecaoEscala.ts)) extrapola do consumo real para um alvo (padrão: mil arenas × 300 alunos, ajustável por `?arenas=&alunos=`) — só a parte que cresce com aluno é multiplicada, o overhead fixo entra como parcela, e a projeção se declara não confiável abaixo de 200 alunos em vez de imprimir número bonito e errado. Ela assume o histórico por aluno de hoje, então `avaliarMaturidade` mostra a idade da base ao lado: em operação nova o número é **piso, não teto**. **Diagnóstico de arquitetura** ([lib/plataforma/diagnostico.ts](lib/plataforma/diagnostico.ts)) é um retrato datado dos achados da auditoria, não verificação viva — ao mexer num dos pontos, atualize o item.
 
 O que o painel **não** mede está listado nele mesmo (`LIMITES_EXTERNOS`): CPU/RAM da instância e queries caras ficam no painel do Supabase, invocações e GB-hrs no da Vercel. Os tetos em `LIMITES` vêm dos planos publicados e envelhecem — confira o pricing antes de decidir por eles.
+
+### Confirmação e botões
+
+Confirmação de ação passa por `useConfirm`/`ConfirmDialog`
+([components/ui/ConfirmDialog.tsx](components/ui/ConfirmDialog.tsx)), nunca por
+`window.confirm`/`window.prompt`: os nativos são do sistema operacional (cabeçalho
+"www.arenahub.website diz", botões do Chrome), não deixam destacar valor nem pintar a ação
+destrutiva, e `prompt` não explica para que serve o campo. `confirm({...})` devolve
+`{ ok, text }` — `text` é o campo opcional (`input`), usado por exemplo no motivo da recusa
+de um comprovante.
+
+**Todo botão tem superfície e sombra.** As quatro variantes de
+[components/ui/Button.tsx](components/ui/Button.tsx) — inclusive `ghost` — carregam fundo,
+borda e sombra. Ação escrita como texto solto no meio da tela não se lê como botão; quando
+a ação é um link (`next/link`), embrulhe um `<Button>` dentro do `<Link>` em vez de estilizar
+o `<a>`. Dois botões lado a lado com pesos diferentes (abrir/remover) usam a MESMA forma e
+mudam só a cor.
 
 ### Design System
 

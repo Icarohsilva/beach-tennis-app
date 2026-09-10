@@ -169,6 +169,8 @@ export interface BookDayUseResult {
   initPoint?: string
   /** Centavos abatidos do saldo quando ele cobriu a reserva inteira. */
   paidWithWalletCents?: number
+  /** Reserva confirmada com pagamento na arena; centavos a levar na hora. */
+  payOnSiteCents?: number
   /** Caminho PIX manual: a chave da arena e o valor a transferir. */
   pixKey?: string | null
   pixOwner?: string | null
@@ -224,6 +226,8 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   const pricing = await getDayUsePricing(orgId)
   // Centavos são a unidade de verdade (price_cents do slot); os reais só existem
   // porque a preferência do Mercado Pago e payments.amount são em reais.
+  // O preço é o preço (dayUseChargeCents = dayUsePriceCents): o que varia é
+  // onde ele é pago, e isso é o método logo abaixo.
   const priceCents = dayUseChargeCents(slotRow, pricing)
 
   // Carteira: crédito em dinheiro abate o day use antes do cartão. Aqui o
@@ -250,6 +254,8 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   const token = method === 'mercadopago' ? pricing.mpToken : null
   // Só o Checkout Pro abre preferência aqui; o PIX manual espera comprovante.
   const isPaid = Boolean(token)
+  // `on_site` confirma na hora: não há pagamento online a esperar, e segurar a
+  // vaga por prazo derrubaria a reserva de quem já está indo para a quadra.
   const pendingPayment = method === 'mercadopago' || method === 'pix_manual'
 
   // Saldo cobrindo o total: a reserva nasce confirmada e não há cobrança.
@@ -296,6 +302,35 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
         .eq('id', bookingId as string)
       return { error: w.error }
     }
+  }
+
+  if (method === 'on_site') {
+    // Dívida registrada para o admin dar baixa na tela do day use. Sem esta
+    // linha a arena não teria onde marcar quem pagou na porta — era a pergunta
+    // "como o admin sabe quem pagou?" sem resposta.
+    const { error: payErr } = await adminClient.from('payments').insert({
+      organization_id: orgId,
+      student_id: user.id,
+      subscription_id: null,
+      session_id: null,
+      amount: price,
+      currency: 'BRL',
+      status: 'pending',
+      type: 'day_use',
+      gateway: 'on_site',
+      gateway_payment_id: null,
+      dayuse_booking_id: bookingId as string,
+    })
+    if (payErr) {
+      console.error('[dayuse] payment on_site falhou', { bookingId, error: payErr.message })
+      // A reserva vale: o aluno tem a vaga e paga na arena. Perder a vaga por
+      // causa do registro da dívida seria pior que a dívida sem registro.
+    }
+
+    revalidatePath('/agendar/dayuse')
+    revalidatePath('/home')
+    revalidatePath(`/d/${slotId}`)
+    return { payOnSiteCents: gatewayCents }
   }
 
   if (method === 'pix_manual') {
@@ -613,5 +648,44 @@ export async function updateDayUseCover(
 
   revalidatePath(`/admin/grade/dayuse/${slotId}`)
   revalidatePath(`/d/${slotId}`)
+  return {}
+}
+
+/**
+ * Admin dá baixa num pagamento feito NA ARENA (dinheiro, maquininha, PIX na
+ * hora). É a resposta operacional para "quem já pagou?" no day use cobrado na
+ * porta — sem isto a lista de inscritos não distingue quem acertou de quem não.
+ */
+export async function markDayUsePaidOnSite(
+  bookingId: string,
+  method: 'dinheiro' | 'pix' | 'maquininha' = 'dinheiro',
+): Promise<{ error?: string }> {
+  const { orgId, userId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { data: booking } = await adminClient
+    .from('dayuse_bookings')
+    .select('id, slot_id')
+    .eq('id', bookingId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!booking) return { error: 'Reserva não encontrada.' }
+
+  const { data: updated } = await adminClient
+    .from('payments')
+    .update({
+      status: 'paid',
+      paid_at: new Date().toISOString(),
+      settled_by: userId,
+      settled_method: method,
+    })
+    .eq('dayuse_booking_id', bookingId)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  if (!updated) return { error: 'Não há pagamento pendente nesta reserva.' }
+
+  revalidatePath(`/admin/grade/dayuse/${(booking as { slot_id: string }).slot_id}`)
   return {}
 }

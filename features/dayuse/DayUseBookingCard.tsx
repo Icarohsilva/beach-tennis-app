@@ -9,6 +9,7 @@ import { bookDayUse, cancelDayUseBooking } from './actions'
 import { DayUseBadges } from './DayUseBadges'
 import { dayUseKindHint } from '@/lib/dayuse/dayUseKind'
 import { formatWalletCents, splitWithWallet } from '@/lib/wallet/wallet'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseSlot } from '@/types'
 
 interface Props {
@@ -35,6 +36,7 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
   const [status, setStatus] = useState<string | null>(myBookingStatus)
   const [localCount, setLocalCount] = useState(bookingsCount)
   const [showAttendees, setShowAttendees] = useState(false)
+  const { confirm, dialog } = useConfirm()
   const isFull = localCount >= slot.capacity
   // Mesma conta da reserva (splitWithWallet): o card não pode prometer um
   // abatimento diferente do que bookDayUse aplica.
@@ -64,7 +66,16 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
     if (!bookingId || bookingId === 'pending') return
     // Mesmo aviso da página pública (/d/[id]): as duas telas cancelam a mesma
     // reserva, e prazo diferente em cada uma é o aluno descobrindo no bolso.
-    if (cancelNotice && !confirm(`Cancelar sua reserva?\n\n${cancelNotice}`)) return
+    if (cancelNotice) {
+      const { ok } = await confirm({
+        title: 'Cancelar sua reserva?',
+        message: cancelNotice,
+        confirmLabel: 'Cancelar reserva',
+        cancelLabel: 'Manter',
+        destructive: true,
+      })
+      if (!ok) return
+    }
     setLoading(true)
     setError(null)
     const result = await cancelDayUseBooking(bookingId)
@@ -131,13 +142,9 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
                 <Badge variant="success">Reservado</Badge>
               )}
               {bookingId !== 'pending' && (
-                <button
-                  onClick={handleCancel}
-                  disabled={loading}
-                  className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
+                <Button variant="secondary" size="sm" disabled={loading} onClick={handleCancel}>
                   Cancelar
-                </button>
+                </Button>
               )}
             </div>
           ) : (
@@ -148,6 +155,7 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
         </div>
       </div>
       {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+      {dialog}
     </Card>
   )
 }

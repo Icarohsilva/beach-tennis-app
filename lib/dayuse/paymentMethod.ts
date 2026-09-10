@@ -18,9 +18,18 @@ export type DayUsePaymentMethod =
   | 'mercadopago'
   /** PIX na chave da arena, com comprovante conferido por gente. */
   | 'pix_manual'
+  /**
+   * Paga na arena, na hora. A reserva confirma na hora (não há pagamento online
+   * a esperar) e o `payments` pendente guarda a dívida para o admin dar baixa.
+   *
+   * É o caso mais comum de todos, e era o que o app tratava como GRATUITO —
+   * anunciando "Gratuito" um day use de R$ 20 e deixando a arena sem onde
+   * marcar quem pagou.
+   */
+  | 'on_site'
 
 export const DAY_USE_PAYMENT_METHODS: readonly DayUsePaymentMethod[] = [
-  'free', 'wallet', 'mercadopago', 'pix_manual',
+  'free', 'wallet', 'mercadopago', 'pix_manual', 'on_site',
 ]
 
 /** Minutos que a reserva segura a vaga esperando confirmação. */
@@ -29,6 +38,9 @@ const HOLD_MINUTES: Record<DayUsePaymentMethod, number> = {
   // ficar exaustivo — método novo não compila sem decidir a janela dele.
   free: 0,
   wallet: 0,
+  // Confirma na hora: quem paga na porta não tem prazo online a cumprir, e um
+  // prazo aqui derrubaria a reserva de quem já está indo para a quadra.
+  on_site: 0,
   // Checkout Pro: o webhook chega em segundos; 30 min é folga para o aluno
   // terminar de digitar o cartão. Era o único valor que existia, cravado dentro
   // da RPC.
@@ -57,7 +69,7 @@ export function holdUntilIso(
 
 /** O pagamento deste método é confirmado por gente da arena? */
 export function needsManualConfirmation(method: DayUsePaymentMethod): boolean {
-  return method === 'pix_manual'
+  return method === 'pix_manual' || method === 'on_site'
 }
 
 const LABEL: Record<DayUsePaymentMethod, string> = {
@@ -65,6 +77,7 @@ const LABEL: Record<DayUsePaymentMethod, string> = {
   wallet: 'Crédito no app',
   mercadopago: 'Cartão ou PIX (Mercado Pago)',
   pix_manual: 'PIX na chave da arena',
+  on_site: 'Pagar na arena',
 }
 
 export function paymentMethodLabel(method: DayUsePaymentMethod): string {
@@ -88,7 +101,7 @@ export function resolveDayUsePaymentMethod(input: {
   if (input.gatewayCents <= 0) return input.walletCents > 0 ? 'wallet' : 'free'
   if (input.hasMpToken) return 'mercadopago'
   if (input.hasPixKey) return 'pix_manual'
-  // Sem forma de cobrar: a reserva sai gratuita, como sempre saiu. Quem decide
-  // que isso não devia acontecer é a academia, ligando um dos dois.
-  return 'free'
+  // Sem cobrança online: paga na arena. Antes isto devolvia 'free', e era daí
+  // que saía o "Gratuito" num day use com preço definido.
+  return 'on_site'
 }

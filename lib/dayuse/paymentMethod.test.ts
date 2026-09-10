@@ -18,6 +18,8 @@ describe('holdMinutesFor', () => {
   it('confirmado na hora não segura nada', () => {
     expect(holdMinutesFor('free')).toBe(0)
     expect(holdMinutesFor('wallet')).toBe(0)
+    // Quem paga na porta não tem prazo online a cumprir.
+    expect(holdMinutesFor('on_site')).toBe(0)
   })
 })
 
@@ -56,9 +58,17 @@ describe('resolveDayUsePaymentMethod', () => {
     expect(resolveDayUsePaymentMethod({ ...base, hasMpToken: false })).toBe('pix_manual')
   })
 
-  it('sem gateway e sem chave PIX, segue gratuito como sempre foi', () => {
+  it('sem cobrança online, o day use é pago NA ARENA — não gratuito', () => {
+    // Era daqui que saía o "Gratuito" num day use de R$ 20: sem gateway e sem
+    // chave PIX, a reserva era tratada como sem preço.
     expect(resolveDayUsePaymentMethod({ ...base, hasMpToken: false, hasPixKey: false }))
-      .toBe('free')
+      .toBe('on_site')
+  })
+
+  it('preço zero é gratuito de verdade, mesmo sem cobrança online', () => {
+    expect(resolveDayUsePaymentMethod({
+      gatewayCents: 0, walletCents: 0, hasMpToken: false, hasPixKey: false,
+    })).toBe('free')
   })
 
   it('crédito cobrindo tudo dispensa cobrança', () => {

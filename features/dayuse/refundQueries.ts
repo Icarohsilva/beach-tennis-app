@@ -1,7 +1,7 @@
 // features/dayuse/refundQueries.ts
 // Leitura dos estornos de day use: a lista do aluno e a fila do admin.
 import type { createAdminClient } from '@/lib/supabase/server'
-import { fetchAllPages } from '@/lib/supabase/paginate'
+import { IN_CHUNK_SIZE, chunk, fetchAllPages } from '@/lib/supabase/paginate'
 import type { RefundCause, RefundMethod, RefundStatus } from '@/lib/dayuse/refundRules'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -93,34 +93,40 @@ export async function getOrgRefunds(
   client: AdminClient,
   orgId: string,
 ): Promise<AdminRefund[]> {
-  const rows = await fetchAllPages<RefundRow & {
-    dayuse_bookings: unknown
-    profiles: { full_name: string } | { full_name: string }[] | null
-  }>(
+  // O nome do aluno vem numa leitura SEPARADA, de propósito. `dayuse_refunds`
+  // tem duas FKs para `profiles` (student_id e paid_by), e um embed
+  // `profiles(...)` fica ambíguo: o PostgREST recusa a consulta inteira com
+  // "more than one relationship was found" — a tela quebrava com erro de
+  // servidor, não com lista vazia.
+  const rows = await fetchAllPages<RefundRow & { dayuse_bookings: unknown }>(
     (from, to) =>
       client
         .from('dayuse_refunds')
         .select(`
           id, organization_id, booking_id, student_id, amount_cents, cause, method, status,
           pix_key, pix_owner, proof_url, paid_at, confirmed_at, created_at,
-          dayuse_bookings!inner(dayuse_slots(id, date, start_time, end_time, court)),
-          profiles(full_name)
+          dayuse_bookings!inner(dayuse_slots(id, date, start_time, end_time, court))
         `)
         .eq('organization_id', orgId)
         .order('created_at', { ascending: true })
-        .range(from, to) as unknown as Page<RefundRow & {
-          dayuse_bookings: unknown
-          profiles: { full_name: string } | { full_name: string }[] | null
-        }>,
+        .range(from, to) as unknown as Page<RefundRow & { dayuse_bookings: unknown }>,
     { label: 'dayuse/estornos-admin' },
   )
+
+  const studentIds = Array.from(new Set(rows.map((r) => r.student_id)))
+  const nameById = new Map<string, string>()
+  for (const part of chunk(studentIds, IN_CHUNK_SIZE)) {
+    const { data: profs } = await client.from('profiles').select('id, full_name').in('id', part)
+    for (const p of (profs ?? []) as { id: string; full_name: string }[]) {
+      nameById.set(p.id, p.full_name)
+    }
+  }
 
   const out: AdminRefund[] = []
   for (const r of rows) {
     const booking = Array.isArray(r.dayuse_bookings) ? r.dayuse_bookings[0] : r.dayuse_bookings
     const slotRaw = (booking as { dayuse_slots?: unknown } | null)?.dayuse_slots ?? null
     const slot = (Array.isArray(slotRaw) ? slotRaw[0] : slotRaw) as AdminRefund['slot']
-    const prof = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
 
     let proofSignedUrl: string | null = null
     if (r.proof_url) {
@@ -132,7 +138,7 @@ export async function getOrgRefunds(
 
     out.push({
       ...r,
-      studentName: prof?.full_name ?? 'Aluno',
+      studentName: nameById.get(r.student_id) ?? 'Aluno',
       slot: slot ?? null,
       proofSignedUrl,
     })

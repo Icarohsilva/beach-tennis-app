@@ -107,13 +107,14 @@ export function RefundCard({ refund }: { refund: StudentRefund }) {
                 PIX: <span className="text-white">{refund.pix_key}</span>
                 {refund.pix_owner && <span className="text-slate-500"> · {refund.pix_owner}</span>}
               </p>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
                 onClick={() => setEditingKey(true)}
-                className="shrink-0 text-xs text-brand-400 hover:text-brand-300"
               >
                 Trocar
-              </button>
+              </Button>
             </div>
           )}
 

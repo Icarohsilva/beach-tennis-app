@@ -9,12 +9,14 @@ import { Button } from '@/components/ui/Button'
 import { formatDate, formatTime } from '@/lib/utils/dateHelpers'
 import { formatDayUsePrice } from '@/lib/dayuse/dayUseKind'
 import { confirmDayUseReceipt, rejectDayUseReceipt } from '@/features/dayuse/receiptActions'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { PendingReceipt } from '@/features/dayuse/refundQueries'
 
 export function ReceiptQueueRow({ item }: { item: PendingReceipt }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const { confirm, dialog } = useConfirm()
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null)
@@ -23,6 +25,24 @@ export function ReceiptQueueRow({ item }: { item: PendingReceipt }) {
       if (r.error) { setError(r.error); return }
       router.refresh()
     })
+  }
+
+  async function handleReject() {
+    const { ok, text } = await confirm({
+      title: 'Liberar a vaga?',
+      message:
+        'A reserva é cancelada e o aluno é avisado por notificação.\n'
+        + 'Se ele já tinha abatido crédito, o valor volta para o saldo dele.',
+      input: {
+        label: 'Motivo (aparece na notificação do aluno)',
+        placeholder: 'Ex: não localizei o PIX',
+      },
+      confirmLabel: 'Liberar vaga',
+      cancelLabel: 'Voltar',
+      destructive: true,
+    })
+    if (!ok) return
+    run(() => rejectDayUseReceipt(item.bookingId, text))
   }
 
   return (
@@ -76,14 +96,7 @@ export function ReceiptQueueRow({ item }: { item: PendingReceipt }) {
             variant="danger"
             size="sm"
             disabled={isPending}
-            onClick={() => {
-              const motivo = prompt(
-                'Liberar a vaga e avisar o aluno. Motivo (aparece na notificação):',
-                '',
-              )
-              if (motivo === null) return
-              run(() => rejectDayUseReceipt(item.bookingId, motivo))
-            }}
+            onClick={handleReject}
           >
             Liberar vaga
           </Button>
@@ -91,6 +104,7 @@ export function ReceiptQueueRow({ item }: { item: PendingReceipt }) {
         {!item.hasReceipt && (
           <p className="text-xs text-slate-600">Confirmar só depois do comprovante.</p>
         )}
+        {dialog}
       </div>
     </li>
   )

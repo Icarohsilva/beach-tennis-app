@@ -92,29 +92,24 @@ describe('formatDayUsePrice', () => {
 })
 
 describe('dayUsePriceView', () => {
-  it('com gateway, as duas leituras batem', () => {
-    const v = dayUsePriceView({ price_cents: 4000 }, { defaultCents: 0, canCharge: true })
-    expect(v).toEqual({ intendedCents: 4000, chargeCents: 4000, unchargeable: false })
+  it('o preço é o preço, com ou sem cobrança no app', () => {
+    // O defeito relatado: o admin definia R$ 20 e TODA tela — inclusive o link
+    // do aluno — dizia "Gratuito", porque a leitura de preço era condicionada a
+    // conseguir cobrar dentro do app.
+    expect(dayUsePriceView({ price_cents: 2000 }, { defaultCents: 0, canCharge: true }))
+      .toEqual({ priceCents: 2000, collectedInApp: true, payOnSite: false })
+    expect(dayUsePriceView({ price_cents: 2000 }, { defaultCents: 0, canCharge: false }))
+      .toEqual({ priceCents: 2000, collectedInApp: false, payOnSite: true })
   })
 
-  it('preço definido SEM forma de cobrar: o admin vê o preço e o aviso', () => {
-    // O defeito relatado: o admin digitou R$ 40 e a tela dizia "Gratuito",
-    // escondendo que faltava conectar o Mercado Pago ou cadastrar a chave PIX.
-    const v = dayUsePriceView({ price_cents: 4000 }, { defaultCents: 0, canCharge: false })
-    expect(v.intendedCents).toBe(4000)
-    expect(v.chargeCents).toBe(0)
-    expect(v.unchargeable).toBe(true)
+  it('sem cobrança no app, preço zero segue gratuito e não "pague na arena"', () => {
+    expect(dayUsePriceView({ price_cents: 0 }, { defaultCents: 0, canCharge: false }))
+      .toEqual({ priceCents: 0, collectedInApp: false, payOnSite: false })
   })
 
-  it('day use realmente gratuito não é "sem cobrança"', () => {
-    // Sem preço não há nada a avisar: o admin quis de graça.
-    const v = dayUsePriceView({ price_cents: 0 }, { defaultCents: 0, canCharge: false })
-    expect(v).toEqual({ intendedCents: 0, chargeCents: 0, unchargeable: false })
-  })
-
-  it('herda o padrão da academia na leitura de intenção', () => {
+  it('herda o padrão da academia', () => {
     const v = dayUsePriceView({ price_cents: null }, { defaultCents: 3000, canCharge: false })
-    expect(v.intendedCents).toBe(3000)
-    expect(v.unchargeable).toBe(true)
+    expect(v.priceCents).toBe(3000)
+    expect(v.payOnSite).toBe(true)
   })
 })

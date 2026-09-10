@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { Check, Share2 } from 'lucide-react'
 import { buildWhatsAppShareUrl } from '@/lib/utils/whatsappLink'
+import { Button } from '@/components/ui/Button'
 
 export function ShareDayUse({ message }: { message: string }) {
   const [copied, setCopied] = useState(false)
@@ -31,14 +32,10 @@ export function ShareDayUse({ message }: { message: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={handleShare}
-        className="inline-flex h-9 items-center gap-1.5 rounded-full border border-surface-border bg-surface-card px-3 text-xs font-semibold text-white transition-colors hover:bg-surface"
-      >
+      <Button variant="secondary" size="sm" className="gap-1.5" onClick={handleShare}>
         {copied ? <Check className="h-3.5 w-3.5" /> : <Share2 className="h-3.5 w-3.5" />}
         {copied ? 'Convite copiado' : 'Compartilhar'}
-      </button>
+      </Button>
       <a
         href={buildWhatsAppShareUrl(message)}
         target="_blank"

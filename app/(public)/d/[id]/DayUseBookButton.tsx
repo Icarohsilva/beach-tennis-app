@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { bookDayUse, cancelDayUseBooking } from '@/features/dayuse/actions'
 import { setBookingRefundPixKey } from '@/features/dayuse/refundActions'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 
 interface Props {
   slotId: string
@@ -77,6 +78,7 @@ export function DayUseCancelButton({
   const [key, setKey] = useState(pixKey ?? '')
   const [owner, setOwner] = useState(pixOwner ?? '')
   const [savedKey, setSavedKey] = useState(Boolean(pixKey))
+  const { confirm, dialog } = useConfirm()
   const router = useRouter()
 
   function handleSaveKey() {
@@ -90,8 +92,15 @@ export function DayUseCancelButton({
     })
   }
 
-  function handleCancel() {
-    if (!confirm(`Cancelar sua reserva?\n\n${notice}`)) return
+  async function handleCancel() {
+    const { ok } = await confirm({
+      title: 'Cancelar sua reserva?',
+      message: notice,
+      confirmLabel: 'Cancelar reserva',
+      cancelLabel: 'Manter',
+      destructive: true,
+    })
+    if (!ok) return
     setError(null)
     setMessage(null)
     startTransition(async () => {
@@ -120,30 +129,30 @@ export function DayUseCancelButton({
             onChange={(e) => setOwner(e.target.value)}
             placeholder="Nome do titular da conta"
           />
-          <button
-            type="button"
-            onClick={handleSaveKey}
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={isPending || !key.trim()}
-            className="text-xs text-brand-400 transition-colors hover:text-brand-300 disabled:opacity-50"
+            onClick={handleSaveKey}
           >
             {isPending ? 'Salvando...' : 'Salvar chave PIX'}
-          </button>
+          </Button>
         </div>
       )}
 
       <p className="text-center text-xs text-slate-500">{notice}</p>
-      <div className="text-center">
-        <button
-          type="button"
-          disabled={isPending}
-          onClick={handleCancel}
-          className="text-xs text-red-400 transition-colors hover:text-red-300"
-        >
-          {isPending ? 'Cancelando...' : 'Cancelar minha reserva'}
-        </button>
-      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="w-full"
+        disabled={isPending}
+        onClick={handleCancel}
+      >
+        {isPending ? 'Cancelando...' : 'Cancelar minha reserva'}
+      </Button>
       {error && <p className="text-center text-xs text-red-400">{error}</p>}
       {message && <p className="text-center text-xs text-green-400">{message}</p>}
+      {dialog}
     </div>
   )
 }

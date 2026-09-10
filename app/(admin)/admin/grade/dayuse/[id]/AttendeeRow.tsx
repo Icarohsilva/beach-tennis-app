@@ -11,6 +11,8 @@ import { paymentMethodLabel } from '@/lib/dayuse/paymentMethod'
 import { refundStatusLabel } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { confirmDayUseReceipt, rejectDayUseReceipt } from '@/features/dayuse/receiptActions'
+import { markDayUsePaidOnSite } from '@/features/dayuse/actions'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { AdminAttendee } from '@/features/dayuse/adminSlotQuery'
 
 /** O rótulo de pagamento é o do PAGAMENTO, não o da reserva. */
@@ -18,6 +20,7 @@ function paymentBadge(a: AdminAttendee) {
   if (a.paymentMethod === 'free') return <Badge variant="default">Gratuito</Badge>
   if (a.paymentMethod === 'wallet') return <Badge variant="success">Pago com crédito</Badge>
   if (a.payment?.status === 'paid') return <Badge variant="success">Pago</Badge>
+  if (a.paymentMethod === 'on_site') return <Badge variant="danger">A receber na arena</Badge>
   if (a.paymentMethod === 'pix_manual') {
     return a.hasReceipt
       ? <Badge variant="warning">Comprovante a conferir</Badge>
@@ -30,6 +33,7 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const { confirm, dialog } = useConfirm()
 
   function run(fn: () => Promise<{ error?: string }>) {
     setError(null)
@@ -40,9 +44,32 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
     })
   }
 
+
+  async function handleReject() {
+    const { ok, text } = await confirm({
+      title: 'Liberar a vaga?',
+      message:
+        'A reserva é cancelada e o aluno é avisado por notificação.\n'
+        + 'Se ele já tinha abatido crédito, o valor volta para o saldo dele.',
+      input: {
+        label: 'Motivo (aparece na notificação do aluno)',
+        placeholder: 'Ex: não localizei o PIX',
+      },
+      confirmLabel: 'Liberar vaga',
+      cancelLabel: 'Voltar',
+      destructive: true,
+    })
+    if (!ok) return
+    run(() => rejectDayUseReceipt(item.bookingId, text))
+  }
+
   const cancelado = item.status === 'cancelled'
   const podeConferir = item.paymentMethod === 'pix_manual'
     && item.status === 'pending_payment'
+  // Pago na arena: a baixa é do admin, e a reserva já está confirmada.
+  const podeDarBaixa = item.paymentMethod === 'on_site'
+    && item.status !== 'cancelled'
+    && item.payment?.status === 'pending'
 
   return (
     <li className={`flex flex-col gap-2 py-3 xs:flex-row xs:items-start xs:justify-between ${cancelado ? 'opacity-60' : ''}`}>
@@ -110,6 +137,15 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
             WhatsApp
           </a>
         )}
+        {podeDarBaixa && (
+          <Button
+            size="sm"
+            disabled={isPending}
+            onClick={() => run(() => markDayUsePaidOnSite(item.bookingId))}
+          >
+            Marcar como pago
+          </Button>
+        )}
         {podeConferir && (
           <div className="flex gap-2">
             <Button
@@ -123,16 +159,13 @@ export function AttendeeRow({ item }: { item: AdminAttendee }) {
               variant="danger"
               size="sm"
               disabled={isPending}
-              onClick={() => {
-                const motivo = prompt('Liberar a vaga e avisar o aluno. Motivo:', '')
-                if (motivo === null) return
-                run(() => rejectDayUseReceipt(item.bookingId, motivo))
-              }}
+              onClick={handleReject}
             >
               Liberar vaga
             </Button>
           </div>
         )}
+        {dialog}
       </div>
     </li>
   )

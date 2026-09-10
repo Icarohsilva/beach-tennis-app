@@ -15,6 +15,7 @@ import {
   dayUseKindHint,
   formatDayUsePrice,
 } from '@/lib/dayuse/dayUseKind'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { deactivateDayUseSlot, updateDayUseSlot } from '@/features/dayuse/actions'
 import type { DayUseKind, DayUseSlot } from '@/types'
 
@@ -37,6 +38,7 @@ export function EditDayUseForm({
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [kind, setKind] = useState<DayUseKind>(slot.kind)
+  const { confirm, dialog } = useConfirm()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -57,11 +59,17 @@ export function EditDayUseForm({
     })
   }
 
-  function handleCancel() {
-    const consequencia = activeBookings > 0
-      ? `\n\n${activeBookings} reserva(s) serão canceladas, os alunos avisados e o estorno de quem pagou entra em Financeiro › Day use.`
-      : ''
-    if (!confirm(`Cancelar este day use?${consequencia}`)) return
+  async function handleCancel() {
+    const { ok } = await confirm({
+      title: 'Cancelar este day use?',
+      message: activeBookings > 0
+        ? `${activeBookings} reserva(s) serão canceladas, os alunos avisados e o estorno de quem pagou entra em Financeiro › Day use.`
+        : 'O horário sai da agenda e do link público.',
+      confirmLabel: 'Cancelar day use',
+      cancelLabel: 'Voltar',
+      destructive: true,
+    })
+    if (!ok) return
     setError(null)
     startTransition(async () => {
       const r = await deactivateDayUseSlot(slot.id)
@@ -160,6 +168,7 @@ export function EditDayUseForm({
 
       {error && <p className="text-xs text-red-400">{error}</p>}
       {message && <p className="text-xs text-green-400">{message}</p>}
+      {dialog}
     </Card>
   )
 }

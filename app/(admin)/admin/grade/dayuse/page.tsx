@@ -66,9 +66,9 @@ export default async function AdminDayUsePage() {
     countMap.set(b.slot_id, (countMap.get(b.slot_id) ?? 0) + 1)
   }
 
-  // Slots com preço que não vão cobrar nada. É a checagem que o defeito
-  // relatado pedia: o admin digitou R$ 40 e a tela dizia "Gratuito".
-  const semCobranca = slotList.filter((s) => dayUsePriceView(s, pricing).unchargeable)
+  // Slots cobrados na arena (sem pagamento online). Não é defeito — é o modo
+  // mais comum —, mas a arena precisa saber que o app não recolhe esse dinheiro.
+  const naArena = slotList.filter((s) => dayUsePriceView(s, pricing).payOnSite)
 
   const byDate = new Map<string, DayUseSlot[]>()
   for (const slot of slotList) {
@@ -89,18 +89,20 @@ export default async function AdminDayUsePage() {
         <p className="text-slate-400 text-sm">{slotList.length} slots futuros</p>
       </div>
 
-      {/* Preço definido e nenhuma forma de cobrar: sem este aviso a arena
-          trabalha de graça sem saber — a tela dizia só "Gratuito". */}
-      {semCobranca.length > 0 && (
+      {/* Sem pagamento online, o preço é cobrado na arena. O aviso existe porque
+          a arena precisa saber que o app não recolhe esse dinheiro — antes daqui
+          a tela simplesmente dizia "Gratuito". */}
+      {naArena.length > 0 && (
         <Card className="border-yellow-700/50">
           <p className="text-sm font-semibold text-yellow-300">
-            {semCobranca.length === 1
-              ? '1 day use com preço não está sendo cobrado'
-              : `${semCobranca.length} day use com preço não estão sendo cobrados`}
+            {naArena.length === 1
+              ? '1 day use é pago na arena'
+              : `${naArena.length} day use são pagos na arena`}
           </p>
           <p className="mt-1 text-xs text-slate-300">
-            A academia não tem Mercado Pago conectado nem chave PIX cadastrada, então a
-            reserva sai gratuita mesmo com preço definido.
+            O aluno vê o preço e reserva pelo app, mas o pagamento acontece na porta —
+            a academia dá baixa na tela de cada day use. Para receber online, conecte o
+            Mercado Pago ou cadastre a chave PIX.
           </p>
           <div className="mt-2 flex flex-wrap gap-3">
             <Link
@@ -145,8 +147,8 @@ export default async function AdminDayUsePage() {
                     key={slot.id}
                     slot={slot}
                     bookingsCount={countMap.get(slot.id) ?? 0}
-                    priceCents={dayUsePriceView(slot, pricing).intendedCents}
-                    unchargeable={dayUsePriceView(slot, pricing).unchargeable}
+                    priceCents={dayUsePriceView(slot, pricing).priceCents}
+                    payOnSite={dayUsePriceView(slot, pricing).payOnSite}
                   />
                 ))}
               </div>
