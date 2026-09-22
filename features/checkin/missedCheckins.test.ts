@@ -30,6 +30,8 @@ function makeClient(opts: {
   partner?: string | null
   checkinsOnDate?: number
   existingPendency?: { id: string } | null
+  /** A reserva daquela sessão foi paga com crédito avulso. */
+  paidWithCredit?: boolean
 }) {
   const inserts: { table: string; row: Record<string, unknown> }[] = []
 
@@ -52,6 +54,9 @@ function makeClient(opts: {
         }
         if (table === 'missed_checkins') {
           return Promise.resolve({ data: opts.existingPendency ?? null })
+        }
+        if (table === 'session_bookings') {
+          return Promise.resolve({ data: opts.paidWithCredit ? { id: 'bk-1' } : null })
         }
         return Promise.resolve({ data: null })
       },
@@ -90,6 +95,16 @@ describe('ensureMissedCheckin', () => {
 
   it('já fez check-in na data: o repasse veio, nada a cobrar', async () => {
     const { client, inserts } = makeClient({ partner: 'wellhub', checkinsOnDate: 1 })
+    const r = await ensureMissedCheckin(client, INPUT)
+    expect(r.created).toBe(false)
+    expect(inserts).toEqual([])
+  })
+
+  it('aula paga com crédito não gera pendência — seria cobrar duas vezes', async () => {
+    // O aluno de parceiro pode escolher gastar 1 crédito em vez do check-in
+    // (resolveClassAccess). Essa aula já está paga, então a falta nela não deixou
+    // repasse nenhum de fora.
+    const { client, inserts } = makeClient({ partner: 'wellhub', paidWithCredit: true })
     const r = await ensureMissedCheckin(client, INPUT)
     expect(r.created).toBe(false)
     expect(inserts).toEqual([])

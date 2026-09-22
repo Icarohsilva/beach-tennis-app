@@ -38,6 +38,10 @@ export interface EnsureMissedCheckinResult {
  * Não cria quando:
  *  - o aluno não tem parceiro na academia — a falta dele não custou repasse nenhum
  *    (quem não é parceiro nunca gera pendência de check-in);
+ *  - a reserva daquela sessão foi paga com CRÉDITO — o aluno de parceiro que
+ *    escolhe gastar um crédito avulso já pagou a aula, e a academia não esperava
+ *    check-in nenhum dele ali. Cobrar o check-in que faltou seria cobrar duas
+ *    vezes pela mesma aula;
  *  - já existe check-in do aluno naquela data — ele bipou, o repasse veio; a falta
  *    marcada na chamada é uma divergência de presença, não de check-in;
  *  - já existe pendência para o par (aluno, sessão) — garantido pelo índice único
@@ -76,6 +80,23 @@ export async function ensureMissedCheckin(
     .maybeSingle()
 
   if (existing) {
+    return { created: false, openCount: await countOpenMissedCheckins(client, studentId, orgId) }
+  }
+
+  // 2.5. Pagou esta aula com crédito? Então ela nunca dependeu do parceiro.
+  //      Desde que o aluno de Wellhub/TotalPass pode escolher gastar crédito em vez
+  //      do check-in (resolveClassAccess), a falta nessa aula não deixou repasse
+  //      nenhum de fora — a aula já estava paga. Sem esta trava, escolher crédito
+  //      passaria a custar DUAS vezes: o crédito na reserva e a pendência na falta.
+  const { data: paidBooking } = await client
+    .from('session_bookings')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('session_id', sessionId)
+    .eq('credit_used', true)
+    .maybeSingle()
+
+  if (paidBooking) {
     return { created: false, openCount: await countOpenMissedCheckins(client, studentId, orgId) }
   }
 

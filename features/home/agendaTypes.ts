@@ -3,7 +3,7 @@
 // compartilhada entre a faixa da semana, a ficha em modal e o calendário — e um
 // deles importar o outro só pelo tipo criaria ciclo.
 import type { SelfCheckinView } from '@/features/checkin/selfCheckinQueries'
-import type { Gender } from '@/types'
+import type { CheckinPartner, Gender } from '@/types'
 
 /**
  * Um dependente do responsável, com o que ele já tem NESTA sessão.
@@ -82,10 +82,19 @@ export interface AgendaSession {
    */
   guardianOptions?: GuardianOption[]
   /**
-   * O aluno tem plano com cota E crédito avulso, então pode escolher com o que
-   * paga. Ausente quando só existe um caminho — perguntar seria ruído.
+   * O aluno tem um caminho padrão (parceiro ou plano com cota) E crédito avulso,
+   * então pode escolher com o que paga. Ausente quando só existe um caminho —
+   * perguntar seria ruído.
    */
   canChoosePayment?: boolean
+  /**
+   * Qual é o caminho padrão, para a ficha nomear o cartão de cima. O aluno de
+   * Wellhub/TotalPass não tem "aula do plano": o que ele gasta ao entrar é um
+   * check-in do parceiro, e chamar isso de plano descreveria outra coisa.
+   */
+  paymentDefault?: 'plan' | 'partner'
+  /** Qual parceiro, quando `paymentDefault` é 'partner' — o aluno lê o nome dele. */
+  partner?: CheckinPartner
   /** Saldo de crédito avulso do aluno, para a ficha explicar o que ele gasta. */
   creditsBalance?: number
   /**

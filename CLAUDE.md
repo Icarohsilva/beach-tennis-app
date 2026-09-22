@@ -298,6 +298,18 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   têm de concordar: reservar, entrar na fila e ser promovido pela fila. A regra em si continua
   pura em `resolveClassAccess` ([lib/utils/accessRules.ts](lib/utils/accessRules.ts)).
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
+- **Parceiro é o caminho PADRÃO, não o único.** Em `resolveClassAccess` a escolha
+  explícita do aluno (`preferCredit`) passa à frente de `partner`: quem tem
+  Wellhub/TotalPass **e** crédito avulso decide, no modal da aula, se gasta o check-in
+  ou 1 crédito. Sem escolher nada ele entra pelo parceiro, de graça — o cartão do
+  parceiro nasce selecionado, porque crédito gasto por engano é dinheiro do aluno. A
+  ficha só pergunta quando os dois caminhos existem (`canChoosePayment`), e
+  `paymentDefault` diz qual nomear no cartão de cima; para parceiro o rótulo é
+  "Check-in Wellhub", nunca "aula do plano". A consequência que **precisa** andar
+  junto: `ensureMissedCheckin` não abre pendência quando a reserva daquela sessão tem
+  `credit_used` — a aula já foi paga, e cobrar o check-in que faltou cobraria duas
+  vezes. O parceiro segue isento de cota e de teto diário, e as negações de situação
+  (inativo, dívida, pendência, férias) continuam valendo antes de tudo
 - Dependents (`is_dependent: true`) link to a `parent_id` who handles payment
 - Aluno **sem e-mail** é cadastro gerenciado pela academia: linha em `profiles` com UUID
   próprio, sem usuário de auth (a FK para `auth.users` caiu em `20260626000300`), e sem login.

@@ -18,7 +18,16 @@ import {
 } from '@/features/aulas/guardianActions'
 import { SelfCheckinPanel } from '@/features/checkin/SelfCheckinPanel'
 import type { AgendaSession, GuardianOption } from './agendaTypes'
-import type { PayWith } from '@/types'
+import type { CheckinPartner, PayWith } from '@/types'
+
+/**
+ * O nome do parceiro como o aluno o conhece. A ficha diz "Check-in Wellhub", e
+ * não "aula do plano": o que ele gasta ao entrar é um check-in da operadora.
+ */
+const PARTNER_LABEL: Record<CheckinPartner, string> = {
+  wellhub: 'Wellhub',
+  totalpass: 'TotalPass',
+}
 
 /** Primeiro nome: a ficha fala com o pai sobre o filho, não sobre um cadastro. */
 function firstName(name: string): string {
@@ -385,7 +394,11 @@ export function SessionModal({
 
         {/* Escolher com o que paga. Só aparece quando as duas formas existem de
             verdade: com uma só, perguntar é ruído. Crédito não gasta a cota do
-            plano nem esbarra no teto diário — é aula comprada à parte. */}
+            plano nem esbarra no teto diário — é aula comprada à parte, e para o
+            aluno de parceiro é o que deixa o check-in da operadora guardado. O
+            cartão da esquerda é sempre o caminho PADRÃO (o mesmo que o servidor
+            aplicaria sem escolha), e nasce selecionado: um crédito gasto por
+            engano é dinheiro do aluno. */}
         {/* A vaga da aula fixa continua sendo do aluno que avisou que falta: voltar
             não gasta plano nem crédito. Dizer isso evita a leitura de que sair da
             aula fixa custou a vaga — e é o que justifica não perguntar abaixo
@@ -405,8 +418,16 @@ export function SessionModal({
               <PaymentChoice
                 active={payWith !== 'credit'}
                 onClick={() => setPayWith('plan')}
-                label="Aula do plano"
-                hint="Conta na sua cota"
+                label={
+                  session.paymentDefault === 'partner'
+                    ? `Check-in ${PARTNER_LABEL[session.partner ?? 'wellhub']}`
+                    : 'Aula do plano'
+                }
+                hint={
+                  session.paymentDefault === 'partner'
+                    ? 'Bipe na recepção'
+                    : 'Conta na sua cota'
+                }
               />
               <PaymentChoice
                 active={payWith === 'credit'}
@@ -415,7 +436,9 @@ export function SessionModal({
                 hint={
                   session.creditsBalance !== undefined
                     ? `Você tem ${session.creditsBalance}`
-                    : 'Não conta na cota'
+                    : session.paymentDefault === 'partner'
+                      ? 'Guarda seu check-in'
+                      : 'Não conta na cota'
                 }
               />
             </div>

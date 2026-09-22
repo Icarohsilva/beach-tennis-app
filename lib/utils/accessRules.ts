@@ -93,8 +93,10 @@ export interface AccessInput {
  * Decide o acesso do aluno a uma aula. Pura: toda busca fica no caller.
  *
  * A dívida bloqueia ANTES de tudo, inclusive quem tem plano. Em seguida vem a
- * pendência de check-in, e só depois o parceiro, que é isento da cota e do teto:
- * quem tem Wellhub e plano ao mesmo tempo, o Wellhub prevalece (spec de cota §4).
+ * pendência de check-in, depois a escolha explícita do aluno (`preferCredit`) e
+ * só então o parceiro, que é isento da cota e do teto: quem tem Wellhub e plano
+ * ao mesmo tempo, o Wellhub prevalece sobre o PLANO (spec de cota §4) — mas não
+ * sobre um crédito que o aluno pediu para gastar.
  *
  * A pendência de check-in tem que ser avaliada ANTES do grant de parceiro, e não
  * junto da cota: o parceiro é isento de cota e de teto diário, então se a checagem
@@ -121,13 +123,20 @@ export function resolveClassAccess(input: AccessInput): AccessDecision {
   if (isMissedCheckinBlocked(input.openMissedCheckins, input.missedCheckinBlockLimit)) {
     return { denied: 'blocked_by_missed_checkins' }
   }
-  if (input.partner) return { grant: 'partner' }
-
   // Pagar com crédito é comprar a aula de novo: nem a cota do ciclo nem o teto
   // diário se aplicam, porque os dois medem o consumo do PLANO. Fica depois das
   // negações de acesso (dívida, inativo, pendência) de propósito — aquelas não são
   // sobre quanto o aluno já usou, e crédito não as compra.
+  //
+  // E fica ANTES de `partner`, que é a única razão de esta linha ter subido: o
+  // parceiro continua sendo o caminho PADRÃO de quem tem Wellhub/TotalPass — sem
+  // escolha nenhuma (`preferCredit` falso) ele entra por ali, de graça —, mas é
+  // uma franquia limitada pela operadora e a falta sem bipar gera pendência de
+  // check-in. Recusar ao aluno o crédito que ele COMPROU seria decidir por ele
+  // como gastar a franquia dele.
   if (input.preferCredit && input.creditsBalance >= 1) return { grant: 'credit' }
+
+  if (input.partner) return { grant: 'partner' }
 
   if (input.quotaEnforced) {
     if (exceedsDailyCap(input.bookingsOnDate, input.maxClassesPerDay)) {

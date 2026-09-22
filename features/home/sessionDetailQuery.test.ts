@@ -78,7 +78,11 @@ const ROW: SessionRowWithClass = {
   },
 }
 
-async function build(client: never, rows: SessionRowWithClass[] = [ROW]) {
+async function build(
+  client: never,
+  rows: SessionRowWithClass[] = [ROW],
+  extra: Partial<Parameters<typeof buildAgendaSessions>[1]> = {},
+) {
   return buildAgendaSessions(client, {
     orgId: 'org-1',
     userId: ME,
@@ -89,6 +93,7 @@ async function build(client: never, rows: SessionRowWithClass[] = [ROW]) {
     creditsBalance: 0,
     hasPlanQuota: false,
     studentGender: null,
+    ...extra,
   })
 }
 
@@ -264,5 +269,59 @@ describe('buildAgendaSessions — restrição de sexo', () => {
     const [s] = await buildWithGender(null, ROW)
     expect(s.genderRestriction).toBeNull()
     expect(s.genderDenialMessage).toBeUndefined()
+  })
+})
+
+// Com o que o aluno paga a aula. A ficha só pergunta quando existem DOIS caminhos
+// de verdade, e o cartão de cima tem de nomear o caminho padrão dele.
+describe('buildAgendaSessions — escolha de pagamento', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('parceiro COM crédito passa a poder escolher', async () => {
+    // O pedido do dono: o aluno de Wellhub que também tem crédito escolhe se
+    // gasta o check-in ou o crédito. Antes daqui a ficha nem perguntava.
+    const [s] = await build(makeClient({}), [ROW], {
+      partner: 'wellhub',
+      creditsBalance: 3,
+    })
+    expect(s.canChoosePayment).toBe(true)
+    expect(s.paymentDefault).toBe('partner')
+    expect(s.partner).toBe('wellhub')
+  })
+
+  it('parceiro SEM crédito entra direto, sem pergunta', async () => {
+    const [s] = await build(makeClient({}), [ROW], {
+      partner: 'wellhub',
+      creditsBalance: 0,
+    })
+    expect(s.canChoosePayment).toBeUndefined()
+    expect(s.paymentDefault).toBe('partner')
+  })
+
+  it('plano com cota e crédito escolhe, e o padrão é o plano', async () => {
+    const [s] = await build(makeClient({}), [ROW], {
+      hasPlanQuota: true,
+      creditsBalance: 2,
+    })
+    expect(s.canChoosePayment).toBe(true)
+    expect(s.paymentDefault).toBe('plan')
+    expect(s.partner).toBeUndefined()
+  })
+
+  it('parceiro vence o plano no padrão — a mesma ordem de resolveClassAccess', async () => {
+    const [s] = await build(makeClient({}), [ROW], {
+      partner: 'totalpass',
+      hasPlanQuota: true,
+      creditsBalance: 5,
+    })
+    expect(s.paymentDefault).toBe('partner')
+  })
+
+  it('só crédito, sem caminho padrão: não há o que escolher', async () => {
+    // Crédito é o único caminho, então perguntar seria ruído — e o cartão de cima
+    // não teria nome nenhum para exibir.
+    const [s] = await build(makeClient({}), [ROW], { creditsBalance: 4 })
+    expect(s.canChoosePayment).toBeUndefined()
+    expect(s.paymentDefault).toBeUndefined()
   })
 })
