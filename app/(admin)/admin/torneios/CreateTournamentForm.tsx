@@ -85,6 +85,8 @@ export function CreateTournamentForm({
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [entryPrice, setEntryPrice] = useState<string>('')
   const [pixKey, setPixKey] = useState<string>('')
+  const [shirtSizes, setShirtSizes] = useState(false)
+  const [shirtNames, setShirtNames] = useState(false)
   const [maxPlayers, setMaxPlayers] = useState<string>('')
   const [groupCount, setGroupCount] = useState(2)
   const [advancePerGroup, setAdvancePerGroup] = useState(2)
@@ -152,6 +154,10 @@ export function CreateTournamentForm({
         cover_image_url: coverImageUrl,
         entry_price_cents: entryPriceCents,
         pix_key: pixKey.trim() || null,
+        shirt_sizes_enabled: shirtSizes,
+        // Aninhada: nome sem camisa não existe. O servidor aplica o mesmo teto
+        // (shirtConfig), então marcar só esta não faria a inscrição pedir nada.
+        shirt_names_enabled: shirtSizes && shirtNames,
         max_players: maxPlayersValue,
         group_count: groupCount,
         advance_per_group: advancePerGroup,
@@ -325,6 +331,42 @@ export function CreateTournamentForm({
           })}
         </p>
       </div>
+
+      {/* Camisa: chave por torneio. Ligada, a inscrição exige tamanho e o admin
+          baixa a planilha de encomenda; desligada, o campo nem existe — torneio
+          sem brinde não pede tamanho à toa, e são a maioria. */}
+      <label className="flex items-start gap-2 rounded-lg border border-surface-border bg-surface px-3 py-2">
+        <input
+          type="checkbox"
+          checked={shirtSizes}
+          onChange={(e) => setShirtSizes(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-brand-500"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-slate-200">Este torneio dá camisa</span>
+          <span className="block text-xs text-slate-500">
+            A inscrição passa a pedir o tamanho, e a planilha de encomenda aparece na tela do torneio.
+          </span>
+        </span>
+      </label>
+
+      {shirtSizes && (
+        <label className="ml-6 flex items-start gap-2 rounded-lg border border-surface-border bg-surface px-3 py-2">
+          <input
+            type="checkbox"
+            checked={shirtNames}
+            onChange={(e) => setShirtNames(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-brand-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-slate-200">Com nome estampado</span>
+            <span className="block text-xs text-slate-500">
+              A inscrição pede também o nome que vai na camisa — o primeiro nome ou o apelido,
+              não o do cadastro.
+            </span>
+          </span>
+        </label>
+      )}
 
       <Input
         label="Limite de vagas"

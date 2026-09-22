@@ -5,16 +5,31 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { registerForTournament } from '@/features/torneios/actions'
 import { inviteTournamentPartner } from '@/features/torneios/partnerInviteActions'
+import { ShirtFields } from '@/features/torneios/ShirtFields'
+import { suggestShirtName } from '@/lib/torneios/shirt'
 
 interface RegisterButtonProps {
   tournamentId: string
   participantType: string
   potentialPartners: { id: string; full_name: string }[]
+  /** O torneio dá camisa: a inscrição exige tamanho (tournaments.shirt_sizes_enabled). */
+  needsShirtSize?: boolean
+  /** A camisa é estampada: pede também o nome que vai nela. */
+  needsShirtName?: boolean
+  /** Nome do aluno logado, para sugerir o primeiro nome na estampa. */
+  myName?: string
 }
 
 type PartnerMode = 'existing' | 'invite'
 
-export function RegisterButton({ tournamentId, participantType, potentialPartners }: RegisterButtonProps) {
+export function RegisterButton({
+  tournamentId,
+  participantType,
+  potentialPartners,
+  needsShirtSize = false,
+  needsShirtName = false,
+  myName = '',
+}: RegisterButtonProps) {
   const [partnerMode, setPartnerMode] = useState<PartnerMode>('existing')
   const [partnerId, setPartnerId] = useState('')
   const [inviteName, setInviteName] = useState('')
@@ -22,6 +37,10 @@ export function RegisterButton({ tournamentId, participantType, potentialPartner
   const [inviteResult, setInviteResult] = useState<{ inviteUrl: string; whatsappUrl: string } | null>(null)
   const [chargeResult, setChargeResult] = useState<{ whatsappUrl?: string; paymentUrl?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shirt, setShirt] = useState('')
+  const [partnerShirt, setPartnerShirt] = useState('')
+  const [shirtName, setShirtName] = useState(() => suggestShirtName(myName))
+  const [partnerShirtName, setPartnerShirtName] = useState('')
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -30,7 +49,13 @@ export function RegisterButton({ tournamentId, participantType, potentialPartner
   function handleRegisterExisting() {
     setError(null)
     startTransition(async () => {
-      const res = await registerForTournament(tournamentId, needsPartner ? partnerId || undefined : undefined)
+      const res = await registerForTournament(
+        tournamentId,
+        needsPartner ? partnerId || undefined : undefined,
+        needsShirtSize
+          ? { own: shirt, partner: partnerShirt, ownName: shirtName, partnerName: partnerShirtName }
+          : undefined,
+      )
       if (res.error) {
         setError(res.error)
         return
@@ -49,7 +74,12 @@ export function RegisterButton({ tournamentId, participantType, potentialPartner
   function handleInvite() {
     setError(null)
     startTransition(async () => {
-      const res = await inviteTournamentPartner(tournamentId, { name: inviteName, phone: invitePhone })
+      const res = await inviteTournamentPartner(tournamentId, {
+        name: inviteName,
+        phone: invitePhone,
+        shirtSize: needsShirtSize ? shirt : undefined,
+        shirtName: needsShirtName ? shirtName : undefined,
+      })
       if (res.error) {
         setError(res.error)
         return
@@ -127,7 +157,29 @@ export function RegisterButton({ tournamentId, participantType, potentialPartner
           placeholder="Telefone (WhatsApp)"
           className="w-full rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-sm text-white placeholder:text-slate-500"
         />
-        <Button loading={isPending} onClick={handleInvite} disabled={!inviteName.trim() || !invitePhone.trim()}>
+        {/* Só o SEU tamanho aqui: o parceiro informa o dele ao aceitar o
+            convite, que é a tela por onde ele passa. */}
+        {needsShirtSize && (
+          <ShirtFields
+            size={shirt}
+            onSize={setShirt}
+            name={shirtName}
+            onName={setShirtName}
+            askName={needsShirtName}
+            label="Seu tamanho de camisa"
+            nameLabel="Seu nome na camisa"
+          />
+        )}
+        <Button
+          loading={isPending}
+          onClick={handleInvite}
+          disabled={
+            !inviteName.trim()
+            || !invitePhone.trim()
+            || (needsShirtSize && !shirt)
+            || (needsShirtName && !shirtName.trim())
+          }
+        >
           Inscrever e convidar
         </Button>
         {error && <p className="text-xs text-red-400">{error}</p>}
@@ -158,10 +210,38 @@ export function RegisterButton({ tournamentId, participantType, potentialPartner
           </button>
         </div>
       )}
+      {needsShirtSize && (
+        <ShirtFields
+          size={shirt}
+          onSize={setShirt}
+          name={shirtName}
+          onName={setShirtName}
+          askName={needsShirtName}
+          label={needsPartner ? 'Seu tamanho de camisa' : 'Tamanho da camisa'}
+          nameLabel={needsPartner ? 'Seu nome na camisa' : 'Nome na camisa'}
+        />
+      )}
+      {/* Parceiro escolhido de uma lista não abre tela nenhuma, então quem
+          inscreve responde por ele — senão a camisa dele nunca seria pedida. */}
+      {needsShirtSize && needsPartner && (
+        <ShirtFields
+          size={partnerShirt}
+          onSize={setPartnerShirt}
+          name={partnerShirtName}
+          onName={setPartnerShirtName}
+          askName={needsShirtName}
+          label="Tamanho do seu parceiro"
+          nameLabel="Nome dele(a) na camisa"
+        />
+      )}
       <Button
         loading={isPending}
         onClick={handleRegisterExisting}
-        disabled={needsPartner && !partnerId}
+        disabled={
+          (needsPartner && !partnerId)
+          || (needsShirtSize && (!shirt || (needsPartner && !partnerShirt)))
+          || (needsShirtName && (!shirtName.trim() || (needsPartner && !partnerShirtName.trim())))
+        }
       >
         Inscrever-se
       </Button>

@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { presentOrNull } from '@/lib/torneios/content'
 import { canonicalizePairGenders } from '@/lib/torneios/pairRules'
+import { shirtConfig, validateShirtName, validateShirtSize } from '@/lib/torneios/shirt'
 import type { PairGenders } from '@/types'
 
 async function requireAdmin(): Promise<
@@ -146,6 +147,147 @@ export async function updateTournamentPairGenders(
   const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
   const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
   revalidateTournament(tournamentId, eventSlug)
+  return {}
+}
+
+// ---------------------------------------------------------------------------
+// Camisa — ligar/desligar depois que o torneio já existe
+// ---------------------------------------------------------------------------
+
+/**
+ * Liga ou desliga a camisa num torneio JÁ CRIADO.
+ *
+ * Existe porque a chave só nascia no formulário de criação, e a decisão de dar
+ * camisa quase sempre vem depois — quando a arena fecha o patrocínio, com gente
+ * já inscrita. Sem isto o recurso só servia para torneio criado do zero.
+ *
+ * Ao contrário de `updateTournamentPairGenders`, **não** recusa com inscrição
+ * existente: ligar camisa não invalida ninguém, só deixa quem já entrou sem
+ * tamanho. Quem resolve isso é `setEntryShirt` — a tela lista quem falta.
+ */
+export async function updateTournamentShirts(
+  tournamentId: string,
+  input: { sizes: boolean; names: boolean },
+): Promise<{ error?: string; missing?: number }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, event:tournament_events(slug)')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  const { error } = await adminClient
+    .from('tournaments')
+    .update({
+      shirt_sizes_enabled: input.sizes,
+      // Nome sem camisa não existe — o mesmo teto que `shirtConfig` aplica na
+      // leitura, aplicado também na escrita para o dado não ficar incoerente.
+      shirt_names_enabled: input.sizes && input.names,
+    })
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  // Quantos já inscritos ficaram sem tamanho: é o que a tela precisa dizer na
+  // hora, senão o admin liga a camisa e só descobre o buraco na planilha.
+  const { count } = await adminClient
+    .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .eq('entry_status', 'confirmed')
+    .is('shirt_size', null)
+
+  const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
+  const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
+  revalidateTournament(tournamentId, eventSlug)
+  return { missing: input.sizes ? (count ?? 0) : 0 }
+}
+
+/**
+ * Preenche (ou corrige) a camisa de UM lado de uma inscrição.
+ *
+ * Dois donos possíveis, e é a MESMA função: o admin, que digita o que a pessoa
+ * respondeu no grupo, e o próprio inscrito, que informa o dele sem depender de
+ * ninguém. Separar em duas actions faria a validação divergir — e é a mesma
+ * regra (`validateShirtSize`/`validateShirtName`) nos dois casos.
+ *
+ * Quem não é admin só alcança o PRÓPRIO lado: o `side` é derivado da inscrição,
+ * nunca recebido do cliente, senão daria para escrever a camisa do parceiro.
+ */
+export async function setEntryShirt(
+  entryId: string,
+  input: { size?: unknown; name?: unknown; side?: 'player' | 'partner' },
+): Promise<{ error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Não autenticado.' }
+
+  const adminClient = createAdminClient()
+  const { data: entryRaw } = await adminClient
+    .from('tournament_entries')
+    .select('id, organization_id, tournament_id, player_id, partner_id')
+    .eq('id', entryId)
+    .maybeSingle()
+  if (!entryRaw) return { error: 'Inscrição não encontrada.' }
+  const entry = entryRaw as {
+    organization_id: string
+    tournament_id: string
+    player_id: string
+    partner_id: string | null
+  }
+
+  const { data: membership } = await adminClient
+    .from('memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('organization_id', entry.organization_id)
+    .maybeSingle()
+  const isAdmin = membership?.role === 'admin'
+
+  // O lado: do admin vem por parâmetro (ele preenche por qualquer um); do
+  // inscrito é DERIVADO de onde ele está na inscrição.
+  let side: 'player' | 'partner'
+  if (isAdmin && input.side) {
+    side = input.side
+  } else if (user.id === entry.player_id) {
+    side = 'player'
+  } else if (user.id === entry.partner_id) {
+    side = 'partner'
+  } else {
+    return { error: 'Você não participa desta inscrição.' }
+  }
+  if (side === 'partner' && !entry.partner_id) return { error: 'Esta inscrição não tem parceiro.' }
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('shirt_sizes_enabled, shirt_names_enabled')
+    .eq('id', entry.tournament_id)
+    .maybeSingle()
+  const cfg = shirtConfig(tournament ?? {})
+  if (!cfg.size) return { error: 'Este torneio não dá camisa.' }
+
+  const size = validateShirtSize(input.size, { required: true })
+  if (!size.ok) return { error: size.error }
+  const name = validateShirtName(input.name, { required: cfg.name })
+  if (!name.ok) return { error: name.error }
+
+  const payload = side === 'partner'
+    ? { partner_shirt_size: size.size, partner_shirt_name: name.name }
+    : { shirt_size: size.size, shirt_name: name.name }
+
+  const { error } = await adminClient
+    .from('tournament_entries')
+    .update(payload)
+    .eq('id', entryId)
+  if (error) return { error: 'Erro ao salvar o tamanho. Tente novamente.' }
+
+  revalidateTournament(entry.tournament_id)
+  revalidatePath(`/torneios/${entry.tournament_id}`)
   return {}
 }
 

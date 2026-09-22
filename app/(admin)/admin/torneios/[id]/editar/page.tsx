@@ -9,6 +9,7 @@ import { sortPrizes, type PrizeRow } from '@/lib/torneios/prizes'
 import { TournamentContentForm } from './TournamentContentForm'
 import { TournamentPrizesCard } from './TournamentPrizesCard'
 import { TournamentPairGendersCard } from './TournamentPairGendersCard'
+import { TournamentShirtsCard } from './TournamentShirtsCard'
 import type { PairGenders } from '@/types'
 
 interface PageProps { params: { id: string } }
@@ -21,7 +22,7 @@ export default async function EditarTorneioPage({ params }: PageProps) {
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type')
+    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type, shirt_sizes_enabled, shirt_names_enabled')
     .eq('id', params.id)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -97,6 +98,12 @@ export default async function EditarTorneioPage({ params }: PageProps) {
         allowedPairGenders={(tournament.allowed_pair_genders as PairGenders[] | null) ?? []}
         participantType={tournament.participant_type as 'individual' | 'dupla_fixa' | 'dupla_revezando'}
         hasEntries={(entryCount ?? 0) > 0}
+      />
+
+      <TournamentShirtsCard
+        tournamentId={params.id}
+        initialSizes={Boolean(tournament.shirt_sizes_enabled)}
+        initialNames={Boolean(tournament.shirt_names_enabled)}
       />
 
       <TournamentPrizesCard tournamentId={params.id} initialPrizes={prizes} />

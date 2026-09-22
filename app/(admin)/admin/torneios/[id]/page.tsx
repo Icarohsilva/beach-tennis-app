@@ -23,6 +23,8 @@ import { inviteState } from '@/lib/torneios/invite'
 import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
+import { ShirtsCard } from './ShirtsCard'
+import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
 import { SendAccessButton } from './SendAccessButton'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
@@ -72,7 +74,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .select(`id, player_id, partner_id, seed, created_at,
       payment_status, discount_pct, final_price_cents, receipt_url,
       partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
-      entry_status, offer_expires_at,
+      entry_status, offer_expires_at, shirt_size, partner_shirt_size, shirt_name, partner_shirt_name,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
       partner:profiles!tournament_entries_partner_id_fkey(id, full_name, phone)`)
     .eq('tournament_id', params.id)
@@ -90,10 +92,44 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     partner_receipt_url: string | null
     entry_status: 'confirmed' | 'waitlist' | 'offered'
     offer_expires_at: string | null
+    shirt_size: ShirtSize | null
+    partner_shirt_size: ShirtSize | null
+    shirt_name: string | null
+    partner_shirt_name: string | null
     player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
     partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
+
+  // Uma linha por PESSOA: em dupla fixa são duas camisas na mesma inscrição, e
+  // listar por inscrição deixaria metade da encomenda de fora.
+  const shirtRows: ShirtRow[] = t.shirt_sizes_enabled
+    ? entries.flatMap((e) => {
+        const player = Array.isArray(e.player) ? e.player[0] : e.player
+        const partner = Array.isArray(e.partner) ? e.partner[0] : e.partner
+        const list: ShirtRow[] = [{
+          entryId: e.id,
+          side: 'player',
+          name: player?.full_name ?? 'Sem nome',
+          size: e.shirt_size,
+          shirtName: e.shirt_name,
+          entryStatus: e.entry_status,
+          phone: player?.phone ?? null,
+        }]
+        if (partner) {
+          list.push({
+            entryId: e.id,
+            side: 'partner',
+            name: partner.full_name ?? 'Sem nome',
+            size: e.partner_shirt_size,
+            shirtName: e.partner_shirt_name,
+            entryStatus: e.entry_status,
+            phone: partner.phone ?? null,
+          })
+        }
+        return list
+      })
+    : []
 
   // Link pessoal de pagamento por lado (features/torneios/entryPaymentActions.ts):
   // gerado aqui (idempotente) para a mensagem de cobrança do admin levar o
@@ -353,6 +389,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                   tournamentUrl={shareUrl}
                   orgName={orgName}
                   isDuplaFixa={t.participant_type === 'dupla_fixa'}
+                  needsShirtSize={Boolean(t.shirt_sizes_enabled)}
+                  needsShirtName={Boolean(t.shirt_names_enabled)}
                 />
               )}
             </div>
@@ -365,6 +403,13 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             winner3Id={t.winner3_id ?? null}
             allPlayers={allPlayers}
           />
+          {t.shirt_sizes_enabled && (
+            <ShirtsCard
+              rows={shirtRows}
+              tournamentName={t.name}
+              withNames={Boolean(t.shirt_names_enabled)}
+            />
+          )}
         </div>
       </div>
 

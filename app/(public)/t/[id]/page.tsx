@@ -27,6 +27,7 @@ import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
 import { scoreRuleFrom, scoringLabel } from '@/lib/torneios/matchScore'
 import { resolveEntryCharge, PAY_ON_SITE_NOTICE } from '@/lib/torneios/entryCharge'
+import { shirtConfig } from '@/lib/torneios/shirt'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { resolveTournamentContent } from '@/lib/torneios/content'
@@ -358,6 +359,19 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   // OU acerto na arena. Exigir chave PIX aqui fazia a página anunciar como
   // gratuito um torneio pago de arena com Mercado Pago conectado — e o botão
   // dizia "Inscrever-se" sem valor nenhum.
+  // Camisa: o que ESTE torneio pede, já com o teto (nome só com camisa).
+  const shirtCfg = shirtConfig(t)
+  // Nome de quem está vendo, só para sugerir o primeiro nome na estampa.
+  let viewerName = ''
+  if (user && shirtCfg.name) {
+    const { data: me } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle()
+    viewerName = (me?.full_name as string | null) ?? ''
+  }
+
   const entryCharge = resolveEntryCharge({
     entryPriceCents: t.entry_price_cents ?? null,
     pixKey: t.pix_key ?? null,
@@ -526,6 +540,9 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                     tournamentId={t.id}
                     isPaid={isPaid}
                     finalPriceCents={isPaid ? (t.entry_price_cents ?? 0) : undefined}
+                    needsShirtSize={shirtCfg.size}
+                    needsShirtName={shirtCfg.name}
+                    suggestedName={viewerName}
                   />
                   {closingSoonLabel(t.registration_deadline, new Date()) && (
                     <p className="mt-2 text-center text-xs font-semibold text-amber-400">

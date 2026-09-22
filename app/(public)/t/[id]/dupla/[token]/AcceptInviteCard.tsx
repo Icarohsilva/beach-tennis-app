@@ -3,16 +3,33 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { acceptPartnerInvite, declinePartnerInvite } from '@/features/torneios/partnerInviteActions'
+import { ShirtFields } from '@/features/torneios/ShirtFields'
+import { suggestShirtName } from '@/lib/torneios/shirt'
 
 interface Props {
   token: string
   tournamentId: string
   needsGender: boolean
+  /** O torneio dá camisa: quem aceita informa o PRÓPRIO tamanho aqui. */
+  needsShirtSize?: boolean
+  /** A camisa é estampada: pede também o nome que vai nela. */
+  needsShirtName?: boolean
+  /** Nome do convite, para sugerir o primeiro nome na estampa. */
+  invitedName?: string
 }
 
-export function AcceptInviteCard({ token, tournamentId, needsGender }: Props) {
+export function AcceptInviteCard({
+  token,
+  tournamentId,
+  needsGender,
+  needsShirtSize = false,
+  needsShirtName = false,
+  invitedName = '',
+}: Props) {
   const router = useRouter()
   const [gender, setGender] = useState<'' | 'M' | 'F'>('')
+  const [shirt, setShirt] = useState('')
+  const [shirtName, setShirtName] = useState(() => suggestShirtName(invitedName))
   const [error, setError] = useState<string | null>(null)
   const [declined, setDeclined] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -23,8 +40,20 @@ export function AcceptInviteCard({ token, tournamentId, needsGender }: Props) {
       setError('Informe seu gênero para confirmar a dupla.')
       return
     }
+    if (needsShirtSize && !shirt) {
+      setError('Escolha o tamanho da camisa.')
+      return
+    }
+    if (needsShirtName && !shirtName.trim()) {
+      setError('Informe o nome que vai na camisa.')
+      return
+    }
     startTransition(async () => {
-      const res = await acceptPartnerInvite(token, gender ? { gender } : undefined)
+      const res = await acceptPartnerInvite(token, {
+        ...(gender ? { gender } : {}),
+        ...(needsShirtSize ? { shirtSize: shirt } : {}),
+        ...(needsShirtName ? { shirtName } : {}),
+      })
       if (res.error) {
         setError(res.error)
         return
@@ -67,6 +96,16 @@ export function AcceptInviteCard({ token, tournamentId, needsGender }: Props) {
             Este torneio tem restrição de gênero na dupla.
           </span>
         </label>
+      )}
+
+      {needsShirtSize && (
+        <ShirtFields
+          size={shirt}
+          onSize={setShirt}
+          name={shirtName}
+          onName={setShirtName}
+          askName={needsShirtName}
+        />
       )}
       {error && <p className="text-sm text-red-400">{error}</p>}
       <button
