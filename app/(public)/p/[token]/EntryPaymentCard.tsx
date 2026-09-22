@@ -9,6 +9,7 @@ import {
   type PublicEntryPayment,
 } from '@/features/torneios/entryPaymentActions'
 import { formatWalletCents, walletCoversAll } from '@/lib/wallet/wallet'
+import { PAY_ON_SITE_NOTICE } from '@/lib/torneios/entryCharge'
 
 interface Props {
   token: string
@@ -166,6 +167,15 @@ export function EntryPaymentCard({ token, data }: Props) {
             </div>
           )}
         </>
+      )}
+
+      {/* Nem gateway nem chave PIX: a inscrição É cobrada (o preço é o preço),
+          só que o acerto acontece na arena. Sem esta linha a tela mostrava o
+          valor e nenhuma ação, e o atleta ficava sem saber o que fazer. */}
+      {!data.hasCheckoutPro && !data.pixKey && (
+        <p className="rounded-lg border border-yellow-700/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+          {PAY_ON_SITE_NOTICE}
+        </p>
       )}
 
       {error && <p className="text-xs text-red-400 text-center">{error}</p>}

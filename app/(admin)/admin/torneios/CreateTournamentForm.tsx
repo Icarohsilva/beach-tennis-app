@@ -8,6 +8,7 @@ import { createTournament } from '@/features/torneios/actions'
 import { SPORTS } from '@/lib/arenas/sports'
 import { pairGendersFor, pairGendersLabel } from '@/lib/torneios/pairRules'
 import { scoreHint, type ScoringMode } from '@/lib/torneios/matchScore'
+import { entryChargeHint } from '@/lib/torneios/entryCharge'
 import type {
   TournamentCategory,
   ParticipantType,
@@ -62,7 +63,12 @@ function entryRuleHint(category: TournamentCategory): string {
   return `Trava a inscrição: ${pairGendersLabel(allowed).toLowerCase()}.`
 }
 
-export function CreateTournamentForm() {
+export function CreateTournamentForm({
+  hasMpToken,
+}: {
+  /** A academia tem conta do Mercado Pago conectada (Checkout Pro disponível). */
+  hasMpToken: boolean
+}) {
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [sport, setSport] = useState(SPORTS[0].slug)
@@ -302,11 +308,22 @@ export function CreateTournamentForm() {
         <Input
           label="Chave PIX"
           type="text"
-          placeholder="Deixe vazio para torneio gratuito"
+          placeholder={hasMpToken ? 'Opcional — o Mercado Pago já recebe' : 'CPF, e-mail, telefone ou chave aleatória'}
           value={pixKey}
           onChange={(e) => setPixKey(e.target.value)}
         />
-        <p className="text-xs text-slate-500">CPF, email, telefone ou chave aleatória. Ambos os campos precisam ser preenchidos para cobrança.</p>
+        {/* O texto sai da MESMA regra que decide se a inscrição é cobrada
+            (resolveEntryCharge), e fala do que VAI acontecer. O anterior era um
+            requisito falso ("ambos os campos precisam ser preenchidos"), e foi
+            ele que fez a arena com gateway ligado achar que o torneio ficaria
+            gratuito sem a chave — ficava mesmo, e esse era o defeito. */}
+        <p className="text-xs text-slate-500">
+          {entryChargeHint({
+            entryPriceCents: Math.round((parseFloat(entryPrice.replace(',', '.')) || 0) * 100),
+            pixKey: pixKey.trim() || null,
+            hasMpToken,
+          })}
+        </p>
       </div>
 
       <Input

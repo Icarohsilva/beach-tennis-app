@@ -13,6 +13,7 @@ import { EventPicker } from './EventPicker'
 import { Trophy } from 'lucide-react'
 import type { Tournament, TournamentStatus } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: 'Rascunho',
@@ -33,7 +34,11 @@ export default async function AdminTorneiosPage() {
   const adminClient = createAdminClient()
   const orgId = await getCurrentOrgId()
 
-  const [{ data, error }, { data: eventRows }] = await Promise.all([
+  // Com Mercado Pago conectado, a chave PIX do torneio é dispensável — e o
+  // formulário precisa DIZER isso: o texto que estava lá pedia os dois campos
+  // para cobrar, e foi por ele que uma arena com gateway ligado deixou a chave
+  // vazia e criou torneio pago que saiu de graça.
+  const [{ data, error }, { data: eventRows }, mpToken] = await Promise.all([
     adminClient
       .from('tournaments')
       .select('*')
@@ -44,7 +49,9 @@ export default async function AdminTorneiosPage() {
       .select('id, name, slug, starts_on, ends_on, is_published, description, rules, venue')
       .eq('organization_id', orgId)
       .order('starts_on', { ascending: false }),
+    orgId ? getConnectedMpToken(orgId) : Promise.resolve(null),
   ])
+  const hasMpToken = mpToken !== null
 
   const tournaments = (data ?? []) as Tournament[]
 
@@ -69,7 +76,7 @@ export default async function AdminTorneiosPage() {
       {/* Create tournament form */}
       <Card>
         <h2 className="text-base font-semibold text-white mb-4">Novo Torneio</h2>
-        <CreateTournamentForm />
+        <CreateTournamentForm hasMpToken={hasMpToken} />
       </Card>
 
       {error && (
