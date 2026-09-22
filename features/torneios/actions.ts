@@ -15,6 +15,8 @@ import {
   isBracketFormat,
 } from '@/lib/torneios/formats'
 import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
+import { isEntryCharged } from '@/lib/torneios/entryCharge'
+import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { scoreRuleFrom, validateMatchScore } from '@/lib/torneios/matchScore'
 import {
   computeGroupTables,
@@ -69,8 +71,17 @@ export async function computePersonPayment(
   entryPriceCents: number | null,
   pixKey: string | null,
 ): Promise<{ payment_status: 'free' | 'pending'; discount_pct: number; final_price_cents: number }> {
-  const isPaid = (entryPriceCents ?? 0) > 0 && !!pixKey
-  if (!isPaid) return { payment_status: 'free', discount_pct: 0, final_price_cents: 0 }
+  // O token do gateway é lido AQUI, e não recebido por parâmetro, de propósito:
+  // são nove pontos de chamada em cinco arquivos, e um que esquecesse de passar
+  // "tem Mercado Pago" devolveria inscrição grátis num torneio pago — que é
+  // exatamente o defeito que esta função passou a corrigir. A leitura só
+  // acontece quando há preço.
+  const hasMpToken = (entryPriceCents ?? 0) > 0
+    ? (await getConnectedMpToken(orgId)) !== null
+    : false
+  if (!isEntryCharged({ entryPriceCents, pixKey, hasMpToken })) {
+    return { payment_status: 'free', discount_pct: 0, final_price_cents: 0 }
+  }
 
   // Ler configurações de desconto da academia
   const { data: orgRow } = await adminClient
@@ -1181,9 +1192,15 @@ export async function confirmWaitlistOffer(
     return { error: 'Sua oferta de vaga expirou. Você voltou para a lista de espera.' }
   }
 
-  const isPaid =
-    (tournament.entry_price_cents as number | null ?? 0) > 0 &&
-    !!(tournament.pix_key)
+  // Mesma régua de computePersonPayment: preço + (gateway OU chave PIX OU
+  // acerto na arena). Antes exigia chave PIX, e a vaga aceita da fila entrava
+  // de graça num torneio pago com Mercado Pago conectado.
+  const isPaid = isEntryCharged({
+    entryPriceCents: tournament.entry_price_cents as number | null,
+    pixKey: tournament.pix_key as string | null,
+    hasMpToken:
+      (await getConnectedMpToken(tournament.organization_id as string)) !== null,
+  })
 
   let paymentStatus: 'free' | 'pending' = 'free'
   let finalPriceCents = 0

@@ -458,6 +458,18 @@ The `features/` directory (aulas, financeiro, torneios) and most dashboard pages
 
 A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. As quatro fases de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md) estão implementadas: motor de pontos e divisões, medalhas, elogios + comunidade e mural de fotos. A Liga nasce desligada por academia (`system_settings.liga_enabled`).
 
+- **Inscrição de torneio: o preço é o preço** ([lib/torneios/entryCharge.ts](lib/torneios/entryCharge.ts)).
+  A decisão era `(entry_price_cents ?? 0) > 0 && !!pix_key`, e por isso a arena com Mercado
+  Pago conectado que não cadastrou chave PIX criava torneio de R$ 60 em que TODA inscrição
+  nascia `free` — o mesmo defeito que o day use teve, pela mesma causa: confundir "tem preço"
+  com "tem ESTA forma de receber". `resolveEntryCharge` separa os dois: havendo valor a
+  inscrição é cobrada, e o que varia é o método — `mercadopago` (o gateway vence, confirma
+  sozinho), `pix_manual` (chave do torneio + comprovante) ou **`on_site`** (sem forma online,
+  a inscrição fica pendente e o admin dá baixa em `confirmEntryPayment`). `computePersonPayment`
+  lê o token do gateway **dentro** dela, e não por parâmetro: são nove pontos de chamada em
+  cinco arquivos, e um que esquecesse devolveria inscrição grátis em torneio pago. A página
+  pública e `/p/[token]` usam a mesma régua, e `PAY_ON_SITE_NOTICE` é o texto do caso sem
+  pagamento online — mostrar o valor sem ação nenhuma deixava o atleta sem saber o que fazer
 - **Torneio: como a partida é contada** (`tournaments.scoring_mode`, `'set' | 'fixed_games'`,
   default `set`; regra em [lib/torneios/matchScore.ts](lib/torneios/matchScore.ts)). Em `set`,
   `games_per_set` é o ALVO (ganha quem chega a 6) e a soma dos lados é livre. Em

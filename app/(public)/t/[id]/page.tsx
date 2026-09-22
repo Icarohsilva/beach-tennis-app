@@ -26,6 +26,8 @@ import { RegisterExternalButton } from './RegisterExternalButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
 import { scoreRuleFrom, scoringLabel } from '@/lib/torneios/matchScore'
+import { resolveEntryCharge, PAY_ON_SITE_NOTICE } from '@/lib/torneios/entryCharge'
+import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { resolveTournamentContent } from '@/lib/torneios/content'
 import { resolveRegistrationWindow, deadlineLabel, closingSoonLabel } from '@/lib/torneios/registrationWindow'
@@ -352,7 +354,16 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     waitlistPosition = pos ?? null
   }
 
-  const isPaid = (t.entry_price_cents ?? 0) > 0 && !!t.pix_key
+  // MESMA régua do servidor (resolveEntryCharge): preço + gateway OU chave PIX
+  // OU acerto na arena. Exigir chave PIX aqui fazia a página anunciar como
+  // gratuito um torneio pago de arena com Mercado Pago conectado — e o botão
+  // dizia "Inscrever-se" sem valor nenhum.
+  const entryCharge = resolveEntryCharge({
+    entryPriceCents: t.entry_price_cents ?? null,
+    pixKey: t.pix_key ?? null,
+    hasMpToken: (await getConnectedMpToken(t.organization_id as string)) !== null,
+  })
+  const isPaid = entryCharge.charged
   const formattedPrice = isPaid
     ? `R$ ${((t.entry_price_cents!) / 100).toFixed(2).replace('.', ',')}`
     : null
@@ -410,10 +421,24 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                       <span className="text-white text-2xl font-bold">{formattedPrice}</span>
                     </div>
                   )}
-                  <div className="bg-surface rounded-lg px-3 py-2 mt-2">
-                    <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Chave PIX</p>
-                    <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
-                  </div>
+                  {/* Como se paga depende do que a arena tem ligado. Com
+                      Checkout Pro o pagamento sai no link pessoal da inscrição,
+                      então mostrar chave PIX aqui confundiria; sem nenhum dos
+                      dois, o acerto é na arena e isso precisa estar escrito. */}
+                  {entryCharge.method === 'pix_manual' && (
+                    <div className="bg-surface rounded-lg px-3 py-2 mt-2">
+                      <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Chave PIX</p>
+                      <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
+                    </div>
+                  )}
+                  {entryCharge.method === 'mercadopago' && (
+                    <p className="mt-2 text-xs text-slate-400">
+                      Pagamento por PIX ou cartão, no link que você recebe depois de se inscrever.
+                    </p>
+                  )}
+                  {entryCharge.method === 'on_site' && (
+                    <p className="mt-2 text-xs text-yellow-300">{PAY_ON_SITE_NOTICE}</p>
+                  )}
                 </div>
               )}
 
@@ -448,11 +473,13 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                             >
                               💳 Ir para o pagamento
                             </Link>
-                          ) : (
+                          ) : t.pix_key ? (
                             <div className="bg-surface rounded-lg px-3 py-2">
                               <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-0.5">Chave PIX</p>
                               <p className="text-white text-sm font-mono break-all">{t.pix_key}</p>
                             </div>
+                          ) : (
+                            <p className="text-xs text-yellow-300">{PAY_ON_SITE_NOTICE}</p>
                           )}
                         </div>
                       )}
