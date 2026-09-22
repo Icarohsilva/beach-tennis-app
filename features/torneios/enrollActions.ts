@@ -26,6 +26,7 @@ import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/en
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { computePersonPayment } from './actions'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
+import { validateShirtSize, type ShirtSize } from '@/lib/torneios/shirtSize'
 import type { Gender, ParticipantType } from '@/types'
 
 export interface EnrollPersonInput {
@@ -34,6 +35,8 @@ export interface EnrollPersonInput {
   phone?: string
   /** Identidade — o que valida a formação da dupla (canPairUp exige os dois lados). */
   gender?: Gender | null
+  /** Tamanho da camisa, quando o torneio pede (`shirt_sizes_enabled`). */
+  shirtSize?: unknown
 }
 
 export interface EnrollEntryInput {
@@ -73,7 +76,7 @@ async function requireTournamentAdmin(tournamentId: string) {
   const { data: tournament } = await admin
     .from('tournaments')
     .select(
-      'id, name, organization_id, status, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players',
+      'id, name, organization_id, status, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, shirt_sizes_enabled',
     )
     .eq('id', tournamentId)
     .maybeSingle()
@@ -212,6 +215,18 @@ export async function enrollExternalEntry(input: EnrollEntryInput): Promise<Enro
     return { error: 'Dupla fixa exige os dados dos dois jogadores.' }
   }
 
+  // Camisa: o admin responde pelos dois, porque nenhum deles passa por tela.
+  // Validado antes de CRIAR CONTA para ninguém — um campo vazio não pode deixar
+  // perfil órfão no banco.
+  const wantsShirt = Boolean(tournament.shirt_sizes_enabled)
+  const playerShirt = validateShirtSize(input.player.shirtSize, { required: wantsShirt })
+  if (!playerShirt.ok) return { error: playerShirt.error }
+  const partnerShirt = validateShirtSize(input.partner?.shirtSize, {
+    required: wantsShirt && isDuplaFixa,
+    who: input.partner?.fullName?.trim() || 'o parceiro',
+  })
+  if (!partnerShirt.ok) return { error: partnerShirt.error }
+
   const orgId = tournament.organization_id as string
   const { data: orgRow } = await admin
     .from('organizations')
@@ -292,6 +307,8 @@ export async function enrollExternalEntry(input: EnrollEntryInput): Promise<Enro
       partner_payment_status: partner ? 'free' : null,
       partner_discount_pct: 0,
       partner_final_price_cents: 0,
+      shirt_size: playerShirt.size,
+      partner_shirt_size: partner ? partnerShirt.size : null,
     }
   } else {
     const playerPayment = await computePersonPayment(
@@ -322,6 +339,8 @@ export async function enrollExternalEntry(input: EnrollEntryInput): Promise<Enro
       partner_payment_status: partnerPayment?.payment_status ?? (partner ? 'free' : null),
       partner_discount_pct: partnerPayment?.discount_pct ?? 0,
       partner_final_price_cents: partnerPayment?.final_price_cents ?? 0,
+      shirt_size: playerShirt.size,
+      partner_shirt_size: partner ? partnerShirt.size : null,
     }
   }
 

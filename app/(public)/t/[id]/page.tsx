@@ -526,6 +526,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                     tournamentId={t.id}
                     isPaid={isPaid}
                     finalPriceCents={isPaid ? (t.entry_price_cents ?? 0) : undefined}
+                    needsShirtSize={Boolean(t.shirt_sizes_enabled)}
                   />
                   {closingSoonLabel(t.registration_deadline, new Date()) && (
                     <p className="mt-2 text-center text-xs font-semibold text-amber-400">

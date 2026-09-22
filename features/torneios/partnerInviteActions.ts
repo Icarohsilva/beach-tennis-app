@@ -11,6 +11,7 @@ import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/
 import { canonicalizePairGenders, canEnter, canPairUp, requiresKnownGender } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
 import { inviteState, inviteExpiry } from '@/lib/torneios/invite'
+import { validateShirtSize } from '@/lib/torneios/shirtSize'
 import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
 import { availableSlots } from '@/lib/torneios/waitlist'
 import { computePersonPayment } from './actions'
@@ -31,7 +32,7 @@ function newInviteToken(): string {
 
 export async function inviteTournamentPartner(
   tournamentId: string,
-  input: { name: string; phone: string; gender?: Gender | null },
+  input: { name: string; phone: string; gender?: Gender | null; shirtSize?: unknown },
 ): Promise<{ error?: string; inviteUrl?: string; whatsappUrl?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -48,7 +49,7 @@ export async function inviteTournamentPartner(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline')
+    .select('id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline, shirt_sizes_enabled')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -96,6 +97,13 @@ export async function inviteTournamentPartner(
   const slots = availableSlots(occupiedCount ?? 0, tournament.max_players as number | null)
   const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
 
+  // Só o tamanho de QUEM CONVIDA: o parceiro informa o dele ao aceitar, que é
+  // a tela por onde ele passa. Pedir aqui seria adivinhar o corpo do outro.
+  const shirt = validateShirtSize(input.shirtSize, {
+    required: Boolean(tournament.shirt_sizes_enabled),
+  })
+  if (!shirt.ok) return { error: shirt.error }
+
   const paymentFields =
     entryStatus === 'confirmed'
       ? await computePersonPayment(
@@ -121,6 +129,7 @@ export async function inviteTournamentPartner(
       // Nulo, não 'free': o parceiro ainda não existe, então não há "cobrança
       // dele" nenhuma para descrever ainda.
       partner_payment_status: null,
+      shirt_size: shirt.size,
     })
     .select('id')
     .single()
@@ -179,7 +188,7 @@ export async function inviteTournamentPartner(
 
 export async function acceptPartnerInvite(
   token: string,
-  input?: { gender?: Gender },
+  input?: { gender?: Gender; shirtSize?: unknown },
 ): Promise<{ error?: string; tournamentId?: string; paymentPath?: string }> {
   const user = await getAuthUser()
   if (!user) return { error: 'Entre ou crie uma conta para aceitar o convite.' }
@@ -206,7 +215,7 @@ export async function acceptPartnerInvite(
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, allowed_pair_genders, entry_price_cents, pix_key')
+    .select('id, allowed_pair_genders, entry_price_cents, pix_key, shirt_sizes_enabled')
     .eq('id', tournamentId)
     .single()
   if (!tournament) return { error: 'Torneio não encontrado.' }
@@ -259,6 +268,13 @@ export async function acceptPartnerInvite(
   const clash = findEntrantClash(existing, [{ id: user.id }], user.id)
   if (clash) return { error: clashMessage(clash) }
 
+  // Quem aceita o convite informa o PRÓPRIO tamanho. É o único caminho em que o
+  // parceiro passa por uma tela — nos outros quem inscreve responde por ele.
+  const shirt = validateShirtSize(input?.shirtSize, {
+    required: Boolean(tournament.shirt_sizes_enabled),
+  })
+  if (!shirt.ok) return { error: shirt.error }
+
   const partnerPayment =
     entry.entry_status === 'confirmed'
       ? await computePersonPayment(
@@ -277,6 +293,7 @@ export async function acceptPartnerInvite(
       partner_payment_status: partnerPayment.payment_status,
       partner_discount_pct: partnerPayment.discount_pct,
       partner_final_price_cents: partnerPayment.final_price_cents,
+      partner_shirt_size: shirt.size,
     })
     .eq('id', entry.id as string)
   if (updateErr) return { error: 'Erro ao aceitar o convite. Tente novamente.' }
@@ -344,6 +361,8 @@ export interface PartnerInvitePublicData {
   registrantName: string
   invitedName: string
   needsGender: boolean
+  /** O torneio dá camisa: quem aceita informa o tamanho na mesma tela. */
+  needsShirtSize: boolean
 }
 
 export async function getPartnerInvitePublicData(token: string): Promise<PartnerInvitePublicData | null> {
@@ -358,7 +377,7 @@ export async function getPartnerInvitePublicData(token: string): Promise<Partner
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('name, allowed_pair_genders')
+    .select('name, allowed_pair_genders, shirt_sizes_enabled')
     .eq('id', invite.tournament_id as string)
     .maybeSingle()
   if (!tournament) return null
@@ -385,5 +404,6 @@ export async function getPartnerInvitePublicData(token: string): Promise<Partner
     registrantName: (registrant?.full_name as string | null) ?? 'Alguém',
     invitedName: invite.invited_name as string,
     needsGender: !invite.invited_gender && requiresKnownGender(allowed),
+    needsShirtSize: Boolean(tournament.shirt_sizes_enabled),
   }
 }

@@ -16,6 +16,7 @@ import {
 } from '@/lib/torneios/formats'
 import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
 import { isEntryCharged } from '@/lib/torneios/entryCharge'
+import { validateShirtSize, type ShirtSize } from '@/lib/torneios/shirtSize'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { scoreRuleFrom, validateMatchScore } from '@/lib/torneios/matchScore'
 import {
@@ -237,6 +238,8 @@ export async function createTournament(input: {
   cover_image_url?: string | null
   entry_price_cents?: number | null
   pix_key?: string | null
+  /** O torneio dá camisa: a inscrição passa a exigir tamanho. */
+  shirt_sizes_enabled?: boolean
   max_players?: number | null
   /** Só no formato 'grupos'. */
   group_count?: number | null
@@ -279,6 +282,7 @@ export async function createTournament(input: {
       games_per_set: input.scoring.games_per_set,
       tiebreak_games: input.scoring.tiebreak_games,
       scoring_mode: input.scoring.scoring_mode ?? 'set',
+      shirt_sizes_enabled: input.shirt_sizes_enabled ?? false,
       status: 'draft' as TournamentStatus,
       created_by: user.id,
       cover_image_url: input.cover_image_url ?? null,
@@ -304,6 +308,12 @@ export async function createTournament(input: {
 export async function registerForTournament(
   tournamentId: string,
   partnerId?: string,
+  /**
+   * Tamanhos de camisa, quando o torneio pede (`shirt_sizes_enabled`). Em dupla
+   * fixa quem inscreve informa os DOIS: o parceiro escolhido de uma lista não
+   * passa por nenhuma tela para informar o dele.
+   */
+  shirts?: { own?: unknown; partner?: unknown },
 ): Promise<{ error?: string; partnerPaymentUrl?: string; partnerWhatsappUrl?: string }> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -316,7 +326,7 @@ export async function registerForTournament(
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
     .select(
-      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
+      'id, status, level, category, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline, shirt_sizes_enabled',
     )
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
@@ -363,6 +373,19 @@ export async function registerForTournament(
   })
   if (!verdict.ok) return { error: verdict.reason ?? 'Inscrição não permitida nesta categoria.' }
 
+  // Camisa: exigida só quando o torneio pede. Validado ANTES da capacidade e da
+  // cobrança porque é erro de formulário — barrar depois de ocupar vaga ou de
+  // calcular desconto faria a pessoa refazer o caminho por um campo vazio.
+  const wantsShirt = Boolean(tournament.shirt_sizes_enabled)
+  const ownShirt = validateShirtSize(shirts?.own, { required: wantsShirt })
+  if (!ownShirt.ok) return { error: ownShirt.error }
+  const partnerName = partnerId ? profileById.get(partnerId)?.full_name ?? 'seu parceiro' : undefined
+  const partnerShirt = validateShirtSize(shirts?.partner, {
+    required: wantsShirt && Boolean(partnerId),
+    who: partnerName,
+  })
+  if (!partnerShirt.ok) return { error: partnerShirt.error }
+
   // Duplicidade dos DOIS lados: o unique (tournament_id, player_id) não impede
   // que a mesma pessoa seja partner_id numa dupla e player_id (ou partner_id)
   // em outra — BUG B.
@@ -401,6 +424,8 @@ export async function registerForTournament(
     partner_payment_status: 'free' | 'pending' | null
     partner_discount_pct: number
     partner_final_price_cents: number
+    shirt_size: ShirtSize | null
+    partner_shirt_size: ShirtSize | null
   }
 
   if (entryStatus === 'waitlist') {
@@ -417,6 +442,11 @@ export async function registerForTournament(
       partner_payment_status: partner ? 'free' : null,
       partner_discount_pct: 0,
       partner_final_price_cents: 0,
+      // O tamanho é gravado mesmo na fila: quem for promovido já entra com a
+      // camisa resolvida, e perguntar de novo na promoção seria pedir duas
+      // vezes a mesma coisa.
+      shirt_size: ownShirt.size,
+      partner_shirt_size: partner ? partnerShirt.size : null,
     }
   } else {
     // Dupla fixa é cobrada por atleta: os dois pagam a sua parte, cada um com
@@ -450,6 +480,8 @@ export async function registerForTournament(
       partner_payment_status: partnerPaymentFields?.payment_status ?? (partner ? 'free' : null),
       partner_discount_pct: partnerPaymentFields?.discount_pct ?? 0,
       partner_final_price_cents: partnerPaymentFields?.final_price_cents ?? 0,
+      shirt_size: ownShirt.size,
+      partner_shirt_size: partner ? partnerShirt.size : null,
     }
   }
 
@@ -1525,6 +1557,8 @@ export async function updateTournamentCover(
 
 export async function registerExternal(
   tournamentId: string,
+  /** Tamanho da camisa, quando o torneio pede. */
+  shirtSize?: unknown,
 ): Promise<{ error?: string }> {
   // Usa createClient() apenas para ler sessão (uid); não precisa de org do usuário.
   const supabase = createClient()
@@ -1537,7 +1571,7 @@ export async function registerExternal(
   const { data: tournament } = await adminClient
     .from('tournaments')
     .select(
-      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline',
+      'id, organization_id, status, participant_type, allowed_pair_genders, entry_price_cents, pix_key, max_players, registration_deadline, shirt_sizes_enabled',
     )
     .eq('id', tournamentId)
     .single()
@@ -1600,6 +1634,11 @@ export async function registerExternal(
   const clash = findEntrantClash(existing, [{ id: user.id }], user.id)
   if (clash) return { error: clashMessage(clash) }
 
+  const ownShirt = validateShirtSize(shirtSize, {
+    required: Boolean(tournament.shirt_sizes_enabled),
+  })
+  if (!ownShirt.ok) return { error: ownShirt.error }
+
   // Verificar capacidade
   const { count: occupiedCount } = await adminClient
     .from('tournament_entries')
@@ -1619,6 +1658,7 @@ export async function registerExternal(
     payment_status: 'free' | 'pending'
     discount_pct: number
     final_price_cents: number
+    shirt_size: ShirtSize | null
   }
 
   if (entryStatus === 'waitlist') {
@@ -1631,6 +1671,7 @@ export async function registerExternal(
       payment_status: 'free',
       discount_pct: 0,
       final_price_cents: 0,
+      shirt_size: ownShirt.size,
     }
   } else {
     const paymentFields = await computePersonPayment(
@@ -1649,6 +1690,7 @@ export async function registerExternal(
       payment_status: paymentFields.payment_status,
       discount_pct: paymentFields.discount_pct,
       final_price_cents: paymentFields.final_price_cents,
+      shirt_size: ownShirt.size,
     }
   }
 

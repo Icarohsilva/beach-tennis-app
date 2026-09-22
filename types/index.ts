@@ -113,6 +113,11 @@ export type TournamentFormat =
  */
 export type ScoringMode = 'set' | 'fixed_games'
 
+/** Grade de camisa. A regra e os rótulos ficam em lib/torneios/shirtSize.ts. */
+export type ShirtSize =
+  | 'p' | 'm' | 'g' | 'gg' | 'xg'
+  | 'baby_p' | 'baby_m' | 'baby_g' | 'baby_gg'
+
 export interface ScoringConfig {
   sets_to_win: number
   /**
@@ -512,6 +517,11 @@ export interface Tournament {
   games_per_set: number
   tiebreak_games: boolean
   scoring_mode: ScoringMode
+  /**
+   * A inscrição pede tamanho de camisa? Ligada, o campo é obrigatório e a
+   * planilha de encomenda aparece no admin. Ver lib/torneios/shirtSize.ts.
+   */
+  shirt_sizes_enabled: boolean
   status: TournamentStatus
   created_by: string
   cover_image_url: string | null
@@ -596,6 +606,9 @@ export interface TournamentEntry {
   partner_discount_pct: number
   partner_final_price_cents: number
   partner_receipt_url: string | null
+  /** Tamanho de camisa (lib/torneios/shirtSize.ts). Nulo = torneio sem camisa. */
+  shirt_size: ShirtSize | null
+  partner_shirt_size: ShirtSize | null
 }
 
 export interface Post {

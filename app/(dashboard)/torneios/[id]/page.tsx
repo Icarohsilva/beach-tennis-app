@@ -300,6 +300,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                   tournamentId={t.id}
                   participantType={t.participant_type ?? 'dupla_revezando'}
                   potentialPartners={potentialPartners}
+                  needsShirtSize={Boolean(t.shirt_sizes_enabled)}
                 />
               </div>
             )}

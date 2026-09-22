@@ -3,22 +3,31 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { registerExternal } from '@/features/torneios/actions'
+import { ShirtSizeSelect } from '@/features/torneios/ShirtSizeSelect'
 
 interface Props {
   tournamentId: string
   isPaid: boolean
   finalPriceCents?: number
+  /** O torneio dá camisa: a inscrição exige tamanho. */
+  needsShirtSize?: boolean
 }
 
-export function RegisterExternalButton({ tournamentId, isPaid, finalPriceCents }: Props) {
+export function RegisterExternalButton({
+  tournamentId,
+  isPaid,
+  finalPriceCents,
+  needsShirtSize = false,
+}: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [shirt, setShirt] = useState('')
   const router = useRouter()
 
   function handleRegister() {
     setError(null)
     startTransition(async () => {
-      const result = await registerExternal(tournamentId)
+      const result = await registerExternal(tournamentId, needsShirtSize ? shirt : undefined)
       if (result.error) setError(result.error)
       else router.refresh()
     })
@@ -29,10 +38,11 @@ export function RegisterExternalButton({ tournamentId, isPaid, finalPriceCents }
     : 'Inscrever-se'
 
   return (
-    <div>
+    <div className="space-y-2">
+      {needsShirtSize && <ShirtSizeSelect value={shirt} onChange={setShirt} />}
       <button
         onClick={handleRegister}
-        disabled={isPending}
+        disabled={isPending || (needsShirtSize && !shirt)}
         style={{ width: '100%' }}
         className="bg-gradient-to-r from-orange-600 to-orange-500 text-white border-none rounded-xl py-3 text-base font-semibold disabled:opacity-60 cursor-pointer hover:from-orange-500 hover:to-orange-400 transition-all"
       >

@@ -48,7 +48,12 @@ export default async function PartnerInvitePage({ params }: PageProps) {
         </div>
 
         {user ? (
-          <AcceptInviteCard token={params.token} needsGender={data.needsGender} tournamentId={params.id} />
+          <AcceptInviteCard
+            token={params.token}
+            needsGender={data.needsGender}
+            needsShirtSize={data.needsShirtSize}
+            tournamentId={params.id}
+          />
         ) : (
           <div className="space-y-3">
             <p className="text-center text-sm text-slate-400">
