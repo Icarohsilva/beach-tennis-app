@@ -209,6 +209,9 @@ export function summarizeShirtSizes(sizes: (ShirtSize | null | undefined)[]): Sh
 
 /** Uma pessoa na lista de camisas — titular ou parceiro, cada um é uma linha. */
 export interface ShirtRow {
+  /** Inscrição e lado — é por onde o admin preenche a camisa de quem falta. */
+  entryId: string
+  side: 'player' | 'partner'
   /** Nome do cadastro, para a arena saber de quem é a camisa. */
   name: string
   size: ShirtSize | null

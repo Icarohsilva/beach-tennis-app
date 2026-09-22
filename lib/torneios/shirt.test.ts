@@ -77,10 +77,10 @@ describe('summarizeShirtSizes', () => {
 
 describe('shirtRowsToCsv', () => {
   const rows: ShirtRow[] = [
-    { name: 'José Carlos', size: 'p', shirtName: 'Zeca', entryStatus: 'confirmed', phone: '11999' },
-    { name: 'Ana', size: 'gg', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
-    { name: 'Bia', size: null, shirtName: null, entryStatus: 'waitlist', phone: null },
-    { name: 'Caio', size: 'p', shirtName: 'Caio', entryStatus: 'confirmed', phone: null },
+    { entryId: 'e1', side: 'player', name: 'José Carlos', size: 'p', shirtName: 'Zeca', entryStatus: 'confirmed', phone: '11999' },
+    { entryId: 'e2', side: 'player', name: 'Ana', size: 'gg', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
+    { entryId: 'e3', side: 'player', name: 'Bia', size: null, shirtName: null, entryStatus: 'waitlist', phone: null },
+    { entryId: 'e2', side: 'partner', name: 'Caio', size: 'p', shirtName: 'Caio', entryStatus: 'confirmed', phone: null },
   ]
 
   it('ordena por TAMANHO, que é como a confecção separa as pilhas', () => {
@@ -105,7 +105,7 @@ describe('shirtRowsToCsv', () => {
 
   it('escapa nome com ponto e vírgula, senão a planilha ganha uma coluna', () => {
     const csv = shirtRowsToCsv([
-      { name: 'Silva; Ana', size: 'm', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
+      { entryId: 'e1', side: 'player', name: 'Silva; Ana', size: 'm', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
     ])
     expect(csv).toContain('"Silva; Ana"')
   })
@@ -207,14 +207,14 @@ describe('shirtRowsToCsv — nome estampado', () => {
     // Misturar os dois entrega camisa na mão errada: a estampa diz "Zeca" e a
     // conferência precisa dizer "José Carlos".
     const csv = shirtRowsToCsv([
-      { name: 'José Carlos', size: 'm', shirtName: 'Zeca', entryStatus: 'confirmed', phone: null },
+      { entryId: 'e1', side: 'player', name: 'José Carlos', size: 'm', shirtName: 'Zeca', entryStatus: 'confirmed', phone: null },
     ])
     expect(csv).toContain('Zeca;José Carlos')
   })
 
   it('torneio de camisa lisa deixa a coluna da estampa vazia', () => {
     const csv = shirtRowsToCsv([
-      { name: 'Ana', size: 'm', shirtName: null, entryStatus: 'confirmed', phone: null },
+      { entryId: 'e1', side: 'player', name: 'Ana', size: 'm', shirtName: null, entryStatus: 'confirmed', phone: null },
     ])
     expect(csv).toContain('M;Tradicional;;Ana')
   })

@@ -479,7 +479,15 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   própria, nunca `full_name` — a estampa diz "Zeca" e a lista de conferência precisa dizer
   "José Carlos", e reaproveitar o cadastro mandaria o nome do documento para a serigrafia.
   `MAX_SHIRT_NAME` é largura de ESTAMPA, não do banco: dito antes de digitar, a pessoa
-  escolhe o que cortar; dito depois, o silk corta por ela
+  escolhe o que cortar; dito depois, o silk corta por ela. **Ligar a camisa depois** é o
+  caso normal (o patrocínio fecha com gente já inscrita): `updateTournamentShirts` mexe na
+  chave em `/admin/torneios/[id]/editar` e devolve quantos confirmados ficaram sem tamanho.
+  Quem já estava dentro tem DOIS caminhos, de propósito — o aluno informa o dele em
+  `MyShirtCard` na página do torneio, e o admin preenche por quem falta na lista do
+  `ShirtsCard`; depender só do aluno deixaria a encomenda refém de quem não abre o app, e
+  só do admin devolveria o WhatsApp um-a-um que o recurso veio matar. Os dois passam por
+  `setEntryShirt`, que deriva o lado da inscrição quando quem chama não é admin — receber
+  `side` do cliente deixaria alguém escrever a camisa do parceiro
 - **Inscrição de torneio: o preço é o preço** ([lib/torneios/entryCharge.ts](lib/torneios/entryCharge.ts)).
   A decisão era `(entry_price_cents ?? 0) > 0 && !!pix_key`, e por isso a arena com Mercado
   Pago conectado que não cadastrou chave PIX criava torneio de R$ 60 em que TODA inscrição

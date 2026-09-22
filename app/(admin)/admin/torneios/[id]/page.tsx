@@ -108,6 +108,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         const player = Array.isArray(e.player) ? e.player[0] : e.player
         const partner = Array.isArray(e.partner) ? e.partner[0] : e.partner
         const list: ShirtRow[] = [{
+          entryId: e.id,
+          side: 'player',
           name: player?.full_name ?? 'Sem nome',
           size: e.shirt_size,
           shirtName: e.shirt_name,
@@ -116,6 +118,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         }]
         if (partner) {
           list.push({
+            entryId: e.id,
+            side: 'partner',
             name: partner.full_name ?? 'Sem nome',
             size: e.partner_shirt_size,
             shirtName: e.partner_shirt_name,

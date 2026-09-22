@@ -21,6 +21,8 @@ import { PodiumCard, type PodiumPlace } from '@/features/torneios/PodiumCard'
 import { LiveRefresher } from '@/features/torneios/LiveRefresher'
 import { ShareButton } from '@/features/torneios/ShareButton'
 import { RegisterButton } from './RegisterButton'
+import { MyShirtCard } from '@/features/torneios/MyShirtCard'
+import { shirtConfig } from '@/lib/torneios/shirt'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
   DEFAULT_GROUP_COUNT,
@@ -76,7 +78,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   const [{ data: entriesRaw }, { data: matchesRaw }, photos] = await Promise.all([
     adminClient
       .from('tournament_entries')
-      .select(`player_id, partner_id, entry_status,
+      .select(`id, player_id, partner_id, entry_status, shirt_size, partner_shirt_size,
         player:profiles!tournament_entries_player_id_fkey(id, full_name),
         partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
       .eq('tournament_id', params.id),
@@ -96,9 +98,12 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   ])
 
   type EntryRow = {
+    id: string
     player_id: string
     partner_id: string | null
     entry_status: 'confirmed' | 'waitlist' | 'offered'
+    shirt_size: string | null
+    partner_shirt_size: string | null
     player: { id: string; full_name: string } | { id: string; full_name: string }[] | null
     partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   }
@@ -210,11 +215,21 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   // memberships/profiles de outros alunos).
   const needsPartner = t.participant_type === 'dupla_fixa'
   let potentialPartners: { id: string; full_name: string }[] = []
+  // Minha inscrição SEM camisa: acontece quando a arena liga o brinde depois
+  // que eu já entrei. Sem este caminho, quem já estava dentro dependeria do
+  // admin perguntar um por um — o trabalho que o recurso veio matar.
+  const shirtCfgMine = shirtConfig(t)
+  const myEntry = entries.find((e) => e.player_id === user.id || e.partner_id === user.id)
+  const myShirtPending =
+    shirtCfgMine.size && myEntry
+      ? (myEntry.player_id === user.id ? !myEntry.shirt_size : !myEntry.partner_shirt_size)
+      : false
+
   // Nome do aluno logado: só para SUGERIR o primeiro nome na estampa. A
   // sugestão é editável — quem joga costuma ser chamado pelo apelido, e o campo
   // vazio faz a pessoa digitar o nome do documento, que não cabe nas costas.
   let myProfileName = ''
-  if (t.shirt_names_enabled) {
+  if (t.shirt_names_enabled || myShirtPending) {
     const { data: me } = await adminClient
       .from('profiles')
       .select('full_name')
@@ -295,11 +310,20 @@ export default async function TorneioDetailPage({ params }: PageProps) {
         <Reveal step={1}>
           <Card accent={!isMine}>
             {isMine ? (
-              <div className="flex items-center gap-2">
-                <Badge variant="success">Inscrito</Badge>
-                <span className="text-sm text-slate-400">
-                  Você está dentro. A chave sai quando as inscrições fecharem.
-                </span>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="success">Inscrito</Badge>
+                  <span className="text-sm text-slate-400">
+                    Você está dentro. A chave sai quando as inscrições fecharem.
+                  </span>
+                </div>
+                {myShirtPending && myEntry && (
+                  <MyShirtCard
+                    entryId={myEntry.id}
+                    askName={shirtCfgMine.name}
+                    myName={myProfileName}
+                  />
+                )}
               </div>
             ) : (
               <div className="space-y-2">

@@ -6,8 +6,12 @@
 // `shirtRowsToCsv` sobre `rows`) — o admin decide encomendar olhando o resumo e
 // confere na planilha, e duas somas por caminhos diferentes é como elas
 // divergem no dia de fechar com a confecção.
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { ShirtFields } from '@/features/torneios/ShirtFields'
+import { setEntryShirt } from '@/features/torneios/configActions'
 import {
   shirtRowsToCsv,
   summarizeShirtSizes,
@@ -35,6 +39,9 @@ export function ShirtsCard({
   const missingNames = withNames
     ? confirmed.filter((r) => !r.shirtName).length
     : 0
+  // Falta tamanho, ou falta a estampa num torneio que estampa. Os dois casos
+  // se resolvem no mesmo lugar, com o mesmo campo.
+  const pendentes = confirmed.filter((r) => !r.size || (withNames && !r.shirtName))
 
   function download() {
     const csv = shirtRowsToCsv(rows)
@@ -90,6 +97,24 @@ export function ShirtsCard({
           &quot;Nome na camisa&quot; vai vazia para eles.
         </p>
       )}
+
+      {/* Quem falta, com o campo ao lado. É o caminho de quem já estava inscrito
+          quando a arena ligou a camisa: o aluno também resolve sozinho pelo app,
+          mas o admin não pode ficar refém disso para fechar a encomenda. */}
+      {pendentes.length > 0 && (
+        <div className="space-y-2 border-t border-surface-border pt-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Preencher por quem falta
+          </p>
+          {pendentes.map((r) => (
+            <MissingRow
+              key={`${r.entryId}-${r.side}`}
+              row={r}
+              askName={withNames}
+            />
+          ))}
+        </div>
+      )}
     </Card>
   )
 }
@@ -102,4 +127,59 @@ function slug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     || 'torneio'
+}
+
+/** Uma pessoa sem camisa informada, com o campo para o admin preencher. */
+function MissingRow({ row, askName }: { row: ShirtRow; askName: boolean }) {
+  const router = useRouter()
+  const [size, setSize] = useState(row.size ?? '')
+  const [name, setName] = useState(row.shirtName ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [isPending, startTransition] = useTransition()
+
+  function save() {
+    setError(null)
+    startTransition(async () => {
+      const r = await setEntryShirt(row.entryId, {
+        size,
+        name: askName ? name : undefined,
+        side: row.side,
+      })
+      if (r.error) { setError(r.error); return }
+      setDone(true)
+      router.refresh()
+    })
+  }
+
+  if (done) {
+    return (
+      <p className="text-xs text-green-400">✓ {row.name} — registrado.</p>
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-surface-border bg-surface p-2.5">
+      <p className="truncate text-sm font-medium text-white">{row.name}</p>
+      <ShirtFields
+        size={size}
+        onSize={setSize}
+        name={name}
+        onName={setName}
+        askName={askName}
+        label="Tamanho"
+        nameLabel="Nome na camisa"
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        loading={isPending}
+        disabled={!size || (askName && !name.trim())}
+        onClick={save}
+      >
+        Salvar
+      </Button>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
+  )
 }
