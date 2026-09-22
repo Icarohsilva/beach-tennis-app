@@ -52,6 +52,8 @@ export default async function PartnerInvitePage({ params }: PageProps) {
             token={params.token}
             needsGender={data.needsGender}
             needsShirtSize={data.needsShirtSize}
+            needsShirtName={data.needsShirtName}
+            invitedName={data.invitedName}
             tournamentId={params.id}
           />
         ) : (

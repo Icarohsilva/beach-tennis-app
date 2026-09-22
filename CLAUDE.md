@@ -458,8 +458,10 @@ The `features/` directory (aulas, financeiro, torneios) and most dashboard pages
 
 A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. As quatro fases de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md) estão implementadas: motor de pontos e divisões, medalhas, elogios + comunidade e mural de fotos. A Liga nasce desligada por academia (`system_settings.liga_enabled`).
 
-- **Tamanho de camisa** (`tournaments.shirt_sizes_enabled` + `tournament_entries.shirt_size`
-  / `partner_shirt_size`; grade e regras em [lib/torneios/shirtSize.ts](lib/torneios/shirtSize.ts)).
+- **Camisa do inscrito: tamanho e, quando estampada, o nome**
+  (`tournaments.shirt_sizes_enabled` / `shirt_names_enabled` + `tournament_entries.shirt_size`,
+  `partner_shirt_size`, `shirt_name`, `partner_shirt_name`; regras em
+  [lib/torneios/shirt.ts](lib/torneios/shirt.ts)).
   Fica **por inscrição**, não no perfil: a camisa é feita para AQUELE torneio, e a mesma
   pessoa pede baby look M num evento e tradicional G noutro. Duas colunas pelo mesmo motivo
   de `payment_status`/`partner_payment_status` — em dupla fixa são duas pessoas na mesma
@@ -472,7 +474,12 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   dois; quem convida por WhatsApp responde só pelo próprio, porque o parceiro passa pela
   tela do convite. O resumo na tela e o CSV saem da MESMA lista (`summarizeShirtSizes` /
   `shirtRowsToCsv`), e a planilha é ordenada por TAMANHO — quem a recebe está separando
-  pilhas de camisa, não procurando um nome
+  pilhas de camisa, não procurando um nome. A chave do NOME é aninhada na da camisa
+  (`shirtConfig` aplica o teto: nome sem camisa não existe), e o nome estampado é coluna
+  própria, nunca `full_name` — a estampa diz "Zeca" e a lista de conferência precisa dizer
+  "José Carlos", e reaproveitar o cadastro mandaria o nome do documento para a serigrafia.
+  `MAX_SHIRT_NAME` é largura de ESTAMPA, não do banco: dito antes de digitar, a pessoa
+  escolhe o que cortar; dito depois, o silk corta por ela
 - **Inscrição de torneio: o preço é o preço** ([lib/torneios/entryCharge.ts](lib/torneios/entryCharge.ts)).
   A decisão era `(entry_price_cents ?? 0) > 0 && !!pix_key`, e por isso a arena com Mercado
   Pago conectado que não cadastrou chave PIX criava torneio de R$ 60 em que TODA inscrição

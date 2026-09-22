@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { UserPlus } from 'lucide-react'
 import { enrollExternalEntry, type EnrolledPerson } from '@/features/torneios/enrollActions'
-import { ShirtSizeSelect } from '@/features/torneios/ShirtSizeSelect'
+import { ShirtFields } from '@/features/torneios/ShirtFields'
 import { buildAccessMessage } from '@/lib/torneios/contactMessage'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 
@@ -19,9 +19,12 @@ interface PersonFields {
   phone: string
   gender: '' | 'M' | 'F'
   shirtSize: string
+  shirtName: string
 }
 
-const EMPTY_PERSON: PersonFields = { fullName: '', email: '', phone: '', gender: '', shirtSize: '' }
+const EMPTY_PERSON: PersonFields = {
+  fullName: '', email: '', phone: '', gender: '', shirtSize: '', shirtName: '',
+}
 
 interface Props {
   tournamentId: string
@@ -31,6 +34,8 @@ interface Props {
   isDuplaFixa: boolean
   /** O torneio dá camisa: o admin responde o tamanho pelos dois. */
   needsShirtSize?: boolean
+  /** A camisa é estampada: o nome que vai nela também vem daqui. */
+  needsShirtName?: boolean
 }
 
 export function EnrollParticipantCard({
@@ -40,6 +45,7 @@ export function EnrollParticipantCard({
   orgName,
   isDuplaFixa,
   needsShirtSize = false,
+  needsShirtName = false,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [player, setPlayer] = useState<PersonFields>(EMPTY_PERSON)
@@ -72,6 +78,7 @@ export function EnrollParticipantCard({
           phone: player.phone || undefined,
           gender: player.gender || null,
           shirtSize: needsShirtSize ? player.shirtSize : undefined,
+          shirtName: needsShirtName ? player.shirtName : undefined,
         },
         ...(isDuplaFixa
           ? {
@@ -81,6 +88,7 @@ export function EnrollParticipantCard({
                 phone: partner.phone || undefined,
                 gender: partner.gender || null,
                 shirtSize: needsShirtSize ? partner.shirtSize : undefined,
+                shirtName: needsShirtName ? partner.shirtName : undefined,
               },
             }
           : {}),
@@ -132,6 +140,7 @@ export function EnrollParticipantCard({
               onChange={setPlayer}
               genderRequired={isDuplaFixa}
               needsShirtSize={needsShirtSize}
+              needsShirtName={needsShirtName}
             />
 
             {isDuplaFixa && (
@@ -141,6 +150,7 @@ export function EnrollParticipantCard({
                 onChange={setPartner}
                 genderRequired
                 needsShirtSize={needsShirtSize}
+                needsShirtName={needsShirtName}
               />
             )}
 
@@ -167,12 +177,14 @@ function PersonFieldset({
   onChange,
   genderRequired = false,
   needsShirtSize = false,
+  needsShirtName = false,
 }: {
   legend: string
   value: PersonFields
   onChange: (v: PersonFields) => void
   /** O torneio dá camisa: sem tela do participante, quem responde é o admin. */
   needsShirtSize?: boolean
+  needsShirtName?: boolean
   /**
    * Dupla fixa: canPairUp() exige os dois gêneros conhecidos para validar a
    * formação da dupla, mesmo num torneio sem restrição de formação — é o que
@@ -218,9 +230,12 @@ function PersonFieldset({
         )}
       </div>
       {needsShirtSize && (
-        <ShirtSizeSelect
-          value={value.shirtSize}
-          onChange={(v) => onChange({ ...value, shirtSize: v })}
+        <ShirtFields
+          size={value.shirtSize}
+          onSize={(v: string) => onChange({ ...value, shirtSize: v })}
+          name={value.shirtName}
+          onName={(v: string) => onChange({ ...value, shirtName: v })}
+          askName={needsShirtName}
         />
       )}
     </fieldset>

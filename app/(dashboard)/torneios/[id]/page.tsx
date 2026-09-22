@@ -210,6 +210,19 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   // memberships/profiles de outros alunos).
   const needsPartner = t.participant_type === 'dupla_fixa'
   let potentialPartners: { id: string; full_name: string }[] = []
+  // Nome do aluno logado: só para SUGERIR o primeiro nome na estampa. A
+  // sugestão é editável — quem joga costuma ser chamado pelo apelido, e o campo
+  // vazio faz a pessoa digitar o nome do documento, que não cabe nas costas.
+  let myProfileName = ''
+  if (t.shirt_names_enabled) {
+    const { data: me } = await adminClient
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle()
+    myProfileName = (me?.full_name as string | null) ?? ''
+  }
+
   if (needsPartner && t.status === 'open' && !isMine) {
     // 'student' e 'athlete': quem chegou pelo link público de outro torneio
     // (registerExternal) vira 'athlete' nesta academia — antes ficava de fora
@@ -301,6 +314,8 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                   participantType={t.participant_type ?? 'dupla_revezando'}
                   potentialPartners={potentialPartners}
                   needsShirtSize={Boolean(t.shirt_sizes_enabled)}
+                  needsShirtName={Boolean(t.shirt_names_enabled)}
+                  myName={myProfileName}
                 />
               </div>
             )}

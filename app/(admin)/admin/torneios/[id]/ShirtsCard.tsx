@@ -1,5 +1,5 @@
 'use client'
-// app/(admin)/admin/torneios/[id]/ShirtSizesCard.tsx
+// app/(admin)/admin/torneios/[id]/ShirtsCard.tsx
 // A encomenda de camisas deste torneio: quanto de cada tamanho e a planilha.
 //
 // O resumo na tela e o CSV saem da MESMA lista (`summarizeShirtSizes` e
@@ -12,20 +12,29 @@ import {
   shirtRowsToCsv,
   summarizeShirtSizes,
   type ShirtRow,
-} from '@/lib/torneios/shirtSize'
+} from '@/lib/torneios/shirt'
 
-export function ShirtSizesCard({
+export function ShirtsCard({
   rows,
   tournamentName,
+  withNames = false,
 }: {
   rows: ShirtRow[]
   tournamentName: string
+  /** A camisa é estampada: o card também cobra os nomes que faltam. */
+  withNames?: boolean
 }) {
   // A encomenda é de quem VAI jogar. Fila de espera não entra na conta — a
   // arena não manda fazer camisa para quem talvez não jogue —, mas continua na
   // planilha, com a situação na coluna, para o caso de alguém subir.
   const confirmed = rows.filter((r) => r.entryStatus === 'confirmed')
   const summary = summarizeShirtSizes(confirmed.map((r) => r.size))
+  // Nome faltando é pendência SEPARADA do tamanho: dá para ter a grade fechada
+  // e ainda não poder mandar estampar. Somar os dois numa contagem só faria o
+  // admin achar que falta tamanho quando o que falta é nome.
+  const missingNames = withNames
+    ? confirmed.filter((r) => !r.shirtName).length
+    : 0
 
   function download() {
     const csv = shirtRowsToCsv(rows)
@@ -72,6 +81,13 @@ export function ShirtSizesCard({
         <p className="text-xs text-yellow-300">
           {summary.missing} inscrito(s) confirmado(s) ainda sem tamanho — provavelmente entraram
           antes de o torneio passar a dar camisa. Eles aparecem como &quot;NAO INFORMADO&quot; na planilha.
+        </p>
+      )}
+
+      {missingNames > 0 && (
+        <p className="text-xs text-yellow-300">
+          {missingNames} inscrito(s) confirmado(s) sem o nome da estampa. A coluna
+          &quot;Nome na camisa&quot; vai vazia para eles.
         </p>
       )}
     </Card>

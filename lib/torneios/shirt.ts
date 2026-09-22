@@ -1,4 +1,4 @@
-// lib/torneios/shirtSize.ts
+// lib/torneios/shirt.ts
 // Tamanho de camisa do inscrito. Puro, sem I/O.
 //
 // O catálogo vive em CÓDIGO, e não em tabela — mesma escolha de
@@ -83,6 +83,77 @@ export function validateShirtSize(
   return { ok: false, error: `Escolha o tamanho da camisa${quem}.` }
 }
 
+/**
+ * O que ESTE torneio pede na inscrição, já com o teto aplicado.
+ *
+ * Nome sem camisa não existe, e `shirt_names_enabled` sozinho não pode fazer a
+ * tela pedir estampa para um torneio que não dá camisa. Uma função só porque
+ * seis caminhos de inscrição e três telas precisam da mesma leitura — cada um
+ * combinando os dois booleanos por conta própria é como um deles combina errado.
+ */
+export function shirtConfig(tournament: {
+  shirt_sizes_enabled?: boolean | null
+  shirt_names_enabled?: boolean | null
+}): { size: boolean; name: boolean } {
+  const size = Boolean(tournament.shirt_sizes_enabled)
+  return { size, name: size && Boolean(tournament.shirt_names_enabled) }
+}
+
+// ---------------------------------------------------------------------------
+// Nome estampado
+// ---------------------------------------------------------------------------
+
+/**
+ * Quantos caracteres cabem nas costas.
+ *
+ * Não é limite de banco: é largura de estampa. Acima disso a serigrafia reduz a
+ * fonte até o nome virar um fio, e quem escolhe o que cortar tem de ser a
+ * pessoa — na tela, com o campo na frente —, não o silk na hora de imprimir.
+ */
+export const MAX_SHIRT_NAME = 16
+
+/**
+ * O nome como vai para a estampa: sem espaço sobrando e sem espaço duplo.
+ *
+ * Não força maiúscula: caixa é decisão da arte, e gravar "ZECA" impediria a
+ * arena de imprimir "Zeca" depois. O CSV entrega o que a pessoa digitou.
+ */
+export function normalizeShirtName(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : ''
+}
+
+/**
+ * Sugestão de nome a partir do cadastro: o PRIMEIRO nome.
+ *
+ * "José Carlos da Silva Pereira" não cabe nas costas, e deixar o campo vazio
+ * faz a pessoa digitar o nome completo do jeito que está no documento. O
+ * primeiro nome é o que a turma chama de fato, e ela edita se quiser o apelido.
+ */
+export function suggestShirtName(fullName: string | null | undefined): string {
+  const first = normalizeShirtName(fullName).split(' ')[0] ?? ''
+  return first.slice(0, MAX_SHIRT_NAME)
+}
+
+export function validateShirtName(
+  value: unknown,
+  opts: { required: boolean; who?: string },
+): { ok: true; name: string | null } | { ok: false; error: string } {
+  const name = normalizeShirtName(value)
+  if (!name) {
+    if (!opts.required) return { ok: true, name: null }
+    const quem = opts.who ? ` de ${opts.who}` : ''
+    return { ok: false, error: `Informe o nome que vai na camisa${quem}.` }
+  }
+  if (name.length > MAX_SHIRT_NAME) {
+    return {
+      ok: false,
+      error: `O nome na camisa cabe em ${MAX_SHIRT_NAME} caracteres. `
+        + `"${name}" tem ${name.length} — use o primeiro nome ou um apelido.`,
+    }
+  }
+  return { ok: true, name }
+}
+
 // ---------------------------------------------------------------------------
 // Resumo da encomenda
 // ---------------------------------------------------------------------------
@@ -138,8 +209,15 @@ export function summarizeShirtSizes(sizes: (ShirtSize | null | undefined)[]): Sh
 
 /** Uma pessoa na lista de camisas — titular ou parceiro, cada um é uma linha. */
 export interface ShirtRow {
+  /** Nome do cadastro, para a arena saber de quem é a camisa. */
   name: string
   size: ShirtSize | null
+  /**
+   * O que vai ESTAMPADO. Separado do nome do cadastro de propósito: a estampa
+   * diz "Zeca" e a lista de conferência precisa dizer "José Carlos" — misturar
+   * os dois entrega camisa na mão errada.
+   */
+  shirtName: string | null
   /** 'confirmed' | 'waitlist' | 'offered' — a arena não encomenda para a fila. */
   entryStatus: string
   phone: string | null
@@ -165,7 +243,7 @@ const STATUS_LABEL: Record<string, string> = {
  * de usar. O nome resolve o empate dentro do tamanho.
  */
 export function shirtRowsToCsv(rows: ShirtRow[]): string {
-  const header = ['Tamanho', 'Corte', 'Nome', 'Situacao', 'Telefone']
+  const header = ['Tamanho', 'Corte', 'Nome na camisa', 'Inscrito', 'Situacao', 'Telefone']
   const order = new Map(SHIRT_SIZES.map((s, i) => [s, i]))
 
   const sorted = [...rows].sort((a, b) => {
@@ -178,6 +256,9 @@ export function shirtRowsToCsv(rows: ShirtRow[]): string {
   const lines = sorted.map((r) => [
     r.size ? SHIRT_SIZE_LABEL[r.size] : 'NAO INFORMADO',
     r.size ? SHIRT_CUT_LABEL[shirtCut(r.size)] : '',
+    // Vazio, e não o nome do cadastro: torneio de camisa lisa não tem estampa,
+    // e preencher aqui faria a serigrafia imprimir o que ninguém pediu.
+    r.shirtName ?? '',
     r.name,
     STATUS_LABEL[r.entryStatus] ?? r.entryStatus,
     r.phone ?? '',

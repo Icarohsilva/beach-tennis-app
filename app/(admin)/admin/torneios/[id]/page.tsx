@@ -23,8 +23,8 @@ import { inviteState } from '@/lib/torneios/invite'
 import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
-import { ShirtSizesCard } from './ShirtSizesCard'
-import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirtSize'
+import { ShirtsCard } from './ShirtsCard'
+import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
 import { SendAccessButton } from './SendAccessButton'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
@@ -74,7 +74,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .select(`id, player_id, partner_id, seed, created_at,
       payment_status, discount_pct, final_price_cents, receipt_url,
       partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
-      entry_status, offer_expires_at, shirt_size, partner_shirt_size,
+      entry_status, offer_expires_at, shirt_size, partner_shirt_size, shirt_name, partner_shirt_name,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
       partner:profiles!tournament_entries_partner_id_fkey(id, full_name, phone)`)
     .eq('tournament_id', params.id)
@@ -94,6 +94,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     offer_expires_at: string | null
     shirt_size: ShirtSize | null
     partner_shirt_size: ShirtSize | null
+    shirt_name: string | null
+    partner_shirt_name: string | null
     player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
     partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
   }
@@ -108,6 +110,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         const list: ShirtRow[] = [{
           name: player?.full_name ?? 'Sem nome',
           size: e.shirt_size,
+          shirtName: e.shirt_name,
           entryStatus: e.entry_status,
           phone: player?.phone ?? null,
         }]
@@ -115,6 +118,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
           list.push({
             name: partner.full_name ?? 'Sem nome',
             size: e.partner_shirt_size,
+            shirtName: e.partner_shirt_name,
             entryStatus: e.entry_status,
             phone: partner.phone ?? null,
           })
@@ -382,6 +386,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                   orgName={orgName}
                   isDuplaFixa={t.participant_type === 'dupla_fixa'}
                   needsShirtSize={Boolean(t.shirt_sizes_enabled)}
+                  needsShirtName={Boolean(t.shirt_names_enabled)}
                 />
               )}
             </div>
@@ -395,7 +400,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             allPlayers={allPlayers}
           />
           {t.shirt_sizes_enabled && (
-            <ShirtSizesCard rows={shirtRows} tournamentName={t.name} />
+            <ShirtsCard
+              rows={shirtRows}
+              tournamentName={t.name}
+              withNames={Boolean(t.shirt_names_enabled)}
+            />
           )}
         </div>
       </div>
