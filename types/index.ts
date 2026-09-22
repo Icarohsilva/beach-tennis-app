@@ -107,10 +107,23 @@ export type TournamentFormat =
   | 'ranking'
   | 'super8'
 
+/**
+ * Como a partida é contada. Definido em lib/torneios/matchScore.ts, que é onde
+ * a regra vive; aqui só o tipo, para o schema.
+ */
+export type ScoringMode = 'set' | 'fixed_games'
+
 export interface ScoringConfig {
   sets_to_win: number
+  /**
+   * Em `scoring_mode: 'set'` é o ALVO do set (ganha quem chega a 6). Em
+   * `'fixed_games'` é o TOTAL de games da partida, todos jogados. Ler este
+   * número sem olhar o modo dá o placar errado — use `lib/torneios/matchScore.ts`.
+   */
   games_per_set: number
   tiebreak_games: boolean
+  /** Ausente em torneio anterior à coluna = 'set', o comportamento de sempre. */
+  scoring_mode?: ScoringMode
 }
 
 export interface StandingRow {
@@ -498,6 +511,7 @@ export interface Tournament {
   sets_to_win: number
   games_per_set: number
   tiebreak_games: boolean
+  scoring_mode: ScoringMode
   status: TournamentStatus
   created_by: string
   cover_image_url: string | null

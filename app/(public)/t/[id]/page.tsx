@@ -25,6 +25,7 @@ import { PoweredBy } from '@/components/ui/PoweredBy'
 import { RegisterExternalButton } from './RegisterExternalButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
+import { scoreRuleFrom, scoringLabel } from '@/lib/torneios/matchScore'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { resolveTournamentContent } from '@/lib/torneios/content'
 import { resolveRegistrationWindow, deadlineLabel, closingSoonLabel } from '@/lib/torneios/registrationWindow'
@@ -226,7 +227,11 @@ export default async function PublicTournamentPage({ params }: PageProps) {
     sets_to_win: t.sets_to_win ?? 1,
     games_per_set: t.games_per_set ?? 6,
     tiebreak_games: t.tiebreak_games ?? true,
+    scoring_mode: t.scoring_mode ?? 'set',
   }
+  // Como o placar é contado. O card de partida precisa disto para completar o
+  // outro lado e recusar soma errada; a leitura é a MESMA do servidor.
+  const scoreRule = scoreRuleFrom(t)
   const normalized = matches.map((m) => ({
     ...m,
     result_status: m.result_status as 'pending' | 'confirmed' | null,
@@ -374,7 +379,9 @@ export default async function PublicTournamentPage({ params }: PageProps) {
       : t.participant_type === 'dupla_revezando'
         ? 'Dupla sorteada — o parceiro muda a cada rodada'
         : 'Individual — você joga sozinho'
-  const scoringLabel = `${t.games_per_set ?? 6} games por set${t.tiebreak_games ? ' com tiebreak' : ''}`
+  // Sai do MESMO lugar que valida o placar: a página pública prometendo "set
+  // até 6" num torneio de 5 games corridos seria mentir para quem vai jogar.
+  const scoringText = scoringLabel(scoreRule)
 
   return (
     <div className="min-h-screen bg-surface" style={{ maxWidth: 480, margin: '0 auto' }}>
@@ -547,7 +554,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
         </div>
         <div className="bg-surface-card border border-surface-border rounded-xl px-3 py-2">
           <p className="text-slate-500 text-[11px] font-semibold uppercase tracking-wide">Pontuação</p>
-          <p className="text-white text-xs font-medium mt-0.5">{scoringLabel}</p>
+          <p className="text-white text-xs font-medium mt-0.5">{scoringText}</p>
         </div>
       </div>
 
@@ -709,7 +716,13 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                 </h3>
                 <div className="space-y-2">
                   {roundMatches.map((match) => (
-                    <MatchScoreCard key={match.id} match={toScoreMatch(match)} isAdmin={false} readOnly />
+                    <MatchScoreCard
+                      key={match.id}
+                      match={toScoreMatch(match)}
+                      isAdmin={false}
+                      scoreRule={scoreRule}
+                      readOnly
+                    />
                   ))}
                 </div>
               </div>

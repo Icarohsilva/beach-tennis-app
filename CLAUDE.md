@@ -458,6 +458,25 @@ The `features/` directory (aulas, financeiro, torneios) and most dashboard pages
 
 A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como bloco interno. As quatro fases de [docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md](docs/superpowers/specs/2026-08-02-liga-gamificacao-aluno-design.md) estão implementadas: motor de pontos e divisões, medalhas, elogios + comunidade e mural de fotos. A Liga nasce desligada por academia (`system_settings.liga_enabled`).
 
+- **Torneio: como a partida é contada** (`tournaments.scoring_mode`, `'set' | 'fixed_games'`,
+  default `set`; regra em [lib/torneios/matchScore.ts](lib/torneios/matchScore.ts)). Em `set`,
+  `games_per_set` é o ALVO (ganha quem chega a 6) e a soma dos lados é livre. Em
+  `fixed_games` — o Super/Americano que o beach tennis joga de verdade — ele é o TOTAL da
+  partida: os 5 games são jogados até o fim e vence quem fizer 3 (`gamesToWin` deriva a
+  maioria do total, nunca um campo à parte). A validação recusa soma diferente do total, e
+  isso não é rigor: aceitar `3x1` num formato de 5 tira 1 game da contagem dos QUATRO
+  jogadores daquela partida. `scoreRuleFrom` é a leitura única — servidor
+  (`recordMatchResult`/`reportMatchResult`), card de placar e rótulo público saem dela, e o
+  card completa o outro lado sozinho porque o total é fixo.
+- **Ordem da classificação: 1) vitórias, 2) games ganhos, 3) confronto direto**
+  ([lib/torneios/standings.ts](lib/torneios/standings.ts)). Começava pelo SALDO, o que punha
+  na frente quem venceu pouco e goleou nas poucas vezes. O confronto direto **nunca** é
+  comparador global — ele não é ordem total (A ganha de B, B de C, C de A), e um comparador
+  circular dentro de `sort` daria tabela diferente a cada execução. Ele é aplicado como
+  mini-tabela DENTRO de cada bloco empatado em (vitórias, games), contando só os confrontos
+  entre os empatados; parceiros da mesma dupla não contam (não se enfrentaram), e o saldo
+  sobrou como último desempate determinístico. `StandingsTable` imprime a ordem embaixo da
+  tabela — sem isso, quem está em 3º com mais vitórias que o 2º acha que o app errou a conta.
 - Medalha (`liga_medals`) **não dá ponto** e o catálogo vive em código (`lib/liga/medals.ts`), não em tabela: acrescentar medalha é deploy, e a passada diária do cron `liga-streak` concede retroativamente a quem já cumpre o critério.
 - Elogio (`liga_kudos`) é a única parte fraudável do sistema. As travas moram no **banco** (`unique (org, from, to, iso_week)`) e em `lib/liga/kudos.ts`; receber vale mais que dar de propósito. Elogio barrado pela trava é gravado assim mesmo, só sem ponto.
 - O feed (`features/comunidade/`) voltou ao menu como **seção da Liga**; `/comunidade` redireciona. `posts.is_pinned` é o mural de comunicados do admin.

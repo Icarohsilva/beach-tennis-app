@@ -28,6 +28,7 @@ import {
   hasGroupStage,
   isBracketFormat,
 } from '@/lib/torneios/formats'
+import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
 import { GroupTables } from '@/features/torneios/GroupTables'
 import { ParticipantModalProvider } from '@/features/torneios/ParticipantModal'
@@ -152,7 +153,11 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     sets_to_win: t.sets_to_win ?? 1,
     games_per_set: t.games_per_set ?? 6,
     tiebreak_games: t.tiebreak_games ?? true,
+    scoring_mode: t.scoring_mode ?? 'set',
   }
+  // Como o placar é contado. O card de partida precisa disto para completar o
+  // outro lado e recusar soma errada; a leitura é a MESMA do servidor.
+  const scoreRule = scoreRuleFrom(t)
   // O select devolve result_status e group_label como text; as constraints das
   // migrações 20260626000700/20260809000300 garantem os valores possíveis.
   const normalized = matches.map((m) => ({
@@ -318,6 +323,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
             match={toScoreMatch(myNextMatch)}
             currentUserId={user.id}
             isAdmin={false}
+            scoreRule={scoreRule}
             roundLabel={labelForRound(myNextMatch.round, myNextMatch.group_label)}
           />
         </Reveal>
@@ -375,6 +381,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                       match={toScoreMatch(match)}
                       currentUserId={user.id}
                       isAdmin={false}
+                      scoreRule={scoreRule}
                     />
                   ))}
                 </div>
