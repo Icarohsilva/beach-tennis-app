@@ -15,6 +15,7 @@ import {
   isBracketFormat,
 } from '@/lib/torneios/formats'
 import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
+import { scoreRuleFrom, validateMatchScore } from '@/lib/torneios/matchScore'
 import {
   computeGroupTables,
   generateKnockoutFromGroups,
@@ -266,6 +267,7 @@ export async function createTournament(input: {
       sets_to_win: input.scoring.sets_to_win,
       games_per_set: input.scoring.games_per_set,
       tiebreak_games: input.scoring.tiebreak_games,
+      scoring_mode: input.scoring.scoring_mode ?? 'set',
       status: 'draft' as TournamentStatus,
       created_by: user.id,
       cover_image_url: input.cover_image_url ?? null,
@@ -821,6 +823,35 @@ async function advanceBracketWinner(
     .eq('match_no', dest.matchNo)
 }
 
+/**
+ * A regra de placar do torneio dono desta partida.
+ *
+ * Uma leitura a mais por lançamento, e vale a pena: sem ela um Super de 5 games
+ * aceitaria `3x1` — placar de partida que não terminou de ser jogada, que
+ * corrompe a contagem de games dos QUATRO jogadores daquela partida e, por
+ * tabela, o 2º critério de desempate da classificação inteira.
+ */
+async function matchScoreRule(
+  adminClient: ReturnType<typeof createAdminClient>,
+  matchId: string,
+  orgId: string,
+) {
+  const { data } = await adminClient
+    .from('tournament_matches')
+    .select('tournaments(games_per_set, tiebreak_games, scoring_mode)')
+    .eq('id', matchId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+
+  const raw = (data as { tournaments: unknown } | null)?.tournaments
+  const t = (Array.isArray(raw) ? raw[0] : raw) as {
+    games_per_set: number | null
+    tiebreak_games: boolean | null
+    scoring_mode: 'set' | 'fixed_games' | null
+  } | null
+  return scoreRuleFrom(t ?? {})
+}
+
 // ---------------------------------------------------------------------------
 // recordMatchResult — admin only (lança direto, já confirmado)
 // ---------------------------------------------------------------------------
@@ -846,9 +877,9 @@ export async function recordMatchResult(
     .single()
   if (membership?.role !== 'admin') return { error: 'Sem permissão.' }
 
-  if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
-    return { error: 'Placar inválido.' }
-  }
+  const rule = await matchScoreRule(adminClient, matchId, orgId)
+  const valid = validateMatchScore(games1, games2, rule)
+  if (!valid.ok) return { error: valid.error }
 
   const { error: updErr } = await adminClient
     .from('tournament_matches')
@@ -886,9 +917,9 @@ export async function reportMatchResult(
   const orgId = await getActiveOrgId()
   if (!orgId) return { error: 'Academia ativa não encontrada.' }
 
-  if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
-    return { error: 'Placar inválido.' }
-  }
+  const rule = await matchScoreRule(adminClient, matchId, orgId)
+  const valid = validateMatchScore(games1, games2, rule)
+  if (!valid.ok) return { error: valid.error }
 
   const { data: match, error: mErr } = await adminClient
     .from('tournament_matches')

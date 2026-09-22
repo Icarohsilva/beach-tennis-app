@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { createTournament } from '@/features/torneios/actions'
 import { SPORTS } from '@/lib/arenas/sports'
 import { pairGendersFor, pairGendersLabel } from '@/lib/torneios/pairRules'
+import { scoreHint, type ScoringMode } from '@/lib/torneios/matchScore'
 import type {
   TournamentCategory,
   ParticipantType,
@@ -68,6 +69,10 @@ export function CreateTournamentForm() {
   const [category, setCategory] = useState<TournamentCategory>('livre')
   const [participantType, setParticipantType] = useState<ParticipantType>('dupla_revezando')
   const [format, setFormat] = useState<TournamentFormat>('americano')
+  // Placar: modo + número. O Super de 5 games corridos é o formato que a
+  // academia usa de verdade, e antes daqui não havia como expressá-lo — só
+  // existia "set até N", cuja soma é livre.
+  const [scoringMode, setScoringMode] = useState<ScoringMode>('set')
   const [gamesPerSet, setGamesPerSet] = useState(6)
   const [error, setError] = useState<string | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -131,7 +136,13 @@ export function CreateTournamentForm() {
         participant_type: participantType,
         format,
         level: 'iniciante',
-        scoring: { sets_to_win: 1, games_per_set: gamesPerSet, tiebreak_games: true },
+        scoring: {
+          sets_to_win: 1,
+          games_per_set: gamesPerSet,
+          // Games corridos não têm empate a desempatar: o tiebreak é do set.
+          tiebreak_games: scoringMode === 'set',
+          scoring_mode: scoringMode,
+        },
         cover_image_url: coverImageUrl,
         entry_price_cents: entryPriceCents,
         pix_key: pixKey.trim() || null,
@@ -241,10 +252,39 @@ export function CreateTournamentForm() {
       )}
 
       <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-slate-300">Games por set</label>
-        <select value={gamesPerSet} onChange={(e) => setGamesPerSet(Number(e.target.value))} className={selectClass}>
-          {[4, 6, 8, 9].map((g) => (<option key={g} value={g}>{g} games</option>))}
+        <label className="text-sm font-medium text-slate-300">Contagem da partida</label>
+        <select
+          value={scoringMode}
+          onChange={(e) => {
+            const mode = e.target.value as ScoringMode
+            setScoringMode(mode)
+            // 6 é alvo de set; 5 é total de partida. Trocar o modo sem trocar o
+            // número deixaria "set até 5" ou "5 games corridos" por acidente.
+            setGamesPerSet(mode === 'fixed_games' ? 5 : 6)
+          }}
+          className={selectClass}
+        >
+          <option value="set">Set (ganha quem chega ao número de games)</option>
+          <option value="fixed_games">Games corridos (todos jogados, vence a maioria)</option>
         </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-slate-300">
+          {scoringMode === 'fixed_games' ? 'Games por partida' : 'Games por set'}
+        </label>
+        <select value={gamesPerSet} onChange={(e) => setGamesPerSet(Number(e.target.value))} className={selectClass}>
+          {(scoringMode === 'fixed_games' ? [3, 5, 7, 9] : [4, 6, 8, 9]).map((g) => (
+            <option key={g} value={g}>{g} games</option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500">
+          {scoreHint({
+            mode: scoringMode,
+            games: gamesPerSet,
+            tiebreak: scoringMode === 'set',
+          })}
+        </p>
       </div>
 
       {/* Inscrição paga (opcional) */}

@@ -92,11 +92,19 @@ export async function buildAgendaSessions(
   const sessionIds = rows.map((r) => r.id)
   if (sessionIds.length === 0) return []
 
-  // Só há escolha quando os dois caminhos existem. Com um só, perguntar seria
-  // ruído — e para quem tem parceiro não existe escolha nenhuma: ele entra de
-  // graça e gastar crédito seria jogar dinheiro fora.
-  const canChoosePayment =
-    input.partner === null && input.hasPlanQuota && input.creditsBalance >= 1
+  // Qual caminho vale sem o aluno escolher nada — o mesmo que `resolveClassAccess`
+  // aplica no servidor, na mesma ordem: parceiro antes de plano.
+  const paymentDefault: 'partner' | 'plan' | null =
+    input.partner !== null ? 'partner' : input.hasPlanQuota ? 'plan' : null
+
+  // Só há escolha quando os DOIS caminhos existem: o padrão e o crédito comprado.
+  // Com um só, perguntar seria ruído.
+  //
+  // O aluno de parceiro entrou aqui porque o check-in dele não é infinito — a
+  // operadora tem teto, e a falta sem bipar vira pendência —, então quem comprou
+  // crédito precisa poder guardar o check-in para outro dia. O que ele não pode é
+  // gastar crédito por engano: por isso o cartão do parceiro nasce selecionado.
+  const canChoosePayment = paymentDefault !== null && input.creditsBalance >= 1
 
   // Dependentes primeiro: a ficha precisa saber, por sessão, o que cada filho já
   // tem ali (reserva, fila) para oferecer entrar ou sair no botão certo.
@@ -315,6 +323,8 @@ export async function buildAgendaSessions(
         cancelled: row.status === 'cancelled' || undefined,
         cancelledReason: row.status === 'cancelled' ? (row.cancelled_reason ?? null) : undefined,
         canChoosePayment: canChoosePayment || undefined,
+        paymentDefault: paymentDefault ?? undefined,
+        partner: input.partner ?? undefined,
         creditsBalance: input.creditsBalance,
       }
     })

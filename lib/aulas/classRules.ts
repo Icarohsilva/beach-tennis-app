@@ -98,6 +98,15 @@ export function buildClassRules(input: ClassRulesInput): RuleSection[] {
       text: 'Você entra pelo Wellhub/TotalPass',
       detail: 'Sem limite de aulas por semana nem por dia. Faça o check-in na recepção.',
     })
+    // A escolha existe desde que `preferCredit` passou à frente de `partner` em
+    // resolveClassAccess. Precisa estar escrita aqui: o aluno que comprou crédito
+    // não tem como adivinhar que pode guardar o check-in do parceiro para outro
+    // dia, e é para isso que ele comprou.
+    suasAulas.push({
+      text: 'Com crédito avulso, você escolhe',
+      detail: 'Ao entrar na aula dá para usar 1 crédito no lugar do check-in e '
+        + 'guardar o check-in do parceiro para outro dia. Sem escolher nada, entra pelo parceiro.',
+    })
   } else if (input.quotaEnforced && input.plan) {
     suasAulas.push({
       text: `Seu plano dá ${aulas(input.plan.classesPerWeek)} ${periodo(input.plan.cycle)}`,

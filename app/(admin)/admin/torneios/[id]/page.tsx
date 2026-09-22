@@ -20,6 +20,7 @@ import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { inviteState } from '@/lib/torneios/invite'
+import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { SendAccessButton } from './SendAccessButton'
@@ -239,7 +240,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     sets_to_win: t.sets_to_win ?? 1,
     games_per_set: t.games_per_set ?? 6,
     tiebreak_games: t.tiebreak_games ?? true,
+    scoring_mode: t.scoring_mode ?? 'set',
   }
+  // Como o placar é contado. O card de partida precisa disto para completar o
+  // outro lado e recusar soma errada; a leitura é a MESMA do servidor.
+  const scoreRule = scoreRuleFrom(t)
   const fmt = FORMATS[t.format ?? 'americano']
   const standings = fmt ? fmt.computeStandings(entryRefs, matches as unknown as MatchResultInput[], scoring) : []
 
@@ -692,6 +697,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           played_at: match.played_at,
                         }}
                         isAdmin
+                        scoreRule={scoreRule}
                         currentUserId=""
                       />
                     ))}

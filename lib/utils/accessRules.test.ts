@@ -235,9 +235,30 @@ describe('resolveClassAccess — aluno escolhe pagar com crédito', () => {
     ).toEqual({ denied: 'blocked_by_missed_checkins' })
   })
 
-  it('parceiro continua entrando de graça, sem gastar crédito à toa', () => {
+  it('parceiro que PEDE crédito gasta crédito — o check-in fica para outro dia', () => {
+    // Isto já devolveu 'partner': o parceiro vencia a escolha do aluno. Mas o
+    // check-in é franquia limitada da operadora, e a falta sem bipar vira
+    // pendência — quem comprou crédito tem de poder guardar o check-in.
     expect(
       resolveClassAccess({ ...comCota, creditsBalance: 5, partner: 'wellhub' }),
+    ).toEqual({ grant: 'credit' })
+  })
+
+  it('parceiro SEM escolha continua entrando de graça, sem gastar crédito à toa', () => {
+    // O padrão não mudou: quem não escolhe nada entra pelo parceiro. É o que
+    // impede o crédito de ser gasto por esquecimento.
+    expect(
+      resolveClassAccess({
+        ...comCota, creditsBalance: 5, partner: 'wellhub', preferCredit: false,
+      }),
+    ).toEqual({ grant: 'partner' })
+  })
+
+  it('parceiro sem saldo pedindo crédito cai no parceiro, não em negação', () => {
+    // A ficha só oferece a escolha com saldo, mas saldo some numa corrida — e aí
+    // o caminho certo é entrar pelo parceiro, não barrar o aluno.
+    expect(
+      resolveClassAccess({ ...comCota, creditsBalance: 0, partner: 'wellhub' }),
     ).toEqual({ grant: 'partner' })
   })
 })

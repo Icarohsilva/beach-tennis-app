@@ -23,6 +23,12 @@ import {
   isoToBrtLocalInput,
   brtLocalToIso,
 } from '@/lib/torneios/matchTime'
+import {
+  completeScore,
+  scoreHint,
+  validateMatchScore,
+  type MatchScoreRule,
+} from '@/lib/torneios/matchScore'
 
 export interface ScoreMatch {
   id: string
@@ -49,9 +55,25 @@ interface MatchScoreCardProps {
   roundLabel?: string
   /** Visitante público: mostra placar/badges, esconde lançar/confirmar/agendar. */
   readOnly?: boolean
+  /**
+   * Regra de placar do torneio (lib/torneios/matchScore.ts). Ausente = set de 6
+   * com tiebreak, que é o que todo torneio anterior à coluna `scoring_mode` é.
+   * Em games corridos ela preenche o outro lado sozinha e recusa soma errada
+   * ANTES de o servidor recusar — quem está na beira da quadra digita uma vez.
+   */
+  scoreRule?: MatchScoreRule
 }
 
-export function MatchScoreCard({ match, currentUserId = '', isAdmin, roundLabel, readOnly = false }: MatchScoreCardProps) {
+const DEFAULT_RULE: MatchScoreRule = { mode: 'set', games: 6, tiebreak: true }
+
+export function MatchScoreCard({
+  match,
+  currentUserId = '',
+  isAdmin,
+  roundLabel,
+  readOnly = false,
+  scoreRule = DEFAULT_RULE,
+}: MatchScoreCardProps) {
   const router = useRouter()
   const [editing, setEditing] = useState(false)
   const [g1, setG1] = useState<string>(match.games1?.toString() ?? '')
@@ -130,11 +152,28 @@ export function MatchScoreCard({ match, currentUserId = '', isAdmin, roundLabel,
         : 0
       : 0
 
+  /**
+   * Digitar um lado já define o outro em games corridos: o total é fixo. Evita
+   * o erro mais comum do lançamento na quadra — preencher só um campo e salvar
+   * um placar que não soma.
+   */
+  function setSide(side: 1 | 2, raw: string) {
+    if (side === 1) setG1(raw)
+    else setG2(raw)
+    const n = Number(raw)
+    if (raw === '' || !Number.isInteger(n)) return
+    const other = completeScore(n, scoreRule)
+    if (other === null) return
+    if (side === 1) setG2(String(other))
+    else setG1(String(other))
+  }
+
   function save() {
     const n1 = Number(g1)
     const n2 = Number(g2)
-    if (!Number.isInteger(n1) || !Number.isInteger(n2) || n1 < 0 || n2 < 0) {
-      setError('Informe um placar válido (games por lado).')
+    const valid = validateMatchScore(n1, n2, scoreRule)
+    if (!valid.ok) {
+      setError(valid.error ?? 'Informe um placar válido (games por lado).')
       return
     }
     setError(null)
@@ -175,7 +214,8 @@ export function MatchScoreCard({ match, currentUserId = '', isAdmin, roundLabel,
           min={0}
           inputMode="numeric"
           value={side === 1 ? g1 : g2}
-          onChange={(e) => (side === 1 ? setG1(e.target.value) : setG2(e.target.value))}
+          onChange={(e) => setSide(side, e.target.value)}
+          max={scoreRule.mode === 'fixed_games' ? scoreRule.games : undefined}
           aria-label={`Games ${side === 1 ? team1 : team2}`}
           className="h-11 w-12 shrink-0 rounded-lg border border-brand-500/50 bg-surface text-center text-xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
@@ -313,6 +353,9 @@ export function MatchScoreCard({ match, currentUserId = '', isAdmin, roundLabel,
         <div className="border-t border-surface-border px-3 py-2.5">
           {editing ? (
             <div className="space-y-2">
+              {/* A regra antes do clique: em games corridos, "todos os 5 são
+                  jogados" é a informação que evita o 3x0 que não soma. */}
+              <p className="text-xs text-slate-500">{scoreHint(scoreRule)}</p>
               {error && <p className="text-xs text-red-400">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" loading={isPending} onClick={save}>
