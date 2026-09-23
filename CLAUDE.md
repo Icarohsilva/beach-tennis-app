@@ -500,6 +500,21 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   cinco arquivos, e um que esquecesse devolveria inscrição grátis em torneio pago. A página
   pública e `/p/[token]` usam a mesma régua, e `PAY_ON_SITE_NOTICE` é o texto do caso sem
   pagamento online — mostrar o valor sem ação nenhuma deixava o atleta sem saber o que fazer
+- **Página pública do evento (`/e/[slug]`) é a que vai no WhatsApp**, e é lida no celular.
+  A capa (`tournament_events.cover_image_url`) sobe pelo painel do evento em
+  Admin › Torneios › Editar conteúdo (`EventCoverField` → bucket `tournament-images`,
+  `updateTournamentEventCover`) e aparece **inteira, na proporção dela**, com o título
+  embaixo: a capa real é o FLYER, e recortá-la a 224px com 85% de escurecimento para o
+  título caber por cima apagava a arte. Pelo mesmo motivo o OG não declara 1200x630 (o
+  WhatsApp recortava o flyer quadrado como faixa). A ordem é título → quando/onde →
+  **categorias** → sobre/regulamento: quem chega pelo link já leu o post, e a descrição
+  antes empurrava a inscrição para a terceira rolagem. A hora do cabeçalho vem do torneio
+  que começa primeiro no primeiro dia (`eventStartTime`), porque o evento não tem hora
+  própria. Os números (torneios/abertas/inscritos) só aparecem com pelo menos um inscrito:
+  "Inscritos 0" num link recém-divulgado é prova social ao contrário. O nível do torneio
+  era cravado em `iniciante` na criação (o card do "Avançado" dizia "Iniciante"); hoje é
+  escolhido no formulário e corrigível em `/admin/torneios/[id]/editar`
+  (`updateTournamentLevel`).
 - **Torneio: como a partida é contada** (`tournaments.scoring_mode`, `'set' | 'fixed_games'`,
   default `set`; regra em [lib/torneios/matchScore.ts](lib/torneios/matchScore.ts)). Em `set`,
   `games_per_set` é o ALVO (ganha quem chega a 6) e a soma dos lados é livre. Em

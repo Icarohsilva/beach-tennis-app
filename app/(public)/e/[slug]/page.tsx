@@ -24,7 +24,9 @@ import { EventStat } from '@/features/torneios/EventStat'
 import {
   eventPhase,
   eventPhaseLabel,
+  eventStartTime,
   formatEventRange,
+  formatStartTime,
   sortEventTournaments,
   summarizeEvent,
 } from '@/lib/torneios/event'
@@ -65,9 +67,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: event.name,
       description,
       url: `${getSiteUrl()}/e/${params.slug}`,
-      images: event.cover_image_url
-        ? [{ url: event.cover_image_url, width: 1200, height: 630 }]
-        : [],
+      // Sem width/height: a capa costuma ser o flyer QUADRADO do evento, e
+      // declarar 1200x630 fazia o WhatsApp recortar a arte como se fosse faixa.
+      images: event.cover_image_url ? [{ url: event.cover_image_url }] : [],
       type: 'website',
     },
     twitter: {
@@ -88,6 +90,7 @@ export default async function EventoPage({ params }: PageProps) {
   const summary = summarizeEvent(tournaments)
   const ordered = sortEventTournaments(tournaments)
   const whatsapp = org.whatsapp?.replace(/\D/g, '') ?? ''
+  const startTime = eventStartTime(tournaments)
 
   const asBrowse = (t: (typeof tournaments)[number]): BrowseTournament => ({
     id: t.id,
@@ -109,70 +112,74 @@ export default async function EventoPage({ params }: PageProps) {
 
   return (
     <div style={accentVars(org.brand_color)} className="min-h-screen bg-surface text-white">
-      {/* ── Capa ────────────────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden">
-        {event.cover_image_url ? (
-          <>
-            <div className="relative h-56 w-full sm:h-72">
-              <Image
-                src={event.cover_image_url}
-                alt=""
-                fill
-                sizes="100vw"
-                className="object-cover"
-                priority
-              />
-            </div>
-            <div
-              aria-hidden
-              className="absolute inset-0 bg-gradient-to-t from-surface via-surface/85 to-surface/30"
-            />
-          </>
-        ) : (
-          <div className="h-40 w-full bg-gradient-to-br from-brand-500 via-brand-700 to-brand-900 sm:h-48">
-            <div
-              aria-hidden
-              className="h-full w-full opacity-[0.16] [background-image:linear-gradient(rgb(255_255_255/0.5)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.5)_1px,transparent_1px)] [background-size:26px_26px]"
-            />
-          </div>
-        )}
+      {/* ── Capa ────────────────────────────────────────────────────────────
+          Com imagem, ela aparece INTEIRA, na proporção dela, e o título vem
+          embaixo. Antes a capa virava fundo recortado a 224px e escurecido a
+          85% para o título caber por cima — funciona com foto de quadra, mas a
+          capa real de um evento é o FLYER, com a arte e o texto já desenhados:
+          recortado e escurecido, ele sumia justamente onde mais aparece, no
+          celular. Sem imagem, segue o degradê com o título por cima. */}
+      {event.cover_image_url ? (
+        <div className="mx-auto max-w-2xl sm:px-4 sm:pt-4">
+          <Image
+            src={event.cover_image_url}
+            alt={event.name}
+            width={1200}
+            height={1200}
+            sizes="(min-width: 672px) 672px, 100vw"
+            className="h-auto w-full sm:rounded-2xl"
+            priority
+          />
+        </div>
+      ) : (
+        <div className="h-32 w-full bg-gradient-to-br from-brand-500 via-brand-700 to-brand-900 sm:h-40">
+          <div
+            aria-hidden
+            className="h-full w-full opacity-[0.16] [background-image:linear-gradient(rgb(255_255_255/0.5)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.5)_1px,transparent_1px)] [background-size:26px_26px]"
+          />
+        </div>
+      )}
 
-        <div className="absolute inset-x-0 bottom-0 mx-auto max-w-2xl px-4 pb-4">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm',
-                  phase === 'running'
-                    ? 'border-red-400/40 bg-red-500/25 text-red-50'
-                    : phase === 'past'
-                      ? 'border-white/20 bg-black/40 text-white/80'
-                      : 'border-emerald-300/40 bg-emerald-400/20 text-emerald-50',
-                )}
-              >
-                {phase === 'running' && (
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-300" />
-                  </span>
-                )}
-                {eventPhaseLabel(phase)}
-              </span>
-              <h1 className="mt-2 text-2xl font-extrabold leading-tight text-white sm:text-3xl">
-                {event.name}
-              </h1>
-            </div>
+      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-12 pt-4">
+        {/* ── Título ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-col gap-3 xs:flex-row xs:items-start xs:justify-between">
+          <div className="min-w-0">
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold',
+                phase === 'running'
+                  ? 'border-red-400/40 bg-red-500/20 text-red-100'
+                  : phase === 'past'
+                    ? 'border-white/15 bg-white/5 text-white/70'
+                    : 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200',
+              )}
+            >
+              {phase === 'running' && (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-300 opacity-75" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-300" />
+                </span>
+              )}
+              {eventPhaseLabel(phase)}
+            </span>
+            <h1 className="mt-2 text-2xl font-extrabold leading-tight text-white sm:text-3xl">
+              {event.name}
+            </h1>
+          </div>
+          <div className="shrink-0">
             <ShareButton path={`/e/${event.slug}`} title={event.name} what="evento" />
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto max-w-2xl space-y-5 px-4 pb-12 pt-4">
         {/* ── Quando e onde ───────────────────────────────────────────────── */}
         <div className="space-y-1.5 text-sm">
           <p className="flex items-center gap-2 font-semibold text-white first-letter:uppercase">
             <CalendarDays className="h-4 w-4 shrink-0 text-brand-400" aria-hidden />
+            {/* A hora vem do torneio que começa primeiro: o evento não tem hora
+                própria, e sem ela aqui a arena repetia data e local dentro da
+                descrição só para dizer "14h". */}
             {formatEventRange(event)}
+            {startTime ? ` · ${formatStartTime(startTime)}` : ''}
           </p>
           <Link
             href={`/arenas/${org.slug}`}
@@ -193,27 +200,17 @@ export default async function EventoPage({ params }: PageProps) {
           )}
         </div>
 
-        {event.description && (
-          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-300">
-            {event.description}
-          </p>
+        {/* ── Números do evento ─────────────────────────────────────────────
+            Só aparecem quando alguém já se inscreveu. "Inscritos 0" num link que
+            acabou de ser divulgado é prova social ao contrário — diz a quem
+            chega que ninguém quis ir. */}
+        {summary.entrants > 0 && (
+          <dl className="grid grid-cols-3 gap-2">
+            <EventStat label={summary.total === 1 ? 'Torneio' : 'Torneios'} value={summary.total} />
+            <EventStat label="Abertas" value={summary.open} tone="emerald" />
+            <EventStat label="Inscritos" value={summary.entrants} />
+          </dl>
         )}
-
-        {event.rules && (
-          <details className="rounded-2xl border border-white/[0.07] bg-surface-card p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-white">📋 Regulamento</summary>
-            <div className="mt-3">
-              <MarkdownDoc content={event.rules} />
-            </div>
-          </details>
-        )}
-
-        {/* ── Números do evento ───────────────────────────────────────────── */}
-        <dl className="grid grid-cols-3 gap-2">
-          <EventStat label={summary.total === 1 ? 'Torneio' : 'Torneios'} value={summary.total} />
-          <EventStat label="Com inscrição" value={summary.open} tone="emerald" />
-          <EventStat label="Inscritos" value={summary.entrants} />
-        </dl>
 
         {/* ── Torneios ────────────────────────────────────────────────────── */}
         <section>
@@ -242,6 +239,31 @@ export default async function EventoPage({ params }: PageProps) {
           )}
         </section>
 
+        {/* ── Sobre o evento ─────────────────────────────────────────────────
+            Depois das categorias, e não antes: quem chega pelo WhatsApp já leu
+            o texto do post, e no celular a descrição empurrava o botão de
+            inscrição para a terceira rolagem. */}
+        {(event.description || event.rules) && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-white">
+              Sobre o evento
+            </h2>
+            {event.description && (
+              <p className="whitespace-pre-line text-sm leading-relaxed text-slate-300">
+                {event.description}
+              </p>
+            )}
+            {event.rules && (
+              <details className="rounded-2xl border border-white/[0.07] bg-surface-card p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-white">📋 Regulamento</summary>
+                <div className="mt-3">
+                  <MarkdownDoc content={event.rules} />
+                </div>
+              </details>
+            )}
+          </section>
+        )}
+
         {/* ── Contato ─────────────────────────────────────────────────────── */}
         {(whatsapp || summary.sports > 0) && (
           <section className="rounded-2xl border border-white/[0.07] bg-surface-card p-4">
@@ -258,7 +280,9 @@ export default async function EventoPage({ params }: PageProps) {
                 )}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            {/* Empilhados abaixo de 400px: lado a lado, em 360px, cada rótulo
+                quebrava em duas linhas. */}
+            <div className="mt-3 flex flex-col gap-2 xs:flex-row">
               {whatsapp && (
                 <a
                   href={buildWhatsAppUrl(

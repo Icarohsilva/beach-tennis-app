@@ -9,9 +9,11 @@ import { SPORTS } from '@/lib/arenas/sports'
 import { pairGendersFor, pairGendersLabel } from '@/lib/torneios/pairRules'
 import { scoreHint, type ScoringMode } from '@/lib/torneios/matchScore'
 import { entryChargeHint } from '@/lib/torneios/entryCharge'
+import { LEVEL_ORDER, levelLabel } from '@/lib/torneios/sportProfile'
 import type {
   TournamentCategory,
   ParticipantType,
+  StudentLevel,
   TournamentFormat,
 } from '@/types'
 import { createClient } from '@/lib/supabase/client'
@@ -73,6 +75,9 @@ export function CreateTournamentForm({
   const [date, setDate] = useState('')
   const [sport, setSport] = useState(SPORTS[0].slug)
   const [category, setCategory] = useState<TournamentCategory>('livre')
+  // Nível: era gravado 'iniciante' FIXO, então todo torneio nascia Iniciante e
+  // a página do evento mostrava o chip "Iniciante" no card do Super Avançado.
+  const [level, setLevel] = useState<StudentLevel>('iniciante')
   const [participantType, setParticipantType] = useState<ParticipantType>('dupla_revezando')
   const [format, setFormat] = useState<TournamentFormat>('americano')
   // Placar: modo + número. O Super de 5 games corridos é o formato que a
@@ -143,7 +148,7 @@ export function CreateTournamentForm({
         category,
         participant_type: participantType,
         format,
-        level: 'iniciante',
+        level,
         scoring: {
           sets_to_win: 1,
           games_per_set: gamesPerSet,
@@ -206,6 +211,18 @@ export function CreateTournamentForm({
             allowed_pair_genders dela) — sem isto o admin não teria como saber,
             antes de criar, que "Masculino" já impede mulher de se inscrever. */}
         <p className="text-xs text-slate-500">{entryRuleHint(category)}</p>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label className="text-sm font-medium text-slate-300">Nível</label>
+        <select value={level} onChange={(e) => setLevel(e.target.value as StudentLevel)} className={selectClass}>
+          {LEVEL_ORDER.map((l) => (
+            <option key={l} value={l}>{levelLabel(l, sport)}</option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500">
+          Aparece no card do torneio e no filtro da vitrine. A → mais forte, Iniciante → quem está começando.
+        </p>
       </div>
 
       <div className="flex flex-col gap-1">

@@ -10,10 +10,14 @@ import { useRouter } from 'next/navigation'
 import { CalendarDays, Check, Copy, ExternalLink, Plus, Trophy } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
+import { Button, buttonClasses } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createTournamentEvent, setEventPublished } from '@/features/torneios/eventActions'
-import { updateTournamentEventContent } from '@/features/torneios/configActions'
+import {
+  updateTournamentEventContent,
+  updateTournamentEventCover,
+} from '@/features/torneios/configActions'
+import { createClient } from '@/lib/supabase/client'
 import { formatEventRange } from '@/lib/torneios/event'
 
 export interface AdminEvent {
@@ -26,6 +30,7 @@ export interface AdminEvent {
   description: string | null
   rules: string | null
   venue: string | null
+  cover_image_url: string | null
   tournamentCount: number
 }
 
@@ -206,7 +211,9 @@ function EventRow({ event }: { event: AdminEvent }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      window.prompt('Copie o link do evento:', url)
+      // Sem `window.prompt` (ver CLAUDE.md): o caminho já está impresso logo
+      // abaixo do nome do evento, então basta pedir a cópia manual.
+      setError(`Não foi possível copiar. Copie à mão: ${url}`)
     }
   }
 
@@ -262,6 +269,7 @@ function EventRow({ event }: { event: AdminEvent }) {
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
       {editingContent && (
         <div className="mt-3 space-y-2 rounded-lg border border-surface-border bg-surface/60 p-3">
+          <EventCoverField eventId={event.id} initialUrl={event.cover_image_url} />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-300">Descrição</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputClass} />
@@ -281,5 +289,90 @@ function EventRow({ event }: { event: AdminEvent }) {
         </div>
       )}
     </li>
+  )
+}
+
+/**
+ * A capa da página do evento. É o flyer que vai no preview do WhatsApp e no
+ * topo da página — a coluna existia e a página já a desenhava, mas não havia
+ * onde enviar a imagem, então todo evento saía com o degradê de fallback.
+ *
+ * Mesmo caminho da capa do torneio (`CoverImageCard`): o navegador sobe o
+ * arquivo ao bucket público e a action só grava a URL.
+ */
+function EventCoverField({ eventId, initialUrl }: { eventId: string; initialUrl: string | null }) {
+  const router = useRouter()
+  const [url, setUrl] = useState<string | null>(initialUrl)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    // 5 MB: acima disso o celular de quem abre o link espera a capa carregar
+    // antes de ver qualquer coisa, e o WhatsApp desiste do preview.
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Imagem muito grande. Use até 5 MB.')
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      const supabase = createClient()
+      const ext = (file.name.split('.').pop() ?? 'jpg').toLowerCase()
+      const path = `eventos/${eventId}/${crypto.randomUUID()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('tournament-images').upload(path, file)
+      if (upErr) { setError('Erro ao enviar a imagem. Tente de novo.'); return }
+      const publicUrl = supabase.storage.from('tournament-images').getPublicUrl(path).data.publicUrl
+      const r = await updateTournamentEventCover(eventId, publicUrl)
+      if (r.error) { setError(r.error); return }
+      setUrl(publicUrl)
+      router.refresh()
+    })
+  }
+
+  function remove() {
+    setError(null)
+    startTransition(async () => {
+      const r = await updateTournamentEventCover(eventId, null)
+      if (r.error) { setError(r.error); return }
+      setUrl(null)
+      router.refresh()
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium text-slate-300">Capa da página</span>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="max-h-64 w-full rounded-lg object-contain bg-black/20" />
+      ) : (
+        <p className="text-xs text-slate-500">
+          Sem capa, a página abre com um degradê e o link vai sem imagem no WhatsApp.
+          Use o flyer do evento — quadrado ou retrato funciona melhor no celular.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <label className="cursor-pointer">
+          <span className={buttonClasses({ variant: 'secondary', size: 'sm' })}>
+            {isPending ? 'Enviando…' : url ? 'Trocar capa' : 'Enviar capa'}
+          </span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleFile}
+            disabled={isPending}
+          />
+        </label>
+        {url && (
+          <Button variant="danger" size="sm" disabled={isPending} onClick={remove}>
+            Remover
+          </Button>
+        )}
+      </div>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+    </div>
   )
 }

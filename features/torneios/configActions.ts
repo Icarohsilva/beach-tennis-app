@@ -10,6 +10,7 @@ import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/
 import { presentOrNull } from '@/lib/torneios/content'
 import { canonicalizePairGenders } from '@/lib/torneios/pairRules'
 import { shirtConfig, validateShirtName, validateShirtSize } from '@/lib/torneios/shirt'
+import { LEVEL_ORDER } from '@/lib/torneios/sportProfile'
 import type { PairGenders } from '@/types'
 
 async function requireAdmin(): Promise<
@@ -403,6 +404,90 @@ export async function updateTournamentEventContent(
 
   revalidatePath('/admin/torneios')
   revalidatePath(`/e/${event.slug as string}`)
+  return {}
+}
+
+/**
+ * Capa da página do evento (`/e/[slug]`).
+ *
+ * A coluna existia desde a criação dos eventos e a página já a desenhava, mas
+ * nenhuma tela a preenchia: o evento sempre caía no degradê de fallback, e o
+ * link divulgado no WhatsApp saía sem imagem no preview. É a capa que vende o
+ * evento — a arte do flyer é o que faz a pessoa abrir.
+ *
+ * `null` remove. A imagem em si é enviada pelo navegador ao bucket público
+ * `tournament-images` (o mesmo da capa do torneio); aqui só se grava a URL.
+ */
+export async function updateTournamentEventCover(
+  eventId: string,
+  url: string | null,
+): Promise<{ error?: string }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  // Só URL do nosso storage público. Aceitar qualquer endereço poria na página
+  // (e no preview do WhatsApp) uma imagem hospedada sabe-se lá onde.
+  if (url !== null && !/\/storage\/v1\/object\/public\/tournament-images\//.test(url)) {
+    return { error: 'Imagem inválida. Envie o arquivo pelo botão de capa.' }
+  }
+
+  const { data: event } = await adminClient
+    .from('tournament_events')
+    .select('id, slug')
+    .eq('id', eventId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!event) return { error: 'Evento não encontrado.' }
+
+  const { error } = await adminClient
+    .from('tournament_events')
+    .update({ cover_image_url: url })
+    .eq('id', eventId)
+  if (error) return { error: 'Erro ao salvar a capa. Tente novamente.' }
+
+  revalidatePath('/admin/torneios')
+  revalidatePath(`/e/${event.slug as string}`)
+  return {}
+}
+
+/**
+ * Nível do torneio, depois de criado.
+ *
+ * O formulário de criação gravava `level: 'iniciante'` fixo, então TODO torneio
+ * nascia Iniciante — e a página do evento mostrava o chip "Iniciante" no card
+ * do Super Avançado. Esta action conserta os já criados; o formulário passou a
+ * perguntar.
+ */
+export async function updateTournamentLevel(
+  tournamentId: string,
+  level: string,
+): Promise<{ error?: string }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  if (!(LEVEL_ORDER as readonly string[]).includes(level)) {
+    return { error: 'Nível inválido.' }
+  }
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, event:tournament_events(slug)')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  const { error } = await adminClient
+    .from('tournaments')
+    .update({ level })
+    .eq('id', tournamentId)
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
+  const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
+  revalidateTournament(tournamentId, eventSlug)
   return {}
 }
 

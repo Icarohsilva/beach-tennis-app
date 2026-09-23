@@ -27,7 +27,7 @@ export interface EventPageData {
 }
 
 const TOURNAMENT_COLUMNS =
-  'id, name, date, sport, category, level, participant_type, format, status, entry_price_cents, max_players'
+  'id, name, date, sport, category, level, participant_type, format, status, entry_price_cents, max_players, start_time'
 
 /** Evento publicado pelo slug, com a academia e os torneios vinculados. */
 export async function getEventBySlug(slug: string): Promise<EventPageData | null> {
