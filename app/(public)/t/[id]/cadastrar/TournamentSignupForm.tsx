@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { formatWhatsApp, parseWhatsApp } from '@/lib/utils/phone'
 
 interface Props {
   tournamentId: string
@@ -26,7 +27,7 @@ export function TournamentSignupForm({
   next = null,
 }: Props) {
   const router = useRouter()
-  const [form, setForm] = useState({ full_name: '', email: '', password: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', password: '' })
   const [gender, setGender] = useState<'' | 'M' | 'F'>('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,6 +39,9 @@ export function TournamentSignupForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.full_name.trim()) { setError('Informe seu nome completo.'); return }
+    // Obrigatório: é por ele que a arena manda a senha e a cobrança da inscrição.
+    const phone = parseWhatsApp(form.phone)
+    if (!phone.ok) { setError(phone.error); return }
     if (requiresGender && !gender) { setError('Este torneio pede o gênero para validar a inscrição.'); return }
     setLoading(true)
     setError('')
@@ -50,6 +54,7 @@ export function TournamentSignupForm({
       options: {
         data: {
           full_name: form.full_name.trim(),
+          phone: phone.formatted,
           ...(orgInviteCode ? { org_invite_code: orgInviteCode } : {}),
           // handle_new_user grava em memberships.sports.
           ...(sport ? { sports: sport } : {}),
@@ -111,6 +116,17 @@ export function TournamentSignupForm({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
+          <Input
+            label="WhatsApp"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            value={form.phone}
+            onChange={(e) => setForm((f) => ({ ...f, phone: formatWhatsApp(e.target.value) }))}
+            placeholder="(31) 99999-9999"
+            hint="Com DDD. É por ele que a arena confirma sua inscrição e o pagamento."
+            required
+          />
           {requiresGender && (
             <label className="text-sm text-slate-300">
               Gênero

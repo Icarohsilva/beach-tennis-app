@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { formatWhatsApp, parseWhatsApp } from '@/lib/utils/phone'
 
 export function DayUseSignupForm({ slotId, subtitle }: { slotId: string; subtitle: string }) {
   const router = useRouter()
@@ -25,6 +26,10 @@ export function DayUseSignupForm({ slotId, subtitle }: { slotId: string; subtitl
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.full_name.trim()) { setError('Informe seu nome completo.'); return }
+    // Obrigatório: é por ele que a arena cobra quem paga na porta e avisa
+    // mudança de horário de quem não é aluno e não abre o app todo dia.
+    const phone = parseWhatsApp(form.phone)
+    if (!phone.ok) { setError(phone.error); return }
     setLoading(true)
     setError('')
     const supabase = createClient()
@@ -34,9 +39,7 @@ export function DayUseSignupForm({ slotId, subtitle }: { slotId: string; subtitl
       options: {
         data: {
           full_name: form.full_name.trim(),
-          // Telefone é o único extra: é por ele que a arena avisa mudança de
-          // horário de quem não é aluno e não abre o app todo dia.
-          ...(form.phone.trim() ? { phone: form.phone.trim() } : {}),
+          phone: phone.formatted,
         },
       },
     })
@@ -96,12 +99,15 @@ export function DayUseSignupForm({ slotId, subtitle }: { slotId: string; subtitl
           <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
           <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
           <Input
-            label="WhatsApp (opcional)"
+            label="WhatsApp"
             type="tel"
             inputMode="tel"
+            autoComplete="tel"
             value={form.phone}
-            onChange={set('phone')}
-            placeholder="(11) 90000-0000"
+            onChange={(e) => setForm((f) => ({ ...f, phone: formatWhatsApp(e.target.value) }))}
+            placeholder="(31) 99999-9999"
+            hint="Com DDD. É por ele que a arena confirma sua reserva e o pagamento."
+            required
           />
           <Input
             label="Senha"

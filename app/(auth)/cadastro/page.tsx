@@ -10,6 +10,7 @@ import { acceptLegalDocuments } from '@/features/legal/actions'
 import { STUDENT_REQUIRED_SLUGS } from '@/lib/legal/documents'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { formatWhatsApp, parseWhatsApp } from '@/lib/utils/phone'
 import { Card } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { SportsPicker } from '@/components/ui/SportsPicker'
@@ -82,6 +83,13 @@ function CadastroInner() {
       setError('Informe o ID do seu Gympass/TotalPass.')
       return
     }
+    // Obrigatório: é por ele que a academia manda a senha, a cobrança e o aviso
+    // de aula cancelada.
+    const phone = parseWhatsApp(form.phone)
+    if (!phone.ok) {
+      setError(phone.error)
+      return
+    }
     if (!acceptedTerms) {
       setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
       return
@@ -89,8 +97,11 @@ function CadastroInner() {
     setLoading(true)
     setError('')
     const supabase = createClient()
-    const meta: Record<string, string> = { full_name: form.full_name, org_invite_code: inviteCode }
-    if (form.phone.trim()) meta.phone = form.phone.trim()
+    const meta: Record<string, string> = {
+      full_name: form.full_name,
+      org_invite_code: inviteCode,
+      phone: phone.formatted,
+    }
     // Os esportes vão pelo metadata porque handle_new_user() os grava na membership.
     // Uma server action pós-signUp não serviria: com confirmação de email ligada não
     // há sessão aqui, e mandar o user_id pelo cliente seria IDOR.
@@ -271,7 +282,17 @@ function CadastroInner() {
       <form onSubmit={handleCadastro} className="flex flex-col gap-4">
         <Input label="Nome completo" value={form.full_name} onChange={set('full_name')} required />
         <Input label="Email" type="email" value={form.email} onChange={set('email')} required />
-        <Input label="Telefone" type="tel" value={form.phone} onChange={set('phone')} placeholder="(11) 99999-9999" />
+        <Input
+          label="WhatsApp"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={form.phone}
+          onChange={(e) => setForm((f) => ({ ...f, phone: formatWhatsApp(e.target.value) }))}
+          placeholder="(31) 99999-9999"
+          hint="Com DDD. É por ele que a academia fala com você."
+          required
+        />
         <label className="text-sm text-slate-300">
           Gênero <span className="text-slate-500">(opcional)</span>
           <select

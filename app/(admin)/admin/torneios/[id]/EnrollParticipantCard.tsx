@@ -277,10 +277,10 @@ function ConfirmationView({
           // A parte de cada um (dupla fixa cobra por atleta) vai junto na
           // mesma mensagem de acesso — sem isso o organizador manda o login e
           // esquece de avisar que falta pagar.
-          const paymentNote =
+          const payment =
             person.paymentUrl && person.pendingAmountCents
-              ? `\n\nSua parte da inscrição é R$ ${(person.pendingAmountCents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${person.paymentUrl}`
-              : ''
+              ? { url: person.paymentUrl, amountCents: person.pendingAmountCents }
+              : null
           const waUrl = person.phone
             ? buildWhatsAppUrl(
                 person.phone,
@@ -291,7 +291,8 @@ function ConfirmationView({
                   email: person.email,
                   password: person.password ?? null,
                   orgName,
-                }) + paymentNote,
+                  payment,
+                }),
               )
             : null
           return (

@@ -5,10 +5,12 @@ import { cn } from '@/lib/utils/cn'
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
+  /** Texto de apoio embaixo do campo (some quando há erro). */
+  hint?: string
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, ...props }, ref) => (
+  ({ label, error, hint, className, ...props }, ref) => (
     <div className="flex flex-col gap-1">
       {label && <label className="text-sm font-medium text-slate-300">{label}</label>}
       <input
@@ -20,7 +22,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         {...props}
       />
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error ? (
+        <p className="text-xs text-red-400">{error}</p>
+      ) : (
+        hint && <p className="text-xs text-slate-500">{hint}</p>
+      )}
     </div>
   ),
 )

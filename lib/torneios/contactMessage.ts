@@ -66,6 +66,12 @@ export interface AccessContext {
    */
   password?: string | null
   orgName?: string | null
+  /**
+   * A parte da inscrição que esta pessoa ainda deve, com o link pessoal de
+   * pagamento (/p/<token>). Presente, a mensagem deixa de dizer "confirmada":
+   * a vaga só fica garantida depois do pagamento.
+   */
+  payment?: { url: string; amountCents: number } | null
 }
 
 /**
@@ -82,16 +88,24 @@ export interface AccessContext {
 export function buildAccessMessage(ctx: AccessContext): string {
   const to = firstName(ctx.toName)
   const org = ctx.orgName?.trim()
-  const linhas: string[] = [
-    to ? `Oi, ${to}!` : 'Oi!',
-    '',
-    org
-      ? `Sua inscrição no torneio *${ctx.tournamentName}* (${org}) está confirmada. 🎾`
-      : `Sua inscrição no torneio *${ctx.tournamentName}* está confirmada. 🎾`,
-    '',
-    'Acompanhe a chave, seus jogos e os resultados por aqui:',
-    ctx.tournamentUrl,
-  ]
+  const where = org ? ` (${org})` : ''
+  const linhas: string[] = [to ? `Oi, ${to}!` : 'Oi!', '']
+
+  // O link de pagamento vem ANTES do link do torneio: é a única ação que a
+  // pessoa precisa tomar, e no fim da mensagem ele se perdia depois do login.
+  if (ctx.payment) {
+    const valor = `R$ ${(ctx.payment.amountCents / 100).toFixed(2).replace('.', ',')}`
+    linhas.push(
+      `Sua inscrição no torneio *${ctx.tournamentName}*${where} foi feita. 🎾`,
+      '',
+      `Para garantir sua vaga, falta o pagamento de *${valor}*. Pague por aqui:`,
+      ctx.payment.url,
+    )
+  } else {
+    linhas.push(`Sua inscrição no torneio *${ctx.tournamentName}*${where} está confirmada. 🎾`)
+  }
+
+  linhas.push('', 'Acompanhe a chave, seus jogos e os resultados por aqui:', ctx.tournamentUrl)
 
   if (ctx.password) {
     linhas.push(
