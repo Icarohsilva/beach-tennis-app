@@ -317,6 +317,13 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   nem telefone. Converter depois em conta com login **não é possível** hoje: `createUser` não
   aceita id, então virar login significaria outro id e repontar todo o histórico. Quem tem
   e-mail deve ser cadastrado com ele.
+- **WhatsApp é obrigatório nos três cadastros feitos pela própria pessoa** (`/cadastro`,
+  `/t/[id]/cadastrar`, `/d/[id]/cadastrar`): é por ele que a arena manda senha, cobrança e
+  aviso de horário, e quem chega pelo link do torneio não abre o app todo dia. Validação e
+  máscara em [lib/utils/phone.ts](lib/utils/phone.ts) (`parseWhatsApp` / `formatWhatsApp`);
+  o número vai para `profiles.phone` pelo metadata do `signUp`, já formatado. Exige DDD e
+  aceita fixo de 10 dígitos (WhatsApp Business). A trava é só no cliente, porque o `signUp`
+  é chamado do navegador; contas antigas sem telefone continuam existindo.
 - `memberships.age_group` (`'adult' | 'kids'`, default `adult`) é a leitura da academia sobre
   o aluno; `classes.type` é a da turma. Cruzar os dois (`lib/aulas/ageGroup.ts`) só **avisa** —
   nunca bloqueia, porque o adolescente na turma de adultos é caso legítimo. Não confundir com
