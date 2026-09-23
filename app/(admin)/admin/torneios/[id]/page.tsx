@@ -26,6 +26,8 @@ import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
 import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
 import { SendAccessButton } from './SendAccessButton'
+import { CopyPaymentLinkButton } from './CopyPaymentLinkButton'
+import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
@@ -472,16 +474,24 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                 const pt = normalizeProf(entry.partner)
                 const playerPayToken = paymentTokens[entry.id]?.player
                 const partnerPayToken = paymentTokens[entry.id]?.partner
-                const waUrl = entry.payment_status === 'pending' && p?.phone && playerPayToken
+                // Link direto da tela de pagamento de cada lado: vai na cobrança,
+                // na mensagem de acesso e no botão de copiar.
+                const playerPayUrl =
+                  entry.payment_status === 'pending' && playerPayToken ? `${getSiteUrl()}/p/${playerPayToken}` : null
+                const partnerPayUrl =
+                  entry.partner_payment_status === 'pending' && partnerPayToken
+                    ? `${getSiteUrl()}/p/${partnerPayToken}`
+                    : null
+                const waUrl = p?.phone && playerPayUrl
                   ? buildWhatsAppUrl(
                       p.phone,
-                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${playerPayToken}`,
+                      `Olá ${p.full_name}! Sua inscrição no torneio ${t.name} aguarda pagamento de R$ ${(entry.final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${playerPayUrl}`,
                     )
                   : null
-                const partnerWaUrl = entry.partner_payment_status === 'pending' && pt?.phone && partnerPayToken
+                const partnerWaUrl = pt?.phone && partnerPayUrl
                   ? buildWhatsAppUrl(
                       pt.phone,
-                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${getSiteUrl()}/p/${partnerPayToken}`,
+                      `Olá ${pt.full_name}! Sua inscrição no torneio ${t.name} (dupla com ${p?.full_name ?? ''}) aguarda pagamento de R$ ${(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}. Pague por aqui: ${partnerPayUrl}`,
                     )
                   : null
                 return (
@@ -502,6 +512,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                             tournamentName={t.name}
                             tournamentUrl={shareUrl}
                             orgName={orgName}
+                            paymentUrl={playerPayUrl}
+                            pendingAmountCents={entry.final_price_cents}
                           />
                         )}
                         {pt && (
@@ -526,6 +538,8 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                             tournamentName={t.name}
                             tournamentUrl={shareUrl}
                             orgName={orgName}
+                            paymentUrl={partnerPayUrl}
+                            pendingAmountCents={entry.partner_final_price_cents}
                           />
                         )}
                         {entry.payment_status === 'pending' && (
@@ -580,29 +594,23 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                       <div className="mt-2 flex flex-wrap gap-2 items-center">
                         <ConfirmPaymentButton entryId={entry.id} />
                         {waUrl && (
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-green-400 hover:text-green-300"
-                          >
-                            📱 Cobrar titular via WhatsApp
+                          <a href={waUrl} target="_blank" rel="noopener noreferrer">
+                            <Button type="button" variant="secondary" size="sm">📱 Cobrar titular via WhatsApp</Button>
                           </a>
                         )}
+                        {playerPayUrl && <CopyPaymentLinkButton url={playerPayUrl} />}
                       </div>
                     )}
                     {entry.partner_payment_status === 'pending' && (
                       <div className="mt-2 flex flex-wrap gap-2 items-center">
                         <ConfirmPaymentButton entryId={entry.id} side="partner" />
                         {partnerWaUrl && (
-                          <a
-                            href={partnerWaUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-green-400 hover:text-green-300"
-                          >
-                            📱 Cobrar parceiro via WhatsApp
+                          <a href={partnerWaUrl} target="_blank" rel="noopener noreferrer">
+                            <Button type="button" variant="secondary" size="sm">📱 Cobrar parceiro via WhatsApp</Button>
                           </a>
+                        )}
+                        {partnerPayUrl && (
+                          <CopyPaymentLinkButton url={partnerPayUrl} label="Copiar link do parceiro" />
                         )}
                       </div>
                     )}

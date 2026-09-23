@@ -22,6 +22,9 @@ import { LiveRefresher } from '@/features/torneios/LiveRefresher'
 import { ShareButton } from '@/features/torneios/ShareButton'
 import { RegisterButton } from './RegisterButton'
 import { MyShirtCard } from '@/features/torneios/MyShirtCard'
+import { MyEntryPaymentCard } from '@/features/torneios/MyEntryPaymentCard'
+import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
+import { chargeFor, sideOfEntry, type PayableEntry } from '@/lib/torneios/entrySide'
 import { shirtConfig } from '@/lib/torneios/shirt'
 import {
   DEFAULT_ADVANCE_PER_GROUP,
@@ -79,6 +82,8 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     adminClient
       .from('tournament_entries')
       .select(`id, player_id, partner_id, entry_status, shirt_size, partner_shirt_size,
+        payment_status, discount_pct, final_price_cents, receipt_url,
+        partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
         player:profiles!tournament_entries_player_id_fkey(id, full_name),
         partner:profiles!tournament_entries_partner_id_fkey(id, full_name)`)
       .eq('tournament_id', params.id),
@@ -104,6 +109,14 @@ export default async function TorneioDetailPage({ params }: PageProps) {
     entry_status: 'confirmed' | 'waitlist' | 'offered'
     shirt_size: string | null
     partner_shirt_size: string | null
+    payment_status: PayableEntry['payment_status']
+    discount_pct: number
+    final_price_cents: number
+    receipt_url: string | null
+    partner_payment_status: PayableEntry['partner_payment_status']
+    partner_discount_pct: number
+    partner_final_price_cents: number
+    partner_receipt_url: string | null
     player: { id: string; full_name: string } | { id: string; full_name: string }[] | null
     partner: { id: string; full_name: string } | { id: string; full_name: string }[] | null
   }
@@ -225,6 +238,33 @@ export default async function TorneioDetailPage({ params }: PageProps) {
       ? (myEntry.player_id === user.id ? !myEntry.shirt_size : !myEntry.partner_shirt_size)
       : false
 
+  // Minha parte da cobrança. Em dupla fixa cada lado paga o seu, então vale o
+  // lado em que EU estou, não o status do titular. O link é o mesmo /p/<token>
+  // que o admin manda na cobrança pelo WhatsApp (idempotente).
+  const mySide = myEntry ? sideOfEntry(user.id, myEntry) : null
+  const myCharge = myEntry && mySide ? chargeFor(mySide, myEntry) : null
+  const myPaymentPending =
+    myEntry?.entry_status === 'confirmed' && myCharge?.paymentStatus === 'pending'
+  let myPaymentPath: string | null = null
+  if (myPaymentPending && myEntry && mySide) {
+    try {
+      const token = await ensureEntryPaymentToken(adminClient, {
+        orgId: t.organization_id, tournamentId: t.id, entryId: myEntry.id, side: mySide,
+      })
+      if (token) myPaymentPath = `/p/${token}`
+    } catch (e) {
+      console.error('[torneios/[id]] falha ao gerar link de pagamento', e)
+    }
+  }
+  const paymentCard =
+    myPaymentPending && myCharge ? (
+      <MyEntryPaymentCard
+        amountCents={myCharge.finalPriceCents}
+        paymentPath={myPaymentPath}
+        receiptSent={Boolean(myCharge.receiptUrl)}
+      />
+    ) : null
+
   // Nome do aluno logado: só para SUGERIR o primeiro nome na estampa. A
   // sugestão é editável — quem joga costuma ser chamado pelo apelido, e o campo
   // vazio faz a pessoa digitar o nome do documento, que não cabe nas costas.
@@ -311,12 +351,13 @@ export default async function TorneioDetailPage({ params }: PageProps) {
           <Card accent={!isMine}>
             {isMine ? (
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="success">Inscrito</Badge>
+                <div className="flex flex-col gap-1.5 xs:flex-row xs:items-center xs:gap-2">
+                  <Badge variant="success" className="w-fit shrink-0">Inscrito</Badge>
                   <span className="text-sm text-slate-400">
                     Você está dentro. A chave sai quando as inscrições fecharem.
                   </span>
                 </div>
+                {paymentCard}
                 {myShirtPending && myEntry && (
                   <MyShirtCard
                     entryId={myEntry.id}
@@ -345,6 +386,12 @@ export default async function TorneioDetailPage({ params }: PageProps) {
             )}
           </Card>
         </Reveal>
+      )}
+
+      {/* Inscrições fechadas ou torneio rolando e a minha parte ainda não
+          paga: a dívida não some quando o card de inscrição sai da tela. */}
+      {t.status !== 'open' && t.status !== 'finished' && paymentCard && (
+        <Reveal step={1}>{paymentCard}</Reveal>
       )}
 
       {/* ── Pódio ───────────────────────────────────────────────────────── */}

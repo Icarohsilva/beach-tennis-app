@@ -114,6 +114,23 @@ describe('buildAccessMessage', () => {
     expect(msg).toContain('Xk4p2Qw9')
   })
 
+  it('com pagamento pendente, manda o link de pagamento antes do link do torneio', () => {
+    const msg = buildAccessMessage({
+      ...base,
+      password: 'Xk4p2Qw9',
+      payment: { url: 'https://arenahub.website/p/tok123', amountCents: 8000 },
+    })
+    expect(msg).toContain('R$ 80,00')
+    expect(msg).toContain('https://arenahub.website/p/tok123')
+    // "Confirmada" com dívida em aberto faz a pessoa achar que já pagou.
+    expect(msg).not.toMatch(/confirmada/i)
+    expect(msg.indexOf('/p/tok123')).toBeLessThan(msg.indexOf('/t/abc'))
+  })
+
+  it('sem pagamento pendente, segue dizendo que está confirmada', () => {
+    expect(buildAccessMessage({ ...base, payment: null })).toMatch(/está confirmada/)
+  })
+
   it('avisa que a senha é só do primeiro acesso', () => {
     // Sem isso a pessoa guarda a provisória e estranha o app pedir outra.
     const msg = buildAccessMessage({ ...base, password: 'Xk4p2Qw9' })

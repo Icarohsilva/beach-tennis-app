@@ -507,6 +507,15 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   cinco arquivos, e um que esquecesse devolveria inscrição grátis em torneio pago. A página
   pública e `/p/[token]` usam a mesma régua, e `PAY_ON_SITE_NOTICE` é o texto do caso sem
   pagamento online — mostrar o valor sem ação nenhuma deixava o atleta sem saber o que fazer
+- **Inscrição com pagamento pendente se anuncia ao próprio aluno.** Na página logada
+  (`/torneios/[id]`), a parte do aluno ainda não paga vira `MyEntryPaymentCard`: tag
+  "Pagamento pendente" (ou "em análise", com comprovante enviado) e botão para o link
+  pessoal `/p/<token>`, o MESMO que o admin manda na cobrança (`ensureEntryPaymentToken`,
+  idempotente). Vale o LADO do aluno (`sideOfEntry` + `chargeFor`), não o status do
+  titular, e continua na tela depois que as inscrições fecham. No admin, a mensagem de
+  "Enviar acesso" leva o link de pagamento pelo campo `payment` de `buildAccessMessage` (e
+  aí deixa de dizer "confirmada"), e `CopyPaymentLinkButton` cobre quem não tem WhatsApp
+  cadastrado.
 - **Página pública do evento (`/e/[slug]`) é a que vai no WhatsApp**, e é lida no celular.
   A capa (`tournament_events.cover_image_url`) sobe pelo painel do evento em
   Admin › Torneios › Editar conteúdo (`EventCoverField` → bucket `tournament-images`,
