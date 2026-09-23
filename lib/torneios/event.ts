@@ -79,6 +79,8 @@ export interface EventTournament {
   status: 'draft' | 'open' | 'in_progress' | 'finished'
   entry_price_cents: number | null
   max_players: number | null
+  /** HH:MM(:SS) do início, quando o admin informou. */
+  start_time?: string | null
   occupiedCount: number
 }
 
@@ -118,4 +120,33 @@ export function summarizeEvent(items: EventTournament[]): EventSummary {
     entrants: items.reduce((sum, t) => sum + Math.max(0, t.occupiedCount), 0),
     sports: new Set(items.map((t) => t.sport).filter(Boolean)).size,
   }
+}
+
+/**
+ * O horário que a capa do evento mostra ao lado da data: o do torneio que
+ * começa PRIMEIRO no primeiro dia.
+ *
+ * O evento não tem horário próprio — quem tem é cada torneio. Sem isto a página
+ * mostrava a data e o endereço mas não a hora, e a arena repetia "Data, Horário,
+ * Local" dentro da descrição só para dizer "14h", duplicando o resto na tela.
+ *
+ * Só olha o primeiro dia de propósito: num evento de fim de semana, "a partir
+ * das 8h" de domingo não serve para quem vai no sábado às 14h. Devolve `null`
+ * quando nenhum torneio do primeiro dia informou horário.
+ */
+export function eventStartTime(items: Pick<EventTournament, 'date' | 'start_time'>[]): string | null {
+  if (items.length === 0) return null
+  const firstDay = items.reduce((min, t) => (t.date < min ? t.date : min), items[0].date)
+  const times = items
+    .filter((t) => t.date === firstDay && t.start_time)
+    .map((t) => (t.start_time as string).slice(0, 5))
+    .sort()
+  return times[0] ?? null
+}
+
+/** "14h" / "14h30" — como a hora é dita na divulgação, não "14:00". */
+export function formatStartTime(hhmm: string): string {
+  const [h, m] = hhmm.split(':')
+  const hour = String(Number(h))
+  return m && m !== '00' ? `${hour}h${m}` : `${hour}h`
 }

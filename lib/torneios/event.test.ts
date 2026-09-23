@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   eventPhase,
   eventPhaseLabel,
+  eventStartTime,
+  formatStartTime,
   formatEventRange,
   lastDay,
   sortEventTournaments,
@@ -157,5 +159,38 @@ describe('summarizeEvent', () => {
 
   it('contagem negativa não subtrai do total de inscritos', () => {
     expect(summarizeEvent([t({ id: '1', occupiedCount: -3 })]).entrants).toBe(0)
+  })
+})
+
+describe('eventStartTime', () => {
+  it('pega o horário mais cedo do primeiro dia', () => {
+    expect(
+      eventStartTime([
+        { date: '2026-11-01', start_time: '16:00:00' },
+        { date: '2026-11-01', start_time: '14:00:00' },
+        { date: '2026-10-31', start_time: null },
+        { date: '2026-11-02', start_time: '08:00:00' },
+      ]),
+    ).toBeNull()
+    expect(
+      eventStartTime([
+        { date: '2026-11-01', start_time: '16:00:00' },
+        { date: '2026-11-01', start_time: '14:00:00' },
+        { date: '2026-11-02', start_time: '08:00:00' },
+      ]),
+    ).toBe('14:00')
+  })
+
+  it('sem horário cadastrado devolve null', () => {
+    expect(eventStartTime([])).toBeNull()
+    expect(eventStartTime([{ date: '2026-11-01', start_time: null }])).toBeNull()
+  })
+})
+
+describe('formatStartTime', () => {
+  it('fala a hora como na divulgação', () => {
+    expect(formatStartTime('14:00')).toBe('14h')
+    expect(formatStartTime('09:30')).toBe('9h30')
+    expect(formatStartTime('08')).toBe('8h')
   })
 })
