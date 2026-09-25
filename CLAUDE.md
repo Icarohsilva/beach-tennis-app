@@ -404,6 +404,14 @@ Gradiente de marca: bg-gradient-to-br from-brand-600 to-brand-800 (headers/CTAs 
 
 UI primitives live in [components/ui/](components/ui/): `Button`, `Card`, `Badge`, `Input`, `BottomNav`. Always use these rather than raw HTML elements for consistency.
 
+`CollapsibleCard` ([components/ui/CollapsibleCard.tsx](components/ui/CollapsibleCard.tsx)) é o
+card que abre pelo cabeçalho e **nasce fechado**. É `<details>` nativo, não estado em React:
+serve em Server Component e o `open` não é controlado, então o card aberto continua aberto
+depois de uma revalidação. Em `/admin/torneios` ele guarda "Páginas de evento" e "Novo
+Torneio", que antes empurravam a lista para a segunda rolagem; a lista é agrupada por status
+em `groupTournamentsByStatus` ([lib/torneios/statusGroups.ts](lib/torneios/statusGroups.ts)):
+em andamento, inscrições abertas, rascunhos e **encerrados sempre por último**.
+
 ### Versão do app e sessão
 
 Este app **não tem cache de service worker**: o `@ducanh2912/next-pwa` está nas
