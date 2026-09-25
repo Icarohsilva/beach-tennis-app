@@ -11,6 +11,8 @@ import { TournamentStatusActions } from './TournamentStatusActions'
 import { EventsPanel, type AdminEvent } from './EventsPanel'
 import { EventPicker } from './EventPicker'
 import { Trophy } from 'lucide-react'
+import { CollapsibleCard } from '@/components/ui/CollapsibleCard'
+import { groupTournamentsByStatus } from '@/lib/torneios/statusGroups'
 import type { Tournament, TournamentStatus } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
@@ -73,11 +75,11 @@ export default async function AdminTorneiosPage() {
 
       <EventsPanel events={events} />
 
-      {/* Create tournament form */}
-      <Card>
-        <h2 className="text-base font-semibold text-white mb-4">Novo Torneio</h2>
+      {/* Fechado ao abrir: o formulário inteiro empurrava a lista de torneios
+          para a segunda rolagem, e criar torneio é raro perto de gerenciar. */}
+      <CollapsibleCard title="Novo Torneio" subtitle="Toque para criar um torneio.">
         <CreateTournamentForm hasMpToken={hasMpToken} />
-      </Card>
+      </CollapsibleCard>
 
       {error && (
         <p className="text-red-400 text-sm">Erro ao carregar torneios.</p>
@@ -87,48 +89,58 @@ export default async function AdminTorneiosPage() {
       {tournaments.length === 0 ? (
         <EmptyState icon={Trophy} title="Nenhum torneio cadastrado ainda." description="Use o formulário acima para criar o primeiro torneio." />
       ) : (
-        <div className="space-y-3">
-          {tournaments.map((tournament) => (
-            <Card key={tournament.id}>
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <Link
-                      href={`/admin/torneios/${tournament.id}`}
-                      className="text-white font-semibold hover:text-brand-500 transition-colors"
-                    >
-                      {tournament.name}
-                    </Link>
-                    <Badge variant={STATUS_VARIANTS[tournament.status]}>
-                      {STATUS_LABELS[tournament.status]}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {formatDate(tournament.date, "dd 'de' MMMM 'de' yyyy")} ·{' '}
-                    {tournament.modality === 'dupla_fixa' ? 'Dupla Fixa' : 'Dupla Revezando'}
-                  </p>
-                </div>
+        <div className="space-y-6">
+          {groupTournamentsByStatus(tournaments).map((group) => (
+            <section key={group.status} className="space-y-3">
+              <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {group.label}
+                <span className="rounded-full bg-surface-card px-2 py-0.5 text-[11px] text-slate-300">
+                  {group.items.length}
+                </span>
+              </h2>
+              {group.items.map((tournament) => (
+                <Card key={tournament.id}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <Link
+                          href={`/admin/torneios/${tournament.id}`}
+                          className="text-white font-semibold hover:text-brand-500 transition-colors"
+                        >
+                          {tournament.name}
+                        </Link>
+                        <Badge variant={STATUS_VARIANTS[tournament.status]}>
+                          {STATUS_LABELS[tournament.status]}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {formatDate(tournament.date, "dd 'de' MMMM 'de' yyyy")} ·{' '}
+                        {tournament.modality === 'dupla_fixa' ? 'Dupla Fixa' : 'Dupla Revezando'}
+                      </p>
+                    </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {eventOptions.length > 0 && (
-                    <EventPicker
-                      tournamentId={tournament.id}
-                      currentEventId={tournament.event_id ?? null}
-                      options={eventOptions}
-                    />
-                  )}
-                  <Link href={`/admin/torneios/${tournament.id}`}>
-                    <Button variant="secondary" size="sm">
-                      Gerenciar
-                    </Button>
-                  </Link>
-                  <TournamentStatusActions
-                    tournamentId={tournament.id}
-                    currentStatus={tournament.status}
-                  />
-                </div>
-              </div>
-            </Card>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {eventOptions.length > 0 && (
+                        <EventPicker
+                          tournamentId={tournament.id}
+                          currentEventId={tournament.event_id ?? null}
+                          options={eventOptions}
+                        />
+                      )}
+                      <Link href={`/admin/torneios/${tournament.id}`}>
+                        <Button variant="secondary" size="sm">
+                          Gerenciar
+                        </Button>
+                      </Link>
+                      <TournamentStatusActions
+                        tournamentId={tournament.id}
+                        currentStatus={tournament.status}
+                      />
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </section>
           ))}
         </div>
       )}

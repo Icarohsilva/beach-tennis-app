@@ -8,8 +8,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { CalendarDays, Check, Copy, ExternalLink, Plus, Trophy } from 'lucide-react'
-import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { CollapsibleCard } from '@/components/ui/CollapsibleCard'
 import { Button, buttonClasses } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createTournamentEvent, setEventPublished } from '@/features/torneios/eventActions'
@@ -41,14 +41,14 @@ export function EventsPanel({ events }: { events: AdminEvent[] }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <Card>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-white">Páginas de evento</h2>
-          <p className="mt-0.5 text-xs text-slate-400">
-            Um link só para divulgar; os torneios ficam dentro dele.
-          </p>
-        </div>
+    // Fechado ao abrir a página: a lista de torneios, que é o que o admin veio
+    // ver, fica logo embaixo em vez de depois de dois cards inteiros.
+    <CollapsibleCard
+      title="Páginas de evento"
+      subtitle="Um link só para divulgar; os torneios ficam dentro dele."
+      meta={`${events.length} ${events.length === 1 ? 'evento' : 'eventos'}`}
+    >
+      <div className="mb-4 flex justify-end">
         <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)}>
           <Plus className="mr-1 h-4 w-4" />
           {open ? 'Fechar' : 'Novo evento'}
@@ -70,7 +70,7 @@ export function EventsPanel({ events }: { events: AdminEvent[] }) {
           ))}
         </ul>
       )}
-    </Card>
+    </CollapsibleCard>
   )
 }
 
