@@ -242,6 +242,21 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   use **de graça**. Recusar um comprovante passa por `openRefundForBooking` de propósito: o
   pagamento nunca virou `paid`, então nenhum estorno PIX abre, mas a parte que o aluno tinha
   abatido da carteira volta para ele.
+- **Day use por Wellhub/TotalPass** ([lib/dayuse/partnerCheckin.ts](lib/dayuse/partnerCheckin.ts)).
+  A arena liga cada parceiro em Financeiro › Planos (`system_settings.day_use_partners`,
+  "wellhub,totalpass"); ligado, todo day use **pago** oferece "Usar Wellhub/TotalPass" ao lado
+  do reservar, nas três telas (`PartnerBookButtons`), com o aviso de que check-in recusado vira
+  cobrança na arena. A reserva vai com `payment_method` = o parceiro: nasce `confirmed`, **sem
+  `payments`** e sem tocar na carteira — quem paga é o app do parceiro, então não há estorno a
+  abrir e o aviso de cancelamento usa `paidCents = 0`. O que falta é o quiosque validar:
+  `partner_checkin_at` via `markDayUsePartnerCheckin`, ou "Não passou: cobrar"
+  (`convertPartnerBookingToOnSite`), que troca o método para `on_site` e abre o `payments`
+  pendente pelo preço do day use, caindo no "Marcar como pago" de sempre. `bookDayUse` revalida
+  com a MESMA `partnerOptionsFor` da tela — sem isso, chamar a action com `partner` reservaria
+  day use pago de graça em arena que não aceita parceiro. `partner_checkin_by` não tem FK de
+  propósito: uma segunda FK de `dayuse_bookings` para `profiles` deixaria ambíguo o embed
+  `profiles(...)` das telas, e o PostgREST recusa a consulta inteira. Não confundir com
+  `memberships.partner`, que é o eixo de cobrança das AULAS (webhook do parceiro).
 - **Carteira (crédito em DINHEIRO)**: `wallet_transactions` é a verdade e `wallets.balance_cents`
   o cache, mesmo par de `credit_transactions`→`memberships.credits_balance` — mas conta reais,
   não aulas. Escrita **só** pela RPC `wallet_apply` (o `select ... for update` nela é o que

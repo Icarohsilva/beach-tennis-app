@@ -70,9 +70,16 @@ export type DayUsePaymentMethod =
    * marcar quem pagou.
    */
   | 'on_site'
+  /**
+   * Check-in de parceiro (lib/dayuse/partnerCheckin.ts). Confirma na hora e
+   * NÃO gera `payments`: quem paga é o app do parceiro, e o que a arena precisa
+   * é o quiosque validar o check-in (`partner_checkin_at`).
+   */
+  | 'wellhub'
+  | 'totalpass'
 
 export const DAY_USE_PAYMENT_METHODS: readonly DayUsePaymentMethod[] = [
-  'free', 'wallet', 'mercadopago', 'pix_manual', 'on_site',
+  'free', 'wallet', 'mercadopago', 'pix_manual', 'on_site', 'wellhub', 'totalpass',
 ]
 
 /** Minutos que a reserva segura a vaga esperando confirmação. */
@@ -84,6 +91,9 @@ const HOLD_MINUTES: Record<DayUsePaymentMethod, number> = {
   // Confirma na hora: quem paga na porta não tem prazo online a cumprir, e um
   // prazo aqui derrubaria a reserva de quem já está indo para a quadra.
   on_site: 0,
+  // Parceiro: confirma na hora, igual a on_site; a validação é no quiosque.
+  wellhub: 0,
+  totalpass: 0,
   // Checkout Pro: o webhook chega em segundos; 30 min é folga para o aluno
   // terminar de digitar o cartão. Era o único valor que existia, cravado dentro
   // da RPC.
@@ -121,6 +131,8 @@ const LABEL: Record<DayUsePaymentMethod, string> = {
   mercadopago: 'Cartão ou PIX (Mercado Pago)',
   pix_manual: 'PIX na chave da arena',
   on_site: 'Pagar na arena',
+  wellhub: 'Check-in Wellhub',
+  totalpass: 'Check-in TotalPass',
 }
 
 export function paymentMethodLabel(method: DayUsePaymentMethod): string {

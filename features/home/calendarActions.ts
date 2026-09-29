@@ -145,6 +145,7 @@ export async function loadDayUseDetail(slotId: string): Promise<DayUseDetail | n
     priceCents: data.priceCents,
     paymentTiming: data.paymentTiming,
     walletCents: data.walletCents,
+    partnerOptions: data.partnerOptions,
     occupied: data.occupied,
     attendees: data.attendees,
     mine: data.mine,
@@ -160,6 +161,7 @@ export interface DayUseDetail {
   /** Onde o pagamento acontece, já com o teto da configuração aplicado. */
   paymentTiming: PublicDayUse['paymentTiming']
   walletCents: number
+  partnerOptions: PublicDayUse['partnerOptions']
   occupied: number
   attendees: string[]
   mine: PublicDayUse['mine']

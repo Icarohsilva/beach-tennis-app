@@ -21,6 +21,11 @@ export interface AdminAttendee {
   paymentMethod: DayUsePaymentMethod
   bookedAt: string
   holdUntil: string | null
+  /**
+   * Quando o quiosque validou o check-in do parceiro (Wellhub/TotalPass).
+   * Nulo em reserva de parceiro = ainda falta validar.
+   */
+  partnerCheckinAt: string | null
   /** Pagamento ligado à reserva, quando há cobrança. */
   payment: { amountCents: number; status: string } | null
   /** URL assinada do comprovante do PIX manual (bucket privado). */
@@ -66,7 +71,7 @@ export async function getAdminDayUse(
   const { data: rows } = await client
     .from('dayuse_bookings')
     .select(`
-      id, student_id, status, payment_method, booked_at, hold_until,
+      id, student_id, status, payment_method, booked_at, hold_until, partner_checkin_at,
       receipt_url, refund_pix_key, refund_pix_owner,
       profiles(full_name, phone),
       payments(amount, status),
@@ -82,6 +87,7 @@ export async function getAdminDayUse(
     payment_method: DayUsePaymentMethod
     booked_at: string
     hold_until: string | null
+    partner_checkin_at: string | null
     receipt_url: string | null
     refund_pix_key: string | null
     refund_pix_owner: string | null
@@ -127,6 +133,7 @@ export async function getAdminDayUse(
       paymentMethod: r.payment_method,
       bookedAt: r.booked_at,
       holdUntil: r.hold_until,
+      partnerCheckinAt: r.partner_checkin_at,
       payment: payment
         ? { amountCents: Math.round(Number(payment.amount) * 100), status: payment.status }
         : null,

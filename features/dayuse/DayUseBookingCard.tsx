@@ -17,6 +17,14 @@ import {
 import { PAYMENT_REFUND_PROMISE } from '@/lib/dayuse/refundRules'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseSlot } from '@/types'
+import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
+import { PartnerBookButtons } from './PartnerBookButtons'
+import {
+  isDayUsePartner,
+  partnerBookedNotice,
+  PARTNER_SHORT_LABEL,
+  type DayUsePartner,
+} from '@/lib/dayuse/partnerCheckin'
 
 interface Props {
   slot: DayUseSlot
@@ -38,14 +46,19 @@ interface Props {
   cancelNotice?: string | null
   /** Saldo em dinheiro do aluno nesta academia, para mostrar o abatimento. */
   walletCents?: number
+  /** Parceiros aceitos no lugar do pagamento (partnerOptionsFor). */
+  partnerOptions?: DayUsePartner[]
+  /** Como a MINHA reserva foi feita, para lembrar o check-in do parceiro. */
+  myPaymentMethod?: DayUsePaymentMethod | null
 }
 
-export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, paymentTiming = 'on_site', cancelNotice = null, walletCents = 0 }: Props) {
+export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingStatus = null, attendees, priceCents, paymentTiming = 'on_site', cancelNotice = null, walletCents = 0, partnerOptions = [], myPaymentMethod = null }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [bookingId, setBookingId] = useState<string | null>(myBookingId)
   const [status, setStatus] = useState<string | null>(myBookingStatus)
   const [localCount, setLocalCount] = useState(bookingsCount)
+  const [method, setMethod] = useState<DayUsePaymentMethod | null>(myPaymentMethod)
   const [showAttendees, setShowAttendees] = useState(false)
   const { confirm, dialog } = useConfirm()
   const isFull = localCount >= slot.capacity
@@ -53,10 +66,10 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
   // abatimento diferente do que bookDayUse aplica.
   const split = splitWithWallet(priceCents, walletCents)
 
-  async function handleBook() {
+  async function handleBook(partner: DayUsePartner | null = null) {
     setLoading(true)
     setError(null)
-    const result = await bookDayUse(slot.id)
+    const result = await bookDayUse(slot.id, { partner })
     if (result.error) {
       setLoading(false)
       setError(result.error)
@@ -71,6 +84,7 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
     setLocalCount((c) => c + 1)
     setBookingId('pending')
     setStatus('confirmed')
+    setMethod(result.partner ?? null)
   }
 
   async function handleCancel() {
@@ -160,7 +174,9 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
               {status === 'pending_payment' ? (
                 <Badge variant="warning">Aguardando pagamento</Badge>
               ) : (
-                <Badge variant="success">Reservado</Badge>
+                <Badge variant="success">
+                  {isDayUsePartner(method) ? `Reservado · ${PARTNER_SHORT_LABEL[method]}` : 'Reservado'}
+                </Badge>
               )}
               {bookingId !== 'pending' && (
                 <Button variant="secondary" size="sm" disabled={loading} onClick={handleCancel}>
@@ -169,12 +185,26 @@ export function DayUseBookingCard({ slot, bookingsCount, myBookingId, myBookingS
               )}
             </div>
           ) : (
-            <Button size="sm" disabled={loading || isFull} onClick={handleBook}>
+            <Button size="sm" disabled={loading || isFull} onClick={() => handleBook()}>
               {loading ? '...' : 'Reservar'}
             </Button>
           )}
         </div>
       </div>
+      {!bookingId && !isFull && partnerOptions.length > 0 && (
+        <div className="mt-3 border-t border-surface-border pt-3">
+          <PartnerBookButtons
+            options={partnerOptions}
+            priceCents={priceCents}
+            disabled={loading}
+            onPick={(p) => handleBook(p)}
+            size="sm"
+          />
+        </div>
+      )}
+      {bookingId && isDayUsePartner(method) && (
+        <p className="mt-2 text-xs text-slate-400">{partnerBookedNotice(method)}</p>
+      )}
       {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
       {dialog}
     </Card>

@@ -5,6 +5,7 @@ import { FinanceiroSubnav } from '../FinanceiroSubnav'
 import { SalesSettingsCard } from './SalesSettingsCard'
 import type { SubscriptionPlan, PlanBillingOption } from '@/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
+import { parseAcceptedPartners } from '@/lib/dayuse/partnerCheckin'
 
 export default async function PlanosPage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -30,7 +31,7 @@ export default async function PlanosPage() {
     .from('system_settings')
     .select('key, value')
     .eq('organization_id', orgId)
-    .in('key', ['single_class_price', 'single_class_sale_enabled', 'day_use_price', 'day_use_sale_enabled'])
+    .in('key', ['single_class_price', 'single_class_sale_enabled', 'day_use_price', 'day_use_sale_enabled', 'day_use_partners'])
   const settings = Object.fromEntries(
     ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
   )
@@ -56,6 +57,7 @@ export default async function PlanosPage() {
             single_class_sale_enabled: settings.single_class_sale_enabled === 'true',
             day_use_price: parseFloat(settings.day_use_price ?? '0') || 0,
             day_use_sale_enabled: settings.day_use_sale_enabled === 'true',
+            day_use_partners: parseAcceptedPartners(settings.day_use_partners),
           }}
         />
       </section>

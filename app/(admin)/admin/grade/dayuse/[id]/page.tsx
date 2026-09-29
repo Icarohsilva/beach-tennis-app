@@ -25,6 +25,7 @@ import { getAdminDayUse } from '@/features/dayuse/adminSlotQuery'
 import { DayUseShareCard } from './DayUseShareCard'
 import { EditDayUseForm } from './EditDayUseForm'
 import { AttendeeRow } from './AttendeeRow'
+import { isDayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 interface PageProps { params: { id: string } }
 
@@ -66,6 +67,10 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
     (a) => a.paymentMethod === 'pix_manual' && a.status === 'pending_payment',
   )
   const comEstorno = attendees.filter((a) => a.refund && a.refund.status === 'pendente')
+  // Quem vem pelo parceiro e ainda não teve o check-in validado no quiosque.
+  const parceiroAValidar = attendees.filter(
+    (a) => a.status !== 'cancelled' && isDayUsePartner(a.paymentMethod) && !a.partnerCheckinAt,
+  )
 
   return (
     <div className="space-y-6">
@@ -131,10 +136,18 @@ export default async function AdminDayUseSlotPage({ params }: PageProps) {
         {slot.notes && <p className="mt-2 text-sm text-slate-300">{slot.notes}</p>}
       </div>
 
-      {(aConferir.length > 0 || comEstorno.length > 0) && (
+      {(aConferir.length > 0 || comEstorno.length > 0 || parceiroAValidar.length > 0) && (
         <Card className="border-yellow-700/50">
           <p className="text-sm font-semibold text-yellow-300">Pendências deste day use</p>
           <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+            {parceiroAValidar.length > 0 && (
+              <li>
+                {parceiroAValidar.length === 1
+                  ? '1 pessoa vem pelo Wellhub/TotalPass e precisa validar o check-in no quiosque: '
+                  : `${parceiroAValidar.length} pessoas vêm pelo Wellhub/TotalPass e precisam validar o check-in no quiosque: `}
+                {parceiroAValidar.map((a) => a.name.split(' ')[0]).join(', ')}.
+              </li>
+            )}
             {aConferir.length > 0 && (
               <li>
                 {aConferir.length} pagamento(s) por PIX aguardando conferência — confirme na

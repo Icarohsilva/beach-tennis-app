@@ -11,26 +11,31 @@ import { Input } from '@/components/ui/Input'
 import { bookDayUse, cancelDayUseBooking } from '@/features/dayuse/actions'
 import { setBookingRefundPixKey } from '@/features/dayuse/refundActions'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { PartnerBookButtons } from '@/features/dayuse/PartnerBookButtons'
+import { PARTNER_SHORT_LABEL, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 interface Props {
   slotId: string
   label: string
   signedIn: boolean
+  /** Parceiros que este day use aceita no lugar do pagamento. */
+  partnerOptions?: DayUsePartner[]
+  priceCents?: number
 }
 
-export function DayUseBookButton({ slotId, label, signedIn }: Props) {
+export function DayUseBookButton({ slotId, label, signedIn, partnerOptions = [], priceCents = 0 }: Props) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
-  function handleClick() {
+  function handleClick(partner: DayUsePartner | null = null) {
     setError(null)
     if (!signedIn) {
       router.push(`/d/${slotId}/cadastrar`)
       return
     }
     startTransition(async () => {
-      const result = await bookDayUse(slotId)
+      const result = await bookDayUse(slotId, { partner })
       if (result.error) { setError(result.error); return }
       if (result.initPoint) {
         // Checkout Pro: mantém o pending até a navegação sair desta aba.
@@ -42,10 +47,27 @@ export function DayUseBookButton({ slotId, label, signedIn }: Props) {
   }
 
   return (
-    <div>
-      <Button size="lg" className="w-full" disabled={isPending} onClick={handleClick}>
+    <div className="space-y-3">
+      <Button size="lg" className="w-full" disabled={isPending} onClick={() => handleClick()}>
         {isPending ? 'Reservando...' : label}
       </Button>
+      {/* Sem conta, a escolha do parceiro fica para depois do cadastro: o
+          botão de reservar já leva para a conta rápida e volta para cá. */}
+      {signedIn ? (
+        <PartnerBookButtons
+          options={partnerOptions}
+          priceCents={priceCents}
+          disabled={isPending}
+          onPick={(p) => handleClick(p)}
+        />
+      ) : (
+        partnerOptions.length > 0 && (
+          <p className="text-center text-xs text-slate-400">
+            Vai de {partnerOptions.map((p) => PARTNER_SHORT_LABEL[p]).join(' ou ')}?
+            Crie a conta e escolha na reserva.
+          </p>
+        )
+      )}
       {error && <p className="mt-2 text-center text-xs text-red-400">{error}</p>}
     </div>
   )

@@ -8,6 +8,7 @@ import { formatDayUsePrice } from './dayUseKind'
 import type { DayUseKind } from '@/types'
 import { DAY_USE_TIMING_STUDENT_LABEL } from './paymentMethod'
 import type { DayUsePaymentMethod, DayUsePaymentTiming } from './paymentMethod'
+import { isDayUsePartner, partnerBookedNotice } from './partnerCheckin'
 
 export type DayUseCtaState =
   /** Dá para reservar agora. */
@@ -93,7 +94,11 @@ export function resolveDayUseCta(input: DayUseCtaInput): DayUseCta {
     return {
       state: 'booked',
       label: 'Você está nesta lista',
-      note: 'Chegue com alguns minutos de antecedência.',
+      // Reservado pelo parceiro: a única coisa que falta é o check-in no app
+      // dele, e é isso que a pessoa precisa ler ao reabrir o link.
+      note: isDayUsePartner(input.myPaymentMethod)
+        ? partnerBookedNotice(input.myPaymentMethod)
+        : 'Chegue com alguns minutos de antecedência.',
       actionable: false,
     }
   }

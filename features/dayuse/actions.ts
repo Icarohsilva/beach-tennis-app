@@ -28,6 +28,7 @@ import {
 } from '@/lib/dayuse/paymentMethod'
 import { sportLabel } from '@/lib/arenas/sports'
 import type { DayUseKind } from '@/types'
+import { isDayUsePartner, partnerOptionsFor, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 export { validateDayUseSlot }
 
@@ -184,9 +185,14 @@ export interface BookDayUseResult {
   pixOwner?: string | null
   amountCents?: number
   bookingId?: string
+  /** Reservado pelo check-in deste parceiro: nada a pagar à arena. */
+  partner?: DayUsePartner
 }
 
-export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
+export async function bookDayUse(
+  slotId: string,
+  opts: { partner?: DayUsePartner | null } = {},
+): Promise<BookDayUseResult> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
@@ -238,6 +244,38 @@ export async function bookDayUse(slotId: string): Promise<BookDayUseResult> {
   // O preço é o preço (dayUseChargeCents = dayUsePriceCents): o que varia é
   // onde ele é pago, e isso é o método logo abaixo.
   const priceCents = dayUseChargeCents(slotRow, pricing)
+
+  // Check-in de parceiro (Wellhub/TotalPass): confirma na hora e não toca em
+  // carteira nem em `payments` — quem paga é o app do parceiro. Vem ANTES da
+  // carteira de propósito: senão o saldo seria abatido de quem não deve nada.
+  if (opts.partner) {
+    const partner = opts.partner
+    // A régua é a mesma que a tela usa para oferecer a opção: parceiro que a
+    // arena não liga, ou day use gratuito, não aceita reserva por parceiro —
+    // senão bastava chamar a action para reservar um day use pago de graça.
+    const offered = partnerOptionsFor({ priceCents, accepted: pricing.acceptedPartners })
+    if (!isDayUsePartner(partner) || !offered.includes(partner)) {
+      return { error: 'Esta arena não aceita este parceiro neste day use.' }
+    }
+    const { error: partnerErr } = await adminClient.rpc('book_dayuse_atomic', {
+      p_student_id: user.id,
+      p_slot_id: slotId,
+      p_status: 'confirmed',
+      p_payment_method: partner,
+      p_hold_until: null,
+    })
+    if (partnerErr) {
+      if (partnerErr.message.includes('SLOT_FULL')) return { error: 'Este horário está lotado.' }
+      if (partnerErr.message.includes('ALREADY_BOOKED')) return { error: 'Você já tem uma reserva neste horário' }
+      if (partnerErr.message.includes('SLOT_NOT_FOUND')) return { error: 'Slot não encontrado' }
+      return { error: 'Erro ao reservar. Tente novamente.' }
+    }
+    revalidatePath('/agendar/dayuse')
+    revalidatePath('/home')
+    revalidatePath(`/d/${slotId}`)
+    revalidatePath(`/admin/grade/dayuse/${slotId}`)
+    return { partner }
+  }
 
   // Carteira: crédito em dinheiro abate o day use antes do cartão. Aqui o
   // abatimento pode ser PARCIAL (ao contrário da compra de créditos e da
@@ -792,5 +830,121 @@ export async function cancelDayUseBookingAsAdmin(
   revalidatePath('/admin/financeiro/day-use')
   revalidatePath(`/d/${booking.slot_id}`)
   revalidatePath('/agendar/dayuse')
+  return {}
+}
+
+/**
+ * Quiosque confirma que o check-in do parceiro (Wellhub/TotalPass) passou.
+ *
+ * É o controle que a arena fazia de cabeça ("avisa os meninos do quiosque"): a
+ * reserva por parceiro não gera cobrança, e sem esta marca não havia como
+ * saber, no fim do dia, quem entrou pelo parceiro e teve o check-in aceito.
+ * Idempotente: marcar de novo não reescreve quem validou primeiro.
+ */
+export async function markDayUsePartnerCheckin(bookingId: string): Promise<{ error?: string }> {
+  const { orgId, userId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { data: booking } = await adminClient
+    .from('dayuse_bookings')
+    .select('id, slot_id, payment_method, status, partner_checkin_at')
+    .eq('id', bookingId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!booking) return { error: 'Reserva não encontrada.' }
+  const row = booking as {
+    slot_id: string
+    payment_method: string
+    status: string
+    partner_checkin_at: string | null
+  }
+  if (!isDayUsePartner(row.payment_method)) return { error: 'Esta reserva não é de parceiro.' }
+  if (row.status !== 'confirmed') return { error: 'Esta reserva já não está ativa.' }
+
+  if (!row.partner_checkin_at) {
+    await adminClient
+      .from('dayuse_bookings')
+      .update({ partner_checkin_at: new Date().toISOString(), partner_checkin_by: userId })
+      .eq('id', bookingId)
+      .is('partner_checkin_at', null)
+  }
+
+  revalidatePath(`/admin/grade/dayuse/${row.slot_id}`)
+  return {}
+}
+
+/**
+ * O check-in do parceiro não passou (plano vencido, sem crédito no app, limite
+ * do dia): a reserva continua, mas vira cobrança NA ARENA, pelo preço deste day
+ * use. É o mesmo destino de quem escolheu pagar na porta — `on_site` com
+ * `payments` pendente —, então a baixa sai pelo "Marcar como pago" de sempre.
+ *
+ * O preço é lido agora, pela mesma régua da reserva (dayUseChargeCents): foi o
+ * valor que o aviso antes da reserva prometeu cobrar se o check-in falhasse.
+ */
+export async function convertPartnerBookingToOnSite(bookingId: string): Promise<{ error?: string }> {
+  const { orgId, error: authErr } = await requireAdmin()
+  if (authErr) return { error: authErr }
+
+  const adminClient = createAdminClient()
+  const { data: booking } = await adminClient
+    .from('dayuse_bookings')
+    .select('id, slot_id, student_id, payment_method, status, dayuse_slots(price_cents)')
+    .eq('id', bookingId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!booking) return { error: 'Reserva não encontrada.' }
+  const row = booking as {
+    slot_id: string
+    student_id: string
+    payment_method: string
+    status: string
+    dayuse_slots: { price_cents: number | null } | { price_cents: number | null }[] | null
+  }
+  if (!isDayUsePartner(row.payment_method)) return { error: 'Esta reserva não é de parceiro.' }
+  if (row.status !== 'confirmed') return { error: 'Esta reserva já não está ativa.' }
+
+  const slot = Array.isArray(row.dayuse_slots) ? row.dayuse_slots[0] : row.dayuse_slots
+  const pricing = await getDayUsePricing(orgId)
+  const priceCents = dayUseChargeCents({ price_cents: slot?.price_cents ?? null }, pricing)
+  if (priceCents <= 0) return { error: 'Este day use não tem preço a cobrar.' }
+
+  // A troca de método é a trava: dois cliques (ou dois admins) e só o primeiro
+  // encontra a reserva ainda como parceiro — senão nasceriam duas cobranças.
+  const { data: switched } = await adminClient
+    .from('dayuse_bookings')
+    .update({ payment_method: 'on_site', partner_checkin_at: null, partner_checkin_by: null })
+    .eq('id', bookingId)
+    .eq('payment_method', row.payment_method)
+    .select('id')
+    .maybeSingle()
+  if (!switched) return { error: 'Esta reserva já foi alterada.' }
+
+  const { error: payErr } = await adminClient.from('payments').insert({
+    organization_id: orgId,
+    student_id: row.student_id,
+    subscription_id: null,
+    session_id: null,
+    amount: priceCents / 100,
+    currency: 'BRL',
+    status: 'pending',
+    type: 'day_use',
+    gateway: 'on_site',
+    gateway_payment_id: null,
+    dayuse_booking_id: bookingId,
+  })
+  if (payErr) {
+    // Sem a cobrança registrada, a reserva volta a ser de parceiro: melhor o
+    // admin tentar de novo do que a pessoa ficar "a pagar" sem dívida anotada.
+    await adminClient
+      .from('dayuse_bookings')
+      .update({ payment_method: row.payment_method })
+      .eq('id', bookingId)
+    return { error: 'Não foi possível registrar a cobrança. Tente novamente.' }
+  }
+
+  revalidatePath(`/admin/grade/dayuse/${row.slot_id}`)
+  revalidatePath(`/d/${row.slot_id}`)
   return {}
 }

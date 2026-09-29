@@ -34,6 +34,14 @@ describe('resolveDayUseCta', () => {
     expect(cta.label).toBe('Criar conta e reservar')
   })
 
+  it('reservado pelo parceiro, lembra do check-in no app dele', () => {
+    const cta = resolveDayUseCta({ ...BASE, myStatus: 'confirmed', myPaymentMethod: 'wellhub' })
+    expect(cta.state).toBe('booked')
+    expect(cta.note).toMatch(/check-in no app Wellhub/)
+    expect(resolveDayUseCta({ ...BASE, myStatus: 'confirmed', myPaymentMethod: 'on_site' }).note)
+      .toBe('Chegue com alguns minutos de antecedência.')
+  })
+
   it('diz "última vaga" no singular', () => {
     expect(resolveDayUseCta({ ...BASE, occupied: 7 }).note).toContain('última vaga')
   })

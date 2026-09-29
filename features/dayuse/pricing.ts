@@ -6,6 +6,7 @@
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { createAdminClient } from '@/lib/supabase/server'
 import { reaisToCents } from '@/lib/dayuse/dayUseKind'
+import { parseAcceptedPartners, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 export interface DayUsePricing {
   /** system_settings.day_use_price em centavos — o padrão da academia. */
@@ -24,6 +25,12 @@ export interface DayUsePricing {
   /** Chave PIX da academia (system_settings.pix_key), para o pagamento manual. */
   pixKey: string | null
   pixOwner: string | null
+  /**
+   * Parceiros que a arena aceita no day use (system_settings.day_use_partners).
+   * Independe da venda pelo app: a arena que cobra na porta também recebe
+   * Wellhub/TotalPass.
+   */
+  acceptedPartners: DayUsePartner[]
 }
 
 /** A academia consegue receber ONLINE (gateway ou chave PIX)? */
@@ -37,7 +44,7 @@ export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
     .from('system_settings')
     .select('key, value')
     .eq('organization_id', orgId)
-    .in('key', ['day_use_price', 'day_use_sale_enabled', 'pix_key', 'pix_key_owner'])
+    .in('key', ['day_use_price', 'day_use_sale_enabled', 'pix_key', 'pix_key_owner', 'day_use_partners'])
   const settings = Object.fromEntries(
     ((settingsRaw ?? []) as { key: string; value: string }[]).map((s) => [s.key, s.value]),
   )
@@ -54,5 +61,6 @@ export async function getDayUsePricing(orgId: string): Promise<DayUsePricing> {
     mpToken,
     pixKey,
     pixOwner: settings.pix_key_owner?.trim() || null,
+    acceptedPartners: parseAcceptedPartners(settings.day_use_partners),
   }
 }

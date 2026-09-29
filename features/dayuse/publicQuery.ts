@@ -8,6 +8,7 @@ import { dayUseChargeCents, dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
 import type { DayUsePaymentMethod, DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseSlot } from '@/types'
+import { partnerOptionsFor, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 export interface PublicDayUse {
   slot: DayUseSlot
@@ -32,6 +33,8 @@ export interface PublicDayUse {
   paymentTiming: DayUsePaymentTiming
   /** Saldo em dinheiro de quem está vendo, na academia deste day use. */
   walletCents: number
+  /** Parceiros que este day use aceita no lugar do pagamento (partnerOptionsFor). */
+  partnerOptions: DayUsePartner[]
   /** Chave PIX da arena — só usada no caminho de pagamento manual. */
   pixKey: string | null
   pixOwner: string | null
@@ -147,6 +150,10 @@ export async function getPublicDayUse(
     priceCents: dayUseChargeCents(slot, pricing),
     paymentTiming: dayUsePriceView(slot, pricing).timing,
     walletCents,
+    partnerOptions: partnerOptionsFor({
+      priceCents: dayUseChargeCents(slot, pricing),
+      accepted: pricing.acceptedPartners,
+    }),
     pixKey: pricing.pixKey,
     pixOwner: pricing.pixOwner,
     occupied: bookings.length,

@@ -34,6 +34,7 @@ import { ShareDayUse } from './ShareDayUse'
 import { DayUsePixPanel } from './DayUsePixPanel'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { DayUseSlot } from '@/types'
+import { isDayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 interface PageProps { params: { id: string } }
 
@@ -88,7 +89,10 @@ export default async function PublicDayUsePage({ params }: PageProps) {
   const data = await getPublicDayUse(params.id, user?.id ?? null)
   if (!data) notFound()
 
-  const { slot, org, priceCents, paymentTiming, walletCents, occupied, attendees, mine } = data
+  const { slot, org, priceCents, paymentTiming, walletCents, partnerOptions, occupied, attendees, mine } = data
+  // Reservado pelo parceiro, nada foi pago à arena: o aviso de cancelamento não
+  // pode falar em estorno nem pedir chave PIX.
+  const paidCents = mine && isDayUsePartner(mine.paymentMethod) ? 0 : priceCents
   // Divisão saldo/cartão pela MESMA função que a reserva usa (splitWithWallet):
   // prometer um abatimento na tela e cobrar outro no Mercado Pago é o defeito
   // que essa função existe para impedir.
@@ -206,7 +210,13 @@ export default async function PublicDayUsePage({ params }: PageProps) {
 
       <Card className="space-y-3">
         {cta.actionable ? (
-          <DayUseBookButton slotId={slot.id} label={cta.label} signedIn={Boolean(user)} />
+          <DayUseBookButton
+            slotId={slot.id}
+            label={cta.label}
+            signedIn={Boolean(user)}
+            partnerOptions={partnerOptions}
+            priceCents={priceCents}
+          />
         ) : (
           <p
             className={
@@ -237,11 +247,11 @@ export default async function PublicDayUsePage({ params }: PageProps) {
               start_time: slot.start_time,
               bookedAtIso: mine.bookedAt,
               nowIso: new Date().toISOString(),
-              paidCents: priceCents,
+              paidCents,
             })}
             pixKey={mine.refundPixKey}
             pixOwner={mine.refundPixOwner}
-            paid={priceCents > 0}
+            paid={paidCents > 0}
           />
         )}
         {cta.state === 'full' && org.whatsapp && (
