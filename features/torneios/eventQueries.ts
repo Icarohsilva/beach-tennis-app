@@ -131,6 +131,20 @@ export interface ArenaShowcase {
   }>
   /** Comunicados fixados pela academia no mural. */
   notices: Array<{ id: string; content: string; created_at: string }>
+  /**
+   * Páginas de day use publicadas que ainda têm data pela frente. Cada uma é o
+   * cartaz de um day use (o flyer com as datas dentro), como o evento é o dos
+   * torneios.
+   */
+  dayUsePages: Array<{
+    id: string
+    name: string
+    slug: string
+    cover_image_url: string | null
+    upcomingCount: number
+    /** Primeira data futura (yyyy-MM-dd), para o cartaz dizer "próxima: sábado". */
+    nextDate: string
+  }>
 }
 
 /**
@@ -142,6 +156,58 @@ export interface ArenaShowcase {
  */
 export async function getArenaShowcase(orgId: string, today: string): Promise<ArenaShowcase> {
   const admin = createAdminClient()
+
+  // Páginas de day use publicadas e as datas futuras delas. Vêm antes da lista
+  // solta porque as datas que já estão num cartaz saem dela — repetir o mesmo
+  // sábado no cartaz e na lista transformaria a vitrine num paredão, o mesmo
+  // motivo de o torneio dentro de evento não aparecer solto.
+  const { data: pageRows } = await admin
+    .from('dayuse_pages')
+    .select('id, name, slug, cover_image_url')
+    .eq('organization_id', orgId)
+    .eq('is_published', true)
+    .order('created_at', { ascending: false })
+    .limit(6)
+  const publishedPages = (pageRows ?? []) as Array<{
+    id: string; name: string; slug: string; cover_image_url: string | null
+  }>
+  const pageIds = publishedPages.map((pg) => pg.id)
+  const pageSlotStats = new Map<string, { count: number; next: string }>()
+  if (pageIds.length > 0) {
+    const { data: pageSlotRows } = await admin
+      .from('dayuse_slots')
+      .select('page_id, date')
+      .in('page_id', pageIds)
+      .eq('is_active', true)
+      .gte('date', today)
+      .order('date', { ascending: true })
+    for (const r of (pageSlotRows ?? []) as { page_id: string; date: string }[]) {
+      const cur = pageSlotStats.get(r.page_id)
+      if (cur) cur.count++
+      else pageSlotStats.set(r.page_id, { count: 1, next: r.date })
+    }
+  }
+  // Página publicada sem data futura não vira cartaz: levaria a uma capa vazia.
+  const dayUsePages: ArenaShowcase['dayUsePages'] = publishedPages
+    .filter((pg) => pageSlotStats.has(pg.id))
+    .map((pg) => ({
+      ...pg,
+      upcomingCount: pageSlotStats.get(pg.id)!.count,
+      nextDate: pageSlotStats.get(pg.id)!.next,
+    }))
+  const pagedIds = dayUsePages.map((pg) => pg.id)
+
+  let dayUseQuery = admin
+    .from('dayuse_slots')
+    .select('id, date, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing')
+    .eq('organization_id', orgId)
+    .eq('is_active', true)
+    .gte('date', today)
+  // Data que já está num cartaz sai da lista solta; data sem página, ou numa
+  // página que não virou cartaz (rascunho), continua aqui.
+  if (pagedIds.length > 0) {
+    dayUseQuery = dayUseQuery.or(`page_id.is.null,page_id.not.in.(${pagedIds.join(',')})`)
+  }
 
   const [{ data: eventRows }, { data: tournamentRows }, { data: dayUseRows }, { data: noticeRows }] =
     await Promise.all([
@@ -163,12 +229,7 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
         .is('event_id', null)
         .order('date', { ascending: true })
         .limit(8),
-      admin
-        .from('dayuse_slots')
-        .select('id, date, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing')
-        .eq('organization_id', orgId)
-        .eq('is_active', true)
-        .gte('date', today)
+      dayUseQuery
         .order('date', { ascending: true })
         .order('start_time', { ascending: true })
         .limit(6),
@@ -231,5 +292,6 @@ export async function getArenaShowcase(orgId: string, today: string): Promise<Ar
     looseTournaments,
     dayUse,
     notices: (noticeRows ?? []) as ArenaShowcase['notices'],
+    dayUsePages,
   }
 }

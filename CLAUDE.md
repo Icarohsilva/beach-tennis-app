@@ -210,7 +210,11 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   (`DayUsePagesPanel`, recolhido; `DayUsePagePicker` em cada data e recorrência). A página
   pública mostra a capa inteira (mesmo motivo de `/e/[slug]`), as datas antes da descrição e
   vagas/lotado pela régua de ocupação de sempre (`hold_until`), com a lógica pura em
-  [lib/dayuse/pageView.ts](lib/dayuse/pageView.ts).
+  [lib/dayuse/pageView.ts](lib/dayuse/pageView.ts). Na vitrine da arena (`/arenas/[slug]`,
+  `getArenaShowcase().dayUsePages`) cada página publicada com data futura vira cartaz
+  (`DayUsePageTeaser`, o mesmo formato do `EventTeaser`), e as datas que estão num cartaz
+  **saem** da lista solta de day use — o mesmo motivo de o torneio dentro de evento não
+  aparecer solto. Página em rascunho não esconde nada: as datas dela seguem na lista.
 - Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
   **O preço é o preço** — `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
   não é mais condicionado a "consigo cobrar no app". Já foi, e o resultado apareceu em uso
