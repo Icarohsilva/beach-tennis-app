@@ -46,6 +46,8 @@ export interface GenerateDayUseResult {
 
 interface RecurrenceRow extends DayUseRecurrence {
   created_by: string | null
+  /** Página de day use em que as datas geradas nascem. */
+  page_id: string | null
 }
 
 /**
@@ -63,7 +65,7 @@ export async function generateDayUse(
     (a, b) =>
       client
         .from('dayuse_recurrences')
-        .select('id, day_of_week, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing, notes, created_by')
+        .select('id, day_of_week, start_time, end_time, court, capacity, sport, kind, price_cents, payment_timing, notes, page_id, created_by')
         .eq('organization_id', orgId)
         .eq('is_active', true)
         .order('id', { ascending: true })
@@ -79,6 +81,9 @@ export async function generateDayUse(
   // created_by vem do molde: o cron não tem usuário logado, e a coluna aponta
   // para quem é responsável por aquele day use existir.
   const authorOf = new Map(recurrences.map((r) => [r.id, r.created_by]))
+  // A data nasce dentro da página do molde: sem isto a arena vincularia data
+  // por data toda semana. Só vale para data NOVA — o upsert ignora a existente.
+  const pageOf = new Map(recurrences.map((r) => [r.id, r.page_id ?? null]))
 
   // organization_id explícito: dayuse_slots não tem o trigger trg_set_org (foi
   // removido no cutover de identidade, plano 3).
@@ -89,6 +94,7 @@ export async function generateDayUse(
         ...r,
         organization_id: orgId,
         created_by: authorOf.get(r.recurrence_id) ?? null,
+        page_id: pageOf.get(r.recurrence_id) ?? null,
         is_active: true,
       })),
       { onConflict: 'organization_id,court,date,start_time', ignoreDuplicates: true },

@@ -197,6 +197,20 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   o que o cabeçalho de `20260810000200_signup_without_org.sql` previa ("reserva de day use →
   membership athlete"); o torneio (`registerExternal`) continua criando vínculo, e a
   divergência entre os dois fluxos é conhecida.
+- **Página de day use** (`dayuse_pages`, link `/dayuse/[slug]`, liberado em `middleware.ts`) é a
+  capa que agrupa as datas de UM day use ("Day Use de Verão"), no mesmo desenho do evento de
+  torneio (`tournament_events` → `/e/[slug]`): nome, slug global, descrição, flyer no bucket
+  `dayuse-images` e `is_published`. A página é só a capa: reserva, pagamento, parceiro e lista
+  do quiosque continuam na DATA, e cada card leva a `/d/[id]`, que ganhou o "Todas as datas de…"
+  de volta (só para página publicada). A data aponta para a página (`dayuse_slots.page_id`) e a
+  recorrência também (`dayuse_recurrences.page_id`): `generateDayUse` copia o `page_id` do
+  molde para a data NOVA, e `setDayUseRecurrencePage` leva junto as datas futuras já geradas —
+  senão as próximas quatro semanas, que são as que a arena divulga agora, ficariam de fora.
+  Publicar exige data futura ativa vinculada. Admin em `/admin/grade/dayuse`
+  (`DayUsePagesPanel`, recolhido; `DayUsePagePicker` em cada data e recorrência). A página
+  pública mostra a capa inteira (mesmo motivo de `/e/[slug]`), as datas antes da descrição e
+  vagas/lotado pela régua de ocupação de sempre (`hold_until`), com a lógica pura em
+  [lib/dayuse/pageView.ts](lib/dayuse/pageView.ts).
 - Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
   **O preço é o preço** — `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
   não é mais condicionado a "consigo cobrar no app". Já foi, e o resultado apareceu em uso

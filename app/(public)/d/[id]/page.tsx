@@ -89,7 +89,7 @@ export default async function PublicDayUsePage({ params }: PageProps) {
   const data = await getPublicDayUse(params.id, user?.id ?? null)
   if (!data) notFound()
 
-  const { slot, org, priceCents, paymentTiming, walletCents, partnerOptions, occupied, attendees, mine } = data
+  const { slot, org, priceCents, paymentTiming, walletCents, partnerOptions, occupied, attendees, mine, page } = data
   // Reservado pelo parceiro, nada foi pago à arena: o aviso de cancelamento não
   // pode falar em estorno nem pedir chave PIX.
   const paidCents = mine && isDayUsePartner(mine.paymentMethod) ? 0 : priceCents
@@ -135,6 +135,16 @@ export default async function PublicDayUsePage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 space-y-4">
+      {/* Esta data faz parte de uma página de day use: quem chegou pelo link
+          de UMA data pode querer outro dia do mesmo day use. */}
+      {page && (
+        <Link
+          href={`/dayuse/${page.slug}`}
+          className="block text-sm text-brand-400 hover:text-brand-300"
+        >
+          ← Todas as datas de {page.name}
+        </Link>
+      )}
       {slot.cover_image_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img

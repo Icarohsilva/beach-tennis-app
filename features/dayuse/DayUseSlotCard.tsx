@@ -10,6 +10,7 @@ import { deactivateDayUseSlot } from './actions'
 import { DayUseBadges } from './DayUseBadges'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import type { DayUseSlot } from '@/types'
+import { DayUsePagePicker } from './DayUsePagePicker'
 
 interface Props {
   slot: DayUseSlot
@@ -18,9 +19,11 @@ interface Props {
   priceCents: number
   /** Pagamento na arena, sem cobrança online. */
   payOnSite?: boolean
+  /** Páginas de day use da academia, para vincular esta data. */
+  pageOptions?: Array<{ id: string; name: string }>
 }
 
-export function DayUseSlotCard({ slot, bookingsCount, priceCents, payOnSite = false }: Props) {
+export function DayUseSlotCard({ slot, bookingsCount, priceCents, payOnSite = false, pageOptions = [] }: Props) {
   const [loading, setLoading] = useState(false)
   const { confirm, dialog } = useConfirm()
   const isFull = bookingsCount >= slot.capacity
@@ -79,6 +82,13 @@ export function DayUseSlotCard({ slot, bookingsCount, priceCents, payOnSite = fa
         <p className="text-slate-500 text-xs mt-1">
           {bookingsCount}/{slot.capacity} {slot.kind === 'open' ? 'pessoas' : 'reservas'}
         </p>
+        <div className="mt-2">
+          <DayUsePagePicker
+            target={{ slotId: slot.id }}
+            currentPageId={slot.page_id ?? null}
+            options={pageOptions}
+          />
+        </div>
       </div>
       {/* Os dois na MESMA forma de botão, mudando só a cor. "Abrir" era texto
           solto ao lado de um botão vermelho — parecia outra coisa. */}
