@@ -669,7 +669,25 @@ export interface DayUseSlot {
   is_active: boolean
   /** Recorrência que gerou este slot. null = criado à mão pelo admin. */
   recurrence_id: string | null
+  /** Página de day use em que esta data aparece (dayuse_pages). */
+  page_id?: string | null
   created_by: string
+  created_at: string
+}
+
+/**
+ * Página de day use: a capa que agrupa as datas de um mesmo day use ("Day Use
+ * de Verão"), no mesmo desenho de `TournamentEvent`. Link público /dayuse/<slug>.
+ */
+export interface DayUsePage {
+  id: string
+  organization_id: string
+  name: string
+  slug: string
+  description: string | null
+  cover_image_url: string | null
+  is_published: boolean
+  created_by: string | null
   created_at: string
 }
 
@@ -695,6 +713,8 @@ export interface DayUseRecurrence {
   payment_timing: DayUsePaymentTiming
   notes: string | null
   is_active: boolean
+  /** Página em que as datas geradas por este molde nascem (dayuse_pages). */
+  page_id?: string | null
   created_by: string | null
   created_at: string
 }

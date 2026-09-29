@@ -11,7 +11,13 @@ import { paymentMethodLabel } from '@/lib/dayuse/paymentMethod'
 import { refundStatusLabel } from '@/lib/dayuse/refundRules'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { confirmDayUseReceipt, rejectDayUseReceipt } from '@/features/dayuse/receiptActions'
-import { cancelDayUseBookingAsAdmin, markDayUsePaidOnSite } from '@/features/dayuse/actions'
+import {
+  cancelDayUseBookingAsAdmin,
+  convertPartnerBookingToOnSite,
+  markDayUsePaidOnSite,
+  markDayUsePartnerCheckin,
+} from '@/features/dayuse/actions'
+import { isDayUsePartner, PARTNER_SHORT_LABEL } from '@/lib/dayuse/partnerCheckin'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { WhatsAppButton } from '@/components/ui/WhatsAppButton'
 import type { AdminAttendee } from '@/features/dayuse/adminSlotQuery'
@@ -19,6 +25,13 @@ import type { AdminAttendee } from '@/features/dayuse/adminSlotQuery'
 /** O rótulo de pagamento é o do PAGAMENTO, não o da reserva. */
 function paymentBadge(a: AdminAttendee) {
   if (a.paymentMethod === 'free') return <Badge variant="default">Gratuito</Badge>
+  // Parceiro: não há pagamento, há check-in a validar no quiosque.
+  if (isDayUsePartner(a.paymentMethod)) {
+    const nome = PARTNER_SHORT_LABEL[a.paymentMethod]
+    return a.partnerCheckinAt
+      ? <Badge variant="success">{nome} validado</Badge>
+      : <Badge variant="warning">{nome} · validar check-in</Badge>
+  }
   if (a.paymentMethod === 'wallet') return <Badge variant="success">Pago com crédito</Badge>
   if (a.payment?.status === 'paid') return <Badge variant="success">Pago</Badge>
   if (a.paymentMethod === 'on_site') return <Badge variant="danger">A receber na arena</Badge>
@@ -71,6 +84,20 @@ export function AttendeeRow({
     run(() => rejectDayUseReceipt(item.bookingId, text))
   }
 
+  async function handlePartnerFailed() {
+    const nome = isDayUsePartner(item.paymentMethod) ? PARTNER_SHORT_LABEL[item.paymentMethod] : 'parceiro'
+    const { ok } = await confirm({
+      title: `Check-in do ${nome} não passou?`,
+      message:
+        'A reserva continua, mas passa a ser cobrada na arena pelo preço deste day use.\n'
+        + 'Depois de receber, use "Marcar como pago".',
+      confirmLabel: 'Cobrar na arena',
+      cancelLabel: 'Voltar',
+    })
+    if (!ok) return
+    run(() => convertPartnerBookingToOnSite(item.bookingId))
+  }
+
   async function handleCancelUnpaid() {
     const { ok, text } = await confirm({
       title: 'Cancelar esta inscrição por falta de pagamento?',
@@ -106,6 +133,10 @@ export function AttendeeRow({
     : `Olá, ${item.name.split(' ')[0]}!`
   const podeConferir = item.paymentMethod === 'pix_manual'
     && item.status === 'pending_payment'
+  /** Veio pelo parceiro e o quiosque ainda não validou o check-in. */
+  const parceiroAValidar = !cancelado
+    && isDayUsePartner(item.paymentMethod)
+    && !item.partnerCheckinAt
   // Pago na arena: a baixa é do admin, e a reserva já está confirmada.
   const podeDarBaixa = item.paymentMethod === 'on_site'
     && item.status !== 'cancelled'
@@ -171,6 +202,20 @@ export function AttendeeRow({
           <WhatsAppButton href={buildWhatsAppUrl(item.phone, cobrancaMessage)}>
             {devendo ? 'Cobrar' : 'WhatsApp'}
           </WhatsAppButton>
+        )}
+        {parceiroAValidar && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={isPending}
+              onClick={() => run(() => markDayUsePartnerCheckin(item.bookingId))}
+            >
+              Check-in validado
+            </Button>
+            <Button variant="secondary" size="sm" disabled={isPending} onClick={handlePartnerFailed}>
+              Não passou: cobrar
+            </Button>
+          </div>
         )}
         {podeDarBaixa && (
           <Button

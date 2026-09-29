@@ -8,6 +8,7 @@ import { dayUseChargeCents, dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
 import type { DayUsePaymentMethod, DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseSlot } from '@/types'
+import { partnerOptionsFor, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 export interface PublicDayUse {
   slot: DayUseSlot
@@ -32,6 +33,10 @@ export interface PublicDayUse {
   paymentTiming: DayUsePaymentTiming
   /** Saldo em dinheiro de quem está vendo, na academia deste day use. */
   walletCents: number
+  /** Parceiros que este day use aceita no lugar do pagamento (partnerOptionsFor). */
+  partnerOptions: DayUsePartner[]
+  /** Página de day use publicada que agrupa esta data, para o "ver todas as datas". */
+  page: { name: string; slug: string } | null
   /** Chave PIX da arena — só usada no caminho de pagamento manual. */
   pixKey: string | null
   pixOwner: string | null
@@ -82,6 +87,18 @@ export async function getPublicDayUse(
     .eq('id', slot.organization_id)
     .maybeSingle()
   if (!orgRaw) return null
+
+  // Só página PUBLICADA: rascunho não pode vazar num link que já está no grupo.
+  let page: PublicDayUse['page'] = null
+  if (slot.page_id) {
+    const { data: pageRow } = await admin
+      .from('dayuse_pages')
+      .select('name, slug')
+      .eq('id', slot.page_id)
+      .eq('is_published', true)
+      .maybeSingle()
+    page = (pageRow as { name: string; slug: string } | null) ?? null
+  }
 
   const freshLimit = new Date(Date.now() - PENDING_WINDOW_MS).toISOString()
   const nowIso = new Date().toISOString()
@@ -147,6 +164,11 @@ export async function getPublicDayUse(
     priceCents: dayUseChargeCents(slot, pricing),
     paymentTiming: dayUsePriceView(slot, pricing).timing,
     walletCents,
+    page,
+    partnerOptions: partnerOptionsFor({
+      priceCents: dayUseChargeCents(slot, pricing),
+      accepted: pricing.acceptedPartners,
+    }),
     pixKey: pricing.pixKey,
     pixOwner: pricing.pixOwner,
     occupied: bookings.length,

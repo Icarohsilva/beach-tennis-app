@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { PERIODICITIES } from '@/lib/billing/periodicity'
+import { serializeAcceptedPartners } from '@/lib/dayuse/partnerCheckin'
 import type { Periodicity } from '@/types'
 
 async function assertAdmin() {
@@ -191,6 +192,8 @@ export interface SalesSettingsData {
   single_class_sale_enabled: boolean
   day_use_price: number
   day_use_sale_enabled: boolean
+  /** Parceiros aceitos no day use ('wellhub' | 'totalpass'). */
+  day_use_partners: string[]
 }
 
 export async function updateSalesSettings(data: SalesSettingsData): Promise<{ error?: string }> {
@@ -210,12 +213,19 @@ export async function updateSalesSettings(data: SalesSettingsData): Promise<{ er
       { organization_id: orgId, key: 'single_class_sale_enabled', value: String(data.single_class_sale_enabled) },
       { organization_id: orgId, key: 'day_use_price', value: String(data.day_use_price) },
       { organization_id: orgId, key: 'day_use_sale_enabled', value: String(data.day_use_sale_enabled) },
+      {
+        organization_id: orgId,
+        key: 'day_use_partners',
+        value: serializeAcceptedPartners(data.day_use_partners ?? []),
+      },
     ]
     const { error } = await adminClient
       .from('system_settings')
       .upsert(rows, { onConflict: 'organization_id,key' })
     if (error) return { error: 'Erro ao salvar configurações de venda.' }
     revalidatePath('/admin/financeiro/planos')
+    // Parceiro aceito muda o que as telas de reserva oferecem.
+    revalidatePath('/agendar/dayuse')
     return {}
   } catch (e: unknown) {
     return { error: e instanceof Error ? e.message : 'Erro desconhecido.' }

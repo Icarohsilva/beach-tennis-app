@@ -35,6 +35,12 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { bookDayUse, cancelDayUseBooking } from '@/features/dayuse/actions'
 import { DayUsePixPanel } from '@/app/(public)/d/[id]/DayUsePixPanel'
 import { loadDayUseDetail, type DayUseDetail } from './calendarActions'
+import { PartnerBookButtons } from '@/features/dayuse/PartnerBookButtons'
+import {
+  isDayUsePartner,
+  partnerBookedNotice,
+  type DayUsePartner,
+} from '@/lib/dayuse/partnerCheckin'
 
 export function DayUseModal({
   detail: initialDetail,
@@ -58,7 +64,7 @@ export function DayUseModal({
    */
   const [detail, setDetail] = useState(initialDetail)
 
-  const { slot, priceCents, paymentTiming, walletCents, occupied, attendees, mine } = detail
+  const { slot, priceCents, paymentTiming, walletCents, partnerOptions, occupied, attendees, mine } = detail
 
   async function reload() {
     const fresh = await loadDayUseDetail(slot.id)
@@ -89,17 +95,19 @@ export function DayUseModal({
       ? { bookingId: mine.id, key: detail.pixKey, owner: detail.pixOwner, hasReceipt: mine.hasReceipt }
       : null
 
-  function handleBook() {
+  function handleBook(partner: DayUsePartner | null = null) {
     setError(null)
     setMessage(null)
     startTransition(async () => {
-      const r = await bookDayUse(slot.id)
+      const r = await bookDayUse(slot.id, { partner })
       if (r.error) { setError(r.error); return }
       if (r.initPoint) {
         window.location.href = r.initPoint
         return
       }
-      if (r.pixKey) {
+      if (r.partner) {
+        setMessage(`Vaga garantida. ${partnerBookedNotice(r.partner)}`)
+      } else if (r.pixKey) {
         setMessage('Vaga segurada. Pague por PIX e envie o comprovante.')
       } else if (r.payOnSiteCents) {
         setMessage(
@@ -123,7 +131,8 @@ export function DayUseModal({
         start_time: slot.start_time,
         bookedAtIso: mine.bookedAt,
         nowIso: new Date().toISOString(),
-        paidCents: priceCents,
+        // Reservado pelo parceiro, nada foi pago à arena: não há estorno a prometer.
+        paidCents: isDayUsePartner(mine.paymentMethod) ? 0 : priceCents,
         windowHours: detail.refundWindowHours,
       }),
       confirmLabel: 'Cancelar reserva',
@@ -235,9 +244,15 @@ export function DayUseModal({
         <div className="mt-4 space-y-2">
           {cta.actionable ? (
             <>
-              <Button size="lg" className="w-full" disabled={isPending} onClick={handleBook}>
+              <Button size="lg" className="w-full" disabled={isPending} onClick={() => handleBook()}>
                 {isPending ? 'Reservando...' : cta.label}
               </Button>
+              <PartnerBookButtons
+                options={partnerOptions}
+                priceCents={priceCents}
+                disabled={isPending}
+                onPick={(p) => handleBook(p)}
+              />
               {split.walletCents > 0 && (
                 <p className="text-center text-xs text-green-400">
                   {split.gatewayCents === 0

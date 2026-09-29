@@ -103,7 +103,9 @@ export function middleware(request: NextRequest) {
     // Página de UM day use, o link que a arena divulga no WhatsApp. Reservar
     // exige conta, mas LER a página não — sem isto o link cai no /login e o
     // convite não diz mais o que era.
-    pathname.startsWith('/d/')
+    pathname.startsWith('/d/') ||
+    // Página de um day use (o flyer com as datas dentro), divulgada no grupo.
+    pathname.startsWith('/dayuse/')
   ) {
     return finalizar(NextResponse.next())
   }

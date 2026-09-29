@@ -31,6 +31,7 @@ import { Logo } from '@/components/ui/Logo'
 import { PoweredBy } from '@/components/ui/PoweredBy'
 import { EventStat } from '@/features/torneios/EventStat'
 import { EventTeaser } from '@/features/torneios/EventTeaser'
+import { DayUsePageTeaser } from '@/features/dayuse/DayUsePageTeaser'
 import { PhotoGallery } from '@/features/torneios/PhotoGallery'
 import { ShareButton } from '@/features/torneios/ShareButton'
 import { TournamentCard } from '@/features/torneios/TournamentCard'
@@ -141,7 +142,9 @@ export default async function ArenaPage({ params }: PageProps) {
 
   const openTournaments = showcase.looseTournaments.length
   const eventCount = showcase.events.length
-  const dayUseCount = showcase.dayUse.length
+  // Cartaz de day use conta como oferta, igual à data solta: é o que a pessoa
+  // tem para reservar.
+  const dayUseCount = showcase.dayUse.length + showcase.dayUsePages.length
 
   const asBrowse = (t: (typeof showcase.looseTournaments)[number]): BrowseTournament => ({
     id: t.id,
@@ -311,10 +314,25 @@ export default async function ArenaPage({ params }: PageProps) {
           </section>
         )}
 
-        {/* ── Day use ────────────────────────────────────────────────────── */}
-        {showcase.dayUse.length > 0 && (
+        {/* ── Day use ────────────────────────────────────────────────────────
+            Primeiro os cartazes (página de day use com o flyer), depois as
+            datas soltas — as que já estão num cartaz não se repetem aqui. */}
+        {dayUseCount > 0 && (
           <section className="mt-6">
             <SectionTitle icon={Sun}>Day use</SectionTitle>
+            {showcase.dayUsePages.length > 0 && (
+              <div className="space-y-3">
+                {showcase.dayUsePages.map((pg, i) => (
+                  <DayUsePageTeaser key={pg.id} page={pg} step={i} />
+                ))}
+              </div>
+            )}
+            {showcase.dayUse.length > 0 && showcase.dayUsePages.length > 0 && (
+              <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Outros horários
+              </p>
+            )}
+            {showcase.dayUse.length > 0 && (
             <Card>
               <ul className="divide-y divide-white/[0.06]">
                 {showcase.dayUse.map((slot) => {
@@ -372,6 +390,7 @@ export default async function ArenaPage({ params }: PageProps) {
                 </Link>
               )}
             </Card>
+            )}
           </section>
         )}
 

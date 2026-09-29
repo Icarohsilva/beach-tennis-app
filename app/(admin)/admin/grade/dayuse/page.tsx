@@ -13,6 +13,7 @@ import { getOrgSports } from '@/lib/arenas/orgSports'
 import { canCollectOnline, getDayUsePricing } from '@/features/dayuse/pricing'
 import { dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { DAY_USE_HORIZON_DAYS } from '@/features/dayuse/generation'
+import { DayUsePagesPanel, type AdminDayUsePage } from '@/features/dayuse/DayUsePagesPanel'
 
 export default async function AdminDayUsePage() {
   await requirePlatformAccess() // gate de cobranca; ver lib/billing/guard.ts
@@ -50,6 +51,22 @@ export default async function AdminDayUsePage() {
 
   const slotList = (slots ?? []) as DayUseSlot[]
   const slotIds = slotList.map((s) => s.id)
+
+  // Páginas de day use (a capa divulgada). Teto natural: poucas por academia.
+  const { data: pagesRaw } = await adminClient
+    .from('dayuse_pages')
+    .select('id, name, slug, description, cover_image_url, is_published')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false })
+  // Datas futuras de cada página: é o número que diz se ela tem o que mostrar.
+  const upcomingByPage = new Map<string, number>()
+  for (const sl of slotList) {
+    if (sl.page_id) upcomingByPage.set(sl.page_id, (upcomingByPage.get(sl.page_id) ?? 0) + 1)
+  }
+  const pages: AdminDayUsePage[] = (
+    (pagesRaw ?? []) as Omit<AdminDayUsePage, 'upcomingCount'>[]
+  ).map((pg) => ({ ...pg, upcomingCount: upcomingByPage.get(pg.id) ?? 0 }))
+  const pageOptions = pages.map((pg) => ({ id: pg.id, name: pg.name }))
 
   const { data: bookingsRaw } =
     slotIds.length > 0
@@ -133,8 +150,10 @@ export default async function AdminDayUsePage() {
           </div>
         </Card>
       )}
+      <DayUsePagesPanel pages={pages} />
       <DayUseRecurrencePanel
         recurrences={(recurrencesRaw ?? []) as DayUseRecurrence[]}
+        pageOptions={pageOptions}
         orgSports={orgSports}
         orgDefaultPriceCents={pricing.defaultCents}
         horizonDays={DAY_USE_HORIZON_DAYS}
@@ -167,6 +186,7 @@ export default async function AdminDayUsePage() {
                     bookingsCount={countMap.get(slot.id) ?? 0}
                     priceCents={dayUsePriceView(slot, pricing).priceCents}
                     payOnSite={dayUsePriceView(slot, pricing).payOnSite}
+                    pageOptions={pageOptions}
                   />
                 ))}
               </div>

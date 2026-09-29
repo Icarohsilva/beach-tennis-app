@@ -14,6 +14,8 @@ import { dayUseChargeCents, dayUsePriceView } from '@/lib/dayuse/dayUseKind'
 import { cancelNoticeForStudent } from '@/lib/dayuse/refundRules'
 import { PENDING_HOLD_MINUTES, expireStalePendingDayUse, getRefundWindowHours } from '@/features/dayuse/refunds'
 import { getWalletBalance } from '@/features/wallet/walletQueries'
+import { isDayUsePartner, partnerOptionsFor } from '@/lib/dayuse/partnerCheckin'
+import type { DayUsePaymentMethod } from '@/lib/dayuse/paymentMethod'
 
 export default async function AgendarDayUsePage({
   searchParams,
@@ -72,7 +74,7 @@ export default async function AgendarDayUsePage({
     slotIds.length > 0
       ? await adminClient
           .from('dayuse_bookings')
-          .select('id, slot_id, student_id, status, booked_at, profiles(full_name)')
+          .select('id, slot_id, student_id, status, booked_at, payment_method, profiles(full_name)')
           .in('slot_id', slotIds)
           // Prazo por MÉTODO (hold_until): o PIX manual segura 24h, e contar
           // por booked_at o tiraria da ocupação em 30 min.
@@ -87,6 +89,7 @@ export default async function AgendarDayUsePage({
   const myBookings = new Map<string, string>()
   const myBookingStatus = new Map<string, string>()
   const myBookedAt = new Map<string, string>()
+  const myMethod = new Map<string, DayUsePaymentMethod>()
   const attendeesMap = new Map<string, string[]>()
 
   for (const b of (allBookings ?? []) as {
@@ -95,6 +98,7 @@ export default async function AgendarDayUsePage({
     student_id: string
     status: string
     booked_at: string
+    payment_method: DayUsePaymentMethod
     profiles: { full_name: string } | { full_name: string }[] | null
   }[]) {
     countMap.set(b.slot_id, (countMap.get(b.slot_id) ?? 0) + 1)
@@ -102,6 +106,7 @@ export default async function AgendarDayUsePage({
       myBookings.set(b.slot_id, b.id)
       myBookingStatus.set(b.slot_id, b.status)
       myBookedAt.set(b.slot_id, b.booked_at)
+      myMethod.set(b.slot_id, b.payment_method)
     }
     const profile = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles
     if (profile?.full_name) {
@@ -156,12 +161,20 @@ export default async function AgendarDayUsePage({
                   priceCents={dayUseChargeCents(slot, pricing)}
                   paymentTiming={dayUsePriceView(slot, pricing).timing}
                   walletCents={walletCents}
+                  partnerOptions={partnerOptionsFor({
+                    priceCents: dayUseChargeCents(slot, pricing),
+                    accepted: pricing.acceptedPartners,
+                  })}
+                  myPaymentMethod={myMethod.get(slot.id) ?? null}
                   cancelNotice={cancelNoticeForStudent({
                     date: slot.date,
                     start_time: slot.start_time,
                     bookedAtIso: myBookedAt.get(slot.id) ?? null,
                     nowIso,
-                    paidCents: dayUseChargeCents(slot, pricing),
+                    // Reservado pelo parceiro, nada foi pago à arena.
+                    paidCents: isDayUsePartner(myMethod.get(slot.id))
+                      ? 0
+                      : dayUseChargeCents(slot, pricing),
                     windowHours: refundWindowHours,
                   })}
                 />

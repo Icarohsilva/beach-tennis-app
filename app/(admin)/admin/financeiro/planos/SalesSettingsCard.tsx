@@ -6,12 +6,22 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { updateSalesSettings } from '../adminActions'
 import type { SalesSettingsData } from '../adminActions'
+import { DAY_USE_PARTNERS, PARTNER_LABEL, type DayUsePartner } from '@/lib/dayuse/partnerCheckin'
 
 export function SalesSettingsCard({ initial }: { initial: SalesSettingsData }) {
   const [form, setForm] = useState<SalesSettingsData>(initial)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  function togglePartner(partner: DayUsePartner, on: boolean) {
+    setForm((f) => ({
+      ...f,
+      day_use_partners: on
+        ? [...f.day_use_partners.filter((p) => p !== partner), partner]
+        : f.day_use_partners.filter((p) => p !== partner),
+    }))
+  }
 
   function handleSave() {
     setError(null)
@@ -58,6 +68,23 @@ export function SalesSettingsCard({ initial }: { initial: SalesSettingsData }) {
               />
               Cobrar day use pelo app
             </label>
+            {/* Parceiro aceito aparece como opção na reserva do day use pago, e
+                a lista do day use mostra ao quiosque quem vem por ele. */}
+            <p className="mt-3 text-xs text-slate-400">Aceitar no day use</p>
+            {DAY_USE_PARTNERS.map((partner) => (
+              <label key={partner} className="flex items-center gap-2 mt-1 text-sm text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={form.day_use_partners.includes(partner)}
+                  onChange={(e) => togglePartner(partner, e.target.checked)}
+                />
+                {PARTNER_LABEL[partner]}
+              </label>
+            ))}
+            <p className="mt-1 text-xs text-slate-500">
+              O aluno escolhe o parceiro ao reservar e não paga pelo app. O quiosque valida o
+              check-in na lista do day use.
+            </p>
           </div>
         </div>
         {error && (

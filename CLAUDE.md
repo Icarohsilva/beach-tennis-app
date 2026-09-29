@@ -197,6 +197,24 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   o que o cabeçalho de `20260810000200_signup_without_org.sql` previa ("reserva de day use →
   membership athlete"); o torneio (`registerExternal`) continua criando vínculo, e a
   divergência entre os dois fluxos é conhecida.
+- **Página de day use** (`dayuse_pages`, link `/dayuse/[slug]`, liberado em `middleware.ts`) é a
+  capa que agrupa as datas de UM day use ("Day Use de Verão"), no mesmo desenho do evento de
+  torneio (`tournament_events` → `/e/[slug]`): nome, slug global, descrição, flyer no bucket
+  `dayuse-images` e `is_published`. A página é só a capa: reserva, pagamento, parceiro e lista
+  do quiosque continuam na DATA, e cada card leva a `/d/[id]`, que ganhou o "Todas as datas de…"
+  de volta (só para página publicada). A data aponta para a página (`dayuse_slots.page_id`) e a
+  recorrência também (`dayuse_recurrences.page_id`): `generateDayUse` copia o `page_id` do
+  molde para a data NOVA, e `setDayUseRecurrencePage` leva junto as datas futuras já geradas —
+  senão as próximas quatro semanas, que são as que a arena divulga agora, ficariam de fora.
+  Publicar exige data futura ativa vinculada. Admin em `/admin/grade/dayuse`
+  (`DayUsePagesPanel`, recolhido; `DayUsePagePicker` em cada data e recorrência). A página
+  pública mostra a capa inteira (mesmo motivo de `/e/[slug]`), as datas antes da descrição e
+  vagas/lotado pela régua de ocupação de sempre (`hold_until`), com a lógica pura em
+  [lib/dayuse/pageView.ts](lib/dayuse/pageView.ts). Na vitrine da arena (`/arenas/[slug]`,
+  `getArenaShowcase().dayUsePages`) cada página publicada com data futura vira cartaz
+  (`DayUsePageTeaser`, o mesmo formato do `EventTeaser`), e as datas que estão num cartaz
+  **saem** da lista solta de day use — o mesmo motivo de o torneio dentro de evento não
+  aparecer solto. Página em rascunho não esconde nada: as datas dela seguem na lista.
 - Preço de day use: `dayuse_slots.price_cents` nulo herda `system_settings.day_use_price`.
   **O preço é o preço** — `dayUseChargeCents` ([lib/dayuse/dayUseKind.ts](lib/dayuse/dayUseKind.ts))
   não é mais condicionado a "consigo cobrar no app". Já foi, e o resultado apareceu em uso
@@ -242,6 +260,21 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   use **de graça**. Recusar um comprovante passa por `openRefundForBooking` de propósito: o
   pagamento nunca virou `paid`, então nenhum estorno PIX abre, mas a parte que o aluno tinha
   abatido da carteira volta para ele.
+- **Day use por Wellhub/TotalPass** ([lib/dayuse/partnerCheckin.ts](lib/dayuse/partnerCheckin.ts)).
+  A arena liga cada parceiro em Financeiro › Planos (`system_settings.day_use_partners`,
+  "wellhub,totalpass"); ligado, todo day use **pago** oferece "Usar Wellhub/TotalPass" ao lado
+  do reservar, nas três telas (`PartnerBookButtons`), com o aviso de que check-in recusado vira
+  cobrança na arena. A reserva vai com `payment_method` = o parceiro: nasce `confirmed`, **sem
+  `payments`** e sem tocar na carteira — quem paga é o app do parceiro, então não há estorno a
+  abrir e o aviso de cancelamento usa `paidCents = 0`. O que falta é o quiosque validar:
+  `partner_checkin_at` via `markDayUsePartnerCheckin`, ou "Não passou: cobrar"
+  (`convertPartnerBookingToOnSite`), que troca o método para `on_site` e abre o `payments`
+  pendente pelo preço do day use, caindo no "Marcar como pago" de sempre. `bookDayUse` revalida
+  com a MESMA `partnerOptionsFor` da tela — sem isso, chamar a action com `partner` reservaria
+  day use pago de graça em arena que não aceita parceiro. `partner_checkin_by` não tem FK de
+  propósito: uma segunda FK de `dayuse_bookings` para `profiles` deixaria ambíguo o embed
+  `profiles(...)` das telas, e o PostgREST recusa a consulta inteira. Não confundir com
+  `memberships.partner`, que é o eixo de cobrança das AULAS (webhook do parceiro).
 - **Carteira (crédito em DINHEIRO)**: `wallet_transactions` é a verdade e `wallets.balance_cents`
   o cache, mesmo par de `credit_transactions`→`memberships.credits_balance` — mas conta reais,
   não aulas. Escrita **só** pela RPC `wallet_apply` (o `select ... for update` nela é o que

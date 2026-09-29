@@ -27,6 +27,7 @@ import {
 } from '@/lib/dayuse/paymentMethod'
 import type { DayUsePaymentTiming } from '@/lib/dayuse/paymentMethod'
 import type { DayUseKind, DayUseRecurrence } from '@/types'
+import { DayUsePagePicker } from './DayUsePagePicker'
 
 const DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const SELECT_CLS = 'w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500'
@@ -37,8 +38,11 @@ export function DayUseRecurrencePanel({
   orgDefaultPriceCents,
   horizonDays,
   canCollectOnline,
+  pageOptions = [],
 }: {
   recurrences: DayUseRecurrence[]
+  /** Páginas de day use: a recorrência vinculada leva as datas para a página. */
+  pageOptions?: Array<{ id: string; name: string }>
   orgSports: string[]
   orgDefaultPriceCents: number
   horizonDays: number
@@ -180,6 +184,13 @@ export function DayUseRecurrencePanel({
                   <span className="text-xs text-slate-400">
                     {DAY_USE_TIMING_LABEL[rec.payment_timing ?? 'on_site']}
                   </span>
+                </div>
+                <div className="mt-2">
+                  <DayUsePagePicker
+                    target={{ recurrenceId: rec.id }}
+                    currentPageId={rec.page_id ?? null}
+                    options={pageOptions}
+                  />
                 </div>
               </div>
               <div className="shrink-0">
