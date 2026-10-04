@@ -351,8 +351,15 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   puras (`receiptCheck.ts`): tela "Check-in confirmado", data e hora do CARTÃO (nunca o relógio
   da barra de status), data de HOJE, hora não futura e **posterior ao último comprovante do
   aluno** (`receipt_taken_at`). `next.config.js` mantém `tesseract.js` fora do webpack
-  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva o modelo para a função
-  da `/home` (`outputFileTracingIncludes`) — tirar um dos dois quebra a leitura só na Vercel.
+  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva para a função da `/home`
+  (`outputFileTracingIncludes`) o modelo de português **e os `.wasm` do motor** — o rastreador da
+  Vercel não enxerga nenhum dos dois, e sem o `.wasm` o leitor não sobe e NÃO dá erro: o primeiro
+  deploy ficou com o check-in girando sem fim. A análise tem de caber em **10 s** (requisito da
+  arena): a leitura tem teto de 6 s (`READ_BUDGET_MS`; estourou, o check-in entra como "conferir"
+  e o leitor é descartado), o worker é reaproveitado entre envios na função quente (subir custa
+  ~1,2 s, ler ~0,5 s), a imagem vai a 600 px de largura antes do OCR, a segunda passada só roda se
+  sobrar tempo, e a action dispara a leitura antes das consultas ao banco. `maxDuration = 20` na
+  `/home` só evita o corte na partida a frio.
   No vitest o teste que roda o OCR de verdade precisa de `// @vitest-environment node`: no
   jsdom o tesseract.js tenta carregar o worker por URL. O mesmo arquivo reenviado cai pelo hash
   (`receipt_sha256`, único por academia). Reprovado não vira check-in; academia com nome

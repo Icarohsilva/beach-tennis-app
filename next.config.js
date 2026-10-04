@@ -10,11 +10,19 @@ const nextConfig = {
     // sobe um worker_thread a partir de arquivos do próprio pacote, que o
     // webpack quebraria ao empacotar.
     serverComponentsExternalPackages: ['tesseract.js'],
-    // O modelo de português do OCR é lido do node_modules em tempo de execução;
-    // sem isto ele fica fora do deploy da Vercel. Só a rota onde o aluno envia
-    // o check-in (a server action roda na função da /home) precisa dele.
+    // O OCR lê dois arquivos do disco em tempo de execução, e o rastreador da
+    // Vercel não enxerga nenhum dos dois: o modelo de português e o motor .wasm
+    // do Tesseract. Sem o .wasm o leitor não sobe e NÃO dá erro — o check-in
+    // ficava girando (reproduzido escondendo os .wasm: trava até o teto de
+    // receiptReader.ts). TODAS as variantes vão junto porque qual delas carrega
+    // depende do processador da máquina (simd / relaxed simd). Só a rota onde
+    // o aluno envia o check-in (a server action roda na função da /home)
+    // precisa deles.
     outputFileTracingIncludes: {
-      '/home': ['./node_modules/@tesseract.js-data/por/4.0.0_best_int/**'],
+      '/home': [
+        './node_modules/@tesseract.js-data/por/4.0.0_best_int/**',
+        './node_modules/tesseract.js-core/*.wasm',
+      ],
     },
   },
   // Identidade da build, inlinada em tempo de build no bundle do cliente E no do

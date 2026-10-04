@@ -79,7 +79,15 @@ export function AppCheckinCard({ today }: Props) {
     startTransition(async () => {
       const fd = new FormData()
       fd.append('file', file)
-      const r = await submitAppCheckin(fd)
+      let r: Awaited<ReturnType<typeof submitAppCheckin>>
+      try {
+        r = await submitAppCheckin(fd)
+      } catch {
+        // Queda de rede ou função cortada: sem isto a rodinha some sem dizer nada
+        // e o aluno não sabe se o check-in foi registrado.
+        setError('Não deu para enviar agora. Confira sua conexão e tente de novo.')
+        return
+      }
       if (r.error) { setError(r.error); return }
       setDone(r.linkedSession ? 'Presença marcada na sua aula de agora.' : 'Check-in do dia contado.')
       // Print recusado nem chega aqui (volta como erro, com o motivo).
@@ -137,7 +145,7 @@ export function AppCheckinCard({ today }: Props) {
               {file ? 'Trocar print' : 'Anexar print'}
             </button>
             <Button className="flex-1" onClick={handleSubmit} loading={isPending} disabled={!file}>
-              Enviar check-in
+              {isPending ? 'Conferindo o print…' : 'Enviar check-in'}
             </Button>
           </div>
         </div>
