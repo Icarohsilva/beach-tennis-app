@@ -482,6 +482,27 @@ Torneio", que antes empurravam a lista para a segunda rolagem; a lista é agrupa
 em `groupTournamentsByStatus` ([lib/torneios/statusGroups.ts](lib/torneios/statusGroups.ts)):
 em andamento, inscrições abertas, rascunhos e **encerrados sempre por último**.
 
+### Carregamento na navegação
+
+Todo clique que troca de página tem de dar sinal na hora: sem isso o admin clicava num
+aluno, nada acontecia por alguns segundos e a ficha "abria do nada", e a pessoa clicava de
+novo. São duas peças que se completam:
+
+- **`loading.tsx` em TODA pasta com `page.tsx`** dos grupos `(admin)`, `(dashboard)` e
+  `(super-admin)`, renderizando `PageLoading` ([components/ui/PageLoading.tsx](components/ui/PageLoading.tsx)):
+  esqueleto **com "Carregando…" escrito**, porque cinza sozinho não diz que o clique pegou.
+  Variante `dashboard` (aluno, traz o `p-4 pb-24`) ou `panel` (admin e plataforma, cujo
+  layout já tem margem). Uma por pasta, não só na raiz do grupo: o limite de Suspense
+  precisa ser do segmento que muda, senão a navegação entre irmãos não o remonta.
+  **Página nova nasce com o seu `loading.tsx`.**
+- **`NavigationProgress`** ([components/ui/NavigationProgress.tsx](components/ui/NavigationProgress.tsx)),
+  no layout raiz: barra no topo + chip "Carregando…" depois de 300 ms. Cobre o que o
+  `loading.tsx` não cobre: o intervalo até o Next buscar o pedaço da rota e a troca de
+  filtro (`?status=`) na mesma página. Começa por um listener de clique no documento na
+  fase de **captura** (o `<Link>` chama `preventDefault` no próprio onClick, então na bolha
+  todo link pareceria cancelado) e termina quando `usePathname`/`useSearchParams` mudam.
+  Navegação por código (`router.push` depois de um clique) chama `startNavigation()` antes.
+
 ### Versão do app e sessão
 
 Este app **não tem cache de service worker**: o `@ducanh2912/next-pwa` está nas

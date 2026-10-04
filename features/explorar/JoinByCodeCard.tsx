@@ -13,6 +13,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { KeyRound } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { startNavigation } from '@/components/ui/NavigationProgress'
 import { Card } from '@/components/ui/Card'
 import { joinAcademy } from '@/features/organizations/actions'
 import { setActiveOrg } from '@/features/organizations/setActiveOrg'
@@ -36,6 +37,7 @@ export function JoinByCodeCard() {
       // Entrar numa academia é justamente escolhê-la: deixar o cookie apontando
       // para outra faria a Home abrir na academia errada logo depois.
       if (res.orgId) await setActiveOrg(res.orgId)
+      startNavigation()
       router.push('/home')
       router.refresh()
     })

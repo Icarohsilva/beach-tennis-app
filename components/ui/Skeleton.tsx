@@ -1,18 +1,15 @@
 // components/ui/Skeleton.tsx
 import { cn } from '@/lib/utils/cn'
+import { PageLoading } from './PageLoading'
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded-xl bg-surface-card', className)} />
 }
 
-/** Página de loading padrão: header + 3 cards. */
+/**
+ * Página de loading padrão da área do aluno. Mantido como atalho: hoje é o
+ * PageLoading (com o "Carregando…" escrito) na variante do aluno.
+ */
 export function PageSkeleton() {
-  return (
-    <div className="p-4 space-y-4 pb-24">
-      <Skeleton className="h-24" />
-      <Skeleton className="h-20" />
-      <Skeleton className="h-20" />
-      <Skeleton className="h-20" />
-    </div>
-  )
+  return <PageLoading variant="dashboard" />
 }

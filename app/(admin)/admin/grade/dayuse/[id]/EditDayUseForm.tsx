@@ -7,6 +7,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { startNavigation } from '@/components/ui/NavigationProgress'
 import { Input } from '@/components/ui/Input'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
 import {
@@ -85,6 +86,7 @@ export function EditDayUseForm({
     startTransition(async () => {
       const r = await deactivateDayUseSlot(slot.id)
       if (r.error) { setError(r.error); return }
+      startNavigation()
       router.push('/admin/grade/dayuse')
     })
   }
