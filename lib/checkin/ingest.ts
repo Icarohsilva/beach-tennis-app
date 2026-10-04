@@ -90,8 +90,11 @@ export interface RecordResolvedInput {
   /** Instante ISO do check-in. Usado para casar a sessão na janela de ±1h. */
   checkinAt: string
   externalRef: string | null
-  validation: 'manual' | CheckinPartner
+  /** 'app' = o aluno registrou pelo app, com o print em `receiptUrl`. */
+  validation: 'manual' | CheckinPartner | 'app'
   createdBy?: string | null
+  /** Caminho do print no bucket checkin-receipts (só no check-in pelo app). */
+  receiptUrl?: string | null
 }
 
 // Grava um check-in JÁ resolvido (aluno conhecido). Idempotente por external_ref.
@@ -128,6 +131,7 @@ export async function recordResolvedCheckin(
     external_ref: input.externalRef,
     validation: input.validation,
     created_by: input.createdBy ?? null,
+    receipt_url: input.receiptUrl ?? null,
   })
   if (insertError) {
     // 23505 = violação de índice único. Outra requisição concorrente já gravou

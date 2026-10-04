@@ -18,6 +18,9 @@ import { HeartHandshake } from 'lucide-react'
 import { WellhubSettingsCard } from './WellhubSettingsCard'
 import { WellhubStudentRow } from './WellhubStudentRow'
 import { ChargeAllButton } from './ChargeAllButton'
+import { AppCheckinReviewList } from './AppCheckinReviewList'
+import { getAppCheckinsForReview, isAppCheckinEnabled } from '@/features/checkin/appCheckinQueries'
+import { addDaysStr, brtToday } from '@/lib/utils/gridSchedule'
 import type { CheckinPartner } from '@/types'
 
 export const dynamic = 'force-dynamic'
@@ -121,6 +124,17 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
       : null,
   }))
 
+  // Check-ins pelo app (com print): a fila só aparece quando a função está ligada
+  // ou ainda há registros recentes dela para conferir.
+  const [appCheckinOn, appCheckins] = await Promise.all([
+    isAppCheckinEnabled(adminClient, orgId),
+    getAppCheckinsForReview(adminClient, {
+      orgId,
+      sinceDate: addDaysStr(brtToday(new Date()), -30),
+    }),
+  ])
+  const showAppCheckins = appCheckinOn || appCheckins.length > 0
+
   const comPendencia = overview.students.filter((s) => s.summary.openCount > 0).length
   const monthLabel = formatDate(window.from, "MMMM 'de' yyyy")
 
@@ -141,6 +155,21 @@ export default async function WellhubPage({ searchParams }: { searchParams: Sear
           Check-ins e pendências dos alunos de parceiro (Wellhub e TotalPass)
         </p>
       </div>
+
+      {showAppCheckins && (
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Check-ins pelo app ({appCheckins.length})
+            </h2>
+            <p className="text-xs text-slate-500">
+              Últimos 30 dias. O print é lido automaticamente: data de hoje, posterior ao último
+              comprovante e da academia certa. Só os marcados &quot;Conferir&quot; precisam do seu olho.
+            </p>
+          </div>
+          <AppCheckinReviewList rows={appCheckins} />
+        </section>
+      )}
 
       {overview.students.length === 0 ? (
         <EmptyState

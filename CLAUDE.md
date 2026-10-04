@@ -331,6 +331,36 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   têm de concordar: reservar, entrar na fila e ser promovido pela fila. A regra em si continua
   pura em `resolveClassAccess` ([lib/utils/accessRules.ts](lib/utils/accessRules.ts)).
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
+- **Check-in Wellhub pelo app, com print** ([lib/checkin/appCheckin.ts](lib/checkin/appCheckin.ts)).
+  Para a arena SEM a integração do Wellhub: o check-in do aluno nunca chegava ao sistema. Vale
+  com três condições (`resolveAppCheckin`): chave `system_settings.wellhub_app_checkin_enabled`
+  ligada em Configurações, integração Wellhub (`org_integrations`) **não** conectada — conectada,
+  o webhook já faz o check-in e um segundo caminho duplicaria o dia — e aluno com
+  `memberships.partner = 'wellhub'`. O aluno usa o `AppCheckinCard` da `/home`, e o print é
+  obrigatório: é reduzido no navegador (`lib/utils/compressImage.ts`, porque server action aceita
+  1 MB e a Vercel corta em 4,5 MB) e sobe por service role no bucket **privado**
+  `checkin-receipts`. O registro passa pelo MESMO `recordResolvedCheckin` do webhook
+  (`validation = 'app'`): marca presença na aula reservada, dá baixa em pendência e conta na meta.
+  Um por dia, por qualquer caminho, e `external_ref = app:<aluno>:<dia>` trava a corrida.
+  **O print é lido automaticamente e de graça**: OCR com Tesseract no próprio servidor
+  (`receiptReader.ts`, `tesseract.js` + o modelo `@tesseract.js-data/por` do node_modules —
+  nada de API paga nem chave). São duas passadas, porque a tela tem texto claro sobre o rosa e
+  escuro sobre o branco: a imagem invertida em cinza (via `sharp`) lê o título e o logo, a
+  original é a segunda chance para o cartão. O texto é interpretado com padrões tolerantes a
+  erro de OCR (`receiptText.ts`: "Checlctin confirmado", "11h38 + 4 out") e julgado por regras
+  puras (`receiptCheck.ts`): tela "Check-in confirmado", data e hora do CARTÃO (nunca o relógio
+  da barra de status), data de HOJE, hora não futura e **posterior ao último comprovante do
+  aluno** (`receipt_taken_at`). `next.config.js` mantém `tesseract.js` fora do webpack
+  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva o modelo para a função
+  da `/home` (`outputFileTracingIncludes`) — tirar um dos dois quebra a leitura só na Vercel.
+  No vitest o teste que roda o OCR de verdade precisa de `// @vitest-environment node`: no
+  jsdom o tesseract.js tenta carregar o worker por URL. O mesmo arquivo reenviado cai pelo hash
+  (`receipt_sha256`, único por academia). Reprovado não vira check-in; academia com nome
+  diferente no print entra como `receipt_status = 'review'` (o nome é procurado no texto todo, e
+  palavras genéricas como "beach" não contam), e OCR que falhou também — o aluno nunca fica
+  travado por falha nossa. O admin confere só os "Conferir" na fila de `/admin/wellhub`
+  (`AppCheckinReviewList`), e "Excluir" (`deleteAppCheckin`) desfaz a presença marcada por aquele
+  check-in, mas não reabre pendência baixada por ele.
 - **Parceiro é o caminho PADRÃO, não o único.** Em `resolveClassAccess` a escolha
   explícita do aluno (`preferCredit`) passa à frente de `partner`: quem tem
   Wellhub/TotalPass **e** crédito avulso decide, no modal da aula, se gasta o check-in
