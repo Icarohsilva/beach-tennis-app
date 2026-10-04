@@ -42,6 +42,8 @@ import { isQuotaEnforced } from '@/features/aulas/quotaSettings'
 import { getClassRules } from '@/features/aulas/classRulesQuery'
 import { RulesCard } from '@/features/home/RulesCard'
 import { brtToday } from '@/lib/utils/gridSchedule'
+import { AppCheckinCard } from '@/features/checkin/AppCheckinCard'
+import { getAppCheckinState } from '@/features/checkin/appCheckinQueries'
 import type { Profile, Periodicity, MissedCheckinStatus } from '@/types'
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -121,6 +123,16 @@ export default async function HomePage() {
   // Não mostra o CTA genérico se já existe uma recomendação de plano do admin
   // (mais específica) ou se o aluno já tem plano/pendência em andamento.
   const showPlanCTA = !isPartner && !existingSub && !recRaw
+  // Check-in Wellhub pelo app: só na arena que ligou a função e não tem a
+  // integração conectada, e só para o aluno do plano Wellhub.
+  const appCheckin = isPartner && orgId
+    ? await getAppCheckinState(adminClient, {
+        orgId,
+        studentId: user.id,
+        partner: membership?.partner ?? null,
+        today,
+      })
+    : null
   let checkinProgress: ReturnType<typeof computeProgress> | null = null
   let missedCheckins: MissedCheckinSummary | null = null
   if (isPartner && membership && orgId) {
@@ -339,6 +351,12 @@ export default async function HomePage() {
             Inclui {quota.carriedIn} {quota.carriedIn === 1 ? 'aula guardada' : 'aulas guardadas'}{' '}
             {plan?.cycle === 'weekly' ? 'da semana anterior' : 'do mês anterior'}.
           </p>
+        </Reveal>
+      )}
+
+      {appCheckin?.available && (
+        <Reveal step={1}>
+          <AppCheckinCard today={appCheckin.today} />
         </Reveal>
       )}
 

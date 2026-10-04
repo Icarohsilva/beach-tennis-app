@@ -9,6 +9,9 @@ import { VideoFeedUrlForm } from './VideoFeedUrlForm'
 import { LigaSettingsForm } from './LigaSettingsForm'
 import { getLigaSettings } from '@/features/liga/settings'
 import { SelfCheckinForm } from './SelfCheckinForm'
+import { AppCheckinForm } from './AppCheckinForm'
+import { isWellhubIntegrationConnected } from '@/features/checkin/appCheckinQueries'
+import { APP_CHECKIN_SETTING } from '@/lib/checkin/appCheckin'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
@@ -35,6 +38,7 @@ export default async function ConfiguracoesPage() {
     .eq('organization_id', orgId)
 
   const map = new Map((rows ?? []).map((r: { key: string; value: string }) => [r.key, r.value]))
+  const wellhubConnected = orgId ? await isWellhubIntegrationConnected(adminClient, orgId) : false
 
   const defaults: SystemSettings = {
     credit_expiry_days: Number(map.get('credit_expiry_days') ?? 30),
@@ -167,6 +171,18 @@ export default async function ConfiguracoesPage() {
         </p>
       </div>
       <SelfCheckinForm settings={selfCheckin} />
+
+      <div>
+        <h2 className="text-lg font-bold text-white">Check-in Wellhub pelo app</h2>
+        <p className="text-slate-400 text-sm mt-1">
+          Para a arena sem a integração do Wellhub: o aluno registra o check-in do dia no
+          app e anexa o print do Wellhub como comprovante.
+        </p>
+      </div>
+      <AppCheckinForm
+        enabled={map.get(APP_CHECKIN_SETTING) === 'true'}
+        integrationConnected={wellhubConnected}
+      />
 
       <div>
         <h2 className="text-lg font-bold text-white">Vídeo das quadras</h2>

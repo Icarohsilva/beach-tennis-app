@@ -1118,6 +1118,8 @@ export function StudentProfileClient({
                   <span className="min-w-0 text-white">
                     {formatDate(c.checkin_date)}
                     {c.session_id && <span className="text-green-400"> · presença em aula</span>}
+                    {/* Feito pelo aluno no app, com print (o print fica em Wellhub). */}
+                    {c.validation === 'app' && <span className="text-slate-400"> · pelo app</span>}
                   </span>
                   <span className="shrink-0">
                     <Badge variant={c.partner === 'wellhub' ? 'success' : 'warning'}>
