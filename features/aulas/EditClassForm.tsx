@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
+import { startNavigation } from '@/components/ui/NavigationProgress'
 import { Input } from '@/components/ui/Input'
 import { updateClass } from './class-form-actions'
 import { sportEmoji, sportLabel } from '@/lib/arenas/sports'
@@ -47,6 +48,7 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
     })
     setPending(false)
     if (result.error) { setError(result.error); return }
+    startNavigation()
     router.push('/admin/grade')
     router.refresh()
   }
@@ -124,7 +126,10 @@ export function EditClassForm({ class_: c, orgSports }: Props) {
         <Button type="submit" disabled={pending}>
           {pending ? 'Salvando...' : 'Salvar Alterações'}
         </Button>
-        <Button type="button" variant="secondary" onClick={() => router.push('/admin/grade')}>
+        <Button type="button" variant="secondary" onClick={() => {
+            startNavigation()
+            router.push('/admin/grade')
+          }}>
           Cancelar
         </Button>
       </div>

@@ -351,8 +351,15 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   puras (`receiptCheck.ts`): tela "Check-in confirmado", data e hora do CARTÃO (nunca o relógio
   da barra de status), data de HOJE, hora não futura e **posterior ao último comprovante do
   aluno** (`receipt_taken_at`). `next.config.js` mantém `tesseract.js` fora do webpack
-  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva o modelo para a função
-  da `/home` (`outputFileTracingIncludes`) — tirar um dos dois quebra a leitura só na Vercel.
+  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva para a função da `/home`
+  (`outputFileTracingIncludes`) o modelo de português **e os `.wasm` do motor** — o rastreador da
+  Vercel não enxerga nenhum dos dois, e sem o `.wasm` o leitor não sobe e NÃO dá erro: o primeiro
+  deploy ficou com o check-in girando sem fim. A análise tem de caber em **10 s** (requisito da
+  arena): a leitura tem teto de 6 s (`READ_BUDGET_MS`; estourou, o check-in entra como "conferir"
+  e o leitor é descartado), o worker é reaproveitado entre envios na função quente (subir custa
+  ~1,2 s, ler ~0,5 s), a imagem vai a 600 px de largura antes do OCR, a segunda passada só roda se
+  sobrar tempo, e a action dispara a leitura antes das consultas ao banco. `maxDuration = 20` na
+  `/home` só evita o corte na partida a frio.
   No vitest o teste que roda o OCR de verdade precisa de `// @vitest-environment node`: no
   jsdom o tesseract.js tenta carregar o worker por URL. O mesmo arquivo reenviado cai pelo hash
   (`receipt_sha256`, único por academia). Reprovado não vira check-in; academia com nome
@@ -474,6 +481,27 @@ depois de uma revalidação. Em `/admin/torneios` ele guarda "Páginas de evento
 Torneio", que antes empurravam a lista para a segunda rolagem; a lista é agrupada por status
 em `groupTournamentsByStatus` ([lib/torneios/statusGroups.ts](lib/torneios/statusGroups.ts)):
 em andamento, inscrições abertas, rascunhos e **encerrados sempre por último**.
+
+### Carregamento na navegação
+
+Todo clique que troca de página tem de dar sinal na hora: sem isso o admin clicava num
+aluno, nada acontecia por alguns segundos e a ficha "abria do nada", e a pessoa clicava de
+novo. São duas peças que se completam:
+
+- **`loading.tsx` em TODA pasta com `page.tsx`** dos grupos `(admin)`, `(dashboard)` e
+  `(super-admin)`, renderizando `PageLoading` ([components/ui/PageLoading.tsx](components/ui/PageLoading.tsx)):
+  esqueleto **com "Carregando…" escrito**, porque cinza sozinho não diz que o clique pegou.
+  Variante `dashboard` (aluno, traz o `p-4 pb-24`) ou `panel` (admin e plataforma, cujo
+  layout já tem margem). Uma por pasta, não só na raiz do grupo: o limite de Suspense
+  precisa ser do segmento que muda, senão a navegação entre irmãos não o remonta.
+  **Página nova nasce com o seu `loading.tsx`.**
+- **`NavigationProgress`** ([components/ui/NavigationProgress.tsx](components/ui/NavigationProgress.tsx)),
+  no layout raiz: barra no topo + chip "Carregando…" depois de 300 ms. Cobre o que o
+  `loading.tsx` não cobre: o intervalo até o Next buscar o pedaço da rota e a troca de
+  filtro (`?status=`) na mesma página. Começa por um listener de clique no documento na
+  fase de **captura** (o `<Link>` chama `preventDefault` no próprio onClick, então na bolha
+  todo link pareceria cancelado) e termina quando `usePathname`/`useSearchParams` mudam.
+  Navegação por código (`router.push` depois de um clique) chama `startNavigation()` antes.
 
 ### Versão do app e sessão
 

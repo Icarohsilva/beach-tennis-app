@@ -24,6 +24,17 @@ const config: Config = {
         // de `viewportFit: 'cover'` em app/layout.tsx para resolver > 0 no iOS.
         safe: 'env(safe-area-inset-bottom)',
       },
+      // Barra de NavigationProgress: um terço da largura correndo de ponta a
+      // ponta. Indeterminada de propósito: não sabemos quanto falta.
+      keyframes: {
+        'nav-progress': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
+        },
+      },
+      animation: {
+        'nav-progress': 'nav-progress 1.1s ease-in-out infinite',
+      },
       colors: {
         brand: {
           50:  'rgb(var(--brand-50) / <alpha-value>)',

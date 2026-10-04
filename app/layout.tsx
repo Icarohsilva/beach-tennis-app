@@ -3,7 +3,9 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Sora } from 'next/font/google'
 import './globals.css'
 import { CookieBanner } from '@/components/ui/CookieBanner'
+import { Suspense } from 'react'
 import { VersionGate } from '@/components/pwa/VersionGate'
+import { NavigationProgress } from '@/components/ui/NavigationProgress'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const sora = Sora({ subsets: ['latin'], weight: ['400', '600', '700', '800'], variable: '--font-sora' })
@@ -63,6 +65,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               "window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__arenahubInstallEvent=e;window.dispatchEvent(new Event('arenahub:installable'))});",
           }}
         />
+        {/* useSearchParams exige Suspense; fallback null para não atrasar a página. */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         {children}
         <CookieBanner />
         {/* No layout raiz porque é o único ponto que cobre os quatro grupos de rota

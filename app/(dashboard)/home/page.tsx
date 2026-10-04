@@ -46,6 +46,11 @@ import { AppCheckinCard } from '@/features/checkin/AppCheckinCard'
 import { getAppCheckinState } from '@/features/checkin/appCheckinQueries'
 import type { Profile, Periodicity, MissedCheckinStatus } from '@/types'
 
+// O check-in pelo app (server action desta página) lê o print com OCR. A leitura
+// tem teto de 6 s (lib/checkin/receiptReader.ts); isto só garante que a função
+// não seja cortada antes, na partida a frio, quando o leitor ainda sobe.
+export const maxDuration = 20
+
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default async function HomePage() {

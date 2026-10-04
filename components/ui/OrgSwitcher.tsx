@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { setActiveOrg } from '@/features/organizations/setActiveOrg'
+import { startNavigation } from '@/components/ui/NavigationProgress'
 
 interface Item {
   organization_id: string
@@ -20,6 +21,8 @@ export function OrgSwitcher({ items, activeOrgId }: { items: Item[]; activeOrgId
   function switchTo(orgId: string) {
     setOpen(false)
     if (orgId === activeOrgId) return
+    // Trocar de academia grava o cookie antes de navegar: a barra começa já no clique.
+    startNavigation()
     startTransition(async () => {
       await setActiveOrg(orgId)
       router.push('/home')

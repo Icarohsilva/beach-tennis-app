@@ -53,6 +53,11 @@ export async function submitAppCheckin(formData: FormData): Promise<{
   const fileErr = validateReceiptFile(file instanceof File ? file : null)
   if (fileErr) return { error: fileErr }
   const receipt = file as File
+  const bytes = new Uint8Array(await receipt.arrayBuffer())
+
+  // A leitura do print é a parte lenta: começa JÁ, em paralelo com as checagens
+  // de banco abaixo, para a resposta caber nos 10 s (teto em receiptReader.ts).
+  const readingPromise = readWellhubReceipt(bytes)
 
   const admin = createAdminClient()
   const { data: membership } = await admin
@@ -82,8 +87,6 @@ export async function submitAppCheckin(formData: FormData): Promise<{
     .eq('checkin_date', today)
   if ((count ?? 0) > 0) return { error: 'Seu check-in de hoje já está registrado.' }
 
-  const bytes = new Uint8Array(await receipt.arrayBuffer())
-
   // O mesmo arquivo de novo (deste ou de outro aluno) é recusado sem depender da
   // leitura: é a fraude mais simples, e o hash a pega com certeza.
   const sha = createHash('sha256').update(bytes).digest('hex')
@@ -110,7 +113,7 @@ export async function submitAppCheckin(formData: FormData): Promise<{
       .maybeSingle(),
     admin.from('organizations').select('name').eq('id', orgId).maybeSingle(),
   ])
-  const reading = await readWellhubReceipt(bytes)
+  const reading = await readingPromise
   const verdict = reading
     ? checkReceipt({
         reading,
