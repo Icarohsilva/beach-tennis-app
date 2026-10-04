@@ -5,7 +5,7 @@ import { checkReceipt, gymNameMatches, type ReceiptReading } from './receiptChec
 const now = new Date('2026-10-04T14:40:00Z')
 const ok: ReceiptReading = {
   isWellhubCheckin: true,
-  gymName: 'Varandas Beach',
+  text: 'wellhub Check-in confirmado Varandas Beach 11h38 + 4 out',
   day: 4,
   month: 10,
   hour: 11,
@@ -51,8 +51,8 @@ describe('checkReceipt', () => {
   })
 
   it('academia diferente entra, mas para o admin conferir', () => {
-    const r = checkReceipt({ ...base, reading: { ...ok, gymName: 'Smart Fit Centro' } })
-    expect(r).toMatchObject({ status: 'review', note: 'Academia no print: Smart Fit Centro' })
+    const r = checkReceipt({ ...base, reading: { ...ok, text: 'Check-in confirmado Smart Fit Centro' } })
+    expect(r).toMatchObject({ status: 'review' })
   })
 })
 

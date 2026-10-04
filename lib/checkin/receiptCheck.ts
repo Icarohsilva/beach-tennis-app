@@ -12,7 +12,8 @@
 export interface ReceiptReading {
   /** É a tela "Check-in confirmado" do app do Wellhub. */
   isWellhubCheckin: boolean
-  gymName: string | null
+  /** Texto lido do print, onde se procura o nome da academia. */
+  text: string
   day: number | null
   /** 1..12 */
   month: number | null
@@ -65,10 +66,10 @@ function normalize(s: string): string[] {
  * ("Varandas Beach" e "Arena Varandas Beach Futevôlei"): o Wellhub cadastra a
  * academia com o nome dele, raramente idêntico ao do app.
  */
-export function gymNameMatches(orgName: string, gymName: string | null): boolean {
-  if (!gymName) return false
+export function gymNameMatches(orgName: string, gymText: string | null): boolean {
+  if (!gymText) return false
   const org = new Set(normalize(orgName))
-  return normalize(gymName).some((w) => org.has(w))
+  return normalize(gymText).some((w) => org.has(w))
 }
 
 export function checkReceipt(input: {
@@ -120,13 +121,13 @@ export function checkReceipt(input: {
     }
   }
 
-  if (!gymNameMatches(input.orgName, reading.gymName)) {
+  // O nome é procurado no texto inteiro do print: o OCR suja o começo da linha
+  // ("ÊR Varandas Beach"), mas as palavras do nome saem inteiras.
+  if (!gymNameMatches(input.orgName, reading.text)) {
     return {
       status: 'review',
       takenAt: takenAt.toISOString(),
-      note: reading.gymName
-        ? `Academia no print: ${reading.gymName}`
-        : 'O nome da academia não apareceu no print.',
+      note: 'O nome da arena não aparece no print. Confira se o check-in foi aqui.',
     }
   }
 

@@ -6,6 +6,16 @@ const nextConfig = {
   // Next 14.2: instrumentation.ts só roda com este flag (padrão só no Next 15).
   experimental: {
     instrumentationHook: true,
+    // OCR do print de check-in (lib/checkin/receiptReader.ts): o tesseract.js
+    // sobe um worker_thread a partir de arquivos do próprio pacote, que o
+    // webpack quebraria ao empacotar.
+    serverComponentsExternalPackages: ['tesseract.js'],
+    // O modelo de português do OCR é lido do node_modules em tempo de execução;
+    // sem isto ele fica fora do deploy da Vercel. Só a rota onde o aluno envia
+    // o check-in (a server action roda na função da /home) precisa dele.
+    outputFileTracingIncludes: {
+      '/home': ['./node_modules/@tesseract.js-data/por/4.0.0_best_int/**'],
+    },
   },
   // Identidade da build, inlinada em tempo de build no bundle do cliente E no do
   // servidor. É o que permite detectar deploy novo: o navegador de quem está com o

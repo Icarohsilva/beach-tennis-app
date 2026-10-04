@@ -94,10 +94,10 @@ export async function submitAppCheckin(formData: FormData): Promise<{
     .eq('receipt_sha256', sha)
   if ((reused ?? 0) > 0) return { error: 'Este print já foi usado em outro check-in. Envie o print do check-in de hoje.' }
 
-  // Leitura do print + regras (lib/checkin/receiptCheck.ts): de hoje, não
-  // anterior ao último comprovante, e da academia certa. Sem leitura (sem chave,
-  // falha de rede), o check-in entra para a arena conferir em vez de travar o
-  // aluno por um problema nosso.
+  // Leitura do print (OCR no servidor, sem custo) + regras
+  // (lib/checkin/receiptCheck.ts): de hoje, não anterior ao último comprovante,
+  // e da academia certa. Se o OCR falhar, o check-in entra para a arena
+  // conferir em vez de travar o aluno por um problema nosso.
   const [{ data: lastRow }, { data: orgRow }] = await Promise.all([
     admin
       .from('checkins')
@@ -110,10 +110,7 @@ export async function submitAppCheckin(formData: FormData): Promise<{
       .maybeSingle(),
     admin.from('organizations').select('name').eq('id', orgId).maybeSingle(),
   ])
-  const reading = await readWellhubReceipt(
-    bytes,
-    receipt.type as 'image/jpeg' | 'image/png' | 'image/webp',
-  )
+  const reading = await readWellhubReceipt(bytes)
   const verdict = reading
     ? checkReceipt({
         reading,
@@ -154,7 +151,6 @@ export async function submitAppCheckin(formData: FormData): Promise<{
       .update({
         receipt_status: verdict.status,
         receipt_taken_at: verdict.takenAt,
-        receipt_gym_name: reading?.gymName ?? null,
         receipt_note: verdict.note,
         receipt_sha256: sha,
       })

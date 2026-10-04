@@ -342,14 +342,23 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   `checkin-receipts`. O registro passa pelo MESMO `recordResolvedCheckin` do webhook
   (`validation = 'app'`): marca presença na aula reservada, dá baixa em pendência e conta na meta.
   Um por dia, por qualquer caminho, e `external_ref = app:<aluno>:<dia>` trava a corrida.
-  **O print é lido automaticamente** (`receiptReader.ts`, visão do Claude com saída em JSON
-  schema e `fallbacks: "default"`; precisa de `ANTHROPIC_API_KEY`) e julgado por regras puras
-  (`receiptCheck.ts`): tela "Check-in confirmado", data de HOJE, hora não futura e **posterior
-  ao último comprovante do aluno** (`receipt_taken_at`). O mesmo arquivo reenviado cai pelo hash
+  **O print é lido automaticamente e de graça**: OCR com Tesseract no próprio servidor
+  (`receiptReader.ts`, `tesseract.js` + o modelo `@tesseract.js-data/por` do node_modules —
+  nada de API paga nem chave). São duas passadas, porque a tela tem texto claro sobre o rosa e
+  escuro sobre o branco: a imagem invertida em cinza (via `sharp`) lê o título e o logo, a
+  original é a segunda chance para o cartão. O texto é interpretado com padrões tolerantes a
+  erro de OCR (`receiptText.ts`: "Checlctin confirmado", "11h38 + 4 out") e julgado por regras
+  puras (`receiptCheck.ts`): tela "Check-in confirmado", data e hora do CARTÃO (nunca o relógio
+  da barra de status), data de HOJE, hora não futura e **posterior ao último comprovante do
+  aluno** (`receipt_taken_at`). `next.config.js` mantém `tesseract.js` fora do webpack
+  (`serverComponentsExternalPackages`, ele sobe um worker_thread) e leva o modelo para a função
+  da `/home` (`outputFileTracingIncludes`) — tirar um dos dois quebra a leitura só na Vercel.
+  No vitest o teste que roda o OCR de verdade precisa de `// @vitest-environment node`: no
+  jsdom o tesseract.js tenta carregar o worker por URL. O mesmo arquivo reenviado cai pelo hash
   (`receipt_sha256`, único por academia). Reprovado não vira check-in; academia com nome
-  diferente no print entra como `receipt_status = 'review'` (palavras genéricas como "beach" não
-  contam para o casamento de nome), e sem leitura disponível também — o aluno nunca fica travado
-  por falha nossa. O admin confere só os "Conferir" na fila de `/admin/wellhub`
+  diferente no print entra como `receipt_status = 'review'` (o nome é procurado no texto todo, e
+  palavras genéricas como "beach" não contam), e OCR que falhou também — o aluno nunca fica
+  travado por falha nossa. O admin confere só os "Conferir" na fila de `/admin/wellhub`
   (`AppCheckinReviewList`), e "Excluir" (`deleteAppCheckin`) desfaz a presença marcada por aquele
   check-in, mas não reabre pendência baixada por ele.
 - **Parceiro é o caminho PADRÃO, não o único.** Em `resolveClassAccess` a escolha

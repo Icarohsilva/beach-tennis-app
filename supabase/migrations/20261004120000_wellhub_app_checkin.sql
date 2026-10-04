@@ -16,7 +16,8 @@
 -- sozinho, e um segundo caminho só duplicaria o registro do mesmo dia.
 alter table checkins
   add column if not exists receipt_url text,
-  -- Leitura automática do print (lib/checkin/receiptReader.ts + receiptCheck.ts):
+  -- Leitura automática do print por OCR no servidor (lib/checkin/receiptReader.ts,
+  -- Tesseract, sem custo) + regras (receiptCheck.ts):
   -- 'validated' passou em todas as regras; 'review' entrou, mas pede o olho do
   -- admin (nome da academia não bate, ou a leitura não estava disponível).
   -- Print reprovado não vira check-in, então não há status de recusa aqui.
@@ -24,7 +25,6 @@ alter table checkins
   -- Data e hora lidas NO print (não a do envio): é a régua de "não pode ser
   -- anterior ao último comprovante".
   add column if not exists receipt_taken_at timestamptz,
-  add column if not exists receipt_gym_name text,
   add column if not exists receipt_note text,
   -- Hash do arquivo: o mesmo print reenviado (por este ou outro aluno) é
   -- recusado na hora, sem depender da leitura.
