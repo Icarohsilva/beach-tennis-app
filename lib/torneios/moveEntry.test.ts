@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { checkEntryMove, repriceSide, paidDifferenceNotice, type MoveTournament } from './moveEntry'
+import {
+  checkEntryMove, repriceSide, paidDifferenceNotice, resolveTargetConflicts,
+  type MoveTournament, type TargetEntryRef,
+} from './moveEntry'
 
 const source: MoveTournament = {
   id: 's', name: 'Categoria C', status: 'open', participant_type: 'dupla_fixa',
@@ -7,7 +10,7 @@ const source: MoveTournament = {
 }
 const target: MoveTournament = { ...source, id: 't', name: 'Categoria D' }
 const pair = { entryStatus: 'confirmed' as const, playerGender: 'M' as const, partnerGender: 'M' as const }
-const base = { entry: pair, source, target, targetOccupied: 3, clashName: null }
+const base = { entry: pair, source, target, targetOccupied: 3, clash: null }
 
 describe('checkEntryMove', () => {
   it('move a dupla confirmada para outra categoria aberta', () => {
@@ -39,9 +42,11 @@ describe('checkEntryMove', () => {
   })
 
   it('recusa quem já está no destino', () => {
-    const r = checkEntryMove({ ...base, clashName: 'Ana' })
+    const r = checkEntryMove({ ...base, clash: { name: 'Ana', kind: 'enrolled' } })
     expect(r).toMatchObject({ ok: false })
     if (!r.ok) expect(r.reason).toContain('Ana')
+    const shared = checkEntryMove({ ...base, clash: { name: 'Ana', kind: 'shared_waitlist' } })
+    if (!shared.ok) expect(shared.reason).toContain('lista de espera')
   })
 
   it('confirmada precisa de vaga; fila de espera não ocupa vaga', () => {
@@ -51,8 +56,8 @@ describe('checkEntryMove', () => {
     expect(checkEntryMove({ ...base, targetOccupied: 99, target: { ...target, max_players: null } }).ok).toBe(true)
   })
 
-  it('recusa vaga oferecida aguardando resposta', () => {
-    expect(checkEntryMove({ ...base, entry: { ...pair, entryStatus: 'offered' } }).ok).toBe(false)
+  it('vaga oferecida muda de categoria sem precisar de vaga (vai para a fila do destino)', () => {
+    expect(checkEntryMove({ ...base, entry: { ...pair, entryStatus: 'offered' }, targetOccupied: 16 }).ok).toBe(true)
   })
 })
 
@@ -83,5 +88,32 @@ describe('paidDifferenceNotice', () => {
     expect(paidDifferenceNotice('Ana', paid, { charged: true, priceCents: 6000 })).toBeNull()
     expect(paidDifferenceNotice('Ana', paid, { charged: true, priceCents: 8000 })).toContain('R$ 80,00')
     expect(paidDifferenceNotice('Ana', { ...paid, status: 'pending' }, { charged: true, priceCents: 8000 })).toBeNull()
+  })
+})
+
+describe('resolveTargetConflicts', () => {
+  const ref = (over: Partial<TargetEntryRef>): TargetEntryRef => ({
+    id: 'e', player_id: 'lucas', partner_id: null, entry_status: 'confirmed',
+    payment_status: 'free', partner_payment_status: null, ...over,
+  })
+
+  it('confirmado no destino trava', () => {
+    expect(resolveTargetConflicts(['lucas'], [ref({})]).clash).toEqual({ personId: 'lucas', kind: 'enrolled' })
+  })
+
+  it('vaga oferecida ou fila da mesma pessoa é substituída, não trava', () => {
+    const offered = ref({ id: 'o', entry_status: 'offered' })
+    const waiting = ref({ id: 'w', entry_status: 'waitlist', player_id: 'bia', partner_id: 'lucas' })
+    expect(resolveTargetConflicts(['lucas'], [offered])).toEqual({ clash: null, supersede: [offered] })
+    expect(resolveTargetConflicts(['lucas', 'bia'], [waiting])).toEqual({ clash: null, supersede: [waiting] })
+  })
+
+  it('fila em dupla com alguém de fora trava', () => {
+    const waiting = ref({ entry_status: 'waitlist', partner_id: 'caio' })
+    expect(resolveTargetConflicts(['lucas'], [waiting]).clash).toEqual({ personId: 'lucas', kind: 'shared_waitlist' })
+  })
+
+  it('quem não é desta inscrição é ignorado', () => {
+    expect(resolveTargetConflicts(['lucas'], [ref({ player_id: 'outro' })])).toEqual({ clash: null, supersede: [] })
   })
 })

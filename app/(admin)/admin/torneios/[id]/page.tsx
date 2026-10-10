@@ -444,6 +444,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             ? `Inscrições: ${confirmedEntries.length + offeredEntries.length} / ${maxPlayers} vagas`
             : `Inscrições (${confirmedEntries.length} confirmados)`}
         </h2>
+        {/* A vaga oferecida segura o lugar por 48h para quem estava na fila, por
+            isso entra na conta. Sem esta linha ela parecia um inscrito a mais. */}
+        {maxPlayers && offeredEntries.length > 0 && (
+          <p className="-mt-2 mb-3 text-xs text-slate-400">
+            {confirmedEntries.length} confirmado(s) + {offeredEntries.length} vaga(s) reservada(s) aguardando
+            resposta de quem estava na lista de espera.
+          </p>
+        )}
 
         {/* Duplas incompletas — convite nunca respondido, expirado ou
             recusado. Fica no topo porque é a que precisa de ação do admin;
@@ -709,6 +717,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           📱 Notificar via WhatsApp
                         </a>
                       </div>
+                    )}
+                    {showMove && (
+                      <MoveEntryControl
+                        entryId={entry.id}
+                        who={entryWho(p?.full_name, normalizeProf(entry.partner)?.full_name)}
+                        currentName={t.name}
+                        targets={moveTargets}
+                      />
                     )}
                   </Card>
                 )

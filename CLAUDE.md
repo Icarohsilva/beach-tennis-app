@@ -531,7 +531,7 @@ começam em `sm: 640px`, então sem ele não havia como dizer "só em celular pe
 `pb-safe` depende do par `spacing.safe` + `viewportFit: 'cover'` (em [app/layout.tsx](app/layout.tsx));
 os dois andam juntos, e sem o segundo `env(safe-area-inset-*)` resolve 0.
 
-Dois defeitos se repetem — vale conhecer os dois antes de escrever linha nova:
+Quatro defeitos se repetem — vale conhecer todos antes de escrever linha nova:
 
 1. **`flex justify-between` sem `gap-*` e sem `shrink-0` no chip da direita.** Os dois
    filhos encolhem até o min-content e se encostam. Quando o lado esquerdo é longo,
@@ -547,6 +547,12 @@ Dois defeitos se repetem — vale conhecer os dois antes de escrever linha nova:
    truncate`, uma URL ou nome comprido em fonte monoespaçada empurra o card (e a
    página inteira) para além da tela em vez de cortar com reticências; foi assim que
    `CoverImageCard.tsx` vazava a fileira de "Ações" inteira para fora da viewport.
+
+4. **Elemento mais largo que a tela tira os modais do lugar.** No Chrome do Android, a
+   área de referência do `position: fixed` cresce até o elemento mais largo da página, e
+   todo modal `fixed inset-0` centraliza nessa área maior: abre cortado, metade para fora.
+   Por isso `html` **e** `body` têm `overflow-x: clip` em `app/globals.css`; só no `html` não
+   basta (medido com o Pixel 5 do Playwright).
 
 `npm run test:responsive` mede isso em 320/375/414px sobre a bancada
 [app/dev/responsivo](app/dev/responsivo/page.tsx) (fixtures fixas, **sem** Supabase — roda
@@ -624,8 +630,13 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   torneio (o link `/p/<token>` e o convite de parceiro vão junto, porque `tournament_id` deles
   é atualizado). Travas: os dois torneios em `draft`/`open` (depois do sorteio a dupla está
   gravada nas partidas), mesmo `participant_type`, regra de gênero do DESTINO, ninguém da
-  inscrição já inscrito lá, e vaga livre para inscrição confirmada (fila de espera entra na
-  fila do destino; vaga oferecida aguardando resposta não move). Cobrança: **pago fica pago**
+  inscrição CONFIRMADO lá, e vaga livre para inscrição confirmada (fila de espera e vaga
+  oferecida entram na FILA do destino, porque a oferta era de uma vaga da origem). Estar na
+  fila ou com vaga oferecida no destino **não** trava: essa entrada da mesma pessoa é
+  substituída pela que chega (`resolveTargetConflicts`), e a vaga oferecida dela deixa de
+  contar como ocupada. Foi o caso real: confirmado e pago no Avançado, com vaga oferecida no
+  Iniciante, e o app dizia "já está inscrito". Só trava se a fila for em dupla com alguém de
+  fora da inscrição, que sairia junto. Cobrança: **pago fica pago**
   (e o admin recebe aviso se o preço do destino é outro, a diferença é acertada por fora);
   pendente ou grátis passa ao preço do destino com o **mesmo desconto** que já tinha.
   Recalcular por `computePersonPayment` contaria a própria inscrição como "2º torneio da

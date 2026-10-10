@@ -36,6 +36,48 @@ export interface MoveEntry {
 
 export type MoveVerdict = { ok: true } | { ok: false; reason: string }
 
+export interface TargetEntryRef {
+  id: string
+  player_id: string
+  partner_id: string | null
+  entry_status: 'confirmed' | 'waitlist' | 'offered'
+  payment_status: 'free' | 'pending' | 'paid'
+  partner_payment_status: 'free' | 'pending' | 'paid' | null
+}
+
+export interface TargetConflicts {
+  /** Quem trava a mudança, e por quê. */
+  clash: { personId: string; kind: 'enrolled' | 'shared_waitlist' } | null
+  /**
+   * Entradas da MESMA pessoa no destino que só esperavam vaga (fila ou vaga
+   * oferecida). A inscrição que chega as substitui: estar na fila de uma
+   * categoria não é estar inscrito nela, e travar a mudança por isso deixava o
+   * admin sem saída para quem estava confirmado numa e esperando na outra.
+   */
+  supersede: TargetEntryRef[]
+}
+
+export function resolveTargetConflicts(people: string[], targetEntries: TargetEntryRef[]): TargetConflicts {
+  const mine = new Set(people)
+  const supersede: TargetEntryRef[] = []
+  for (const e of targetEntries) {
+    const members = [e.player_id, e.partner_id].filter((id): id is string => Boolean(id))
+    const overlap = members.find((id) => mine.has(id))
+    if (!overlap) continue
+    const paid = e.payment_status === 'paid' || e.partner_payment_status === 'paid'
+    if (e.entry_status === 'confirmed' || paid) {
+      return { clash: { personId: overlap, kind: 'enrolled' }, supersede: [] }
+    }
+    // Na fila em dupla com alguém de fora: substituir tiraria da fila uma
+    // pessoa que não tem nada com esta mudança.
+    if (members.some((id) => !mine.has(id))) {
+      return { clash: { personId: overlap, kind: 'shared_waitlist' }, supersede: [] }
+    }
+    supersede.push(e)
+  }
+  return { clash: null, supersede }
+}
+
 function isMovable(status: string): boolean {
   return (MOVABLE_STATUSES as readonly string[]).includes(status)
 }
@@ -46,8 +88,8 @@ export function checkEntryMove(input: {
   target: MoveTournament
   /** Inscrições do destino que ocupam vaga (confirmed + offered). */
   targetOccupied: number
-  /** Nome de quem desta inscrição já está no destino, se alguém estiver. */
-  clashName: string | null
+  /** Quem desta inscrição já está no destino (resolveTargetConflicts), com o nome. */
+  clash: { name: string; kind: 'enrolled' | 'shared_waitlist' } | null
 }): MoveVerdict {
   const { entry, source, target } = input
 
@@ -67,13 +109,6 @@ export function checkEntryMove(input: {
       reason: `"${target.name}" tem outro formato de inscrição. Só dá para mover entre torneios do mesmo formato.`,
     }
   }
-  if (entry.entryStatus === 'offered') {
-    return {
-      ok: false,
-      reason: 'Esta inscrição está com uma vaga oferecida. Espere a resposta (ou o prazo vencer) antes de mover.',
-    }
-  }
-
   // A regra de gênero da categoria de DESTINO, a mesma da inscrição normal.
   const allowed = canonicalizePairGenders(target.allowed_pair_genders ?? [])
   const verdict =
@@ -84,11 +119,18 @@ export function checkEntryMove(input: {
     return { ok: false, reason: `Não cabe em "${target.name}": ${verdict.reason ?? 'regra de gênero da categoria.'}` }
   }
 
-  if (input.clashName) {
-    return { ok: false, reason: `${input.clashName} já está inscrito(a) em "${target.name}".` }
+  if (input.clash?.kind === 'enrolled') {
+    return { ok: false, reason: `${input.clash.name} já está inscrito(a) em "${target.name}".` }
+  }
+  if (input.clash?.kind === 'shared_waitlist') {
+    return {
+      ok: false,
+      reason: `${input.clash.name} está na lista de espera de "${target.name}" em dupla com outra pessoa. Resolva essa dupla antes de mover.`,
+    }
   }
 
-  // Na fila de espera ela entra na fila do destino, sem ocupar vaga.
+  // Fila de espera e vaga oferecida entram na FILA do destino, sem ocupar vaga:
+  // a oferta era de uma vaga da categoria de origem, não da nova.
   if (entry.entryStatus === 'confirmed' && availableSlots(input.targetOccupied, target.max_players) < 1) {
     return {
       ok: false,
