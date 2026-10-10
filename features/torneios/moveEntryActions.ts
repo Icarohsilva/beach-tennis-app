@@ -6,7 +6,14 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { isEntryCharged } from '@/lib/torneios/entryCharge'
-import { checkEntryMove, paidDifferenceNotice, repriceSide, type MoveTournament } from '@/lib/torneios/moveEntry'
+import {
+  checkEntryMove,
+  paidDifferenceNotice,
+  repriceSide,
+  resolveTargetConflicts,
+  type MoveTournament,
+  type TargetEntryRef,
+} from '@/lib/torneios/moveEntry'
 import { moveTournamentEntryPoints } from '@/features/liga/tournamentPoints'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
 import { expireAndPromote } from './waitlistPromotion'
@@ -89,21 +96,22 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
   const nameOf = (id: string) => profiles.get(id)?.full_name?.trim() || 'O atleta'
 
   const or = people.flatMap((id) => [`player_id.eq.${id}`, `partner_id.eq.${id}`]).join(',')
-  const { data: clashRaw } = await admin
+  const { data: targetRaw } = await admin
     .from('tournament_entries')
-    .select('player_id, partner_id')
+    .select('id, player_id, partner_id, entry_status, payment_status, partner_payment_status')
     .eq('tournament_id', target.id)
     .or(or)
-  const taken = new Set(
-    ((clashRaw ?? []) as { player_id: string; partner_id: string | null }[]).flatMap((e) => [e.player_id, e.partner_id]),
-  )
-  const clashId = people.find((id) => taken.has(id))
+  const conflicts = resolveTargetConflicts(people, (targetRaw ?? []) as TargetEntryRef[])
 
-  const { count: occupied } = await admin
+  const { count: occupiedRaw } = await admin
     .from('tournament_entries')
     .select('id', { count: 'exact', head: true })
     .eq('tournament_id', target.id)
     .in('entry_status', ['confirmed', 'offered'])
+  // A vaga oferecida à própria pessoa no destino é dela: some junto com a
+  // entrada substituída, então não conta como vaga ocupada por outro.
+  const occupied =
+    (occupiedRaw ?? 0) - conflicts.supersede.filter((e) => e.entry_status === 'offered').length
 
   const verdict = checkEntryMove({
     entry: {
@@ -113,8 +121,8 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
     },
     source,
     target,
-    targetOccupied: occupied ?? 0,
-    clashName: clashId ? nameOf(clashId) : null,
+    targetOccupied: occupied,
+    clash: conflicts.clash ? { name: nameOf(conflicts.clash.personId), kind: conflicts.clash.kind } : null,
   })
   if (!verdict.ok) return { error: verdict.reason }
 
@@ -122,6 +130,9 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
   // aceita, então ali os campos de pagamento ficam como estão.
   const notices: string[] = []
   const update: Record<string, unknown> = { tournament_id: target.id, seed: null }
+  // A oferta era de uma vaga da ORIGEM. No destino a inscrição entra na fila,
+  // e a fila de lá decide se há vaga para oferecer de novo.
+  if (entry.entry_status === 'offered') Object.assign(update, { entry_status: 'waitlist', offer_expires_at: null })
   const newlyPending: ('player' | 'partner')[] = []
   if (entry.entry_status === 'confirmed') {
     const priceCents = target.entry_price_cents
@@ -161,6 +172,20 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
     }
   }
 
+  // Antes do update: o unique (tournament_id, player_id) recusaria a chegada
+  // com a entrada antiga da mesma pessoa ainda lá.
+  if (conflicts.supersede.length > 0) {
+    const { error: delErr } = await admin
+      .from('tournament_entries')
+      .delete()
+      .in('id', conflicts.supersede.map((e) => e.id))
+    if (delErr) return { error: 'Não foi possível mudar a categoria. Tente novamente.' }
+    for (const e of conflicts.supersede) {
+      const label = e.entry_status === 'offered' ? 'tinha uma vaga oferecida' : 'estava na lista de espera'
+      notices.push(`${nameOf(e.player_id)} ${label} em "${target.name}". A inscrição movida ficou no lugar dela.`)
+    }
+  }
+
   const { error } = await admin.from('tournament_entries').update(update).eq('id', entry.id)
   if (error) {
     // unique (tournament_id, player_id) e o índice de parceiro: alguém entrou
@@ -193,12 +218,11 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
         studentId,
       })
     }
-    // Abriu uma vaga na categoria de origem: a fila de lá anda.
-    await expireAndPromote(admin, source.id, source.max_players)
-  } else {
-    // Chegou alguém na fila do destino, que pode ter vaga sobrando.
-    await expireAndPromote(admin, target.id, target.max_players)
   }
+  // Saiu uma inscrição confirmada ou uma vaga oferecida: a fila da origem anda.
+  if (entry.entry_status !== 'waitlist') await expireAndPromote(admin, source.id, source.max_players)
+  // Chegou alguém na fila do destino, que pode ter vaga sobrando.
+  if (entry.entry_status !== 'confirmed') await expireAndPromote(admin, target.id, target.max_players)
 
   if (target.shirt_sizes_enabled) {
     const missing = [

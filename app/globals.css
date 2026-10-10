@@ -27,6 +27,15 @@ html {
   overflow-x: clip;
 }
 
+/* O mesmo no body, e não é redundante. Com o clip só no html, o Chrome do Android
+   ainda alarga a área de referência do `position: fixed` até o elemento mais largo
+   da página: todo modal `fixed inset-0` centralizava nessa área maior e abria
+   cortado para fora da tela (foi assim que o "Mudar categoria" do torneio
+   apareceu pela metade). Com o body também em clip, a área fica do tamanho da tela. */
+body {
+  overflow-x: clip;
+}
+
 * {
   box-sizing: border-box;
 }
