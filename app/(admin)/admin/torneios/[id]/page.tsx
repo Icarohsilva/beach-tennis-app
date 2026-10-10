@@ -22,6 +22,7 @@ import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions
 import { inviteState } from '@/lib/torneios/invite'
 import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
+import { MoveEntryControl, type MoveTarget } from './MoveEntryControl'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
 import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
@@ -164,6 +165,25 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   // que talvez nunca seja aberto; o admin resolve aqui em vez de apagar a
   // inscrição (perdendo pagamento, seed e posição na fila do titular).
   const isDuplaFixa = t.participant_type === 'dupla_fixa'
+
+  // Para onde uma inscrição pode ir (MoveEntryControl): os outros torneios da
+  // arena, do mesmo formato, que ainda não sortearam a chave. O servidor
+  // confere tudo de novo; aqui é só para não oferecer destino impossível.
+  const canMoveEntries = t.status === 'draft' || t.status === 'open'
+  const { data: moveTargetsRaw } = canMoveEntries
+    ? await adminClient
+        .from('tournaments')
+        .select('id, name')
+        .eq('organization_id', orgId)
+        .eq('participant_type', t.participant_type)
+        .in('status', ['draft', 'open'])
+        .neq('id', t.id)
+        .order('date', { ascending: true })
+    : { data: [] }
+  const moveTargets = (moveTargetsRaw ?? []) as MoveTarget[]
+  const showMove = canMoveEntries && moveTargets.length > 0
+  const entryWho = (playerName: string | undefined, partnerName?: string) =>
+    [playerName, partnerName].filter(Boolean).join(' e ') || 'A inscrição'
   const incompleteEntries = isDuplaFixa
     ? entries.filter((e) => !e.partner_id && e.entry_status !== 'offered')
     : []
@@ -457,6 +477,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                     {t.status === 'open' && (
                       <PairFixControls entryId={entry.id} hasPartner={false} candidates={pairCandidates} />
                     )}
+                    {showMove && (
+                      <MoveEntryControl
+                        entryId={entry.id}
+                        who={entryWho(p?.full_name)}
+                        currentName={t.name}
+                        targets={moveTargets}
+                      />
+                    )}
                   </Card>
                 )
               })}
@@ -620,6 +648,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                     {isDuplaFixa && pt && t.status === 'open' && (
                       <PairFixControls entryId={entry.id} hasPartner candidates={pairCandidates} />
                     )}
+                    {showMove && (
+                      <MoveEntryControl
+                        entryId={entry.id}
+                        who={entryWho(p?.full_name, pt?.full_name)}
+                        currentName={t.name}
+                        targets={moveTargets}
+                      />
+                    )}
                   </Card>
                 )
               })}
@@ -688,17 +724,28 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             <div className="space-y-1">
               {waitlistEntries.map((entry, idx) => {
                 const p = normalizeProf(entry.player)
+                const pt = normalizeProf(entry.partner)
                 return (
-                  <div key={entry.id} className="flex items-center gap-3 py-1.5 px-3 bg-surface-card rounded-lg border border-surface-border">
-                    <span className="text-xs text-slate-500 font-mono w-6">#{idx + 1}</span>
-                    <ParticipantName
-                      playerId={entry.player_id}
-                      name={p?.full_name ?? entry.player_id}
-                      className="flex-1 text-sm text-white"
-                    />
-                    <span className="text-xs text-slate-500">
-                      {new Date(entry.created_at).toLocaleDateString('pt-BR')}
-                    </span>
+                  <div key={entry.id} className="py-1.5 px-3 bg-surface-card rounded-lg border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-500 font-mono w-6 shrink-0">#{idx + 1}</span>
+                      <ParticipantName
+                        playerId={entry.player_id}
+                        name={p?.full_name ?? entry.player_id}
+                        className="flex-1 min-w-0 text-sm text-white"
+                      />
+                      <span className="text-xs text-slate-500 shrink-0">
+                        {new Date(entry.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    {showMove && (
+                      <MoveEntryControl
+                        entryId={entry.id}
+                        who={entryWho(p?.full_name, pt?.full_name)}
+                        currentName={t.name}
+                        targets={moveTargets}
+                      />
+                    )}
                   </div>
                 )
               })}

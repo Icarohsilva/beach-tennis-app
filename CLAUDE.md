@@ -615,6 +615,23 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   "Enviar acesso" leva o link de pagamento pelo campo `payment` de `buildAccessMessage` (e
   aí deixa de dizer "confirmada"), e `CopyPaymentLinkButton` cobre quem não tem WhatsApp
   cadastrado.
+- **Mudar a inscrição de categoria** (`moveEntryToTournament`,
+  [features/torneios/moveEntryActions.ts](features/torneios/moveEntryActions.ts); regras puras em
+  [lib/torneios/moveEntry.ts](lib/torneios/moveEntry.ts)). Botão "Mudar categoria" em cada
+  inscrição de `/admin/torneios/[id]`, só para admin. Existe porque a saída era editar
+  `tournament_entries.tournament_id` no SQL Editor, que pulava toda trava, ou apagar e
+  reinscrever, que perdia pagamento, comprovante e lugar na fila. É a MESMA linha que muda de
+  torneio (o link `/p/<token>` e o convite de parceiro vão junto, porque `tournament_id` deles
+  é atualizado). Travas: os dois torneios em `draft`/`open` (depois do sorteio a dupla está
+  gravada nas partidas), mesmo `participant_type`, regra de gênero do DESTINO, ninguém da
+  inscrição já inscrito lá, e vaga livre para inscrição confirmada (fila de espera entra na
+  fila do destino; vaga oferecida aguardando resposta não move). Cobrança: **pago fica pago**
+  (e o admin recebe aviso se o preço do destino é outro, a diferença é acertada por fora);
+  pendente ou grátis passa ao preço do destino com o **mesmo desconto** que já tinha.
+  Recalcular por `computePersonPayment` contaria a própria inscrição como "2º torneio da
+  semana". O ponto de participação da Liga sai do torneio antigo e entra no novo, e a fila
+  da origem anda (`expireAndPromote`, em `features/torneios/waitlistPromotion.ts`, fora do
+  `actions.ts` porque tudo exportado de arquivo `'use server'` vira endpoint público).
 - **Página pública do evento (`/e/[slug]`) é a que vai no WhatsApp**, e é lida no celular.
   A capa (`tournament_events.cover_image_url`) sobe pelo painel do evento em
   Admin › Torneios › Editar conteúdo (`EventCoverField` → bucket `tournament-images`,
