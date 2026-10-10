@@ -153,3 +153,43 @@ export async function syncTournamentResultPoints(
     })
   }
 }
+
+/**
+ * A inscrição mudou de torneio (o admin trocou a categoria): o crédito de
+ * participar sai do torneio antigo e entra no novo. Sem isso o ponto ficaria
+ * preso ao torneio de onde a pessoa saiu, e se ela voltasse para lá depois
+ * ganharia de novo.
+ */
+export async function moveTournamentEntryPoints(
+  admin: AdminClient,
+  input: { orgId: string; fromTournamentId: string; toTournamentId: string; studentId: string },
+): Promise<void> {
+  try {
+    const settings = await getLigaSettings(input.orgId)
+    if (!settings.enabled) return
+
+    const from = await loadTournament(admin, input.orgId, input.fromTournamentId)
+    const season = await getOrCreateActiveSeason(input.orgId)
+    if (season && from?.sport) {
+      await revokeLigaPoints(admin, {
+        seasonId: season.id,
+        studentId: input.studentId,
+        sport: from.sport,
+        reason: 'tournament_entry',
+        sourceId: input.fromTournamentId,
+      })
+    }
+    await awardTournamentEntry(admin, {
+      orgId: input.orgId,
+      tournamentId: input.toTournamentId,
+      studentId: input.studentId,
+    })
+  } catch (err) {
+    console.error('[liga] moveTournamentEntryPoints falhou', {
+      fromTournamentId: input.fromTournamentId,
+      toTournamentId: input.toTournamentId,
+      studentId: input.studentId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
