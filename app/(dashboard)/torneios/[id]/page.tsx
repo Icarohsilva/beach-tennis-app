@@ -5,6 +5,7 @@
 // agora, quem está ganhando, como está a chave, e só então a lista completa de
 // confrontos. Com o torneio em andamento a página se atualiza sozinha
 // (LiveRefresher), então quem está na arquibancada vê o placar mudar.
+import { newEntryStatus, WAITLIST_SIGNUP_NOTICE } from '@/lib/torneios/waitlist'
 import { notFound, redirect } from 'next/navigation'
 import { CalendarClock, LayoutGrid, ListOrdered, Swords, Trophy } from 'lucide-react'
 import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
@@ -32,6 +33,7 @@ import {
   FORMATS,
   hasGroupStage,
   isBracketFormat,
+  standingsVisible,
 } from '@/lib/torneios/formats'
 import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
@@ -154,6 +156,8 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   // Mesma contagem de availableSlots: 'offered' já ocupa vaga.
   const occupiedCount = entries.filter((e) => e.entry_status !== 'waitlist').length
   const waitlistCount = entries.filter((e) => e.entry_status === 'waitlist').length
+  // Lotado e tudo pago: esgotado, sem fila. Lotado com alguém sem pagar: fila.
+  const signupState = newEntryStatus({ occupying: entries, maxPlayers: t.max_players ?? null })
 
   // Confrontos do aluno logado, com o próximo sem resultado em destaque.
   const myMatches = matches.filter(
@@ -185,7 +189,9 @@ export default async function TorneioDetailPage({ params }: PageProps) {
   }))
 
   const engine = FORMATS[t.format ?? 'americano']
-  const standings = engine
+  // Super: tabela só para o admin até encerrar (standingsVisible). Esta é a
+  // tela do atleta, então nunca é admin aqui.
+  const standings = engine && standingsVisible({ format: t.format, status: t.status, isAdmin: false })
     ? engine.computeStandings(entryRefs, normalized as unknown as MatchResultInput[], scoring)
     : []
 
@@ -367,6 +373,9 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                 )}
               </div>
             ) : (
+              signupState === 'full' ? (
+                <p className="text-sm text-slate-300">Vagas esgotadas: todas preenchidas e pagas.</p>
+              ) : (
               <div className="space-y-2">
                 <p className="text-sm text-slate-300">
                   Inscrições abertas
@@ -374,6 +383,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                     ? ` · ${Math.max(0, t.max_players - occupiedCount)} ${competitorNoun(t.sport, t.participant_type, true)} ainda cabem.`
                     : '.'}
                 </p>
+                {signupState === 'waitlist' && <p className="text-xs text-amber-300">{WAITLIST_SIGNUP_NOTICE}</p>}
                 <RegisterButton
                   tournamentId={t.id}
                   participantType={t.participant_type ?? 'dupla_revezando'}
@@ -383,6 +393,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
                   myName={myProfileName}
                 />
               </div>
+              )
             )}
           </Card>
         </Reveal>

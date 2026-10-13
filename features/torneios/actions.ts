@@ -16,7 +16,7 @@ import {
 } from '@/lib/torneios/formats'
 import { splitBySeed, winnerSlot } from '@/lib/torneios/bracket'
 import { isEntryCharged } from '@/lib/torneios/entryCharge'
-import { expireAndPromote } from './waitlistPromotion'
+import { decideNewEntryStatus, expireStaleOffers } from './waitlistPromotion'
 import { shirtConfig, validateShirtName, validateShirtSize, type ShirtSize } from '@/lib/torneios/shirt'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
 import { scoreRuleFrom, validateMatchScore } from '@/lib/torneios/matchScore'
@@ -27,7 +27,7 @@ import {
 } from '@/lib/torneios/schedule/grupos'
 import { getWeekBounds } from '@/lib/utils/weekHelpers'
 import { computeEntryDiscount, applyDiscount } from '@/lib/torneios/entryDiscount'
-import { availableSlots, isOfferExpired } from '@/lib/torneios/waitlist'
+import { isOfferExpired, SOLD_OUT_MESSAGE } from '@/lib/torneios/waitlist'
 import { awardTournamentEntry, syncTournamentResultPoints } from '@/features/liga/tournamentPoints'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
@@ -362,15 +362,10 @@ export async function registerForTournament(
   const clash = findEntrantClash(existing, people, user.id)
   if (clash) return { error: clashMessage(clash) }
 
-  // Verificar capacidade
-  const { count: occupiedCount } = await adminClient
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .in('entry_status', ['confirmed', 'offered'])
-
-  const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
-  const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
+  // Verificar capacidade: lista de espera só com vaga ainda não paga.
+  const decided = await decideNewEntryStatus(adminClient, tournamentId, tournament.max_players as number | null)
+  if (decided === 'full') return { error: SOLD_OUT_MESSAGE }
+  const entryStatus = decided
 
   const partner = tournament.participant_type === 'dupla_fixa' ? partnerId ?? null : null
 
@@ -1074,7 +1069,7 @@ export async function removeEntry(
   }
 
   // Promover lista de espera se houver limite de vagas
-  await expireAndPromote(adminClient, tournamentId, (tournament.max_players as number | null))
+  await expireStaleOffers(adminClient, tournamentId)
 
   revalidatePath(`/admin/torneios/${tournamentId}`)
   revalidatePath(`/t/${tournamentId}`)
@@ -1147,7 +1142,7 @@ export async function cancelEntryForNonPayment(
     .eq('id', tournamentId)
     .single()
 
-  await expireAndPromote(adminClient, tournamentId, (tournament?.max_players as number | null) ?? null)
+  await expireStaleOffers(adminClient, tournamentId)
 
   revalidatePath(`/admin/torneios/${tournamentId}`)
   return {}
@@ -1188,7 +1183,7 @@ export async function confirmWaitlistOffer(
 
   // Verificar expiração
   if (isOfferExpired(entry.offer_expires_at as string | null)) {
-    await expireAndPromote(adminClient, tournamentId, (tournament.max_players as number | null) ?? null)
+    await expireStaleOffers(adminClient, tournamentId)
     return { error: 'Sua oferta de vaga expirou. Você voltou para a lista de espera.' }
   }
 
@@ -1610,15 +1605,10 @@ export async function registerExternal(
   const ownShirtName = validateShirtName(shirtName, { required: extCfg.name })
   if (!ownShirtName.ok) return { error: ownShirtName.error }
 
-  // Verificar capacidade
-  const { count: occupiedCount } = await adminClient
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .in('entry_status', ['confirmed', 'offered'])
-
-  const slots = availableSlots(occupiedCount ?? 0, (tournament.max_players as number | null))
-  const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
+  // Verificar capacidade: lista de espera só com vaga ainda não paga.
+  const decided = await decideNewEntryStatus(adminClient, tournamentId, tournament.max_players as number | null)
+  if (decided === 'full') return { error: SOLD_OUT_MESSAGE }
+  const entryStatus = decided
 
   let insertPayload: {
     organization_id: string

@@ -125,3 +125,35 @@ export function buildAccessMessage(ctx: AccessContext): string {
 
   return linhas.join('\n')
 }
+
+/**
+ * Pergunta para quem está na lista de espera. A vaga não é oferecida sozinha
+ * (a arena coloca a pessoa à mão), então a conversa começa perguntando se ela
+ * ainda quer jogar, e não anunciando uma vaga que talvez nem exista ainda.
+ */
+export function buildWaitlistInterestMessage(ctx: {
+  toName: string
+  tournamentName: string
+  orgName?: string | null
+}): string {
+  const to = firstName(ctx.toName)
+  const from = ctx.orgName?.trim() ? ` Aqui é da ${ctx.orgName.trim()}.` : ''
+  return (
+    `Oi${to ? `, ${to}` : ''}!${from} Você está na lista de espera do torneio ${ctx.tournamentName}. ` +
+    'Ainda tem interesse em participar? Se sim, me responde aqui que eu te coloco na vaga assim que ela abrir.'
+  )
+}
+
+/** Aviso de que a pessoa saiu da fila e entrou na vaga, com o link quando há o que pagar. */
+export function buildWaitlistPlacedMessage(ctx: {
+  toName: string
+  tournamentName: string
+  paymentUrl?: string | null
+  amountCents?: number
+}): string {
+  const to = firstName(ctx.toName)
+  const base = `Oi${to ? `, ${to}` : ''}! Abriu uma vaga no torneio ${ctx.tournamentName} e você já está inscrito(a).`
+  if (!ctx.paymentUrl) return base
+  const value = ctx.amountCents ? ` de R$ ${(ctx.amountCents / 100).toFixed(2).replace('.', ',')}` : ''
+  return `${base} Para garantir a vaga, faça o pagamento${value} por aqui: ${ctx.paymentUrl}`
+}

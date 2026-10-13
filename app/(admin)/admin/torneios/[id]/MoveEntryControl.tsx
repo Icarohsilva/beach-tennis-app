@@ -67,7 +67,7 @@ export function MoveEntryControl({ entryId, who, currentName, targets }: Props) 
   if (!open) {
     return (
       <div className="mt-2">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)}>
+        <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
           <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
           Mudar categoria
         </Button>
