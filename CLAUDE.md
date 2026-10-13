@@ -640,9 +640,32 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   (e o admin recebe aviso se o preço do destino é outro, a diferença é acertada por fora);
   pendente ou grátis passa ao preço do destino com o **mesmo desconto** que já tinha.
   Recalcular por `computePersonPayment` contaria a própria inscrição como "2º torneio da
-  semana". O ponto de participação da Liga sai do torneio antigo e entra no novo, e a fila
-  da origem anda (`expireAndPromote`, em `features/torneios/waitlistPromotion.ts`, fora do
-  `actions.ts` porque tudo exportado de arquivo `'use server'` vira endpoint público).
+  semana". O ponto de participação da Liga sai do torneio antigo e entra no novo, e as
+  ofertas vencidas dos dois lados são limpas (`expireStaleOffers`, em
+  `features/torneios/waitlistPromotion.ts`, fora do `actions.ts` porque tudo exportado de
+  arquivo `'use server'` vira endpoint público).
+- **Lista de espera do torneio só existe com vaga ainda não paga, e não anda sozinha**
+  (`newEntryStatus` em [lib/torneios/waitlist.ts](lib/torneios/waitlist.ts); servidor em
+  `decideNewEntryStatus`, `features/torneios/waitlistPromotion.ts`). Com vaga livre a
+  inscrição confirma. Lotado com alguém sem pagar (lado `pending` ou vaga oferecida): entra
+  na fila, porque aquela vaga ainda pode virar de outra pessoa. Lotado e tudo pago (ou grátis):
+  **esgotado**, a inscrição é recusada (`SOLD_OUT_MESSAGE`) em vez de pôr a pessoa numa fila
+  que nunca anda. A mesma decisão nos QUATRO caminhos de inscrição (aluno, avulso do link
+  público, convite de dupla e admin), e as telas do aluno dizem "esgotado" ou mostram
+  `WAITLIST_SIGNUP_NOTICE`. Ninguém sai da fila automaticamente: a oferta de vaga de 48h foi
+  desligada a pedido da arena (segurava vaga para quem nem lembrava do torneio). O admin
+  pergunta pelo WhatsApp (`buildWaitlistInterestMessage`) e usa **Colocar na vaga**
+  (`placeFromWaitlist`, `features/torneios/waitlistAdminActions.ts`), que exige vaga LIVRE:
+  quem não pagou continua dono da vaga até o admin cancelar por falta de pagamento. A
+  inscrição sai confirmada com a cobrança calculada, o link `/p/<token>` gerado e o aviso
+  pronto no WhatsApp (`buildWaitlistPlacedMessage`). Ofertas `offered` antigas continuam
+  valendo até vencer (`confirmWaitlistOffer`).
+- **Classificação do Super só para o admin até encerrar** (`standingsVisible`,
+  [lib/torneios/formats.ts](lib/torneios/formats.ts)). No americano o parceiro muda a cada
+  rodada e a tabela à vista no meio do torneio fazia quem estava atrás desistir. O atleta (e a
+  página pública) vê os placares e lança o do próprio jogo; a tabela aparece para todos quando
+  o admin encerra. Os outros formatos seguem com a tabela aberta, porque nela está quem passa
+  de fase.
 - **Página pública do evento (`/e/[slug]`) é a que vai no WhatsApp**, e é lida no celular.
   A capa (`tournament_events.cover_image_url`) sobe pelo painel do evento em
   Admin › Torneios › Editar conteúdo (`EventCoverField` → bucket `tournament-images`,

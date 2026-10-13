@@ -6,6 +6,7 @@
 // PhotoGallery) em vez de um layout paralelo escrito à mão — a versão
 // logada já resolve responsividade, tom de marca e o vocabulário certo por
 // esporte, então divergir aqui seria manter duas telas para o mesmo dado.
+import { newEntryStatus, WAITLIST_SIGNUP_NOTICE } from '@/lib/torneios/waitlist'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -40,6 +41,7 @@ import {
   FORMATS,
   hasGroupStage,
   isBracketFormat,
+  standingsVisible,
 } from '@/lib/torneios/formats'
 import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
 import { roundLabel as bracketRoundLabel } from '@/lib/torneios/bracket'
@@ -199,6 +201,8 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   // Mesma contagem de availableSlots: 'offered' já ocupa vaga.
   const occupiedCount = entries.filter((e) => e.entry_status !== 'waitlist').length
   const waitlistCount = entries.filter((e) => e.entry_status === 'waitlist').length
+  // Lotado e tudo pago: esgotado, sem fila. Lotado com alguém sem pagar: fila.
+  const signupState = newEntryStatus({ occupying: entries, maxPlayers: t.max_players ?? null })
 
   type ScoreMatchRaw = {
     id: string; tournament_id: string; round: number; match_no: number | null
@@ -242,7 +246,9 @@ export default async function PublicTournamentPage({ params }: PageProps) {
   }))
 
   const engine = FORMATS[t.format ?? 'americano']
-  const standings = showResults && engine
+  // Super: tabela só para o admin até encerrar (standingsVisible); a página
+  // pública nunca é a do admin.
+  const standings = showResults && engine && standingsVisible({ format: t.format, status: t.status, isAdmin: false })
     ? engine.computeStandings(entryRefs, normalized as unknown as MatchResultInput[], scoring)
     : []
 
@@ -508,7 +514,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                   {/* Na lista de espera */}
                   {userEntry.entry_status === 'waitlist' && (
                     <span className="block bg-slate-800/60 text-slate-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
-                      🕐 Você está na lista de espera{waitlistPosition !== null ? `, posição ${waitlistPosition}` : ''}
+                      🕐 Você está na lista de espera{waitlistPosition !== null ? `, posição ${waitlistPosition}` : ''}. Se abrir vaga, a arena te chama pelo WhatsApp.
                     </span>
                   )}
 
@@ -534,8 +540,13 @@ export default async function PublicTournamentPage({ params }: PageProps) {
                 <span className="block bg-slate-800/60 text-slate-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
                   ⏰ {regWindow.reason}
                 </span>
+              ) : signupState === 'full' ? (
+                <span className="block bg-slate-800/60 text-slate-300 text-sm px-3 py-2 rounded-xl font-semibold w-full text-center">
+                  Vagas esgotadas: todas preenchidas e pagas.
+                </span>
               ) : user ? (
                 <div>
+                  {signupState === 'waitlist' && <p className="mb-2 text-xs text-amber-300">{WAITLIST_SIGNUP_NOTICE}</p>}
                   <RegisterExternalButton
                     tournamentId={t.id}
                     isPaid={isPaid}

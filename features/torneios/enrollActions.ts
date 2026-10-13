@@ -19,7 +19,8 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient, getStaffContext } from '@/lib/supabase/server'
 import { generateTempPassword } from '@/lib/auth/tempPassword'
-import { availableSlots } from '@/lib/torneios/waitlist'
+import { SOLD_OUT_MESSAGE } from '@/lib/torneios/waitlist'
+import { decideNewEntryStatus } from './waitlistPromotion'
 import { normalizeSportsForOrg } from '@/lib/arenas/sports'
 import { canonicalizePairGenders, validateEntry } from '@/lib/torneios/pairRules'
 import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/entryDuplicates'
@@ -292,14 +293,11 @@ export async function enrollExternalEntry(input: EnrollEntryInput): Promise<Enro
   )
   if (clash) return { error: clashMessage(clash) }
 
-  const { count: occupied } = await admin
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', input.tournamentId)
-    .in('entry_status', ['confirmed', 'offered'])
-
-  const slots = availableSlots(occupied ?? 0, tournament.max_players as number | null)
-  const entryStatus: 'confirmed' | 'waitlist' = slots > 0 ? 'confirmed' : 'waitlist'
+  const decided = await decideNewEntryStatus(admin, input.tournamentId, tournament.max_players as number | null)
+  if (decided === 'full') {
+    return { error: `${SOLD_OUT_MESSAGE} Aumente as vagas do torneio para inscrever mais alguém.` }
+  }
+  const entryStatus: 'confirmed' | 'waitlist' = decided
 
   // Dupla fixa é cobrada por atleta: cada um paga a própria parte, no próprio
   // degrau de desconto semanal — mesma regra de registerForTournament.

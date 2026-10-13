@@ -49,3 +49,23 @@ export function isBracketFormat(format: string | null | undefined): boolean {
 export function hasGroupStage(format: string | null | undefined): boolean {
   return format === 'grupos'
 }
+
+/**
+ * A tabela de classificação aparece para quem?
+ *
+ * No Super (americano) o parceiro muda a cada rodada e a ordem só se decide no
+ * fim: com a tabela à vista no meio do torneio, quem estava atrás desistia e
+ * quem estava na frente "administrava" o placar. A arena pediu que ali a
+ * classificação seja só do admin enquanto o torneio corre, e de todos depois que
+ * ele ENCERRA. O atleta continua vendo os placares e lançando o do próprio jogo.
+ * Nos outros formatos a tabela é o próprio caminho do torneio (quem passa de
+ * fase) e segue aberta.
+ */
+export function standingsVisible(input: {
+  format: string | null | undefined
+  status: string
+  isAdmin: boolean
+}): boolean {
+  if ((input.format ?? 'americano') !== 'americano') return true
+  return input.isAdmin || input.status === 'finished'
+}

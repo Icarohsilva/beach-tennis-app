@@ -1,6 +1,6 @@
 // lib/torneios/formats.test.ts
 import { describe, it, expect } from 'vitest'
-import { FORMATS, isBracketFormat } from './formats'
+import { FORMATS, isBracketFormat, standingsVisible } from './formats'
 import type { EntryRef } from './types'
 
 function solo(ids: string[]): EntryRef[] {
@@ -54,5 +54,22 @@ describe('FORMATS', () => {
     expect(isBracketFormat('americano')).toBe(false)
     expect(isBracketFormat('round_robin')).toBe(false)
     expect(isBracketFormat(null)).toBe(false)
+  })
+})
+
+describe('standingsVisible', () => {
+  it('no Super, o atleta só vê a classificação depois de encerrado', () => {
+    expect(standingsVisible({ format: 'americano', status: 'in_progress', isAdmin: false })).toBe(false)
+    expect(standingsVisible({ format: null, status: 'in_progress', isAdmin: false })).toBe(false)
+    expect(standingsVisible({ format: 'americano', status: 'finished', isAdmin: false })).toBe(true)
+  })
+
+  it('o admin vê sempre', () => {
+    expect(standingsVisible({ format: 'americano', status: 'in_progress', isAdmin: true })).toBe(true)
+  })
+
+  it('os outros formatos seguem abertos', () => {
+    expect(standingsVisible({ format: 'round_robin', status: 'in_progress', isAdmin: false })).toBe(true)
+    expect(standingsVisible({ format: 'grupos', status: 'in_progress', isAdmin: false })).toBe(true)
   })
 })

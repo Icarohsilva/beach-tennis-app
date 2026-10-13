@@ -23,6 +23,8 @@ import { inviteState } from '@/lib/torneios/invite'
 import { scoreRuleFrom } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
 import { MoveEntryControl, type MoveTarget } from './MoveEntryControl'
+import { PlaceFromWaitlistButton } from './PlaceFromWaitlistButton'
+import { buildWaitlistInterestMessage } from '@/lib/torneios/contactMessage'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
 import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
@@ -30,7 +32,7 @@ import { SendAccessButton } from './SendAccessButton'
 import { CopyPaymentLinkButton } from './CopyPaymentLinkButton'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils/dateHelpers'
-import { FORMATS } from '@/lib/torneios/formats'
+import { FORMATS, standingsVisible } from '@/lib/torneios/formats'
 import type { Tournament, TournamentStatus, ScoringConfig } from '@/types'
 import type { MatchResultInput } from '@/lib/torneios/types'
 import { requirePlatformAccess } from '@/lib/billing/guard'
@@ -331,6 +333,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const offeredEntries = entries.filter((e) => e.entry_status === 'offered')
   const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
   const maxPlayers = t.max_players
+  // Vaga livre para tirar alguém da fila. Quem ainda não pagou continua dono
+  // da vaga até o admin cancelar por falta de pagamento: a fila não passa por
+  // cima de inscrito (placeFromWaitlist confere de novo no servidor).
+  const freeSlots = maxPlayers ? maxPlayers - confirmedEntries.length - offeredEntries.length : Infinity
+  const canPlace = t.status === 'draft' || t.status === 'open'
+  const placeBlockedReason = freeSlots > 0
+    ? null
+    : 'Sem vaga livre. Cancele por falta de pagamento quem não pagou e depois coloque a pessoa.'
 
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
   const heroChips = [
@@ -736,8 +746,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         {/* ③ Lista de espera */}
         {waitlistEntries.length > 0 && (
           <div className="mb-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Lista de espera</p>
-            <div className="space-y-1">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Lista de espera</p>
+            <p className="mb-2 text-xs text-slate-400">
+              Ninguém entra sozinho: pergunte pelo WhatsApp se a pessoa ainda quer jogar e coloque na vaga.
+            </p>
+            <div className="space-y-2">
               {waitlistEntries.map((entry, idx) => {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
@@ -754,6 +767,27 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                         {new Date(entry.created_at).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
+                    {canPlace && (
+                      <div className="mt-2 flex flex-wrap items-start gap-2">
+                        {p?.phone && (
+                          <a
+                            href={buildWhatsAppUrl(
+                              p.phone,
+                              buildWaitlistInterestMessage({ toName: p.full_name, tournamentName: t.name, orgName }),
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Button type="button" variant="secondary" size="sm">📱 Perguntar no WhatsApp</Button>
+                          </a>
+                        )}
+                        <PlaceFromWaitlistButton
+                          entryId={entry.id}
+                          who={entryWho(p?.full_name, pt?.full_name)}
+                          blockedReason={placeBlockedReason}
+                        />
+                      </div>
+                    )}
                     {showMove && (
                       <MoveEntryControl
                         entryId={entry.id}
@@ -778,6 +812,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       {standings.length > 0 && (
         <section>
           <h2 className="text-lg font-semibold text-white mb-3">Classificação</h2>
+          {!standingsVisible({ format: t.format, status: t.status, isAdmin: false }) && (
+            <p className="-mt-2 mb-3 text-xs text-slate-400">
+              Só você vê esta tabela. Os atletas veem os placares, e a classificação aparece para todos quando o torneio for encerrado.
+            </p>
+          )}
           <StandingsTable rows={standings} nameById={nameById} linkToProfile />
         </section>
       )}

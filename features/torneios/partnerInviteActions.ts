@@ -13,7 +13,8 @@ import { findEntrantClash, clashMessage, selfPairError } from '@/lib/torneios/en
 import { inviteState, inviteExpiry } from '@/lib/torneios/invite'
 import { shirtConfig, validateShirtName, validateShirtSize } from '@/lib/torneios/shirt'
 import { resolveRegistrationWindow } from '@/lib/torneios/registrationWindow'
-import { availableSlots } from '@/lib/torneios/waitlist'
+import { SOLD_OUT_MESSAGE } from '@/lib/torneios/waitlist'
+import { decideNewEntryStatus } from './waitlistPromotion'
 import { computePersonPayment } from './actions'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
 import { awardTournamentEntry } from '@/features/liga/tournamentPoints'
@@ -95,13 +96,9 @@ export async function inviteTournamentPartner(
   const clash = findEntrantClash(existing, [{ id: user.id }], user.id)
   if (clash) return { error: clashMessage(clash) }
 
-  const { count: occupiedCount } = await adminClient
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .in('entry_status', ['confirmed', 'offered'])
-  const slots = availableSlots(occupiedCount ?? 0, tournament.max_players as number | null)
-  const entryStatus = slots > 0 ? 'confirmed' : 'waitlist'
+  const decided = await decideNewEntryStatus(adminClient, tournamentId, tournament.max_players as number | null)
+  if (decided === 'full') return { error: SOLD_OUT_MESSAGE }
+  const entryStatus = decided
 
   // Só o tamanho de QUEM CONVIDA: o parceiro informa o dele ao aceitar, que é
   // a tela por onde ele passa. Pedir aqui seria adivinhar o corpo do outro.

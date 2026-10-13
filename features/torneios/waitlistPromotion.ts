@@ -1,56 +1,48 @@
 // features/torneios/waitlistPromotion.ts
 // Fora de actions.ts de propósito: aquele arquivo é 'use server', e tudo o que
-// ele exporta vira endpoint chamável pelo navegador. Este helper é chamado por
-// mais de um arquivo de actions (remover inscrição, mover de categoria) e não
-// pode ser exposto.
+// ele exporta vira endpoint chamável pelo navegador. Estes helpers são chamados
+// por mais de um arquivo de actions e não podem ser expostos.
+//
+// A fila de espera do torneio NÃO anda sozinha. Quem sai da fila e entra na
+// vaga é decidido pelo admin (placeFromWaitlist), depois de perguntar por
+// WhatsApp se a pessoa ainda quer jogar: pela régua da arena, oferecer a vaga
+// automaticamente segurava o lugar 48h para quem às vezes nem lembrava do
+// torneio. As ofertas que já existiam continuam valendo até vencer.
 import type { createAdminClient } from '@/lib/supabase/server'
+import { newEntryStatus, type NewEntryStatus, type OccupyingEntry } from '@/lib/torneios/waitlist'
 
-// ---------------------------------------------------------------------------
-// expireAndPromote — helper interno
-// Chama toda action que remove uma entry. Expira ofertas vencidas e promove
-// a lista de espera para o número de vagas disponíveis.
-// ---------------------------------------------------------------------------
+type AdminClient = ReturnType<typeof createAdminClient>
 
-export async function expireAndPromote(
-  adminClient: ReturnType<typeof createAdminClient>,
-  tournamentId: string,
-  maxPlayers: number | null,
-): Promise<void> {
-  if (maxPlayers === null) return // sem limite, nada a fazer
-
-  // 1. Expirar entradas 'offered' com prazo vencido → volta para 'waitlist'
+/**
+ * Oferta vencida volta para a fila. Chamado por toda action que mexe nas vagas
+ * de um torneio, para a contagem não segurar vaga de oferta morta.
+ */
+export async function expireStaleOffers(adminClient: AdminClient, tournamentId: string): Promise<void> {
   await adminClient
     .from('tournament_entries')
     .update({ entry_status: 'waitlist', offer_expires_at: null })
     .eq('tournament_id', tournamentId)
     .eq('entry_status', 'offered')
     .lt('offer_expires_at', new Date().toISOString())
-
-  // 2. Contar vagas ocupadas (confirmed + offered restantes)
-  const { count: occupiedCount } = await adminClient
-    .from('tournament_entries')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .in('entry_status', ['confirmed', 'offered'])
-
-  const available = maxPlayers - (occupiedCount ?? 0)
-  if (available <= 0) return
-
-  // 3. Promover os N mais antigos da fila para 'offered'
-  const offerExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
-  const { data: toPromote } = await adminClient
-    .from('tournament_entries')
-    .select('id')
-    .eq('tournament_id', tournamentId)
-    .eq('entry_status', 'waitlist')
-    .order('created_at', { ascending: true })
-    .limit(available)
-
-  if (!toPromote?.length) return
-
-  await adminClient
-    .from('tournament_entries')
-    .update({ entry_status: 'offered', offer_expires_at: offerExpiresAt })
-    .in('id', toPromote.map((e) => e.id))
 }
 
+/** Inscrições que ocupam vaga, com o pagamento: a entrada de `newEntryStatus`. */
+export async function loadOccupyingEntries(adminClient: AdminClient, tournamentId: string): Promise<OccupyingEntry[]> {
+  const { data } = await adminClient
+    .from('tournament_entries')
+    .select('entry_status, payment_status, partner_payment_status')
+    .eq('tournament_id', tournamentId)
+    .in('entry_status', ['confirmed', 'offered'])
+  return (data ?? []) as OccupyingEntry[]
+}
+
+/** A mesma decisão nos quatro caminhos de inscrição (aluno, avulso, convite, admin). */
+export async function decideNewEntryStatus(
+  adminClient: AdminClient,
+  tournamentId: string,
+  maxPlayers: number | null,
+): Promise<NewEntryStatus> {
+  if (maxPlayers === null) return 'confirmed'
+  await expireStaleOffers(adminClient, tournamentId)
+  return newEntryStatus({ occupying: await loadOccupyingEntries(adminClient, tournamentId), maxPlayers })
+}

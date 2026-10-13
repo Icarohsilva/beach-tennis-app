@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { buildAccessMessage, buildContactMessage, firstName } from './contactMessage'
+import {
+  buildAccessMessage,
+  buildContactMessage,
+  buildWaitlistInterestMessage,
+  buildWaitlistPlacedMessage,
+  firstName,
+} from './contactMessage'
 import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 
 describe('firstName', () => {
@@ -160,5 +166,23 @@ describe('buildAccessMessage', () => {
     const url = buildWhatsAppUrl('31994147094', buildAccessMessage({ ...base, password: 'a1' }))
     expect(url).toContain('%0A')
     expect(url.startsWith('https://wa.me/5531994147094?text=')).toBe(true)
+  })
+})
+
+describe('mensagens da lista de espera', () => {
+  it('pergunta se ainda tem interesse, pelo primeiro nome e pela arena', () => {
+    const msg = buildWaitlistInterestMessage({ toName: 'Lucas Fernandes', tournamentName: 'Super Iniciante', orgName: 'Arena Sol' })
+    expect(msg).toContain('Oi, Lucas!')
+    expect(msg).toContain('Arena Sol')
+    expect(msg).toContain('Ainda tem interesse')
+  })
+
+  it('avisa a entrada na vaga com o link quando há pagamento', () => {
+    const msg = buildWaitlistPlacedMessage({
+      toName: 'Ana', tournamentName: 'Super', paymentUrl: 'https://x/p/abc', amountCents: 8000,
+    })
+    expect(msg).toContain('R$ 80,00')
+    expect(msg).toContain('https://x/p/abc')
+    expect(buildWaitlistPlacedMessage({ toName: 'Ana', tournamentName: 'Super' })).not.toContain('pagamento')
   })
 })

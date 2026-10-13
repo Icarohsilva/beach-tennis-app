@@ -16,7 +16,7 @@ import {
 } from '@/lib/torneios/moveEntry'
 import { moveTournamentEntryPoints } from '@/features/liga/tournamentPoints'
 import { ensureEntryPaymentToken } from './entryPaymentActions'
-import { expireAndPromote } from './waitlistPromotion'
+import { expireStaleOffers } from './waitlistPromotion'
 import type { Gender } from '@/types'
 
 type TournamentRow = MoveTournament & {
@@ -219,10 +219,10 @@ export async function moveEntryToTournament(entryId: string, targetTournamentId:
       })
     }
   }
-  // Saiu uma inscrição confirmada ou uma vaga oferecida: a fila da origem anda.
-  if (entry.entry_status !== 'waitlist') await expireAndPromote(admin, source.id, source.max_players)
-  // Chegou alguém na fila do destino, que pode ter vaga sobrando.
-  if (entry.entry_status !== 'confirmed') await expireAndPromote(admin, target.id, target.max_players)
+  // A fila não anda sozinha: quem entra na vaga que abriu é o admin decide
+  // (placeFromWaitlist). Aqui só se limpam as ofertas vencidas dos dois lados.
+  await expireStaleOffers(admin, source.id)
+  await expireStaleOffers(admin, target.id)
 
   if (target.shirt_sizes_enabled) {
     const missing = [
