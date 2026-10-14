@@ -525,7 +525,7 @@ export async function generateBracket(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, format, group_count, advance_per_group')
+    .select('id, status, format, group_count, advance_per_group, draw_no_male_pairs')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -539,6 +539,17 @@ export async function generateBracket(
 
   const engine = FORMATS[tournament.format]
   if (!engine) return { error: 'Formato ainda não suportado para geração de chave.' }
+
+  // Regerar apaga as partidas: com placar lançado, apagaria resultado de jogo
+  // já jogado. Sortear de novo só enquanto nenhum placar existe.
+  const { count: scored } = await adminClient
+    .from('tournament_matches')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', tournamentId)
+    .not('result_status', 'is', null)
+  if ((scored ?? 0) > 0) {
+    return { error: 'Já tem placar lançado. Não dá para sortear as rodadas de novo sem apagar resultados.' }
+  }
 
   // partner_id vem junto: em dupla fixa a dupla é a unidade que entra na chave,
   // e sem o parceiro o mata-mata montaria confronto de uma pessoa só.
@@ -556,11 +567,31 @@ export async function generateBracket(
     partnerId: e.partner_id,
   }))
 
+  // Super sem dupla masculina: o sorteio depende do gênero de cada atleta, e
+  // gênero em branco não é adivinhado. Quem falta é dito pelo nome, porque é o
+  // admin que vai completar a ficha.
+  const noMalePairs = tournament.format === 'americano' && Boolean(tournament.draw_no_male_pairs)
+  let genders: Record<string, Gender | null> | undefined
+  if (noMalePairs) {
+    const ids = entries.map((e) => e.playerId)
+    const { data: profilesRaw } = await adminClient.from('profiles').select('id, full_name, gender').in('id', ids)
+    const profiles = (profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null }[]
+    genders = Object.fromEntries(profiles.map((p) => [p.id, p.gender]))
+    const missing = profiles.filter((p) => p.gender !== 'M' && p.gender !== 'F').map((p) => p.full_name ?? 'Sem nome')
+    if (missing.length > 0) {
+      return {
+        error: `O sorteio sem dupla masculina precisa do gênero de todos. Complete na ficha de: ${missing.join(', ')}.`,
+      }
+    }
+  }
+
   let plan
   try {
     plan = engine.generate(entries, {
       groupCount: (tournament.group_count as number | null) ?? DEFAULT_GROUP_COUNT,
       advancePerGroup: (tournament.advance_per_group as number | null) ?? DEFAULT_ADVANCE_PER_GROUP,
+      noMalePairs,
+      genders,
     })
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Erro ao gerar a chave.' }

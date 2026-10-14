@@ -73,3 +73,20 @@ describe('standingsVisible', () => {
     expect(standingsVisible({ format: 'grupos', status: 'in_progress', isAdmin: false })).toBe(true)
   })
 })
+
+describe('Super com noMalePairs', () => {
+  it('o motor do americano passa a sortear sem dupla masculina', () => {
+    const ids = ['h1', 'h2', 'h3', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7']
+    const genders = Object.fromEntries(ids.map((id) => [id, id.startsWith('h') ? 'M' : 'F'])) as Record<string, 'M' | 'F'>
+    const plan = FORMATS.americano.generate(
+      ids.map((playerId) => ({ playerId, partnerId: null })),
+      { noMalePairs: true, genders },
+    )
+    for (const round of plan) {
+      for (const g of round.matches) {
+        expect(genders[g.p1!] === 'M' && genders[g.partner1!] === 'M').toBe(false)
+        expect(genders[g.p2!] === 'M' && genders[g.partner2!] === 'M').toBe(false)
+      }
+    }
+  })
+})

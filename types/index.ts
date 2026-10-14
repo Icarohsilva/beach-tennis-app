@@ -524,6 +524,11 @@ export interface Tournament {
   shirt_sizes_enabled: boolean
   /** Junto com a de cima, a inscrição também pede o nome que vai estampado. */
   shirt_names_enabled: boolean
+  /**
+   * Super: o sorteio das rodadas nunca forma dupla de dois homens (só MF e FF).
+   * Ver lib/torneios/schedule/americanoMixed.ts.
+   */
+  draw_no_male_pairs?: boolean
   status: TournamentStatus
   created_by: string
   cover_image_url: string | null

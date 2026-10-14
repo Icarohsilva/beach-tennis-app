@@ -1,6 +1,6 @@
 // lib/torneios/types.ts
 // Tipos do núcleo puro de torneios. Não importam nada do banco.
-import type { ScoringConfig, StandingRow } from '@/types'
+import type { Gender, ScoringConfig, StandingRow } from '@/types'
 
 export type { ScoringConfig, StandingRow }
 
@@ -61,6 +61,13 @@ export interface GenerateOptions {
   groupCount?: number
   /** Quantos passam de cada grupo para o mata-mata. */
   advancePerGroup?: number
+  /**
+   * Super: nunca sortear dupla de dois homens (`tournaments.draw_no_male_pairs`).
+   * Exige `genders` de todos os jogadores.
+   */
+  noMalePairs?: boolean
+  /** Gênero por jogador, para as regras de sorteio que dependem dele. */
+  genders?: Record<string, Gender | null>
 }
 
 export interface FormatEngine {
