@@ -459,6 +459,43 @@ export async function updateTournamentEventCover(
  * do Super Avançado. Esta action conserta os já criados; o formulário passou a
  * perguntar.
  */
+/**
+ * Liga/desliga o sorteio sem dupla masculina do Super. Só vale para o próximo
+ * "Gerar chave": rodadas já sorteadas não mudam sozinhas, porque podem ter
+ * placar lançado.
+ */
+export async function updateTournamentDrawRules(
+  tournamentId: string,
+  input: { noMalePairs: boolean },
+): Promise<{ error?: string }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, format, event:tournament_events(slug)')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+  if ((tournament.format ?? 'americano') !== 'americano') {
+    return { error: 'Esta regra é do sorteio do Super.' }
+  }
+
+  const { error } = await adminClient
+    .from('tournaments')
+    .update({ draw_no_male_pairs: input.noMalePairs })
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
+  const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
+  revalidateTournament(tournamentId, eventSlug)
+  return {}
+}
+
 export async function updateTournamentLevel(
   tournamentId: string,
   level: string,

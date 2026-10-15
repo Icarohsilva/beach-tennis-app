@@ -11,6 +11,7 @@ import { TournamentPrizesCard } from './TournamentPrizesCard'
 import { TournamentPairGendersCard } from './TournamentPairGendersCard'
 import { TournamentShirtsCard } from './TournamentShirtsCard'
 import { TournamentLevelCard } from './TournamentLevelCard'
+import { TournamentDrawRulesCard } from './TournamentDrawRulesCard'
 import type { StudentLevel } from '@/types'
 import type { PairGenders } from '@/types'
 
@@ -24,7 +25,7 @@ export default async function EditarTorneioPage({ params }: PageProps) {
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type, shirt_sizes_enabled, shirt_names_enabled, level, sport')
+    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type, shirt_sizes_enabled, shirt_names_enabled, level, sport, format, draw_no_male_pairs')
     .eq('id', params.id)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -32,6 +33,11 @@ export default async function EditarTorneioPage({ params }: PageProps) {
 
   const { count: entryCount } = await adminClient
     .from('tournament_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('tournament_id', params.id)
+
+  const { count: matchCount } = await adminClient
+    .from('tournament_matches')
     .select('id', { count: 'exact', head: true })
     .eq('tournament_id', params.id)
 
@@ -101,6 +107,14 @@ export default async function EditarTorneioPage({ params }: PageProps) {
         participantType={tournament.participant_type as 'individual' | 'dupla_fixa' | 'dupla_revezando'}
         hasEntries={(entryCount ?? 0) > 0}
       />
+
+      {((tournament.format as string | null) ?? 'americano') === 'americano' && (
+        <TournamentDrawRulesCard
+          tournamentId={params.id}
+          initialNoMalePairs={Boolean(tournament.draw_no_male_pairs)}
+          hasMatches={(matchCount ?? 0) > 0}
+        />
+      )}
 
       <TournamentLevelCard
         tournamentId={params.id}

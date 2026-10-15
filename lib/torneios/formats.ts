@@ -1,6 +1,7 @@
 // lib/torneios/formats.ts
 import type { FormatEngine } from './types'
 import { generateAmericanoSchedule } from './schedule/americano'
+import { generateMixedAmericanoSchedule } from './schedule/americanoMixed'
 import { generateRoundRobinSchedule } from './schedule/roundRobin'
 import { computeEliminationStandings, generateEliminationBracket } from './schedule/eliminatoria'
 import { computeGroupsStandings, generateGroupStage } from './schedule/grupos'
@@ -12,7 +13,14 @@ export const FORMATS: Record<string, FormatEngine> = {
   americano: {
     label: 'Super (Super 8, Super 12...)',
     // O americano sorteia parceiro a cada rodada, então só os jogadores importam.
-    generate: (entries) => generateAmericanoSchedule(entries.map((e) => e.playerId)),
+    // Com "sem dupla masculina" o círculo não serve (ele junta todo mundo com
+    // todo mundo) e o sorteio passa a ser por busca, rodada a rodada.
+    generate: (entries, options) =>
+      options?.noMalePairs
+        ? generateMixedAmericanoSchedule(
+            entries.map((e) => ({ id: e.playerId, gender: options.genders?.[e.playerId] ?? null })),
+          )
+        : generateAmericanoSchedule(entries.map((e) => e.playerId)),
     computeStandings,
   },
   round_robin: {

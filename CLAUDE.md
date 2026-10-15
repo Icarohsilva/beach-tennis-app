@@ -666,6 +666,24 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   página pública) vê os placares e lança o do próprio jogo; a tabela aparece para todos quando
   o admin encerra. Os outros formatos seguem com a tabela aberta, porque nela está quem passa
   de fase.
+- **Super sem dupla masculina** (`tournaments.draw_no_male_pairs`, card "Sorteio das duplas" em
+  `/admin/torneios/[id]/editar`, só no formato `americano`; sorteio em
+  [lib/torneios/schedule/americanoMixed.ts](lib/torneios/schedule/americanoMixed.ts)). Ligada,
+  todo homem joga com uma mulher: duplas MF ou FF, nunca MM, e por isso nunca dois homens
+  contra duas mulheres. Coluna própria, e não `allowed_pair_genders`: aquela é regra de
+  inscrição, e reutilizá-la faria "sem dupla masculina" recusar a inscrição dos homens. O
+  método do círculo de `americano.ts` não serve aqui (ele junta todo mundo com todo mundo),
+  então cada rodada é montada por busca: descansa quem jogou mais, forma as duplas sem MM
+  minimizando parceiro repetido e casa os confrontos minimizando adversário repetido, no
+  mesmo número de rodadas e jogos do Super comum. Várias ordens de desempate são tentadas
+  (teto de 1,2 s) e fica a de melhor nota. Medido: 3 homens e 7 mulheres sai sem nenhum
+  parceiro repetido; as repetições que sobram em outros casos são o piso que a própria regra
+  impõe (poucas mulheres para muitos homens). A regra **não é quebrada nunca**: gênero em
+  branco recusa o sorteio dizendo de quem falta (`generateBracket`), e homem demais para as
+  vagas de homem em quadra (`mixedDrawProblem`) recusa com a conta, em vez de gerar.
+  `generateBracket` passou a recusar sortear por cima de partida com placar (antes apagava
+  resultado), e a tela do torneio ganhou **Sortear de novo** enquanto nenhum placar existe,
+  que é como uma regra ligada depois chega às rodadas já sorteadas.
 - **Página pública do evento (`/e/[slug]`) é a que vai no WhatsApp**, e é lida no celular.
   A capa (`tournament_events.cover_image_url`) sobe pelo painel do evento em
   Admin › Torneios › Editar conteúdo (`EventCoverField` → bucket `tournament-images`,

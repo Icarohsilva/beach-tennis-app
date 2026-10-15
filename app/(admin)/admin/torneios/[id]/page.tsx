@@ -403,6 +403,11 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Ações</p>
             <div className="flex flex-wrap gap-2">
               {t.status === 'open' && <GenerateBracketButton tournamentId={t.id} />}
+              {/* Chave sorteada e nenhum placar ainda: dá para sortear de novo
+                  (ex.: ligou "não permitir dupla masculina" depois). */}
+              {t.status === 'in_progress' && matches.length > 0 && matches.every((m) => m.result_status == null) && (
+                <GenerateBracketButton tournamentId={t.id} regenerate />
+              )}
               {/* Só faz sentido com a fase de grupos rolando: antes não há
                   tabela, depois a chave já existe. */}
               {t.format === 'grupos' && t.status === 'in_progress' && (
