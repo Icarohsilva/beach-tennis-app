@@ -1,7 +1,7 @@
 // lib/utils/xlsx.ts
 // Planilha .xlsx de uma aba só, sem dependência.
 //
-// Por que não CSV (que é como `shirtRowsToCsv` exporta): o CSV com `;` e BOM só
+// Por que não CSV (o formato de `tenantsToCsv`): o CSV com `;` e BOM só
 // abre direito no Excel pt-BR de computador. No celular — de onde o admin
 // exporta na beira da quadra — Google Sheets e Excel mobile leem vírgula, e a
 // planilha inteira cai numa coluna só. O .xlsx abre igual em qualquer app.
