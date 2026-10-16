@@ -10,6 +10,7 @@
 // O tipo mora em types/index.ts junto do schema (mesmo arranjo de ScoringMode);
 // a GRADE e as regras moram aqui.
 import type { ShirtSize } from '@/types'
+import type { XlsxSheet } from '@/lib/utils/xlsx'
 
 export type { ShirtSize }
 
@@ -116,7 +117,7 @@ export const MAX_SHIRT_NAME = 16
  * O nome como vai para a estampa: sem espaço sobrando e sem espaço duplo.
  *
  * Não força maiúscula: caixa é decisão da arte, e gravar "ZECA" impediria a
- * arena de imprimir "Zeca" depois. O CSV entrega o que a pessoa digitou.
+ * arena de imprimir "Zeca" depois. A planilha entrega o que a pessoa digitou.
  */
 export function normalizeShirtName(raw: unknown): string {
   return typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : ''
@@ -179,7 +180,7 @@ export interface ShirtSummary {
 /**
  * Soma por tamanho, na ordem da grade.
  *
- * Existe separado do CSV porque a tela precisa do mesmo número que a planilha:
+ * Existe separado da planilha porque a tela precisa do mesmo número que ela:
  * o admin decide encomendar olhando o resumo, e conferir depois numa soma feita
  * por outro caminho é como as duas divergem.
  */
@@ -226,11 +227,6 @@ export interface ShirtRow {
   phone: string | null
 }
 
-function csvCell(v: string | number | null): string {
-  const s = v === null ? '' : String(v)
-  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
-
 const STATUS_LABEL: Record<string, string> = {
   confirmed: 'Confirmado',
   waitlist: 'Lista de espera',
@@ -238,15 +234,13 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 /**
- * CSV para levar à confecção. Separador `;` e BOM porque o público é brasileiro
- * e o Excel pt-BR só abre direito assim (mesma decisão de `tenantsToCsv`).
+ * A planilha para levar à confecção (vira .xlsx em `buildXlsx`).
  *
- * Ordenado por TAMANHO, não por nome: quem recebe a planilha está separando
+ * Ordenada por TAMANHO, não por nome: quem recebe a planilha está separando
  * pilhas de camisa, e ordenar por nome obriga a pessoa a reordenar tudo antes
  * de usar. O nome resolve o empate dentro do tamanho.
  */
-export function shirtRowsToCsv(rows: ShirtRow[]): string {
-  const header = ['Tamanho', 'Corte', 'Nome na camisa', 'Inscrito', 'Situacao', 'Telefone']
+export function shirtRowsToSheet(rows: ShirtRow[]): XlsxSheet {
   const order = new Map(SHIRT_SIZES.map((s, i) => [s, i]))
 
   const sorted = [...rows].sort((a, b) => {
@@ -256,16 +250,26 @@ export function shirtRowsToCsv(rows: ShirtRow[]): string {
     return ia - ib || a.name.localeCompare(b.name, 'pt-BR')
   })
 
-  const lines = sorted.map((r) => [
-    r.size ? SHIRT_SIZE_LABEL[r.size] : 'NAO INFORMADO',
-    r.size ? SHIRT_CUT_LABEL[shirtCut(r.size)] : '',
-    // Vazio, e não o nome do cadastro: torneio de camisa lisa não tem estampa,
-    // e preencher aqui faria a serigrafia imprimir o que ninguém pediu.
-    r.shirtName ?? '',
-    r.name,
-    STATUS_LABEL[r.entryStatus] ?? r.entryStatus,
-    r.phone ?? '',
-  ].map(csvCell).join(';'))
-
-  return '﻿' + [header.join(';'), ...lines].join('\n')
+  return {
+    name: 'Camisas',
+    columns: [
+      { header: 'Tamanho', width: 15 },
+      { header: 'Corte', width: 12 },
+      { header: 'Nome na camisa', width: 18 },
+      { header: 'Inscrito', width: 36 },
+      { header: 'Situação', width: 16 },
+      { header: 'Telefone', width: 18 },
+    ],
+    rows: sorted.map((r) => [
+      r.size ? SHIRT_SIZE_LABEL[r.size] : 'NÃO INFORMADO',
+      r.size ? SHIRT_CUT_LABEL[shirtCut(r.size)] : null,
+      // Vazio, e não o nome do cadastro: torneio de camisa lisa não tem estampa,
+      // e preencher aqui faria a serigrafia imprimir o que ninguém pediu.
+      r.shirtName,
+      r.name,
+      STATUS_LABEL[r.entryStatus] ?? r.entryStatus,
+      // Texto, nunca número: como número o Excel tiraria a máscara do telefone.
+      r.phone,
+    ]),
+  }
 }

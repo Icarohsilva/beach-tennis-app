@@ -24,6 +24,7 @@ const BLOCOS = [
   'liga-hero',
   'standings-table',
   'division-ranking',
+  'confronto-dupla',
   'event-stats',
   'stat-cards-moeda',
   'update-banner',
@@ -100,6 +101,22 @@ for (const width of LARGURAS) {
       linhas.forEach((n) => {
         expect(n, `o título ocupa ${n} linhas em ${width}px`).toBeLessThanOrEqual(3)
       })
+    })
+
+    // O defeito relatado: com a dupla numa linha só e `truncate`, o celular
+    // cortava o parceiro ("Ícaro Silva / Danielle da…"). Nome cortado não estoura
+    // nada — o `truncate` contém o texto —, então só olhando o nome se pega isto.
+    test('confronto mostra cada nome da dupla inteiro', async ({ page }) => {
+      // O nome, não o <li>: o item também leva o avatar, e um `truncate` no nome
+      // cortaria o texto sem o <li> ficar mais largo.
+      const nomes = await page.$$eval('[data-rig="confronto-dupla"] li > span:last-child', (els) =>
+        els.map((el) => ({ texto: el.textContent ?? '', cortado: el.scrollWidth > el.clientWidth + 1 })),
+      )
+      // 2 confrontos × 2 lados × 2 jogadores: um nome por linha, nunca a dupla junta.
+      expect(nomes.length).toBe(8)
+      for (const n of nomes) {
+        expect(n.cortado, `"${n.texto}" aparece cortado em ${width}px`).toBe(false)
+      }
     })
 
     test('screenshot da bancada', async ({ page }, testInfo) => {

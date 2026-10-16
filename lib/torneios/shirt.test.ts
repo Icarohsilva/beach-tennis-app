@@ -6,7 +6,7 @@ import {
   parseShirtSize,
   shirtConfig,
   shirtCut,
-  shirtRowsToCsv,
+  shirtRowsToSheet,
   suggestShirtName,
   summarizeShirtSizes,
   validateShirtName,
@@ -75,43 +75,42 @@ describe('summarizeShirtSizes', () => {
   })
 })
 
-describe('shirtRowsToCsv', () => {
+describe('shirtRowsToSheet', () => {
   const rows: ShirtRow[] = [
-    { entryId: 'e1', side: 'player', name: 'José Carlos', size: 'p', shirtName: 'Zeca', entryStatus: 'confirmed', phone: '11999' },
+    { entryId: 'e1', side: 'player', name: 'José Carlos', size: 'p', shirtName: 'Zeca', entryStatus: 'confirmed', phone: '(11) 99999-0000' },
     { entryId: 'e2', side: 'player', name: 'Ana', size: 'gg', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
     { entryId: 'e3', side: 'player', name: 'Bia', size: null, shirtName: null, entryStatus: 'waitlist', phone: null },
     { entryId: 'e2', side: 'partner', name: 'Caio', size: 'p', shirtName: 'Caio', entryStatus: 'confirmed', phone: null },
   ]
 
-  it('ordena por TAMANHO, que é como a confecção separa as pilhas', () => {
-    const linhas = shirtRowsToCsv(rows).split('\n')
-    // P vem antes de GG na grade; dentro do tamanho, ordem alfabética.
-    expect(linhas[1]).toContain('Caio')
-    expect(linhas[2]).toContain('Zeca')
-    expect(linhas[3]).toContain('GG')
-  })
-
-  it('quem não informou vai para o fim, marcado', () => {
-    const linhas = shirtRowsToCsv(rows).split('\n')
-    expect(linhas[linhas.length - 1]).toContain('NAO INFORMADO')
-  })
-
-  it('leva BOM e separador ; para o Excel pt-BR abrir direito', () => {
-    const csv = shirtRowsToCsv(rows)
-    expect(csv.startsWith('﻿')).toBe(true)
-    expect(csv.split('\n')[0])
-      .toBe('\ufeffTamanho;Corte;Nome na camisa;Inscrito;Situacao;Telefone')
-  })
-
-  it('escapa nome com ponto e vírgula, senão a planilha ganha uma coluna', () => {
-    const csv = shirtRowsToCsv([
-      { entryId: 'e1', side: 'player', name: 'Silva; Ana', size: 'm', shirtName: 'Ana', entryStatus: 'confirmed', phone: null },
+  it('cabeçalho da encomenda', () => {
+    expect(shirtRowsToSheet(rows).columns.map((c) => c.header)).toEqual([
+      'Tamanho', 'Corte', 'Nome na camisa', 'Inscrito', 'Situação', 'Telefone',
     ])
-    expect(csv).toContain('"Silva; Ana"')
+  })
+
+  it('ordena por TAMANHO, que é como a confecção separa as pilhas', () => {
+    // P vem antes de GG na grade; dentro do tamanho, ordem alfabética.
+    expect(shirtRowsToSheet(rows).rows.map((r) => [r[0], r[3]])).toEqual([
+      ['P', 'Caio'], ['P', 'José Carlos'], ['GG', 'Ana'], ['NÃO INFORMADO', 'Bia'],
+    ])
+  })
+
+  it('quem não informou vai para o fim, marcado e sem corte', () => {
+    const rowsOut = shirtRowsToSheet(rows).rows
+    const last = rowsOut[rowsOut.length - 1]
+    expect(last[0]).toBe('NÃO INFORMADO')
+    expect(last[1]).toBeNull()
+  })
+
+  it('telefone vai como texto, com a máscara', () => {
+    const jose = shirtRowsToSheet(rows).rows.find((r) => r[3] === 'José Carlos')!
+    expect(jose[5]).toBe('(11) 99999-0000')
   })
 
   it('a situação vai junto: não se encomenda camisa para a fila de espera', () => {
-    expect(shirtRowsToCsv(rows)).toContain('Lista de espera')
+    const bia = shirtRowsToSheet(rows).rows.find((r) => r[3] === 'Bia')!
+    expect(bia[4]).toBe('Lista de espera')
   })
 })
 
@@ -202,20 +201,20 @@ describe('validateShirtName', () => {
   })
 })
 
-describe('shirtRowsToCsv — nome estampado', () => {
+describe('shirtRowsToSheet — nome estampado', () => {
   it('separa o nome da estampa do nome do cadastro', () => {
     // Misturar os dois entrega camisa na mão errada: a estampa diz "Zeca" e a
     // conferência precisa dizer "José Carlos".
-    const csv = shirtRowsToCsv([
+    const [row] = shirtRowsToSheet([
       { entryId: 'e1', side: 'player', name: 'José Carlos', size: 'm', shirtName: 'Zeca', entryStatus: 'confirmed', phone: null },
-    ])
-    expect(csv).toContain('Zeca;José Carlos')
+    ]).rows
+    expect(row.slice(0, 4)).toEqual(['M', 'Tradicional', 'Zeca', 'José Carlos'])
   })
 
   it('torneio de camisa lisa deixa a coluna da estampa vazia', () => {
-    const csv = shirtRowsToCsv([
+    const [row] = shirtRowsToSheet([
       { entryId: 'e1', side: 'player', name: 'Ana', size: 'm', shirtName: null, entryStatus: 'confirmed', phone: null },
-    ])
-    expect(csv).toContain('M;Tradicional;;Ana')
+    ]).rows
+    expect(row[2]).toBeNull()
   })
 })

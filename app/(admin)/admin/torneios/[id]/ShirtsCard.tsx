@@ -2,8 +2,8 @@
 // app/(admin)/admin/torneios/[id]/ShirtsCard.tsx
 // A encomenda de camisas deste torneio: quanto de cada tamanho e a planilha.
 //
-// O resumo na tela e o CSV saem da MESMA lista (`summarizeShirtSizes` e
-// `shirtRowsToCsv` sobre `rows`) — o admin decide encomendar olhando o resumo e
+// O resumo na tela e a planilha saem da MESMA lista (`summarizeShirtSizes` e
+// `shirtRowsToSheet` sobre `rows`) — o admin decide encomendar olhando o resumo e
 // confere na planilha, e duas somas por caminhos diferentes é como elas
 // divergem no dia de fechar com a confecção.
 import { useState, useTransition } from 'react'
@@ -12,8 +12,9 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { ShirtFields } from '@/features/torneios/ShirtFields'
 import { setEntryShirt } from '@/features/torneios/configActions'
+import { downloadXlsx } from '@/lib/utils/downloadXlsx'
 import {
-  shirtRowsToCsv,
+  shirtRowsToSheet,
   summarizeShirtSizes,
   type ShirtRow,
 } from '@/lib/torneios/shirt'
@@ -44,13 +45,7 @@ export function ShirtsCard({
   const pendentes = confirmed.filter((r) => !r.size || (withNames && !r.shirtName))
 
   function download() {
-    const csv = shirtRowsToCsv(rows)
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `camisas-${slug(tournamentName)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadXlsx(shirtRowsToSheet(rows), `camisas-${slug(tournamentName)}.xlsx`)
   }
 
   return (
@@ -87,7 +82,7 @@ export function ShirtsCard({
       {summary.missing > 0 && (
         <p className="text-xs text-yellow-300">
           {summary.missing} inscrito(s) confirmado(s) ainda sem tamanho — provavelmente entraram
-          antes de o torneio passar a dar camisa. Eles aparecem como &quot;NAO INFORMADO&quot; na planilha.
+          antes de o torneio passar a dar camisa. Eles aparecem como &quot;NÃO INFORMADO&quot; na planilha.
         </p>
       )}
 
