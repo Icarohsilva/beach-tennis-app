@@ -5,8 +5,8 @@
 //
 // A ordem anterior começava pelo SALDO de games, e isso colocava acima quem
 // venceu pouco e goleou nas poucas vezes — num Super, onde todos jogam o mesmo
-// número de partidas, ganhar a partida tem de valer mais do que ganhá-la por
-// muito. "Games ganhos" é o segundo critério (e não o saldo) porque é o que a
+// número de partidas (é o que `superRounds` garante), ganhar a partida tem de
+// valer mais do que ganhá-la por muito. "Games ganhos" é o segundo critério (e não o saldo) porque é o que a
 // academia anuncia na quadra; num formato de games fixos os dois dão a mesma
 // ordem, e o saldo sobrou como último desempate determinístico.
 import type {

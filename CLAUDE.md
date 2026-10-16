@@ -684,11 +684,24 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   então cada rodada é montada por busca: descansa quem jogou mais, forma as duplas sem MM
   minimizando parceiro repetido e casa os confrontos minimizando adversário repetido, no
   mesmo número de rodadas e jogos do Super comum. Várias ordens de desempate são tentadas
-  (teto de 1,2 s) e fica a de melhor nota. Medido: 3 homens e 7 mulheres sai sem nenhum
-  parceiro repetido; as repetições que sobram em outros casos são o piso que a própria regra
-  impõe (poucas mulheres para muitos homens). A regra **não é quebrada nunca**: gênero em
+  (teto de 1,2 s) e fica a de melhor nota. Medido: 2 homens e 8 mulheres sai sem nenhum
+  parceiro repetido; com 3 e 7 cada homem repete uma parceira (8 jogos, 7 mulheres), e as
+  repetições que sobram em outros casos são o piso que a própria regra impõe (poucas
+  mulheres para muitos homens). A regra **não é quebrada nunca**: gênero em
   branco recusa o sorteio dizendo de quem falta (`generateBracket`), e homem demais para as
-  vagas de homem em quadra (`mixedDrawProblem`) recusa com a conta, em vez de gerar.
+  vagas de homem em quadra (`mixedDrawProblem`) recusa com a conta, em vez de gerar. Recusa
+  também quando os homens que não cabem em quadra descansariam em toda rodada (10 com 6
+  homens, 6 com 4, 14 com 8): as mulheres jogariam mais partidas que eles.
+- **No Super todo mundo joga o mesmo número de partidas** (`superRounds`, em
+  `americanoMixed.ts`). A classificação SOMA vitórias e games, então um jogo a mais é
+  vantagem. Com N múltiplo de 4 ninguém descansa e são N−1 rodadas (círculo). Com 6, 10 ou
+  14 sobram 2 de fora por rodada, e em N−1 rodadas a conta não fecha: com 10 eram 9 × 8 =
+  72 vagas para 10 pessoas, e duas jogavam 8 enquanto oito jogavam 7. Por isso esses
+  tamanhos têm **N rodadas** (cada um joga N−2), com ou sem a regra de gênero. O Super comum
+  nesses tamanhos passa pela mesma busca (`generateBalancedAmericanoSchedule`), porque o
+  círculo só cobre N−1 rodadas. Custo aceito: uma rodada a mais de quadra e, no Super comum
+  com 10 ou 14, até UMA dupla repetida. A nota do sorteio pesa qualquer diferença de jogos
+  acima de tudo, então nenhuma tentativa desigual é escolhida.
   `generateBracket` passou a recusar sortear por cima de partida com placar (antes apagava
   resultado), e a tela do torneio ganhou **Sortear de novo** enquanto nenhum placar existe,
   que é como uma regra ligada depois chega às rodadas já sorteadas.
@@ -726,6 +739,7 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   entre os empatados; parceiros da mesma dupla não contam (não se enfrentaram), e o saldo
   sobrou como último desempate determinístico. `StandingsTable` imprime a ordem embaixo da
   tabela — sem isso, quem está em 3º com mais vitórias que o 2º acha que o app errou a conta.
+  Somar em total só é justo porque todos jogam o mesmo número de partidas (`superRounds`).
 - Medalha (`liga_medals`) **não dá ponto** e o catálogo vive em código (`lib/liga/medals.ts`), não em tabela: acrescentar medalha é deploy, e a passada diária do cron `liga-streak` concede retroativamente a quem já cumpre o critério.
 - Elogio (`liga_kudos`) é a única parte fraudável do sistema. As travas moram no **banco** (`unique (org, from, to, iso_week)`) e em `lib/liga/kudos.ts`; receber vale mais que dar de propósito. Elogio barrado pela trava é gravado assim mesmo, só sem ponto.
 - O feed (`features/comunidade/`) voltou ao menu como **seção da Liga**; `/comunidade` redireciona. `posts.is_pinned` é o mural de comunicados do admin.
