@@ -30,6 +30,11 @@ import { ShirtsCard } from './ShirtsCard'
 import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
 import { SendAccessButton } from './SendAccessButton'
 import { CopyPaymentLinkButton } from './CopyPaymentLinkButton'
+import { ExportMatchesButton } from '@/features/torneios/ExportMatchesButton'
+import { matchesToSheet } from '@/lib/torneios/matchExport'
+import { roundLabeler } from '@/lib/torneios/roundLabel'
+import { competitorUnit } from '@/lib/torneios/sportProfile'
+import { slugify } from '@/lib/org/identifiers'
 import { Button } from '@/components/ui/Button'
 import { formatDate } from '@/lib/utils/dateHelpers'
 import { FORMATS, standingsVisible } from '@/lib/torneios/formats'
@@ -265,7 +270,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   // Confrontos com colunas de placar/status
   const { data: matchesRaw } = await adminClient
     .from('tournament_matches')
-    .select(`id, tournament_id, round, match_no,
+    .select(`id, tournament_id, round, match_no, group_label,
       player1_id, player2_id, partner1_id, partner2_id,
       games1, games2, result_status, reported_by, confirmed_by, played_at,
       player1:profiles!player1_id(id, full_name),
@@ -277,7 +282,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     .order('match_no', { ascending: true })
 
   type ScoreMatchRaw = {
-    id: string; tournament_id: string; round: number; match_no: number | null
+    id: string; tournament_id: string; round: number; match_no: number | null; group_label: string | null
     player1_id: string | null; player2_id: string | null; partner1_id: string | null; partner2_id: string | null
     games1: number | null; games2: number | null; result_status: string | null
     reported_by: string | null; confirmed_by: string | null; played_at: string | null
@@ -293,6 +298,22 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     partner1: normalizeProf(m.partner1),
     partner2: normalizeProf(m.partner2),
   }))
+
+  const labelForRound = roundLabeler(t.format, matches)
+  const roundsOfMatches = Array.from(
+    matches.reduce((acc, m) => {
+      acc.set(m.round, [...(acc.get(m.round) ?? []), m])
+      return acc
+    }, new Map<number, typeof matches>()),
+  ).sort(([a], [b]) => a - b)
+  const matchesSheet = matchesToSheet(
+    matches.map((m) => ({
+      ...m,
+      side1: [m.player1?.full_name, m.partner1?.full_name],
+      side2: [m.player2?.full_name, m.partner2?.full_name],
+    })),
+    { roundLabel: labelForRound, unit: competitorUnit(t.sport, t.participant_type) },
+  )
 
   // Classificação computada no servidor pelo formato
   const entryRefs = entries.filter((e) => e.entry_status === 'confirmed').map((e) => ({ playerId: e.player_id, partnerId: e.partner_id ?? null }))
@@ -828,42 +849,46 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
 
       {/* Confrontos */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-3">Confrontos</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Confrontos</h2>
+          {matches.length > 0 && (
+            <ExportMatchesButton
+              sheet={matchesSheet}
+              fileName={`confrontos-${slugify(t.name) || 'torneio'}.xlsx`}
+            />
+          )}
+        </div>
         {matches.length === 0 ? (
           <p className="text-slate-400 text-sm">Nenhum confronto gerado ainda.</p>
         ) : (
           <div className="space-y-8">
-            {Array.from(
-              matches.reduce((acc, m) => {
-                acc.set(m.round, [...(acc.get(m.round) ?? []), m])
-                return acc
-              }, new Map<number, typeof matches>()),
-            )
-              .sort(([a], [b]) => a - b)
-              .map(([round, roundMatches]) => (
-                <div key={round}>
-                  <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
-                    Rodada {round}
-                  </h3>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {roundMatches.map((match) => (
-                      <MatchScoreCard
-                        key={match.id}
-                        match={{
-                          ...match,
-                          player1_id: match.player1_id ?? '',
-                          player2_id: match.player2_id ?? '',
-                          result_status: match.result_status as 'pending' | 'confirmed' | null,
-                          played_at: match.played_at,
-                        }}
-                        isAdmin
-                        scoreRule={scoreRule}
-                        currentUserId=""
-                      />
-                    ))}
-                  </div>
+            {roundsOfMatches.map(([round, roundMatches]) => (
+              <div key={round}>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
+                  {labelForRound(round, roundMatches[0]?.group_label ?? null)}
+                </h3>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {roundMatches.map((match) => (
+                    <MatchScoreCard
+                      key={match.id}
+                      match={{
+                        ...match,
+                        player1_id: match.player1_id ?? '',
+                        player2_id: match.player2_id ?? '',
+                        result_status: match.result_status as 'pending' | 'confirmed' | null,
+                        played_at: match.played_at,
+                      }}
+                      isAdmin
+                      scoreRule={scoreRule}
+                      currentUserId=""
+                      // Na fase de grupos a mesma rodada tem jogo de todos os
+                      // grupos; sem a letra no card não dá para saber qual é qual.
+                      roundLabel={match.group_label ? `Grupo ${match.group_label}` : undefined}
+                    />
+                  ))}
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
         )}
       </section>

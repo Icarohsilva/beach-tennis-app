@@ -239,31 +239,38 @@ export function MatchScoreCard({
 
   function teamRow(side: 1 | 2) {
     const names = side === 1 ? names1 : names2
-    const label = side === 1 ? team1 : team2
     const tone = side === 1 ? 'brand' : 'sky'
     const isMine = mySide === side
     const isWinner = winner === side
     return (
       <div className={cn('flex items-center gap-3 px-3 py-2.5', isMine && 'bg-brand-500/[0.07]')}>
-        <div className="flex -space-x-2">
-          {(names.length > 0 ? names : [null]).map((n, i) => (
-            <PlayerAvatar key={i} name={n} tone={tone} className="ring-2 ring-surface-card" />
-          ))}
-        </div>
+        {/* Um jogador por linha e com o nome inteiro: com a dupla numa linha só e
+            `truncate`, o celular cortava justamente o parceiro ("Ícaro Silva /
+            Danielle da…"). O avatar abre cada jogador, então quando um nome longo
+            quebra a continuação fica recuada e não se lê como o parceiro. */}
         <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              'truncate text-sm font-semibold',
-              isWinner ? 'text-white' : confirmed ? 'text-slate-400' : 'text-slate-200',
-            )}
-          >
-            {label}
-          </p>
+          <ul className="space-y-1.5">
+            {(names.length > 0 ? names : [null]).map((n, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <PlayerAvatar name={n} tone={tone} size="sm" />
+                <span
+                  className={cn(
+                    'min-w-0 break-words pt-0.5 text-sm font-semibold leading-snug',
+                    isWinner ? 'text-white' : confirmed ? 'text-slate-400' : 'text-slate-200',
+                  )}
+                >
+                  {n ?? 'A definir'}
+                </span>
+              </li>
+            ))}
+          </ul>
           {isMine && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-brand-400">Seu time</span>
+            <span className="mt-1 block pl-8 text-[10px] font-bold uppercase tracking-wide text-brand-400">
+              Seu time
+            </span>
           )}
         </div>
-        {isWinner && <span title="Vencedor" className="text-sm">🏆</span>}
+        {isWinner && <span title="Vencedor" className="shrink-0 text-sm">🏆</span>}
         {scoreSlot(side)}
       </div>
     )

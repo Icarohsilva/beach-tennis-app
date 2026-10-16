@@ -25,6 +25,9 @@ import { DivisionRanking } from '@/features/liga/DivisionRanking'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { UpdateBanner } from '@/components/pwa/UpdateBanner'
+import { MatchScoreCard, type ScoreMatch } from '@/features/torneios/MatchScoreCard'
+import { ExportMatchesButton } from '@/features/torneios/ExportMatchesButton'
+import { matchesToSheet } from '@/lib/torneios/matchExport'
 import type { Class, StandingRow } from '@/types'
 
 export const dynamic = 'force-static'
@@ -61,6 +64,41 @@ const NOMES: Record<string, string> = {
   p2: 'João Pedro Gonçalves de Oliveira',
   p3: 'Ana',
 }
+
+// Os dois estados que mais apertam a linha da dupla: sem placar (com o botão
+// de lançar) e confirmado (troféu + placar ao lado dos nomes).
+const CONFRONTOS: ScoreMatch[] = [
+  {
+    id: 'm1',
+    player1_id: 'p1', partner1_id: 'p2', player2_id: 'p3', partner2_id: 'p4',
+    games1: null, games2: null, result_status: null, reported_by: null, played_at: null,
+    player1: { full_name: NOME_LONGO },
+    partner1: { full_name: 'Danielle da Silva Oliveira' },
+    player2: { full_name: 'Wagner Eustaquio Franco Neto' },
+    partner2: { full_name: 'João Pedro Gonçalves de Oliveira' },
+  },
+  {
+    id: 'm2',
+    player1_id: 'p5', partner1_id: 'p6', player2_id: 'p7', partner2_id: 'p8',
+    games1: 6, games2: 4, result_status: 'confirmed', reported_by: 'p5',
+    played_at: '2026-09-12T17:30:00Z',
+    player1: { full_name: 'Lorrayne Parreiras Fonseca' },
+    partner1: { full_name: 'Gabriella Duarte Almeida' },
+    player2: { full_name: 'Ana Paula dos Santos' },
+    partner2: { full_name: NOME_LONGO },
+  },
+]
+
+const PLANILHA_CONFRONTOS = matchesToSheet(
+  CONFRONTOS.map((m) => ({
+    ...m,
+    round: 1,
+    group_label: null,
+    side1: [m.player1?.full_name, m.partner1?.full_name],
+    side2: [m.player2?.full_name, m.partner2?.full_name],
+  })),
+  { roundLabel: (r) => `Rodada ${r}`, unit: 'atleta' },
+)
 
 /** Um bloco medido. O `data-rig` é o que o Playwright itera. */
 function Bloco({ nome, children }: { nome: string; children: React.ReactNode }) {
@@ -149,6 +187,20 @@ export default function BancadaResponsiva() {
             promoteCount={1}
             demoteFrom={3}
           />
+        </Bloco>
+
+        {/* Mesma seção de confrontos do admin: cabeçalho com o botão de exportar
+            e a grade de cards. */}
+        <Bloco nome="confronto-dupla">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-white">Confrontos</h2>
+            <ExportMatchesButton sheet={PLANILHA_CONFRONTOS} fileName="confrontos-bancada.xlsx" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {CONFRONTOS.map((m) => (
+              <MatchScoreCard key={m.id} match={m} isAdmin currentUserId="" />
+            ))}
+          </div>
         </Bloco>
 
         <Bloco nome="event-stats">
