@@ -145,7 +145,7 @@ export default async function OrgDetailPage({ params }: { params: { id: string }
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Cobrança. */}
         <section className="rounded-xl border border-surface-border bg-surface-card p-4">
           <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -202,7 +202,7 @@ export default async function OrgDetailPage({ params }: { params: { id: string }
       {/* Uso ao longo do tempo — duas pequenas-múltiplas, nunca dois eixos. */}
       <section>
         <SectionHeader title="Uso nas últimas 8 semanas" />
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="glass rounded-2xl border border-white/[0.07] p-4">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Aulas por semana

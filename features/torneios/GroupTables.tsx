@@ -28,7 +28,7 @@ export function GroupTables({
   if (tables.length === 0) return null
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {tables.map((table) => {
         // Em dupla fixa a classificação tem uma linha por jogador; a colocação
         // do grupo é a do titular, então o corte conta só quem é titular.

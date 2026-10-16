@@ -300,7 +300,7 @@ export default async function ArenaPage({ params }: PageProps) {
         {showcase.looseTournaments.length > 0 && (
           <section className="mt-6">
             <SectionTitle icon={Trophy}>Torneios com inscrição aberta</SectionTitle>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {showcase.looseTournaments.map((t, i) => (
                 <TournamentCard
                   key={t.id}

@@ -129,7 +129,7 @@ export default async function ExplorarPage({ searchParams }: PageProps) {
       {highlighted.length > 0 && (
         <Reveal step={2} as="section">
           <SectionHeader title="Torneios abertos" />
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {highlighted.map((t, i) => (
               <div key={t.id}>
                 <TournamentCard

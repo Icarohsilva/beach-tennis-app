@@ -201,7 +201,7 @@ export default async function AdminDashboardPage() {
         <StatCard label="Day use hoje" value={todayDayUseCount ?? 0} icon={Sun} step={5} href="/admin/grade/dayuse" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Reveal step={5} as="section">
           <SectionHeader title="Agenda de hoje" href="/admin/grade" linkLabel="ver grade" />
           {timeline.length === 0 ? (

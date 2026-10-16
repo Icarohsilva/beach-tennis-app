@@ -189,7 +189,7 @@ export function CreateTournamentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Input label="Nome do torneio" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Super 8 de Sábado" required />
       <Input label="Data" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
 
@@ -247,7 +247,7 @@ export function CreateTournamentForm({
       {/* Configuração que só existe no formato de grupos — some nos outros para
           não sugerir um grupo que o torneio não tem. */}
       {format === 'grupos' && (
-        <div className="grid gap-3 rounded-lg border border-surface-border bg-surface-card/60 p-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 rounded-lg border border-surface-border bg-surface-card/60 p-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-slate-300">Grupos</label>
             <select

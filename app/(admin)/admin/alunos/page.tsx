@@ -397,7 +397,7 @@ export default async function AlunosPage({ searchParams }: Props) {
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {students.map((student) => {
             const enrollCount = enrollCountMap.get(student.id) ?? 0
             // Dias distintos, não linhas: duas aulas no mesmo dia contam 1 para a

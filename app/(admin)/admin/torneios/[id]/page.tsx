@@ -392,7 +392,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       </div>
 
       {/* Ações rápidas */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <CoverImageCard
           tournamentId={t.id}
           coverImageUrl={t.cover_image_url ?? null}
@@ -476,7 +476,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
             <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wide mb-2">
               ⚠ Duplas incompletas ({incompleteEntries.length})
             </p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {incompleteEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const invite = inviteByEntry[entry.id]
@@ -519,7 +519,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         {confirmedEntries.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Confirmados</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {confirmedEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const pt = normalizeProf(entry.partner)
@@ -690,7 +690,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         {offeredEntries.length > 0 && (
           <div className="mb-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Vaga oferecida</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {offeredEntries.map((entry) => {
                 const p = normalizeProf(entry.player)
                 const expiresAt = entry.offer_expires_at as string | null
@@ -845,7 +845,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                   <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">
                     Rodada {round}
                   </h3>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {roundMatches.map((match) => (
                       <MatchScoreCard
                         key={match.id}

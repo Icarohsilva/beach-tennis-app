@@ -393,7 +393,7 @@ export default async function StudentProfilePage({ params }: Props) {
 
           {/* Identidade + ficha médica: fora do StudentProfileClient de propósito,
               mesmo motivo do VacationPanel — aquele componente já carrega 20+ props. */}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StudentIdentityCard
               studentId={student.id}
               fullName={student.full_name}

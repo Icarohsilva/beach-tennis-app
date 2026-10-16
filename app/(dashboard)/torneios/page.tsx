@@ -221,7 +221,7 @@ export default async function ArenaPage({ searchParams }: PageProps) {
                       {PHASE_TITLES[section.phase]}
                       <span className="text-slate-600">{section.items.length}</span>
                     </h3>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {section.items.map((t) => (
                         <TournamentCard
                           key={t.id}

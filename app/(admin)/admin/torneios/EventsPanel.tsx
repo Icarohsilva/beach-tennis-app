@@ -114,7 +114,7 @@ function CreateEventForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-3 rounded-xl border border-surface-border bg-surface/60 p-3 sm:grid-cols-2">
+    <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 rounded-xl border border-surface-border bg-surface/60 p-3 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <Input
           label="Nome do evento"

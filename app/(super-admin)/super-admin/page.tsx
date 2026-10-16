@@ -176,7 +176,7 @@ export default async function SuperAdminHome() {
           />
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="glass rounded-2xl border border-white/[0.07] p-4">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Base por status de assinatura
@@ -200,7 +200,7 @@ export default async function SuperAdminHome() {
       {/* 4. Aquisição. */}
       <section>
         <SectionHeader title="Aquisição" />
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="glass rounded-2xl border border-white/[0.07] p-4">
             <div className="flex items-baseline justify-between">
               <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -259,7 +259,7 @@ export default async function SuperAdminHome() {
       </section>
 
       {/* 6. Listas de trabalho. */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Reveal step={0} as="div">
           <SectionHeader title="Contas para acompanhar" href="/super-admin/academias?health=risco" linkLabel="ver todas" />
           {watchlist.length === 0 ? (
