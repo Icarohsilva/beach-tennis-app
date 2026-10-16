@@ -35,6 +35,19 @@ export function roundShape(n: number): { matches: number; resting: number } {
 }
 
 /**
+ * Quantas rodadas o Super tem para TODO MUNDO jogar o mesmo número de jogos.
+ *
+ * Com N múltiplo de 4 ninguém descansa e as N−1 rodadas fecham a conta. Com 6,
+ * 10 ou 14 sobram 2 de fora a cada rodada, e em N−1 rodadas não fecha: com 10
+ * são 9 × 8 = 72 vagas para 10 pessoas, então duas jogavam 8 e as outras 7 —
+ * vantagem direta numa classificação que soma vitórias e games. Com N rodadas
+ * cada um joga N−2.
+ */
+export function superRounds(n: number): number {
+  return n % 4 === 0 ? n - 1 : n
+}
+
+/**
  * A regra cabe nestes jogadores? Cada homem em quadra precisa de uma parceira,
  * então em cada rodada no máximo metade de quem joga pode ser homem; o excesso
  * tem de estar descansando.
@@ -47,12 +60,23 @@ export function mixedDrawProblem(players: DrawPlayer[]): string | null {
     return `${unknown} jogador(es) sem gênero no cadastro. Complete o gênero para sortear sem dupla masculina.`
   }
   const men = players.filter((p) => p.gender === 'M').length
+  const women = n - men
   const { matches, resting } = roundShape(n)
   if (men > matches * 2 + resting) {
-    const women = n - men
     return (
       `Com ${men} homens e ${women} mulheres não dá para montar as rodadas sem dupla masculina: ` +
       `cada rodada tem ${matches * 2} vagas para homem em quadra. Desligue a regra ou ajuste os inscritos.`
+    )
+  }
+  // O homem que não cabe em quadra descansa em toda rodada. Se isso passa da
+  // parte justa de descanso dos homens, as mulheres jogam mais partidas que
+  // eles — e a classificação, que soma vitórias e games, vira vantagem delas.
+  const menMustRest = Math.max(0, men - matches * 2)
+  if (menMustRest * n > men * resting) {
+    return (
+      `Com ${men} homens e ${women} mulheres não dá para todos jogarem o mesmo número de partidas ` +
+      `sem dupla masculina: ${menMustRest} homens descansam em toda rodada, e as mulheres jogariam mais ` +
+      `que eles. Desligue a regra ou ajuste os inscritos.`
     )
   }
   return null
@@ -70,11 +94,27 @@ const ATTEMPTS_BUDGET_MS = 1_200
 export function generateMixedAmericanoSchedule(players: DrawPlayer[]): RoundPlan[] {
   const problem = mixedDrawProblem(players)
   if (problem) throw new DrawRuleError(problem)
+  return searchSchedule(players.map((p) => ({ id: p.id, man: p.gender === 'M' })))
+}
 
+/**
+ * O Super SEM regra de gênero, pela mesma busca. É o caminho do Super comum com
+ * 6, 10 ou 14 jogadores: ali o método do círculo de americano.ts não fecha em
+ * jogos iguais (ver superRounds).
+ */
+export function generateBalancedAmericanoSchedule(playerIds: string[]): RoundPlan[] {
+  return searchSchedule(playerIds.map((id) => ({ id, man: false })))
+}
+
+interface SearchPlayer {
+  id: string
+  man: boolean
+}
+
+function searchSchedule(players: SearchPlayer[]): RoundPlan[] {
   // A busca de cada rodada é gulosa (olha só o passado), e a ordem de desempate
   // muda o resultado. Tentar algumas ordens e ficar com a de menos repetição
-  // custa milissegundos e tira, por exemplo, os 2 parceiros repetidos que a
-  // primeira ordem deixava com 3 homens e 7 mulheres.
+  // custa milissegundos e tira repetições que a primeira ordem deixava.
   let best: { plan: RoundPlan[]; score: number } | null = null
   const deadline = Date.now() + ATTEMPTS_BUDGET_MS
   for (let k = 0; k < ATTEMPTS && (k === 0 || Date.now() < deadline); k++) {
@@ -87,8 +127,8 @@ export function generateMixedAmericanoSchedule(players: DrawPlayer[]): RoundPlan
 }
 
 /**
- * Nota do sorteio (menor é melhor): jogos desequilibrados pesam mais que
- * tudo, depois parceiro repetido, depois adversário repetido. O piso de
+ * Nota do sorteio (menor é melhor): qualquer diferença no número de jogos pesa
+ * mais que tudo, depois parceiro repetido, depois adversário repetido. O piso de
  * repetição imposto pela própria regra (poucas mulheres para muitos homens)
  * entra igual em todas as tentativas, então não distorce a escolha.
  */
@@ -102,7 +142,7 @@ function scheduleScore(plays: number[], partnered: number[][], opposed: number[]
       if (opposed[a][b] > 2) opponentRepeat += (opposed[a][b] - 2) ** 2
     }
   }
-  return Math.max(0, spread - 1) * 1_000_000 + partnerRepeat * 1_000 + opponentRepeat
+  return spread * 1_000_000 + partnerRepeat * 1_000 + opponentRepeat
 }
 
 /** Permutação determinística (mulberry32 + Fisher-Yates): mesmo k, mesma ordem. */
@@ -122,9 +162,9 @@ function seededPermutation(n: number, seed: number): number[] {
   return out
 }
 
-function buildSchedule(players: DrawPlayer[]): { plan: RoundPlan[]; score: number } {
+function buildSchedule(players: SearchPlayer[]): { plan: RoundPlan[]; score: number } {
   const n = players.length
-  const isMan = players.map((p) => p.gender === 'M')
+  const isMan = players.map((p) => p.man)
   const { matches: perRound, resting: restSize } = roundShape(n)
   const totalMen = isMan.filter(Boolean).length
   const menMustRest = Math.max(0, totalMen - perRound * 2)
@@ -135,7 +175,7 @@ function buildSchedule(players: DrawPlayer[]): { plan: RoundPlan[]; score: numbe
   const opposed = Array.from({ length: n }, () => new Array<number>(n).fill(0))
 
   const plan: RoundPlan[] = []
-  for (let r = 0; r < n - 1; r++) {
+  for (let r = 0; r < superRounds(n); r++) {
     // 1. Quem descansa: quem jogou mais, e entre esses quem descansou há mais
     // tempo. Homens primeiro quando o excesso deles obriga.
     const restOrder = Array.from({ length: n }, (_, i) => i).sort(

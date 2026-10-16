@@ -1,5 +1,6 @@
 // lib/torneios/schedule/americano.ts
 import type { RoundPlan, MatchPlan } from '../types'
+import { generateBalancedAmericanoSchedule } from './americanoMixed'
 
 // Método do círculo: p/ m par, m-1 rodadas; cada par não-ordenado se forma 1x.
 // Retorna rodadas de pares de ÍNDICES (0..m-1).
@@ -26,49 +27,24 @@ export function generateAmericanoSchedule(playerIds: string[]): RoundPlan[] {
     throw new Error('Super aceita apenas um número par de 4 a 16 jogadores.')
   }
 
-  const rounds = circleRounds(n)
-  const playCount = new Array<number>(n).fill(0)
-  const plan: RoundPlan[] = []
+  // Com 6, 10 ou 14 sobra uma dupla de fora por rodada, e nas N−1 rodadas do
+  // círculo duas pessoas jogavam uma partida a mais que as outras. A busca
+  // monta as N rodadas em que todo mundo joga o mesmo número (superRounds).
+  if (n % 4 !== 0) return generateBalancedAmericanoSchedule(playerIds)
 
-  rounds.forEach((pairs, r) => {
-    let usable = pairs
-    const resting: string[] = []
-
-    // Sobra uma dupla quando o nº de pares é ímpar (N não múltiplo de 4).
-    if (pairs.length % 2 === 1) {
-      // Descansa a dupla de maior carga acumulada (mantém jogos balanceados ±1).
-      let restIdx = 0
-      let worst = -1
-      pairs.forEach((pr, i) => {
-        const load = playCount[pr[0]] + playCount[pr[1]]
-        if (load > worst) {
-          worst = load
-          restIdx = i
-        }
-      })
-      const rp = pairs[restIdx]
-      resting.push(playerIds[rp[0]], playerIds[rp[1]])
-      usable = pairs.filter((_, i) => i !== restIdx)
-    }
-
+  // Múltiplo de 4: todas as duplas da rodada jogam, ninguém descansa.
+  return circleRounds(n).map((pairs, r) => {
     const matches: MatchPlan[] = []
-    for (let c = 0; c + 1 < usable.length; c += 2) {
-      const a = usable[c]
-      const b = usable[c + 1]
+    for (let c = 0; c + 1 < pairs.length; c += 2) {
+      const a = pairs[c]
+      const b = pairs[c + 1]
       matches.push({
         p1: playerIds[a[0]],
         partner1: playerIds[a[1]],
         p2: playerIds[b[0]],
         partner2: playerIds[b[1]],
       })
-      playCount[a[0]]++
-      playCount[a[1]]++
-      playCount[b[0]]++
-      playCount[b[1]]++
     }
-
-    plan.push({ round: r + 1, matches, resting })
+    return { round: r + 1, matches, resting: [] }
   })
-
-  return plan
 }

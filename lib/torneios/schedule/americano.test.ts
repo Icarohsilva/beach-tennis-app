@@ -6,13 +6,15 @@ function ids(n: number): string[] {
   return Array.from({ length: n }, (_, i) => `p${i}`)
 }
 
-const SIZES = [4, 6, 8, 10, 12, 16]
+const SIZES = [4, 6, 8, 10, 12, 14, 16]
 
 describe('generateAmericanoSchedule — invariantes por tamanho', () => {
   for (const n of SIZES) {
-    it(`N=${n}: estrutura válida, jogos e byes balanceados (±1), parceria <=1`, () => {
+    it(`N=${n}: estrutura válida, todos jogam e descansam o MESMO número de vezes`, () => {
       const plan = generateAmericanoSchedule(ids(n))
-      expect(plan.length).toBe(n - 1)
+      // Com 6, 10 ou 14 o Super ganha uma rodada: em N−1 a conta não fecha e
+      // duas pessoas jogariam uma partida a mais (ver superRounds).
+      expect(plan.length).toBe(n % 4 === 0 ? n - 1 : n)
 
       const playCount = new Map<string, number>()
       const byeCount = new Map<string, number>()
@@ -46,19 +48,22 @@ describe('generateAmericanoSchedule — invariantes por tamanho', () => {
         }
       }
 
-      // Todos jogaram ao menos uma vez.
+      // A classificação soma vitórias e games: um jogo a mais é vantagem.
       expect(playCount.size).toBe(n)
-      const plays = [...playCount.values()]
-      expect(Math.max(...plays) - Math.min(...plays)).toBeLessThanOrEqual(1)
+      const plays = Array.from(playCount.values())
+      expect(Math.max(...plays) - Math.min(...plays)).toBe(0)
 
-      // Byes balanceados (quando há byes).
-      const byes = SIZES.includes(n) ? [...byeCount.values()] : []
+      const byes = Array.from(byeCount.values())
       if (byes.length > 0) {
-        expect(Math.max(...byes) - Math.min(...byes)).toBeLessThanOrEqual(1)
+        expect(byeCount.size).toBe(n)
+        expect(Math.max(...byes) - Math.min(...byes)).toBe(0)
       }
 
-      // Nenhuma parceria se repete (método do círculo dá cada par no máx 1x).
-      for (const c of partnerSeen.values()) expect(c).toBeLessThanOrEqual(1)
+      // Múltiplo de 4 (círculo): cada dupla se forma no máximo 1 vez. Com 6, 10
+      // ou 14 a rodada que iguala os jogos pode repetir UMA dupla — o preço de
+      // ninguém jogar a mais.
+      const repeated = Array.from(partnerSeen.values()).filter((c) => c > 1).length
+      expect(repeated).toBeLessThanOrEqual(n % 4 === 0 ? 0 : 1)
     })
   }
 })
@@ -71,6 +76,21 @@ describe('generateAmericanoSchedule — N=8 caso ideal', () => {
       expect(r.matches.length).toBe(2)
       expect(r.resting.length).toBe(0)
     }
+  })
+})
+
+describe('generateAmericanoSchedule — N=10', () => {
+  it('10 rodadas de 2 jogos e todos jogam 8 (em 9 rodadas, dois jogavam 8 e oito jogavam 7)', () => {
+    const plan = generateAmericanoSchedule(ids(10))
+    expect(plan.length).toBe(10)
+    expect(plan.every((r) => r.matches.length === 2 && r.resting.length === 2)).toBe(true)
+    const plays = new Map<string, number>()
+    for (const r of plan) {
+      for (const m of r.matches) {
+        for (const id of [m.p1, m.partner1, m.p2, m.partner2]) plays.set(id!, (plays.get(id!) ?? 0) + 1)
+      }
+    }
+    expect(Array.from(plays.values())).toEqual(Array(10).fill(8))
   })
 })
 

@@ -41,17 +41,27 @@ function analyse(players: DrawPlayer[]) {
 }
 
 describe('generateMixedAmericanoSchedule', () => {
-  it('3 homens e 7 mulheres: nenhuma dupla masculina, jogos equilibrados, parceiro nunca repete', () => {
-    const r = analyse(roster(3, 7))
-    expect(r.plan).toHaveLength(9)
+  it('2 homens e 8 mulheres: 10 rodadas, todos jogam 8 e ninguém repete parceiro', () => {
+    // O caso que motivou a rodada extra: em 9 rodadas duas mulheres jogavam 8 e
+    // o resto 7, e a classificação soma vitórias e games.
+    const r = analyse(roster(2, 8))
+    expect(r.plan).toHaveLength(10)
     expect(r.plan.every((round) => round.matches.length === 2 && round.resting.length === 2)).toBe(true)
     expect(r.malePairs).toBe(0)
     expect(r.malesVsFemales).toBe(0)
-    expect(r.max - r.min).toBeLessThanOrEqual(1)
+    expect([r.min, r.max]).toEqual([8, 8])
     expect(r.repeatedPartners).toBe(0)
   })
 
-  it('nunca forma dupla masculina, em qualquer Super misto possível de 4 a 16 jogadores', () => {
+  it('3 homens e 7 mulheres: todos jogam 8; cada homem repete uma parceira, o piso da regra', () => {
+    // 8 jogos sempre com mulher, e só existem 7: uma parceira se repete por homem.
+    const r = analyse(roster(3, 7))
+    expect(r.malePairs).toBe(0)
+    expect([r.min, r.max]).toEqual([8, 8])
+    expect(r.repeatedPartners).toBe(3)
+  })
+
+  it('nunca forma dupla masculina e todos jogam igual, em qualquer Super misto aceito de 4 a 16', () => {
     for (let n = 4; n <= 16; n += 2) {
       for (let men = 0; men <= n; men++) {
         const players = roster(men, n - men)
@@ -59,8 +69,7 @@ describe('generateMixedAmericanoSchedule', () => {
         const r = analyse(players)
         expect(r.malePairs, `${men}H/${n - men}M`).toBe(0)
         expect(r.malesVsFemales, `${men}H/${n - men}M`).toBe(0)
-        // Com no máximo tantos homens quanto mulheres, ninguém fica 2 jogos atrás.
-        if (men <= n - men) expect(r.max - r.min, `${men}H/${n - men}M`).toBeLessThanOrEqual(1)
+        expect(r.max - r.min, `${men}H/${n - men}M`).toBe(0)
       }
     }
   }, 60_000)
@@ -68,6 +77,15 @@ describe('generateMixedAmericanoSchedule', () => {
   it('mais homens do que a regra comporta: avisa em vez de gerar', () => {
     expect(() => generateMixedAmericanoSchedule(roster(7, 3))).toThrow(DrawRuleError)
     expect(mixedDrawProblem(roster(7, 3))).toContain('7 homens e 3 mulheres')
+  })
+
+  it('homens que descansariam em toda rodada: recusa, porque as mulheres jogariam mais', () => {
+    // 10 jogadores, 6 homens: só 4 homens cabem em quadra, então 2 descansam
+    // sempre e as mulheres nunca — elas jogariam as 10 rodadas, eles bem menos.
+    expect(() => generateMixedAmericanoSchedule(roster(6, 4))).toThrow(DrawRuleError)
+    expect(mixedDrawProblem(roster(6, 4))).toContain('mesmo número de partidas')
+    // Com 5 a conta ainda fecha: cada homem descansa as mesmas 2 vezes que as mulheres.
+    expect(mixedDrawProblem(roster(5, 5))).toBeNull()
   })
 
   it('jogador sem gênero no cadastro: avisa', () => {
