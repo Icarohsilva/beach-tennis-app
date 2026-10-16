@@ -136,7 +136,7 @@ export default async function GradePage() {
         {sessionsToday.length === 0 ? (
           <EmptyState icon={CalendarDays} title="Nenhuma sessão hoje." />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {sessionsToday.map((session) => {
               const confirmed = bookingCountMap.get(session.id) ?? 0
               const clsRaw = Array.isArray(session.class) ? session.class[0] : session.class
@@ -189,7 +189,7 @@ export default async function GradePage() {
                 <span>{DAY_ABBR[day]}</span>
                 <GenerateDayButton dayOfWeek={day} />
               </h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {dayClasses.map((c) => {
                   const rc = roster.byClass.get(c.id) ?? { enrolled: 0, eligible: 0, pendingConfirmation: 0, noPlan: 0, students: [] }
                   const gen = genByClass.get(c.id)

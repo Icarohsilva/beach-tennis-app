@@ -37,7 +37,7 @@ export function SpotlightRow({
   if (!pick) return <>{children}</>
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
       <NextClassCard
         className_={pick.className}
         date={pick.date}

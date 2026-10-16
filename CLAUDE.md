@@ -531,7 +531,7 @@ começam em `sm: 640px`, então sem ele não havia como dizer "só em celular pe
 `pb-safe` depende do par `spacing.safe` + `viewportFit: 'cover'` (em [app/layout.tsx](app/layout.tsx));
 os dois andam juntos, e sem o segundo `env(safe-area-inset-*)` resolve 0.
 
-Quatro defeitos se repetem — vale conhecer todos antes de escrever linha nova:
+Cinco defeitos se repetem — vale conhecer todos antes de escrever linha nova:
 
 1. **`flex justify-between` sem `gap-*` e sem `shrink-0` no chip da direita.** Os dois
    filhos encolhem até o min-content e se encostam. Quando o lado esquerdo é longo,
@@ -553,6 +553,13 @@ Quatro defeitos se repetem — vale conhecer todos antes de escrever linha nova:
    todo modal `fixed inset-0` centraliza nessa área maior: abre cortado, metade para fora.
    Por isso `html` **e** `body` têm `overflow-x: clip` em `app/globals.css`; só no `html` não
    basta (medido com o Pixel 5 do Playwright).
+
+5. **Grid responsivo sem a coluna do celular.** `grid gap-3 sm:grid-cols-2` não tem coluna
+   definida abaixo do `sm`: a coluna implícita cresce até o conteúdo mais largo, e um link
+   com UUID em `truncate` deixava o card com 613px numa tela de 361px. Com o `clip` do item
+   4, o excesso some sem rolagem (o "Copiar" e o fim das mensagens do torneio sumiram assim).
+   Todo grid com `sm:`/`md:`/`lg:grid-cols-*` declara `grid-cols-1` (`minmax(0,1fr)`, a
+   mesma coluna que encolhe). `lib/utils/gridBaseColumns.test.ts` barra o que esquecer.
 
 `npm run test:responsive` mede isso em 320/375/414px sobre a bancada
 [app/dev/responsivo](app/dev/responsivo/page.tsx) (fixtures fixas, **sem** Supabase — roda

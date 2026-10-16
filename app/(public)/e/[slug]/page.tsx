@@ -224,7 +224,7 @@ export default async function EventoPage({ params }: PageProps) {
               As categorias deste evento ainda vão ser divulgadas.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {ordered.map((t, i) => (
                 <div key={t.id}>
                   <TournamentCard
