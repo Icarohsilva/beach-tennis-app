@@ -111,7 +111,7 @@ export type TournamentFormat =
  * Como a partida é contada. Definido em lib/torneios/matchScore.ts, que é onde
  * a regra vive; aqui só o tipo, para o schema.
  */
-export type ScoringMode = 'set' | 'fixed_games'
+export type ScoringMode = 'set' | 'fixed_games' | 'tiebreak'
 
 /** Grade de camisa. A regra e os rótulos ficam em lib/torneios/shirt.ts. */
 export type ShirtSize =

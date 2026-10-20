@@ -26,7 +26,7 @@ import { PoweredBy } from '@/components/ui/PoweredBy'
 import { RegisterExternalButton } from './RegisterExternalButton'
 import { ConfirmWaitlistButton } from './ConfirmWaitlistButton'
 import { sideOfEntry, chargeFor, type PayableEntry } from '@/lib/torneios/entrySide'
-import { scoreRuleFrom, scoringLabel } from '@/lib/torneios/matchScore'
+import { scoreRuleFrom, scoringLabel, scoreUnit } from '@/lib/torneios/matchScore'
 import { resolveEntryCharge, PAY_ON_SITE_NOTICE } from '@/lib/torneios/entryCharge'
 import { shirtConfig } from '@/lib/torneios/shirt'
 import { getConnectedMpToken } from '@/lib/billing/gatewayAccounts'
@@ -754,7 +754,7 @@ export default async function PublicTournamentPage({ params }: PageProps) {
       {standings.length > 0 && (
         <div className="px-3 mt-4">
           <SectionTitle icon={ListOrdered}>Classificação</SectionTitle>
-          <StandingsTable rows={standings} nameById={nameById} />
+          <StandingsTable rows={standings} nameById={nameById} unit={scoreUnit(t.scoring_mode)} />
         </div>
       )}
 

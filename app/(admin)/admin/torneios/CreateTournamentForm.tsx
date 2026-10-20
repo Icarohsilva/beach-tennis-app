@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { createTournament } from '@/features/torneios/actions'
 import { SPORTS } from '@/lib/arenas/sports'
 import { pairGendersFor, pairGendersLabel } from '@/lib/torneios/pairRules'
-import { scoreHint, type ScoringMode } from '@/lib/torneios/matchScore'
+import { scoreHint, TIEBREAK_POINTS, type ScoringMode } from '@/lib/torneios/matchScore'
 import { entryChargeHint } from '@/lib/torneios/entryCharge'
 import { LEVEL_ORDER, levelLabel } from '@/lib/torneios/sportProfile'
 import type {
@@ -287,24 +287,31 @@ export function CreateTournamentForm({
           onChange={(e) => {
             const mode = e.target.value as ScoringMode
             setScoringMode(mode)
-            // 6 é alvo de set; 5 é total de partida. Trocar o modo sem trocar o
-            // número deixaria "set até 5" ou "5 games corridos" por acidente.
-            setGamesPerSet(mode === 'fixed_games' ? 5 : 6)
+            // 6 é alvo de set; 5 é total de partida; 10 é o tie-break mais
+            // comum. Trocar o modo sem trocar o número deixaria "set até 5" ou
+            // "tie-break de 6" por acidente.
+            setGamesPerSet(mode === 'fixed_games' ? 5 : mode === 'tiebreak' ? 10 : 6)
           }}
           className={selectClass}
         >
           <option value="set">Set (ganha quem chega ao número de games)</option>
           <option value="fixed_games">Games corridos (todos jogados, vence a maioria)</option>
+          <option value="tiebreak">Super Tiebreak (um tie-break de 7, 10 ou 15 pontos)</option>
         </select>
       </div>
 
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-slate-300">
-          {scoringMode === 'fixed_games' ? 'Games por partida' : 'Games por set'}
+          {scoringMode === 'tiebreak'
+            ? 'Pontos do tie-break'
+            : scoringMode === 'fixed_games' ? 'Games por partida' : 'Games por set'}
         </label>
         <select value={gamesPerSet} onChange={(e) => setGamesPerSet(Number(e.target.value))} className={selectClass}>
-          {(scoringMode === 'fixed_games' ? [3, 5, 7, 9] : [4, 6, 8, 9]).map((g) => (
-            <option key={g} value={g}>{g} games</option>
+          {(scoringMode === 'tiebreak'
+            ? [...TIEBREAK_POINTS]
+            : scoringMode === 'fixed_games' ? [3, 5, 7, 9] : [4, 6, 8, 9]
+          ).map((g) => (
+            <option key={g} value={g}>{g} {scoringMode === 'tiebreak' ? 'pontos' : 'games'}</option>
           ))}
         </select>
         <p className="text-xs text-slate-500">

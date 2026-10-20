@@ -26,6 +26,7 @@ import {
 import {
   completeScore,
   scoreHint,
+  scoreUnit,
   validateMatchScore,
   type MatchScoreRule,
 } from '@/lib/torneios/matchScore'
@@ -173,7 +174,7 @@ export function MatchScoreCard({
     const n2 = Number(g2)
     const valid = validateMatchScore(n1, n2, scoreRule)
     if (!valid.ok) {
-      setError(valid.error ?? 'Informe um placar válido (games por lado).')
+      setError(valid.error ?? `Informe um placar válido (${scoreUnit(scoreRule.mode)} por lado).`)
       return
     }
     setError(null)
@@ -216,7 +217,7 @@ export function MatchScoreCard({
           value={side === 1 ? g1 : g2}
           onChange={(e) => setSide(side, e.target.value)}
           max={scoreRule.mode === 'fixed_games' ? scoreRule.games : undefined}
-          aria-label={`Games ${side === 1 ? team1 : team2}`}
+          aria-label={`${scoreUnit(scoreRule.mode) === 'pontos' ? 'Pontos' : 'Games'} ${side === 1 ? team1 : team2}`}
           className="h-11 w-12 shrink-0 rounded-lg border border-brand-500/50 bg-surface text-center text-xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
       )
