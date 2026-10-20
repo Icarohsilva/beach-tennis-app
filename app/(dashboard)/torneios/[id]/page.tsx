@@ -35,7 +35,7 @@ import {
   isBracketFormat,
   standingsVisible,
 } from '@/lib/torneios/formats'
-import { scoreRuleFrom } from '@/lib/torneios/matchScore'
+import { scoreRuleFrom, scoreUnit } from '@/lib/torneios/matchScore'
 import { computeGroupTables, splitPhases } from '@/lib/torneios/schedule/grupos'
 import { GroupTables } from '@/features/torneios/GroupTables'
 import { ParticipantModalProvider } from '@/features/torneios/ParticipantModal'
@@ -458,6 +458,7 @@ export default async function TorneioDetailPage({ params }: PageProps) {
             nameById={nameById}
             highlightId={user.id}
             linkToProfile
+            unit={scoreUnit(t.scoring_mode)}
           />
         </Reveal>
       )}

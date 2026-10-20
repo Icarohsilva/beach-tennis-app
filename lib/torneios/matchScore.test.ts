@@ -5,6 +5,7 @@ import {
   scoreHint,
   scoreRuleFrom,
   scoringLabel,
+  scoreUnit,
   validateMatchScore,
   type MatchScoreRule,
 } from './matchScore'
@@ -98,5 +99,43 @@ describe('textos', () => {
   it('o rótulo não promete set num torneio de games corridos', () => {
     expect(scoringLabel(SUPER5)).toBe('5 games corridos · vence com 3')
     expect(scoringLabel(SET6)).toBe('6 games por set com tiebreak')
+  })
+})
+
+describe('Super Tiebreak', () => {
+  const TB10: MatchScoreRule = { mode: 'tiebreak', games: 10, tiebreak: false }
+
+  it('aceita quem chega ao alvo com 2 de vantagem, e a prorrogação de 2', () => {
+    expect(validateMatchScore(10, 8, TB10).ok).toBe(true)
+    expect(validateMatchScore(3, 10, TB10).ok).toBe(true)
+    expect(validateMatchScore(12, 10, TB10).ok).toBe(true)
+    expect(validateMatchScore(11, 13, TB10).ok).toBe(true)
+  })
+
+  it('recusa jogo que não acabou, empate e prorrogação sem 2 de vantagem', () => {
+    expect(validateMatchScore(9, 7, TB10).ok).toBe(false)
+    expect(validateMatchScore(10, 9, TB10).ok).toBe(false)
+    expect(validateMatchScore(10, 10, TB10).ok).toBe(false)
+    expect(validateMatchScore(13, 10, TB10).ok).toBe(false)
+    expect(validateMatchScore(12, 9, TB10).error).toContain('abre 2')
+  })
+
+  it('vale para 7 e 15 pontos', () => {
+    expect(validateMatchScore(7, 5, { ...TB10, games: 7 }).ok).toBe(true)
+    expect(validateMatchScore(7, 6, { ...TB10, games: 7 }).ok).toBe(false)
+    expect(validateMatchScore(15, 0, { ...TB10, games: 15 }).ok).toBe(true)
+  })
+
+  it('não completa o outro lado: com dois dígitos, o "1" de "10" viraria 10 x 10', () => {
+    expect(completeScore(1, TB10)).toBeNull()
+    expect(completeScore(8, TB10)).toBeNull()
+  })
+
+  it('textos e unidade falam em pontos', () => {
+    expect(scoringLabel(TB10)).toBe('Super Tiebreak de 10 pontos')
+    expect(scoreHint(TB10)).toContain('10 x 8')
+    expect(scoreUnit('tiebreak')).toBe('pontos')
+    expect(scoreUnit('fixed_games')).toBe('games')
+    expect(scoreRuleFrom({ scoring_mode: 'tiebreak', games_per_set: 15 }).games).toBe(15)
   })
 })

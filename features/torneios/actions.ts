@@ -41,6 +41,7 @@ import type {
   TournamentModality,
   Gender,
   ScoringConfig,
+  ScoringMode,
 } from '@/types'
 
 // ---------------------------------------------------------------------------
@@ -884,7 +885,7 @@ async function matchScoreRule(
   const t = (Array.isArray(raw) ? raw[0] : raw) as {
     games_per_set: number | null
     tiebreak_games: boolean | null
-    scoring_mode: 'set' | 'fixed_games' | null
+    scoring_mode: ScoringMode | null
   } | null
   return scoreRuleFrom(t ?? {})
 }

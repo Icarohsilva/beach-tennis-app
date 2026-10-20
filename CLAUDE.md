@@ -729,7 +729,22 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   isso não é rigor: aceitar `3x1` num formato de 5 tira 1 game da contagem dos QUATRO
   jogadores daquela partida. `scoreRuleFrom` é a leitura única — servidor
   (`recordMatchResult`/`reportMatchResult`), card de placar e rótulo público saem dela, e o
-  card completa o outro lado sozinho porque o total é fixo.
+  card completa o outro lado sozinho porque o total é fixo. O terceiro modo é **`tiebreak`**, o
+  **Super Tiebreak**: a partida é UM tie-break de 7, 10 ou 15 pontos (`TIEBREAK_POINTS`;
+  `games_per_set` guarda o alvo e `games1/games2` guardam PONTOS). Vence quem chega ao alvo com
+  2 de vantagem (10x8, 12x10); a validação recusa empate, jogo que não chegou ao alvo e
+  prorrogação sem os 2 pontos. Não completa o outro lado sozinho (o "1" de "10" viraria 10 x 10).
+  Classificação igual (vitórias → pontos ganhos → confronto direto), com `scoreUnit` trocando
+  "games" por "pontos" na tabela e no card de placar. Sorteio é o Super comum: todos jogam com
+  todos, independente do sexo.
+- **Trazer inscritos de outros torneios** (`ImportEntrantsCard` em `/admin/torneios/[id]`,
+  actions em [features/torneios/importEntrantsActions.ts](features/torneios/importEntrantsActions.ts)).
+  Para o Super Tiebreak montado com quem jogou outro campeonato (aberto ou encerrado): filtra
+  por torneio de origem e por nome, marca e inclui. A lista (todo inscrito confirmado da arena)
+  é paginada e só carrega ao abrir o card. Cada pessoa passa pela régua normal (gênero da
+  categoria, `decideNewEntryStatus`, `computePersonPayment`, ponto da Liga, link de pagamento) e
+  quem não passa volta com o motivo, sem derrubar o resto. Só antes da chave e fora de dupla
+  fixa, onde a inscrição é da dupla.
 - **Ordem da classificação: 1) vitórias, 2) games ganhos, 3) confronto direto**
   ([lib/torneios/standings.ts](lib/torneios/standings.ts)). Começava pelo SALDO, o que punha
   na frente quem venceu pouco e goleou nas poucas vezes. O confronto direto **nunca** é

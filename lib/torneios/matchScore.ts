@@ -9,6 +9,11 @@
 //   'fixed_games' — o formato que o beach tennis chama de Super/Americano. A
 //                   partida tem um número FIXO de games, todos são jogados, e
 //                   vence quem fizer a maioria. A soma é sempre a mesma.
+//   'tiebreak'    — o Super Tiebreak: a partida é UM tie-break de 7, 10 ou 15
+//                   pontos. Ganha quem chega ao número com 2 de vantagem (10x8,
+//                   12x10). O placar gravado é de PONTOS, nas mesmas colunas
+//                   games1/games2, e "games ganhos" na classificação vira
+//                   "pontos ganhos".
 //
 // A diferença não é cosmética: em 'fixed_games' toda partida entrega o mesmo
 // total de games, e é isso que torna "games ganhos" um critério de desempate
@@ -22,12 +27,18 @@ import type { ScoringMode } from '@/types'
 
 export type { ScoringMode }
 
-export const SCORING_MODES: readonly ScoringMode[] = ['set', 'fixed_games']
+export const SCORING_MODES: readonly ScoringMode[] = ['set', 'fixed_games', 'tiebreak']
+
+/** Pontos do Super Tiebreak que a arena escolhe na criação. */
+export const TIEBREAK_POINTS = [7, 10, 15] as const
 
 /** A regra de placar de um torneio, já lida da configuração dele. */
 export interface MatchScoreRule {
   mode: ScoringMode
-  /** Em 'fixed_games', o total de games da partida. Em 'set', o alvo do set. */
+  /**
+   * Em 'fixed_games', o total de games da partida. Em 'set', o alvo do set. Em
+   * 'tiebreak', os pontos do tie-break (7, 10 ou 15).
+   */
   games: number
   /** Só faz sentido em 'set' — 'fixed_games' não tem empate para desempatar. */
   tiebreak: boolean
@@ -60,7 +71,7 @@ export function scoreRuleFrom(config: {
  * dois campos que precisam concordar acabam discordando.
  */
 export function gamesToWin(rule: MatchScoreRule): number {
-  if (rule.mode !== 'fixed_games') return rule.games
+  if (rule.mode !== 'fixed_games') return rule.games // set e tie-break: o alvo
   return Math.floor(rule.games / 2) + 1
 }
 
@@ -89,6 +100,7 @@ export function validateMatchScore(
   if (!Number.isInteger(games1) || !Number.isInteger(games2) || games1 < 0 || games2 < 0) {
     return { ok: false, error: 'Informe um placar válido (games por lado).' }
   }
+  if (rule.mode === 'tiebreak') return validateTiebreak(games1, games2, rule.games)
   if (rule.mode !== 'fixed_games') return { ok: true }
 
   const total = games1 + games2
@@ -104,6 +116,36 @@ export function validateMatchScore(
 }
 
 /**
+ * Tie-break: ganha quem chega a `target` com 2 de vantagem. Se empatar em
+ * `target - 1`, o jogo segue até alguém abrir 2 (10x8, 11x9, 12x10...). Placar
+ * fora disso é jogo que não acabou ou digitação errada, e entraria na contagem
+ * de pontos dos quatro jogadores.
+ */
+function validateTiebreak(a: number, b: number, target: number): ScoreValidation {
+  const win = Math.max(a, b)
+  const lose = Math.min(a, b)
+  if (win === lose) {
+    return { ok: false, error: `Tie-break não termina empatado. Confira o placar (${a} x ${b}).` }
+  }
+  if (win < target) {
+    return { ok: false, error: `Ninguém chegou a ${target} pontos. O tie-break vai até ${target}.` }
+  }
+  if (win === target && lose > target - 2) {
+    return {
+      ok: false,
+      error: `Com ${target} x ${lose} o jogo continua: é preciso abrir 2 pontos (por exemplo ${target + 1} x ${target - 1}).`,
+    }
+  }
+  if (win > target && win - lose !== 2) {
+    return {
+      ok: false,
+      error: `Passando de ${target}, o tie-break acaba quando alguém abre 2 pontos (por exemplo ${win} x ${win - 2}).`,
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * O outro lado do placar, quando ele é dedutível.
  *
  * Em 'fixed_games' o total é fixo, então digitar um número já define o outro.
@@ -111,6 +153,9 @@ export function validateMatchScore(
  * a menos é um erro de digitação a menos.
  */
 export function completeScore(side: number, rule: MatchScoreRule): number | null {
+  // Tie-break não completa: o placar tem dois dígitos e a tela completa a cada
+  // tecla. Digitar "10" passa por "1", que preencheria o outro lado com 10 e
+  // deixaria 10 x 10 na tela. Cada lado é digitado inteiro.
   if (rule.mode !== 'fixed_games') return null
   if (!Number.isInteger(side) || side < 0 || side > rule.games) return null
   return rule.games - side
@@ -118,6 +163,12 @@ export function completeScore(side: number, rule: MatchScoreRule): number | null
 
 /** Frase que o admin e o jogador leem antes de digitar o placar. */
 export function scoreHint(rule: MatchScoreRule): string {
+  if (rule.mode === 'tiebreak') {
+    return (
+      `Tie-break até ${rule.games} pontos, com 2 de vantagem: ${rule.games} x ${rule.games - 2} ou, `
+      + `empatando, ${rule.games + 1} x ${rule.games - 1}, ${rule.games + 2} x ${rule.games}... Lance os pontos de cada lado.`
+    )
+  }
   if (rule.mode !== 'fixed_games') {
     return `Set até ${rule.games} games${rule.tiebreak ? ', com tiebreak' : ', sem tiebreak'}.`
   }
@@ -129,8 +180,14 @@ export function scoreHint(rule: MatchScoreRule): string {
 
 /** Rótulo curto do formato de placar, para o cabeçalho do torneio. */
 export function scoringLabel(rule: MatchScoreRule): string {
+  if (rule.mode === 'tiebreak') return `Super Tiebreak de ${rule.games} pontos`
   if (rule.mode !== 'fixed_games') {
     return `${rule.games} games por set${rule.tiebreak ? ' com tiebreak' : ''}`
   }
   return `${rule.games} games corridos · vence com ${gamesToWin(rule)}`
+}
+
+/** O que se conta no placar: pontos no tie-break, games nos outros modos. */
+export function scoreUnit(mode: ScoringMode | null | undefined): 'pontos' | 'games' {
+  return mode === 'tiebreak' ? 'pontos' : 'games'
 }

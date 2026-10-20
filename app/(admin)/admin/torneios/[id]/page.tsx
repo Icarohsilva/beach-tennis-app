@@ -20,10 +20,11 @@ import { buildWhatsAppUrl } from '@/lib/utils/whatsappLink'
 import { getSiteUrl } from '@/lib/utils/siteUrl'
 import { ensureEntryPaymentToken } from '@/features/torneios/entryPaymentActions'
 import { inviteState } from '@/lib/torneios/invite'
-import { scoreRuleFrom } from '@/lib/torneios/matchScore'
+import { scoreRuleFrom, scoreUnit } from '@/lib/torneios/matchScore'
 import { PairFixControls } from './PairFixControls'
 import { MoveEntryControl, type MoveTarget } from './MoveEntryControl'
 import { PlaceFromWaitlistButton } from './PlaceFromWaitlistButton'
+import { ImportEntrantsCard } from './ImportEntrantsCard'
 import { buildWaitlistInterestMessage } from '@/lib/torneios/contactMessage'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
@@ -471,6 +472,12 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {/* Super Tiebreak e afins: trazer quem jogou outro campeonato da arena.
+          Só antes da chave, e não em dupla fixa (lá a inscrição é da dupla). */}
+      {(t.status === 'draft' || t.status === 'open') && t.participant_type !== 'dupla_fixa' && (
+        <ImportEntrantsCard tournamentId={t.id} />
+      )}
+
       <PhotosCard tournamentId={t.id} photos={photos} />
 
       {/* Inscrições */}
@@ -843,7 +850,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
               Só você vê esta tabela. Os atletas veem os placares, e a classificação aparece para todos quando o torneio for encerrado.
             </p>
           )}
-          <StandingsTable rows={standings} nameById={nameById} linkToProfile />
+          <StandingsTable rows={standings} nameById={nameById} linkToProfile unit={scoreUnit(t.scoring_mode)} />
         </section>
       )}
 

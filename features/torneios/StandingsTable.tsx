@@ -14,6 +14,8 @@ interface StandingsTableProps {
    * um ParticipantModalProvider; sem ele o clique não faz nada.
    */
   linkToProfile?: boolean
+  /** O que o placar conta: 'pontos' no Super Tiebreak (lib/torneios/matchScore.ts scoreUnit). */
+  unit?: 'games' | 'pontos'
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']
@@ -23,7 +25,9 @@ export function StandingsTable({
   nameById,
   highlightId,
   linkToProfile,
+  unit = 'games',
 }: StandingsTableProps) {
+  const unitLabel = unit === 'pontos' ? 'Pontos' : 'Games'
   if (rows.length === 0) {
     return <p className="text-slate-400 text-sm">Sem classificação ainda.</p>
   }
@@ -48,8 +52,8 @@ export function StandingsTable({
               <th className="px-2 py-2.5 text-left font-semibold xs:px-3">Jogador</th>
               <th className="w-8 px-1 py-2.5 text-center font-semibold" title="Jogos">J</th>
               <th className="w-8 px-1 py-2.5 text-center font-semibold" title="Vitórias">V</th>
-              <th className="w-14 px-2 py-2.5 text-center font-semibold" title="Games ganhos/sofridos">
-                Games
+              <th className="w-14 px-2 py-2.5 text-center font-semibold" title={`${unitLabel} ganhos/sofridos`}>
+                {unitLabel}
               </th>
               <th className="hidden w-12 px-2 py-2.5 text-center font-semibold xs:table-cell xs:w-14 xs:px-3">
                 Saldo
@@ -122,7 +126,7 @@ export function StandingsTable({
           vitórias que o 2º acha que o app errou a conta — e a explicação vira
           conversa no grupo do WhatsApp. */}
       <p className="px-1 text-[10px] leading-relaxed text-slate-500">
-        Desempate: 1º vitórias · 2º games ganhos · 3º confronto direto.
+        Desempate: 1º vitórias · 2º {unit} ganhos · 3º confronto direto.
       </p>
     </div>
   )
