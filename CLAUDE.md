@@ -745,6 +745,17 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   categoria, `decideNewEntryStatus`, `computePersonPayment`, ponto da Liga, link de pagamento) e
   quem não passa volta com o motivo, sem derrubar o resto. Só antes da chave e fora de dupla
   fixa, onde a inscrição é da dupla.
+- **Grupo do WhatsApp do torneio** (`WhatsAppGroupCard` em `/admin/torneios/[id]`, regras puras em
+  [lib/torneios/whatsappGroup.ts](lib/torneios/whatsappGroup.ts), link em
+  `tournaments.whatsapp_group_url`). O WhatsApp só deixa adicionar ao grupo quem está salvo
+  nos contatos, e mandar convite um por um era o que a arena não queria (e o "Enviar acesso"
+  gera senha nova a cada clique). Três saídas em lote: **contatos (.vcf)** só com inscritos
+  confirmados com WhatsApp, nomeados **"ArenaHub <nome>"** (`CONTACT_NAME_PREFIX`, pedido da
+  arena: buscar "ArenaHub" no "Adicionar participantes" traz todos), torneio em `ORG` e número
+  em E.164; **planilha (.xlsx)** com nome, WhatsApp, número com 55, situação e pagamento
+  (inscritos primeiro, depois a fila); e o **link de convite** (`normalizeGroupInviteUrl`
+  recusa o que não é `chat.whatsapp.com`), que vira o botão "Entrar no grupo" na página do
+  torneio para quem está inscrito, nunca na página pública.
 - **Ordem da classificação: 1) vitórias, 2) games ganhos, 3) confronto direto**
   ([lib/torneios/standings.ts](lib/torneios/standings.ts)). Começava pelo SALDO, o que punha
   na frente quem venceu pouco e goleou nas poucas vezes. O confronto direto **nunca** é

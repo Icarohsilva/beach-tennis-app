@@ -5,6 +5,7 @@
 // (que já passa de 1600 linhas) porque é uma responsabilidade diferente:
 // aquele arquivo é o motor (inscrição, chave, placar); este é o que a
 // academia ESCREVE sobre o torneio antes dele acontecer.
+import { normalizeGroupInviteUrl } from '@/lib/torneios/whatsappGroup'
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import { presentOrNull } from '@/lib/torneios/content'
@@ -494,6 +495,47 @@ export async function updateTournamentDrawRules(
   const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
   revalidateTournament(tournamentId, eventSlug)
   return {}
+}
+
+/**
+ * Salva (ou apaga, com vazio) o link do grupo do WhatsApp do torneio. O link é
+ * normalizado e precisa ser um convite de GRUPO: um wa.me de pessoa colado por
+ * engano levaria todos os inscritos para a conversa errada.
+ */
+export async function updateTournamentWhatsAppGroup(
+  tournamentId: string,
+  rawUrl: string,
+): Promise<{ error?: string; url?: string | null }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+
+  const url = rawUrl.trim() ? normalizeGroupInviteUrl(rawUrl) : null
+  if (rawUrl.trim() && !url) {
+    return { error: 'Cole o link de convite do grupo (chat.whatsapp.com/...). No WhatsApp: grupo › Convidar via link › Copiar link.' }
+  }
+
+  const { data: tournament } = await adminClient
+    .from('tournaments')
+    .select('id, event:tournament_events(slug)')
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+    .maybeSingle()
+  if (!tournament) return { error: 'Torneio não encontrado.' }
+
+  const { error } = await adminClient
+    .from('tournaments')
+    .update({ whatsapp_group_url: url })
+    .eq('id', tournamentId)
+    .eq('organization_id', orgId)
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+
+  const eventRaw = tournament.event as { slug: string } | { slug: string }[] | null
+  const eventSlug = Array.isArray(eventRaw) ? eventRaw[0]?.slug : eventRaw?.slug
+  revalidateTournament(tournamentId, eventSlug)
+  // O botão "Entrar no grupo" mora na página do aluno.
+  revalidatePath(`/torneios/${tournamentId}`)
+  return { url }
 }
 
 export async function updateTournamentLevel(

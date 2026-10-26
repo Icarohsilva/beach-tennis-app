@@ -7,10 +7,11 @@
 // (LiveRefresher), então quem está na arquibancada vê o placar mudar.
 import { newEntryStatus, WAITLIST_SIGNUP_NOTICE } from '@/lib/torneios/waitlist'
 import { notFound, redirect } from 'next/navigation'
-import { CalendarClock, LayoutGrid, ListOrdered, Swords, Trophy } from 'lucide-react'
+import { CalendarClock, LayoutGrid, ListOrdered, MessageCircle, Swords, Trophy } from 'lucide-react'
 import { createClient, createAdminClient, getActiveOrgId, getAuthUser } from '@/lib/supabase/server'
 import { getTournamentPhotos } from '@/features/torneios/photoQueries'
 import { PhotoGallery } from '@/features/torneios/PhotoGallery'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Reveal } from '@/components/ui/Reveal'
@@ -350,6 +351,21 @@ export default async function TorneioDetailPage({ params }: PageProps) {
           }
         />
       </Reveal>
+
+      {/* ── Grupo do WhatsApp ─────────────────────────────────────────────
+          Só para quem está inscrito: o link é o convite do grupo, e a página
+          pública não mostra. A arena não consegue adicionar quem não está
+          salvo nos contatos dela, então o atleta entra sozinho por aqui. */}
+      {myEntry?.entry_status === 'confirmed' && t.whatsapp_group_url && t.status !== 'finished' && (
+        <Reveal step={1}>
+          <a href={t.whatsapp_group_url} target="_blank" rel="noopener noreferrer" className="block">
+            <Button type="button" variant="secondary" className="w-full gap-2">
+              <MessageCircle className="h-4 w-4 text-emerald-400" aria-hidden />
+              Entrar no grupo do WhatsApp do torneio
+            </Button>
+          </a>
+        </Reveal>
+      )}
 
       {/* ── Inscrição ───────────────────────────────────────────────────── */}
       {t.status === 'open' && (

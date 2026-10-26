@@ -529,6 +529,8 @@ export interface Tournament {
    * Ver lib/torneios/schedule/americanoMixed.ts.
    */
   draw_no_male_pairs?: boolean
+  /** Convite do grupo do WhatsApp (chat.whatsapp.com/...). Só para inscritos. */
+  whatsapp_group_url?: string | null
   status: TournamentStatus
   created_by: string
   cover_image_url: string | null
