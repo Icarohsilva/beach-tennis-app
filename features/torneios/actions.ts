@@ -526,7 +526,7 @@ export async function generateBracket(
 
   const { data: tournament, error: tErr } = await adminClient
     .from('tournaments')
-    .select('id, status, format, group_count, advance_per_group, draw_no_male_pairs')
+    .select('id, status, format, group_count, advance_per_group, draw_no_male_pairs, draw_same_type')
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
     .single()
@@ -572,16 +572,18 @@ export async function generateBracket(
   // gênero em branco não é adivinhado. Quem falta é dito pelo nome, porque é o
   // admin que vai completar a ficha.
   const noMalePairs = tournament.format === 'americano' && Boolean(tournament.draw_no_male_pairs)
+  const sameType = tournament.format === 'americano' && !noMalePairs && Boolean(tournament.draw_same_type)
   let genders: Record<string, Gender | null> | undefined
-  if (noMalePairs) {
+  if (noMalePairs || sameType) {
     const ids = entries.map((e) => e.playerId)
     const { data: profilesRaw } = await adminClient.from('profiles').select('id, full_name, gender').in('id', ids)
     const profiles = (profilesRaw ?? []) as { id: string; full_name: string | null; gender: Gender | null }[]
     genders = Object.fromEntries(profiles.map((p) => [p.id, p.gender]))
     const missing = profiles.filter((p) => p.gender !== 'M' && p.gender !== 'F').map((p) => p.full_name ?? 'Sem nome')
     if (missing.length > 0) {
+      const rule = noMalePairs ? 'sem dupla masculina' : 'com confrontos do mesmo tipo'
       return {
-        error: `O sorteio sem dupla masculina precisa do sexo de todos. Defina na lista de inscritos (botões Masculino/Feminino) de: ${missing.join(', ')}.`,
+        error: `O sorteio ${rule} precisa do sexo de todos. Defina na lista de inscritos (botões Masculino/Feminino) de: ${missing.join(', ')}.`,
       }
     }
   }
@@ -592,6 +594,7 @@ export async function generateBracket(
       groupCount: (tournament.group_count as number | null) ?? DEFAULT_GROUP_COUNT,
       advancePerGroup: (tournament.advance_per_group as number | null) ?? DEFAULT_ADVANCE_PER_GROUP,
       noMalePairs,
+      sameType,
       genders,
     })
   } catch (e) {

@@ -695,6 +695,18 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   vagas de homem em quadra (`mixedDrawProblem`) recusa com a conta, em vez de gerar. Recusa
   também quando os homens que não cabem em quadra descansariam em toda rodada (10 com 6
   homens, 6 com 4, 14 com 8): as mulheres jogariam mais partidas que eles.
+- **Super com confrontos do mesmo tipo** (`tournaments.draw_same_type`, terceira opção do
+  mesmo card; `generateSameTypeAmericanoSchedule` em `americanoMixed.ts`). Dupla só enfrenta
+  dupla do mesmo tipo: MM x MM, FF x FF, misto x misto, nunca 3 homens e 1 mulher na quadra.
+  Pedido da arena com 4 homens e 4 mulheres, caso em que sai perfeito: 7 rodadas, 7 jogos
+  cada, nenhum parceiro repetido. É **opção escolhida pelo admin**, não detecção automática:
+  mudar o sorteio sozinho por causa da contagem de inscritos surpreenderia quem quer o Super
+  livre. As duas chaves de gênero são exclusivas (`updateTournamentDrawRules` grava as duas a
+  partir de um `rule`). A conta que sustenta a regra: em cada rodada cada tipo de dupla
+  aparece um número PAR de vezes, então o número de homens em quadra é par. Por isso
+  `sameTypeDrawProblem` recusa homens em número ímpar, salvo com descanso e homens = mulheres
+  (aí descansa um de cada); com homens em número par descansam dois do mesmo sexo. Sexo em
+  branco recusa como na outra regra. Testado em todas as combinações válidas de 4 a 16.
 - **No Super todo mundo joga o mesmo número de partidas** (`superRounds`, em
   `americanoMixed.ts`). A classificação SOMA vitórias e games, então um jogo a mais é
   vantagem. Com N múltiplo de 4 ninguém descansa e são N−1 rodadas (círculo). Com 6, 10 ou

@@ -460,15 +460,20 @@ export async function updateTournamentEventCover(
  * do Super Avançado. Esta action conserta os já criados; o formulário passou a
  * perguntar.
  */
+/** Regra de gênero do sorteio do Super. Uma por torneio. */
+export type DrawGenderRule = 'free' | 'no_male_pairs' | 'same_type'
+
 /**
- * Liga/desliga o sorteio sem dupla masculina do Super. Só vale para o próximo
- * "Gerar chave": rodadas já sorteadas não mudam sozinhas, porque podem ter
- * placar lançado.
+ * Escolhe a regra de gênero do sorteio do Super: livre, sem dupla masculina ou
+ * confrontos do mesmo tipo. Grava as duas colunas juntas para nunca ficarem as
+ * duas ligadas. Só vale para o próximo "Gerar chave": rodadas já sorteadas não
+ * mudam sozinhas, porque podem ter placar lançado.
  */
 export async function updateTournamentDrawRules(
   tournamentId: string,
-  input: { noMalePairs: boolean },
+  input: { rule: DrawGenderRule },
 ): Promise<{ error?: string }> {
+  if (!['free', 'no_male_pairs', 'same_type'].includes(input.rule)) return { error: 'Regra de sorteio inválida.' }
   const ctx = await requireAdmin()
   if ('error' in ctx) return ctx
   const { orgId, adminClient } = ctx
@@ -486,7 +491,10 @@ export async function updateTournamentDrawRules(
 
   const { error } = await adminClient
     .from('tournaments')
-    .update({ draw_no_male_pairs: input.noMalePairs })
+    .update({
+      draw_no_male_pairs: input.rule === 'no_male_pairs',
+      draw_same_type: input.rule === 'same_type',
+    })
     .eq('id', tournamentId)
     .eq('organization_id', orgId)
   if (error) return { error: 'Erro ao salvar. Tente novamente.' }

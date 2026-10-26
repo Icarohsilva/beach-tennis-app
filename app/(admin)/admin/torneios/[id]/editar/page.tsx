@@ -25,7 +25,7 @@ export default async function EditarTorneioPage({ params }: PageProps) {
 
   const { data: tournament } = await adminClient
     .from('tournaments')
-    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type, shirt_sizes_enabled, shirt_names_enabled, level, sport, format, draw_no_male_pairs')
+    .select('id, name, date, description, rules, venue, start_time, registration_deadline, event_id, allowed_pair_genders, participant_type, shirt_sizes_enabled, shirt_names_enabled, level, sport, format, draw_no_male_pairs, draw_same_type')
     .eq('id', params.id)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -111,7 +111,9 @@ export default async function EditarTorneioPage({ params }: PageProps) {
       {((tournament.format as string | null) ?? 'americano') === 'americano' && (
         <TournamentDrawRulesCard
           tournamentId={params.id}
-          initialNoMalePairs={Boolean(tournament.draw_no_male_pairs)}
+          initialRule={
+            tournament.draw_no_male_pairs ? 'no_male_pairs' : tournament.draw_same_type ? 'same_type' : 'free'
+          }
           hasMatches={(matchCount ?? 0) > 0}
         />
       )}

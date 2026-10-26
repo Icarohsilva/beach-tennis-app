@@ -66,6 +66,11 @@ export interface GenerateOptions {
    * Exige `genders` de todos os jogadores.
    */
   noMalePairs?: boolean
+  /**
+   * Super: todo jogo do mesmo tipo, MM x MM, FF x FF ou misto x misto
+   * (`tournaments.draw_same_type`). Exige `genders` de todos os jogadores.
+   */
+  sameType?: boolean
   /** Gênero por jogador, para as regras de sorteio que dependem dele. */
   genders?: Record<string, Gender | null>
 }

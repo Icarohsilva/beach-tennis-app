@@ -12,6 +12,12 @@
 //   3. casa as duplas em confrontos evitando repetir adversário.
 // Mesmo número de rodadas e de jogos por rodada do Super comum.
 //
+// A mesma busca serve a segunda regra de gênero, "confrontos do mesmo tipo"
+// (`generateSameTypeAmericanoSchedule`): cada jogo é MM x MM, FF x FF ou misto x
+// misto, nunca dupla masculina contra mista ou feminina. Com 4 homens e 4
+// mulheres ela fecha perfeita: 3 rodadas de MM x MM + FF x FF e 4 de misto x
+// misto, e cada um joga uma vez com cada outro como parceiro.
+//
 // Puro e determinístico: a aleatoriedade fica na ordem de entrada, que a action
 // já sorteia antes de chamar.
 import type { Gender } from '@/types'
@@ -82,6 +88,35 @@ export function mixedDrawProblem(players: DrawPlayer[]): string | null {
   return null
 }
 
+/**
+ * A regra "confrontos do mesmo tipo" cabe nestes jogadores?
+ *
+ * Cada jogo usa um número PAR de homens (4, 2 ou 0) e de mulheres. Sem
+ * descanso (8, 12, 16 jogadores), isso pede homens em número par. Com 2 de
+ * fora por rodada (6, 10, 14), dá sempre, mas com homens em número ímpar
+ * descansa um homem em TODA rodada, e só fica justo se metade for homem (o
+ * mesmo número de descansos de todo mundo).
+ */
+export function sameTypeDrawProblem(players: DrawPlayer[]): string | null {
+  const n = players.length
+  if (n < 4 || n > 16 || n % 2 !== 0) return 'Super aceita apenas um número par de 4 a 16 jogadores.'
+  const unknown = players.filter((p) => p.gender !== 'M' && p.gender !== 'F').length
+  if (unknown > 0) {
+    return `${unknown} jogador(es) sem sexo no cadastro. Defina o sexo para sortear confrontos do mesmo tipo.`
+  }
+  const men = players.filter((p) => p.gender === 'M').length
+  const women = n - men
+  const { resting } = roundShape(n)
+  if (men % 2 === 1 && (resting === 0 || men !== women)) {
+    return (
+      `Com ${men} homens e ${women} mulheres não dá para todos os jogos serem do mesmo tipo ` +
+      '(MM x MM, FF x FF ou misto x misto) com todo mundo jogando o mesmo número de partidas: ' +
+      'é preciso um número par de homens. Escolha outra regra de sorteio ou ajuste os inscritos.'
+    )
+  }
+  return null
+}
+
 /** Quantas ordens de desempate são tentadas; fica a de melhor rodízio. */
 const ATTEMPTS = 24
 /**
@@ -94,7 +129,27 @@ const ATTEMPTS_BUDGET_MS = 1_200
 export function generateMixedAmericanoSchedule(players: DrawPlayer[]): RoundPlan[] {
   const problem = mixedDrawProblem(players)
   if (problem) throw new DrawRuleError(problem)
-  return searchSchedule(players.map((p) => ({ id: p.id, man: p.gender === 'M' })))
+  return searchSchedule(players.map((p) => ({ id: p.id, man: p.gender === 'M' })), 'no_male_pairs')
+}
+
+/** Super em que todo jogo é do mesmo tipo: MM x MM, FF x FF ou misto x misto. */
+export function generateSameTypeAmericanoSchedule(players: DrawPlayer[]): RoundPlan[] {
+  const problem = sameTypeDrawProblem(players)
+  if (problem) throw new DrawRuleError(problem)
+  const plan = searchSchedule(players.map((p) => ({ id: p.id, man: p.gender === 'M' })), 'same_type')
+  // A regra de descanso deixa o número de jogos igual; se a busca não achou,
+  // é melhor recusar do que gravar uma chave em que alguém joga a mais.
+  const plays = new Map<string, number>()
+  for (const round of plan) {
+    for (const g of round.matches) {
+      for (const id of [g.p1, g.partner1, g.p2, g.partner2]) if (id) plays.set(id, (plays.get(id) ?? 0) + 1)
+    }
+  }
+  const counts = players.map((p) => plays.get(p.id) ?? 0)
+  if (Math.max(...counts) !== Math.min(...counts)) {
+    throw new DrawRuleError('Não foi possível sortear confrontos do mesmo tipo com todos jogando o mesmo número de partidas.')
+  }
+  return plan
 }
 
 /**
@@ -103,7 +158,7 @@ export function generateMixedAmericanoSchedule(players: DrawPlayer[]): RoundPlan
  * jogos iguais (ver superRounds).
  */
 export function generateBalancedAmericanoSchedule(playerIds: string[]): RoundPlan[] {
-  return searchSchedule(playerIds.map((id) => ({ id, man: false })))
+  return searchSchedule(playerIds.map((id) => ({ id, man: false })), 'free')
 }
 
 interface SearchPlayer {
@@ -111,7 +166,10 @@ interface SearchPlayer {
   man: boolean
 }
 
-function searchSchedule(players: SearchPlayer[]): RoundPlan[] {
+/** Qual regra de gênero a busca obedece. */
+type DrawMode = 'free' | 'no_male_pairs' | 'same_type'
+
+function searchSchedule(players: SearchPlayer[], mode: DrawMode): RoundPlan[] {
   // A busca de cada rodada é gulosa (olha só o passado), e a ordem de desempate
   // muda o resultado. Tentar algumas ordens e ficar com a de menos repetição
   // custa milissegundos e tira repetições que a primeira ordem deixava.
@@ -119,7 +177,7 @@ function searchSchedule(players: SearchPlayer[]): RoundPlan[] {
   const deadline = Date.now() + ATTEMPTS_BUDGET_MS
   for (let k = 0; k < ATTEMPTS && (k === 0 || Date.now() < deadline); k++) {
     const order = k === 0 ? players.map((_, i) => i) : seededPermutation(players.length, k)
-    const attempt = buildSchedule(order.map((i) => players[i]))
+    const attempt = buildSchedule(order.map((i) => players[i]), mode)
     if (!best || attempt.score < best.score) best = attempt
     if (best.score === 0) break
   }
@@ -162,12 +220,14 @@ function seededPermutation(n: number, seed: number): number[] {
   return out
 }
 
-function buildSchedule(players: SearchPlayer[]): { plan: RoundPlan[]; score: number } {
+function buildSchedule(players: SearchPlayer[], mode: DrawMode): { plan: RoundPlan[]; score: number } {
   const n = players.length
   const isMan = players.map((p) => p.man)
   const { matches: perRound, resting: restSize } = roundShape(n)
   const totalMen = isMan.filter(Boolean).length
-  const menMustRest = Math.max(0, totalMen - perRound * 2)
+  // Sem dupla masculina, o homem que não cabe em quadra descansa. Nas outras
+  // regras não há teto de homem em quadra.
+  const menMustRest = mode === 'no_male_pairs' ? Math.max(0, totalMen - perRound * 2) : 0
 
   const plays = new Array<number>(n).fill(0)
   const lastRest = new Array<number>(n).fill(-1)
@@ -182,26 +242,40 @@ function buildSchedule(players: SearchPlayer[]): { plan: RoundPlan[]; score: num
       (a, b) => plays[b] - plays[a] || lastRest[a] - lastRest[b] || ((a - r + n) % n) - ((b - r + n) % n),
     )
     const resting = new Set<number>()
-    for (const i of restOrder) {
-      if (resting.size >= menMustRest) break
-      if (isMan[i]) resting.add(i)
-    }
-    for (const i of restOrder) {
-      if (resting.size >= restSize) break
-      resting.add(i)
+    if (mode === 'same_type' && restSize > 0) {
+      // Todo jogo usa homens e mulheres em número par, então quem joga também
+      // precisa ser par dos dois lados: com homens em número par descansam dois
+      // do mesmo sexo; com ímpar, um homem e uma mulher.
+      const first = restOrder[0]
+      const wantSame = totalMen % 2 === 0
+      const second = restOrder.find((j) => j !== first && (isMan[j] === isMan[first]) === wantSame)
+      resting.add(first)
+      if (second !== undefined) resting.add(second)
+    } else {
+      for (const i of restOrder) {
+        if (resting.size >= menMustRest) break
+        if (isMan[i]) resting.add(i)
+      }
+      for (const i of restOrder) {
+        if (resting.size >= restSize) break
+        resting.add(i)
+      }
     }
     const playing = Array.from({ length: n }, (_, i) => i).filter((i) => !resting.has(i))
 
-    // 2. Duplas sem MM, com o mínimo de parceiro repetido.
-    const pairs = bestPairing(playing, isMan, partnered)
+    // 2. Duplas dentro da regra, com o mínimo de parceiro repetido.
+    const pairs = bestPairing(playing, isMan, partnered, mode)
     if (!pairs) {
-      // Não acontece com mixedDrawProblem aprovado; a trava fica para nunca
-      // gravar uma rodada que quebre a regra.
-      throw new DrawRuleError(`Não foi possível montar a rodada ${r + 1} sem dupla masculina.`)
+      // Não acontece com a checagem de viabilidade aprovada; a trava fica para
+      // nunca gravar uma rodada que quebre a regra.
+      throw new DrawRuleError(`Não foi possível montar a rodada ${r + 1} dentro da regra de sorteio.`)
     }
 
     // 3. Confrontos com o mínimo de adversário repetido.
-    const games = bestMatchup(pairs, opposed)
+    const games = bestMatchup(pairs, opposed, mode === 'same_type' ? (a, b) => pairKind(a, isMan) === pairKind(b, isMan) : null)
+    if (games.length * 2 !== pairs.length) {
+      throw new DrawRuleError(`Não foi possível montar os confrontos da rodada ${r + 1} dentro da regra de sorteio.`)
+    }
 
     const matchPlans: MatchPlan[] = games.map(([a, b]) => ({
       p1: players[a[0]].id,
@@ -235,10 +309,16 @@ function buildSchedule(players: SearchPlayer[]): { plan: RoundPlan[]; score: num
  * mulher, é o que mais restringe), parceiros mais "novos" primeiro, para a
  * primeira solução já ser boa e a poda cortar o resto.
  */
+/** Tipo da dupla pelo número de homens: 0 = feminina, 1 = mista, 2 = masculina. */
+function pairKind(pair: [number, number], isMan: boolean[]): number {
+  return Number(isMan[pair[0]]) + Number(isMan[pair[1]])
+}
+
 function bestPairing(
   playing: number[],
   isMan: boolean[],
   partnered: number[][],
+  mode: DrawMode,
 ): [number, number][] | null {
   const order = [...playing].sort((a, b) => Number(isMan[b]) - Number(isMan[a]))
   const used = new Set<number>()
@@ -256,13 +336,35 @@ function bestPairing(
     nodes++
     const first = order.find((i) => !used.has(i))
     if (first === undefined) {
+      // Confrontos do mesmo tipo: cada tipo de dupla precisa de um par para
+      // enfrentar, então a quantidade de cada tipo tem de ser par.
+      if (mode === 'same_type') {
+        const kinds = [0, 0, 0]
+        for (const p of current) kinds[pairKind(p, isMan)]++
+        if (kinds.some((k) => k % 2 !== 0)) return
+      }
       bestCost = acc
       best = current.map((p) => [p[0], p[1]])
       return
     }
+    // Os homens vêm primeiro na ordem; quando o próximo é mulher, todas as
+    // duplas com homem já estão feitas. Em "mesmo tipo", masculinas e mistas
+    // têm de estar em número par AQUI: o que falta são só femininas, que não
+    // mudam essas contas. Cortar agora evita varrer todas as combinações de
+    // mulheres de um ramo que nunca fecha (2 homens juntos com 14 mulheres
+    // estourava o teto de nós sem achar nada).
+    if (mode === 'same_type' && !isMan[first]) {
+      let maleOrMixed = [0, 0]
+      for (const p of current) {
+        const kind = pairKind(p, isMan)
+        if (kind === 2) maleOrMixed = [maleOrMixed[0] + 1, maleOrMixed[1]]
+        if (kind === 1) maleOrMixed = [maleOrMixed[0], maleOrMixed[1] + 1]
+      }
+      if (maleOrMixed[0] % 2 !== 0 || maleOrMixed[1] % 2 !== 0) return
+    }
     used.add(first)
     const candidates = order
-      .filter((j) => !used.has(j) && !(isMan[first] && isMan[j]))
+      .filter((j) => !used.has(j) && !(mode === 'no_male_pairs' && isMan[first] && isMan[j]))
       .sort((a, b) => cost(first, a) - cost(first, b))
     for (const j of candidates) {
       used.add(j)
@@ -283,6 +385,7 @@ function bestPairing(
 function bestMatchup(
   pairs: [number, number][],
   opposed: number[][],
+  canFace: ((a: [number, number], b: [number, number]) => boolean) | null,
 ): [[number, number], [number, number]][] {
   let best: [[number, number], [number, number]][] = []
   let bestCost = Infinity
@@ -306,6 +409,7 @@ function bestMatchup(
     used[first] = true
     for (let j = first + 1; j < pairs.length; j++) {
       if (used[j]) continue
+      if (canFace && !canFace(pairs[first], pairs[j])) continue
       used[j] = true
       current.push([pairs[first], pairs[j]])
       dfs(acc + cost(pairs[first], pairs[j]))
