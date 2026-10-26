@@ -32,6 +32,7 @@ import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
 import type { ShirtRow, ShirtSize } from '@/lib/torneios/shirt'
 import { SendAccessButton } from './SendAccessButton'
+import { SetGenderButtons } from './SetGenderButtons'
 import { CopyPaymentLinkButton } from './CopyPaymentLinkButton'
 import { ExportMatchesButton } from '@/features/torneios/ExportMatchesButton'
 import { matchesToSheet } from '@/lib/torneios/matchExport'
@@ -89,7 +90,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       partner_payment_status, partner_discount_pct, partner_final_price_cents, partner_receipt_url,
       entry_status, offer_expires_at, shirt_size, partner_shirt_size, shirt_name, partner_shirt_name,
       player:profiles!tournament_entries_player_id_fkey(id, full_name, gender, phone),
-      partner:profiles!tournament_entries_partner_id_fkey(id, full_name, phone)`)
+      partner:profiles!tournament_entries_partner_id_fkey(id, full_name, gender, phone)`)
     .eq('tournament_id', params.id)
     .order('created_at', { ascending: true })
 
@@ -110,7 +111,7 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
     shirt_name: string | null
     partner_shirt_name: string | null
     player: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
-    partner: { id: string; full_name: string; phone: string | null } | { id: string; full_name: string; phone: string | null }[] | null
+    partner: { id: string; full_name: string; gender: string | null; phone: string | null } | { id: string; full_name: string; gender: string | null; phone: string | null }[] | null
   }
   const entries = (entriesRaw ?? []) as unknown as EntryRow[]
 
@@ -357,6 +358,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const offeredEntries = entries.filter((e) => e.entry_status === 'offered')
   const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
   const maxPlayers = t.max_players
+  // Inscrito sem sexo no cadastro: o admin define ali mesmo. A ficha de
+  // /admin/alunos não abre para atleta (quem veio pelo link do torneio).
+  const canSetGender = t.status !== 'finished'
 
   // Contatos para o grupo do WhatsApp: uma linha por PESSOA (em dupla fixa são
   // duas por inscrição). Vaga oferecida conta como fila: ainda não aceitou.
@@ -546,6 +550,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                       name={p?.full_name ?? entry.player_id}
                       className="block text-sm font-medium text-white"
                     />
+                    {p && !p.gender && canSetGender && (
+                      <SetGenderButtons tournamentId={t.id} profileId={p.id} name={p.full_name} />
+                    )}
                     <p className="text-xs text-slate-400 mt-0.5">{inviteLabel}</p>
                     {t.status === 'open' && (
                       <PairFixControls entryId={entry.id} hasPartner={false} candidates={pairCandidates} />
@@ -604,6 +611,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           name={p?.full_name ?? entry.player_id}
                           className="block text-sm font-medium text-white"
                         />
+                        {p && !p.gender && canSetGender && (
+                          <SetGenderButtons tournamentId={t.id} profileId={p.id} name={p.full_name} />
+                        )}
                         {p && (
                           <SendAccessButton
                             tournamentId={t.id}
@@ -623,6 +633,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                             {entry.partner_payment_status === 'paid' && (
                               <span className="ml-1 text-green-400">· pago</span>
                             )}
+                        {pt && !pt.gender && canSetGender && (
+                          <SetGenderButtons tournamentId={t.id} profileId={pt.id} name={pt.full_name} />
+                        )}
                             {entry.partner_payment_status === 'pending' && (
                               <span className="ml-1 text-yellow-400">
                                 · pendente R$ {(entry.partner_final_price_cents / 100).toFixed(2).replace('.', ',')}
@@ -760,6 +773,9 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                           name={p?.full_name ?? entry.player_id}
                           className="block text-sm font-medium text-white"
                         />
+                        {p && !p.gender && canSetGender && (
+                          <SetGenderButtons tournamentId={t.id} profileId={p.id} name={p.full_name} />
+                        )}
                         {expired ? (
                           <span className="text-xs text-slate-400 bg-slate-800 rounded px-1.5 py-0.5 mt-1 inline-block">
                             Expirada, será reprocessada na próxima ação
@@ -822,6 +838,12 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
                         {new Date(entry.created_at).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
+                    {p && !p.gender && canSetGender && (
+                      <SetGenderButtons tournamentId={t.id} profileId={p.id} name={p.full_name} />
+                    )}
+                    {pt && !pt.gender && canSetGender && (
+                      <SetGenderButtons tournamentId={t.id} profileId={pt.id} name={pt.full_name} />
+                    )}
                     {canPlace && (
                       <div className="mt-2 flex flex-wrap items-start gap-2">
                         {p?.phone && (

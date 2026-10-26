@@ -581,7 +581,7 @@ export async function generateBracket(
     const missing = profiles.filter((p) => p.gender !== 'M' && p.gender !== 'F').map((p) => p.full_name ?? 'Sem nome')
     if (missing.length > 0) {
       return {
-        error: `O sorteio sem dupla masculina precisa do gênero de todos. Complete na ficha de: ${missing.join(', ')}.`,
+        error: `O sorteio sem dupla masculina precisa do sexo de todos. Defina na lista de inscritos (botões Masculino/Feminino) de: ${missing.join(', ')}.`,
       }
     }
   }

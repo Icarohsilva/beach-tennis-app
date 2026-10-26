@@ -12,7 +12,7 @@ import { presentOrNull } from '@/lib/torneios/content'
 import { canonicalizePairGenders } from '@/lib/torneios/pairRules'
 import { shirtConfig, validateShirtName, validateShirtSize } from '@/lib/torneios/shirt'
 import { LEVEL_ORDER } from '@/lib/torneios/sportProfile'
-import type { PairGenders } from '@/types'
+import type { Gender, PairGenders } from '@/types'
 
 async function requireAdmin(): Promise<
   { orgId: string; adminClient: ReturnType<typeof createAdminClient> } | { error: string }
@@ -536,6 +536,50 @@ export async function updateTournamentWhatsAppGroup(
   // O botão "Entrar no grupo" mora na página do aluno.
   revalidatePath(`/torneios/${tournamentId}`)
   return { url }
+}
+
+/**
+ * Define o sexo de um inscrito que não tem no cadastro.
+ *
+ * Existe porque quem entra pelo link do torneio vira ATLETA, e a ficha de
+ * `/admin/alunos/[id]` (onde fica o campo Gênero) só abre para aluno. Sem o
+ * sexo, a categoria não confere a regra e o sorteio "sem dupla masculina"
+ * recusa gerar. Só preenche quem está em branco: o cadastro é da pessoa, e a
+ * arena não sobrescreve o que ela mesma informou.
+ */
+export async function setParticipantGender(
+  tournamentId: string,
+  profileId: string,
+  gender: Gender,
+): Promise<{ error?: string }> {
+  const ctx = await requireAdmin()
+  if ('error' in ctx) return ctx
+  const { orgId, adminClient } = ctx
+  if (gender !== 'M' && gender !== 'F') return { error: 'Escolha masculino ou feminino.' }
+
+  // A pessoa tem de estar NESTE torneio, desta arena: sem isso, um id copiado
+  // deixaria o admin de uma arena mexer no cadastro de qualquer usuário.
+  const { data: entry } = await adminClient
+    .from('tournament_entries')
+    .select('id')
+    .eq('tournament_id', tournamentId)
+    .eq('organization_id', orgId)
+    .or(`player_id.eq.${profileId},partner_id.eq.${profileId}`)
+    .limit(1)
+    .maybeSingle()
+  if (!entry) return { error: 'Esta pessoa não está inscrita neste torneio.' }
+
+  const { data: updated, error } = await adminClient
+    .from('profiles')
+    .update({ gender })
+    .eq('id', profileId)
+    .is('gender', null)
+    .select('id')
+  if (error) return { error: 'Erro ao salvar. Tente novamente.' }
+  if (!updated || updated.length === 0) return { error: 'O sexo desta pessoa já está no cadastro.' }
+
+  revalidatePath(`/admin/torneios/${tournamentId}`)
+  return {}
 }
 
 export async function updateTournamentLevel(

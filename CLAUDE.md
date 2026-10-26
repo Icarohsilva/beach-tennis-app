@@ -688,7 +688,10 @@ A aba "Vídeo" virou **Liga** (`/liga`; `/video` redireciona), com o vídeo como
   parceiro repetido; com 3 e 7 cada homem repete uma parceira (8 jogos, 7 mulheres), e as
   repetições que sobram em outros casos são o piso que a própria regra impõe (poucas
   mulheres para muitos homens). A regra **não é quebrada nunca**: gênero em
-  branco recusa o sorteio dizendo de quem falta (`generateBracket`), e homem demais para as
+  branco recusa o sorteio dizendo de quem falta (`generateBracket`), e o admin define ali mesmo,
+  na lista de inscritos (`SetGenderButtons` → `setParticipantGender`, que só preenche quem está
+  em branco e só para inscrito daquele torneio): a ficha de `/admin/alunos/[id]` não abre para
+  ATLETA, e quem chega pelo link do torneio é atleta. E homem demais para as
   vagas de homem em quadra (`mixedDrawProblem`) recusa com a conta, em vez de gerar. Recusa
   também quando os homens que não cabem em quadra descansariam em toda rodada (10 com 6
   homens, 6 com 4, 14 com 8): as mulheres jogariam mais partidas que eles.
