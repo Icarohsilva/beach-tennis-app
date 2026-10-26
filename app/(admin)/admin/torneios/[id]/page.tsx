@@ -25,6 +25,8 @@ import { PairFixControls } from './PairFixControls'
 import { MoveEntryControl, type MoveTarget } from './MoveEntryControl'
 import { PlaceFromWaitlistButton } from './PlaceFromWaitlistButton'
 import { ImportEntrantsCard } from './ImportEntrantsCard'
+import { WhatsAppGroupCard } from './WhatsAppGroupCard'
+import type { TournamentContact } from '@/lib/torneios/whatsappGroup'
 import { buildWaitlistInterestMessage } from '@/lib/torneios/contactMessage'
 import { EnrollParticipantCard } from './EnrollParticipantCard'
 import { ShirtsCard } from './ShirtsCard'
@@ -355,6 +357,18 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
   const offeredEntries = entries.filter((e) => e.entry_status === 'offered')
   const waitlistEntries = entries.filter((e) => e.entry_status === 'waitlist')
   const maxPlayers = t.max_players
+
+  // Contatos para o grupo do WhatsApp: uma linha por PESSOA (em dupla fixa são
+  // duas por inscrição). Vaga oferecida conta como fila: ainda não aceitou.
+  const groupContacts: TournamentContact[] = entries.flatMap((e) => {
+    const status = e.entry_status === 'confirmed' ? 'confirmed' : 'waitlist'
+    const p = normalizeProf(e.player)
+    const pt = normalizeProf(e.partner)
+    const rows: TournamentContact[] = []
+    if (p) rows.push({ name: p.full_name, phone: p.phone, status, payment: status === 'confirmed' ? e.payment_status : null })
+    if (pt) rows.push({ name: pt.full_name, phone: pt.phone, status, payment: status === 'confirmed' ? e.partner_payment_status : null })
+    return rows
+  })
   // Vaga livre para tirar alguém da fila. Quem ainda não pagou continua dono
   // da vaga até o admin cancelar por falta de pagamento: a fila não passa por
   // cima de inscrito (placeFromWaitlist confere de novo no servidor).
@@ -477,6 +491,14 @@ export default async function AdminTorneioDetailPage({ params }: PageProps) {
       {(t.status === 'draft' || t.status === 'open') && t.participant_type !== 'dupla_fixa' && (
         <ImportEntrantsCard tournamentId={t.id} />
       )}
+
+      <WhatsAppGroupCard
+        tournamentId={t.id}
+        tournamentName={t.name}
+        orgName={orgName}
+        groupUrl={t.whatsapp_group_url ?? null}
+        contacts={groupContacts}
+      />
 
       <PhotosCard tournamentId={t.id} photos={photos} />
 
