@@ -529,6 +529,11 @@ export interface Tournament {
    * Ver lib/torneios/schedule/americanoMixed.ts.
    */
   draw_no_male_pairs?: boolean
+  /**
+   * Super: todo jogo do mesmo tipo (MM x MM, FF x FF, misto x misto). Exclusiva
+   * com `draw_no_male_pairs`.
+   */
+  draw_same_type?: boolean
   /** Convite do grupo do WhatsApp (chat.whatsapp.com/...). Só para inscritos. */
   whatsapp_group_url?: string | null
   status: TournamentStatus

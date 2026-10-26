@@ -90,3 +90,19 @@ describe('Super com noMalePairs', () => {
     }
   })
 })
+
+describe('Super com sameType', () => {
+  it('o motor do americano passa a sortear só confrontos do mesmo tipo', () => {
+    const ids = ['h1', 'h2', 'h3', 'h4', 'm1', 'm2', 'm3', 'm4']
+    const genders = Object.fromEntries(ids.map((id) => [id, id.startsWith('h') ? 'M' : 'F'])) as Record<string, 'M' | 'F'>
+    const men = (a: string | null, b: string | null) => Number(genders[a!] === 'M') + Number(genders[b!] === 'M')
+    const plan = FORMATS.americano.generate(
+      ids.map((playerId) => ({ playerId, partnerId: null })),
+      { sameType: true, genders },
+    )
+    expect(plan).toHaveLength(7)
+    for (const round of plan) {
+      for (const g of round.matches) expect(men(g.p1, g.partner1)).toBe(men(g.p2, g.partner2))
+    }
+  })
+})

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { DrawRuleError, generateMixedAmericanoSchedule, mixedDrawProblem, type DrawPlayer } from './americanoMixed'
+import {
+  DrawRuleError,
+  generateMixedAmericanoSchedule,
+  generateSameTypeAmericanoSchedule,
+  mixedDrawProblem,
+  sameTypeDrawProblem,
+  type DrawPlayer,
+} from './americanoMixed'
 
 function roster(men: number, women: number): DrawPlayer[] {
   return [
@@ -91,5 +98,64 @@ describe('generateMixedAmericanoSchedule', () => {
   it('jogador sem gênero no cadastro: avisa', () => {
     const players = [...roster(1, 2), { id: 'x', gender: null }]
     expect(mixedDrawProblem(players)).toContain('sem gênero')
+  })
+})
+
+describe('generateSameTypeAmericanoSchedule (confrontos do mesmo tipo)', () => {
+  /** 0 = dupla feminina, 1 = mista, 2 = masculina. */
+  function kindsOf(players: DrawPlayer[]) {
+    const male = new Set(players.filter((p) => p.gender === 'M').map((p) => p.id))
+    const plan = generateSameTypeAmericanoSchedule(players)
+    const plays = new Map<string, number>()
+    const partners = new Map<string, number>()
+    let mismatched = 0
+    for (const round of plan) {
+      for (const g of round.matches) {
+        const k1 = Number(male.has(g.p1!)) + Number(male.has(g.partner1!))
+        const k2 = Number(male.has(g.p2!)) + Number(male.has(g.partner2!))
+        if (k1 !== k2) mismatched++
+        for (const [a, b] of [[g.p1!, g.partner1!], [g.p2!, g.partner2!]]) {
+          const key = [a, b].sort().join('+')
+          partners.set(key, (partners.get(key) ?? 0) + 1)
+        }
+        for (const id of [g.p1!, g.partner1!, g.p2!, g.partner2!]) plays.set(id, (plays.get(id) ?? 0) + 1)
+      }
+    }
+    const counts = players.map((p) => plays.get(p.id) ?? 0)
+    return {
+      plan,
+      mismatched,
+      min: Math.min(...counts),
+      max: Math.max(...counts),
+      repeated: Array.from(partners.values()).filter((v) => v > 1).length,
+    }
+  }
+
+  it('4 homens e 4 mulheres: só MM x MM, FF x FF e misto x misto, 7 jogos cada, ninguém repete parceiro', () => {
+    const r = kindsOf(roster(4, 4))
+    expect(r.plan).toHaveLength(7)
+    expect(r.mismatched).toBe(0)
+    expect(r.min).toBe(7)
+    expect(r.max).toBe(7)
+    expect(r.repeated).toBe(0)
+  })
+
+  it('nunca mistura tipos e todos jogam o mesmo número de partidas, em todo Super que a regra aceita', () => {
+    for (let n = 4; n <= 16; n += 2) {
+      for (let men = 0; men <= n; men++) {
+        const players = roster(men, n - men)
+        if (sameTypeDrawProblem(players)) continue
+        const r = kindsOf(players)
+        expect(r.mismatched, `${men}H/${n - men}M`).toBe(0)
+        expect(r.max - r.min, `${men}H/${n - men}M`).toBe(0)
+      }
+    }
+  }, 60_000)
+
+  it('recusa quando não fecha: homens em número ímpar (exceto meio a meio com descanso) e sexo em branco', () => {
+    expect(sameTypeDrawProblem(roster(3, 5))).toContain('número par de homens')
+    expect(() => generateSameTypeAmericanoSchedule(roster(3, 5))).toThrow(DrawRuleError)
+    expect(sameTypeDrawProblem(roster(5, 5))).toBeNull()
+    expect(sameTypeDrawProblem([...roster(2, 1), { id: 'x', gender: null }])).toContain('sem sexo')
   })
 })
