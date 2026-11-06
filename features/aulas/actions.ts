@@ -20,7 +20,12 @@ import { ensureClassDebt } from '@/features/financeiro/classDebt'
 import { syncLigaAttendancePoints } from '@/features/liga/attendancePoints'
 import { getApprovedVacations } from './vacationQueries'
 import { isOnVacation } from '@/lib/aulas/vacation'
-import { resolveClassAccess, exceedsDailyCap, resolveEnrollmentRejoin } from '@/lib/utils/accessRules'
+import {
+  resolveClassAccess,
+  exceedsDailyCap,
+  resolveEnrollmentRejoin,
+  NEEDS_PLAN_OR_CREDIT_MESSAGE,
+} from '@/lib/utils/accessRules'
 import { findEnrollmentRejoin } from './sessionUtils'
 import { getMembershipFor, resolveStudentClassAccess } from './classAccessQuery'
 import { getActivePlan } from '@/lib/billing/planEligibility'
@@ -332,6 +337,9 @@ export async function bookSessionAs(
           ? `Você já usou suas ${access.quotaLimit ?? 0} aulas ${periodo}. Pode entrar usando 1 crédito avulso.`
           : `Você já usou suas ${access.quotaLimit ?? 0} aulas ${periodo}. Cancele uma aula futura ou compre uma avulsa.`,
       }
+    }
+    if (decision.denied === 'needs_plan_or_credit') {
+      return { error: NEEDS_PLAN_OR_CREDIT_MESSAGE }
     }
     if (decision.denied === 'archived') {
       return { error: 'Seu cadastro nesta academia está inativo. Fale com a academia para voltar a agendar.' }

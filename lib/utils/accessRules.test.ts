@@ -366,6 +366,39 @@ describe('resolveClassAccess — férias', () => {
   })
 })
 
+describe('resolveClassAccess — sem plano e sem crédito', () => {
+  // A chave nasce ausente, e ausente é "pode": todo aluno novo é per_class e há
+  // academia que vive de cobrar a avulsa depois da aula.
+  it('chave ausente: entra devendo, como sempre', () => {
+    expect(resolveClassAccess(base)).toEqual({ grant: 'debt' })
+  })
+
+  it('academia desligou: pede plano ou crédito', () => {
+    expect(resolveClassAccess({ ...base, payLaterAllowed: false })).toEqual({
+      denied: 'needs_plan_or_credit',
+    })
+  })
+
+  it('com a cota ligada também pede plano ou crédito', () => {
+    expect(resolveClassAccess({ ...base, quotaEnforced: true, payLaterAllowed: false })).toEqual({
+      denied: 'needs_plan_or_credit',
+    })
+  })
+
+  it('crédito, plano e parceiro continuam entrando', () => {
+    const off = { ...base, payLaterAllowed: false }
+    expect(resolveClassAccess({ ...off, creditsBalance: 1 })).toEqual({ grant: 'credit' })
+    expect(resolveClassAccess({ ...off, hasActivePlan: true })).toEqual({ grant: 'plan' })
+    expect(resolveClassAccess({ ...off, partner: 'wellhub' })).toEqual({ grant: 'partner' })
+  })
+
+  it('dívida aberta continua sendo o motivo dito primeiro', () => {
+    expect(resolveClassAccess({ ...base, payLaterAllowed: false, hasOpenDebt: true })).toEqual({
+      denied: 'blocked_by_debt',
+    })
+  })
+})
+
 describe('resolveEnrollmentRejoin', () => {
   it('saída que não gerou crédito: volta grátis', () => {
     expect(resolveEnrollmentRejoin({ creditRefunded: false, creditsBalance: 0 })).toBe('free')

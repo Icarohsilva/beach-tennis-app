@@ -189,3 +189,22 @@ describe('buildClassRules — blocos que dependem da academia', () => {
     expect(texto({ ...BASE, plan: null })).not.toContain('você escolhe na hora')
   })
 })
+
+describe('buildClassRules — sem plano', () => {
+  const semPlano: ClassRulesInput = { ...BASE, plan: null }
+
+  it('academia que deixa pagar depois: avisa que a aula entra como avulsa', () => {
+    expect(texto(semPlano)).toContain('a aula entra como avulsa')
+  })
+
+  it('academia que não deixa: avisa que precisa de plano ou crédito', () => {
+    const t = texto({ ...semPlano, payLaterAllowed: false })
+    expect(t).toContain('Sem plano, você agenda com crédito')
+    expect(t).not.toContain('entra como avulsa')
+  })
+
+  it('quem tem plano ou parceiro não lê nenhuma das duas', () => {
+    expect(texto({ ...BASE, payLaterAllowed: false })).not.toContain('Sem plano')
+    expect(texto({ ...semPlano, isPartner: true, payLaterAllowed: false })).not.toContain('Sem plano')
+  })
+})

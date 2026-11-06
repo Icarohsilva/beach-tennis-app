@@ -12,6 +12,7 @@ import { SelfCheckinForm } from './SelfCheckinForm'
 import { AppCheckinForm } from './AppCheckinForm'
 import { isWellhubIntegrationConnected } from '@/features/checkin/appCheckinQueries'
 import { APP_CHECKIN_SETTING } from '@/lib/checkin/appCheckin'
+import { PAY_LATER_SETTING } from '@/features/aulas/quotaSettings'
 import { RequestDeletionButton } from '@/features/account/RequestDeletionButton'
 
 import { DEFAULT_CHECKIN_TARGET } from '@/lib/checkin/orgCheckinTarget'
@@ -62,6 +63,8 @@ export default async function ConfiguracoesPage() {
     pix_key: map.get('pix_key') ?? '',
     pix_key_owner: map.get('pix_key_owner') ?? '',
     debt_block_grace_days: Number(map.get('debt_block_grace_days') ?? 7),
+    // Ausente = ligado: é o comportamento de antes da chave (ver isPayLaterAllowed).
+    pay_later_booking_enabled: map.get(PAY_LATER_SETTING) !== 'false',
   }
 
   const videoFeedUrl = map.get('video_feed_url') ?? ''
@@ -158,7 +161,8 @@ export default async function ConfiguracoesPage() {
       <div>
         <h2 className="text-lg font-bold text-white">Cobrança de aulas avulsas</h2>
         <p className="text-slate-400 text-sm mt-1">
-          Chave PIX para o aluno pagar aulas em aberto e a carência antes de bloquear novos agendamentos.
+          Se quem não tem plano pode agendar e pagar depois, a chave PIX para o aluno pagar aulas
+          em aberto e a carência antes de bloquear novos agendamentos.
         </p>
       </div>
       <CobrancaForm settings={cobranca} />

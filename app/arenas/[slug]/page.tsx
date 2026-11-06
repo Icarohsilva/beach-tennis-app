@@ -13,8 +13,8 @@ import Link from 'next/link'
 // AtSign e não um ícone do Instagram: o lucide desta versão não traz ícones de
 // marca, e um "@" diz a mesma coisa sem imagem de terceiro no bundle.
 import { AtSign, CalendarDays, Clock, MapPin, Megaphone, Sun, Trophy } from 'lucide-react'
-import { createAdminClient, getMemberships } from '@/lib/supabase/server'
-import { getOpenTrialSessions } from '@/lib/arenas/sessions'
+import { createAdminClient, getAuthUser, getMemberships } from '@/lib/supabase/server'
+import { getTrialSchedule } from '@/lib/arenas/sessions'
 import { getArenaShowcase } from '@/features/torneios/eventQueries'
 import { getRecentOrgPhotos } from '@/features/torneios/photoQueries'
 import { sportChip } from '@/lib/torneios/sportProfile'
@@ -117,15 +117,23 @@ export default async function ArenaPage({ params }: PageProps) {
 
   const today = brtToday(new Date()) // BRT: em servidor UTC o "hoje" cru virava amanhã depois das 21h
 
-  const [showcase, sessions, photos, memberships, dayUsePricing] = await Promise.all([
+  const [showcase, trialDays, photos, memberships, dayUsePricing, viewer] = await Promise.all([
     getArenaShowcase(org.id, today),
-    getOpenTrialSessions(org.id),
+    getTrialSchedule(org.id),
     getRecentOrgPhotos(org.id, 6),
     getMemberships(),
     // Preço do day use pela mesma resolução do checkout: a vitrine não pode
     // anunciar um valor e a reserva cobrar outro.
     getDayUsePricing(org.id),
+    getAuthUser(),
   ])
+
+  // Logado, a experimental só pede o CPF: a conta já existe.
+  const viewerName = viewer
+    ? ((
+        await createAdminClient().from('profiles').select('full_name').eq('id', viewer.id).maybeSingle()
+      ).data?.full_name?.trim() || viewer.email || 'você')
+    : null
 
   // Quem já é da casa tem a lista completa em /agendar/dayuse. Visitante não é
   // mais mandado para /cadastro: cada horário agora tem página pública própria
@@ -398,19 +406,25 @@ export default async function ArenaPage({ params }: PageProps) {
         <section className="mt-6">
           <SectionTitle icon={CalendarDays}>Aula experimental</SectionTitle>
           <Card>
-            {sessions.length === 0 ? (
+            {trialDays.length === 0 ? (
               <div className="py-6 text-center">
                 <p className="mb-1 text-sm text-slate-400">
-                  Nenhuma sessão disponível nos próximos 30 dias.
+                  Nenhuma aula na grade dos próximos dias.
                 </p>
                 <p className="text-xs text-slate-500">Fale com a arena para combinar uma data.</p>
               </div>
             ) : (
               <>
                 <p className="mb-3 text-xs text-slate-400">
-                  Gratuita na primeira vez. Sem precisar criar conta.
+                  Gratuita, uma por pessoa. Ao marcar você ganha acesso ao app da arena e a aula
+                  já entra na sua agenda.
                 </p>
-                <TrialBookingForm organizationId={org.id} sessions={sessions} />
+                <TrialBookingForm
+                  organizationId={org.id}
+                  days={trialDays}
+                  viewerName={viewerName}
+                  loginHref={`/login?next=${encodeURIComponent(`/arenas/${org.slug}`)}`}
+                />
               </>
             )}
           </Card>

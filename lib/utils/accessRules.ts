@@ -15,8 +15,14 @@ export type AccessDenial =
   | 'blocked_by_missed_checkins'
   | 'quota_exhausted'
   | 'daily_cap'
+  // Sem plano, sem crédito e a academia não deixa agendar para pagar depois.
+  | 'needs_plan_or_credit'
 
 export type AccessDecision = { grant: AccessGrant } | { denied: AccessDenial }
+
+/** Texto de `needs_plan_or_credit`, igual na reserva, na fila e no calendário. */
+export const NEEDS_PLAN_OR_CREDIT_MESSAGE =
+  'Para agendar aulas você precisa de um plano ou de créditos. Escolha um em Financeiro.'
 
 /**
  * O aluno estourou o teto de aulas no dia?
@@ -87,6 +93,17 @@ export interface AccessInput {
    * vaga que o plano dele já vendeu.
    */
   preferCredit: boolean
+  /**
+   * A academia deixa quem não tem plano nem crédito agendar e pagar a aula
+   * depois (`grant: 'debt'`)? `system_settings.pay_later_booking_enabled`.
+   *
+   * Ausente = sim, que é o comportamento de sempre: todo aluno novo nasce
+   * `payment_type = per_class`, e há academia que vive de cobrar a avulsa depois
+   * da aula. Desligado, esse aluno continua VENDO as aulas no calendário, mas
+   * agendar pede plano ou crédito (`needs_plan_or_credit`). É o caso de quem
+   * entrou pela aula experimental: ganhou acesso, não ganhou aula de graça.
+   */
+  payLaterAllowed?: boolean
 }
 
 /**
@@ -147,12 +164,17 @@ export function resolveClassAccess(input: AccessInput): AccessDecision {
     // Plano exausto não vira dívida: cobrar avulsa de quem tem plano não é o
     // que a academia quer. Quem nunca teve plano segue no caminho de baixo.
     if (input.hasActivePlan) return { denied: 'quota_exhausted' }
-    return { grant: 'debt' }
+    return payLater(input)
   }
 
   if (input.hasActivePlan) return { grant: 'plan' }
   if (input.creditsBalance >= 1) return { grant: 'credit' }
-  return { grant: 'debt' }
+  return payLater(input)
+}
+
+/** Último degrau: sem plano e sem crédito, entra devendo só se a academia deixa. */
+function payLater(input: AccessInput): AccessDecision {
+  return input.payLaterAllowed === false ? { denied: 'needs_plan_or_credit' } : { grant: 'debt' }
 }
 
 /**

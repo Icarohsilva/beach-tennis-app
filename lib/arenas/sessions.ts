@@ -1,91 +1,78 @@
 // lib/arenas/sessions.ts
-// Lista as sessões dos próximos 30 dias de UMA academia, abertas para aula
-// experimental: status 'scheduled', turma ativa, adulto (type != 'kids'), com vaga.
+// A grade da aula experimental de UMA academia: as sessões já geradas para os
+// próximos dias, com a ocupação de cada uma. A regra (o que entra, ordem, vaga ou
+// lotado) é pura e mora em lib/arenas/trialSchedule.ts.
 // TODA query é escopada por organization_id (service role ignora RLS).
 
 import { createAdminClient } from '@/lib/supabase/server'
-import type { ClassSession, Class } from '@/types'
 import { brtToday, addDaysStr } from '@/lib/utils/gridSchedule'
-import { resolveSession } from '@/lib/aulas/sessionOverride'
+import { chunk, fetchAllPages, IN_CHUNK_SIZE } from '@/lib/supabase/paginate'
+import { buildTrialSchedule, type TrialDay, type TrialSessionRow } from './trialSchedule'
 
-export interface TrialSessionOption {
-  id: string
-  session_date: string
-  class_name: string
-  start_time: string
-  end_time: string
-  level: string
-  spots_left: number
-}
+/**
+ * Janela mostrada. A grade é gerada por semana, então duas semanas cobrem a
+ * semana corrente e a próxima já gerada, sem virar uma lista sem fim no celular.
+ */
+export const TRIAL_WINDOW_DAYS = 14
 
-export async function getOpenTrialSessions(orgId: string): Promise<TrialSessionOption[]> {
+export async function getTrialSchedule(orgId: string, now: Date = new Date()): Promise<TrialDay[]> {
   const admin = createAdminClient()
 
   // BRT: com o UTC cru, as sessões de hoje saíam da vitrine da arena depois das 21h.
-  const today = brtToday(new Date())
-  const in30 = addDaysStr(today, 30)
+  const today = brtToday(now)
+  const until = addDaysStr(today, TRIAL_WINDOW_DAYS - 1)
 
-  const { data: sessions } = await admin
-    .from('class_sessions')
-    .select(
-      'id, session_date, status, start_time, end_time, court, max_students, class:classes(id, name, level, type, start_time, end_time, max_students, court, is_active)',
+  const rows = await fetchAllPages<TrialSessionRow>(
+    (from, to) =>
+      admin
+        .from('class_sessions')
+        .select(
+          'id, session_date, status, start_time, end_time, court, max_students, class:classes(name, level, type, start_time, end_time, max_students, court, is_active, gender_restriction)',
+        )
+        .eq('organization_id', orgId)
+        .eq('status', 'scheduled')
+        .gte('session_date', today)
+        .lte('session_date', until)
+        .order('id')
+        .range(from, to) as unknown as PromiseLike<{ data: TrialSessionRow[] | null; error: { message: string } | null }>,
+    { label: 'arenas/trialSchedule' },
+  )
+  // O embed volta como objeto ou como lista de um, conforme o PostgREST infere a FK.
+  const sessions = rows.map((s) => ({
+    ...s,
+    class: Array.isArray(s.class) ? (s.class[0] ?? null) : s.class,
+  }))
+  if (sessions.length === 0) return []
+
+  const occupied = new Map<string, number>()
+  const add = (id: string) => occupied.set(id, (occupied.get(id) ?? 0) + 1)
+
+  for (const ids of chunk(sessions.map((s) => s.id), IN_CHUNK_SIZE)) {
+    const bookings = await fetchAllPages<{ id: string; session_id: string }>(
+      (from, to) =>
+        admin
+          .from('session_bookings')
+          .select('id, session_id')
+          .eq('organization_id', orgId)
+          .in('session_id', ids)
+          .eq('status', 'confirmed')
+          .order('id')
+          .range(from, to),
+      { label: 'arenas/trialSchedule/bookings' },
     )
-    .eq('organization_id', orgId)
-    .eq('status', 'scheduled')
-    .gte('session_date', today)
-    .lte('session_date', in30)
-    .order('session_date', { ascending: true })
-    .order('class(start_time)', { ascending: true })
+    bookings.forEach((b) => add(b.session_id))
 
-  type RawSession = ClassSession & { class: Class | Class[] }
-  const rawSessions = (sessions ?? []) as RawSession[]
-  const sessionIds = rawSessions.map((s) => s.id)
-  if (sessionIds.length === 0) return []
-
-  const { data: bookingCountsRaw } = await admin
-    .from('session_bookings')
-    .select('session_id')
-    .eq('organization_id', orgId)
-    .in('session_id', sessionIds)
-    .eq('status', 'confirmed')
-
-  const bookingCountMap = new Map<string, number>()
-  for (const b of (bookingCountsRaw ?? []) as { session_id: string }[]) {
-    bookingCountMap.set(b.session_id, (bookingCountMap.get(b.session_id) ?? 0) + 1)
+    // Experimental antiga não tem reserva (era só nome, e-mail e telefone), então
+    // ocupa a vaga por aqui. A nova já é uma reserva e contaria duas vezes.
+    const { data: legacy } = await admin
+      .from('trial_bookings')
+      .select('session_id')
+      .eq('organization_id', orgId)
+      .in('session_id', ids)
+      .is('student_id', null)
+      .in('status', ['pending', 'attended'])
+    for (const t of (legacy ?? []) as { session_id: string }[]) add(t.session_id)
   }
 
-  const { data: trialCountsRaw } = await admin
-    .from('trial_bookings')
-    .select('session_id')
-    .eq('organization_id', orgId)
-    .in('session_id', sessionIds)
-    .in('status', ['pending', 'attended'])
-
-  const trialCountMap = new Map<string, number>()
-  for (const t of (trialCountsRaw ?? []) as { session_id: string }[]) {
-    trialCountMap.set(t.session_id, (trialCountMap.get(t.session_id) ?? 0) + 1)
-  }
-
-  const options: TrialSessionOption[] = []
-  for (const s of rawSessions) {
-    const cls = Array.isArray(s.class) ? s.class[0] : s.class
-    if (!cls || !cls.is_active || cls.type === 'kids') continue
-    const occupied = (bookingCountMap.get(s.id) ?? 0) + (trialCountMap.get(s.id) ?? 0)
-    // Horário e vagas DESTA data: a vitrine da arena é o que o visitante usa
-    // para escolher a aula experimental — o horário errado aqui é o visitante
-    // aparecendo na hora errada.
-    const horario = resolveSession(s, cls)
-    const spotsLeft = horario.maxStudents - occupied
-    if (spotsLeft <= 0) continue
-    options.push({
-      id: s.id,
-      session_date: s.session_date,
-      class_name: cls.name,
-      start_time: horario.startTime,
-      end_time: horario.endTime,
-      level: cls.level,
-      spots_left: spotsLeft,
-    })
-  }
-  return options
+  return buildTrialSchedule(sessions, occupied, now)
 }

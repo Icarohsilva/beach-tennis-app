@@ -434,6 +434,7 @@ export async function updateSystemSettings(settings: {
   pix_key?: string
   pix_key_owner?: string
   debt_block_grace_days?: number
+  pay_later_booking_enabled?: boolean
   quota_enforcement_enabled?: boolean
   max_classes_per_day?: number
   video_feed_url?: string

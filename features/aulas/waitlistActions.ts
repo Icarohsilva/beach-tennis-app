@@ -4,7 +4,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient, createAdminClient, getActiveOrgId } from '@/lib/supabase/server'
 import type { WaitlistStatus, StudentLevel, ClassType, Gender } from '@/types'
-import type { AccessDenial } from '@/lib/utils/accessRules'
+import { NEEDS_PLAN_OR_CREDIT_MESSAGE, type AccessDenial } from '@/lib/utils/accessRules'
 import { canEnterByGender, classGenderDenialMessage } from '@/lib/aulas/classGenderRule'
 import * as Sentry from '@sentry/nextjs'
 import { notifyUsers } from '@/lib/notifications/dispatch'
@@ -353,6 +353,8 @@ function describeJoinDenial(
       return `Você já usou suas ${access.quotaLimit ?? 0} aulas do ciclo. A fila coloca você na aula automaticamente, então ela precisa de aula disponível — compre uma avulsa ou cancele uma aula futura.`
     case 'daily_cap':
       return `Você já atingiu o limite de ${access.dailyCap} aulas por dia nessa data, então não pode entrar na fila desta aula.`
+    case 'needs_plan_or_credit':
+      return `${NEEDS_PLAN_OR_CREDIT_MESSAGE} A fila coloca você na aula automaticamente, então ela precisa de plano ou crédito.`
     default:
       return 'Não foi possível entrar na fila desta aula.'
   }

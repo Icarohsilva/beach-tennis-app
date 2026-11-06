@@ -38,6 +38,8 @@ export interface StudentAttendance {
   openMissedCheckins: number
   /** Confirmação de presença enviada pelo aluno no app. */
   selfCheckin?: StudentSelfCheckin | null
+  /** Veio pela aula experimental (trial_bookings desta sessão). */
+  trial?: boolean
 }
 
 interface AttendanceSheetProps {
@@ -298,6 +300,7 @@ export function AttendanceSheet({
             checkedInToday,
             openMissedCheckins,
             selfCheckin,
+            trial,
           }) => {
             const att = attendanceMap.get(student.id)
             const isPresent = att?.status === 'present'
@@ -327,6 +330,9 @@ export function AttendanceSheet({
                 <div className="flex-1 min-w-0">
                   <p className="text-white text-sm font-medium truncate">{student.full_name}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    {/* Primeira vez na academia: o professor recebe diferente de
+                        quem já é aluno, e a recepção sabe quem oferecer plano. */}
+                    {trial && <Badge variant="warning">EXPERIMENTAL</Badge>}
                     {/* Selo do parceiro SEMPRE visível: o professor precisa saber
                         quem é Wellhub antes de marcar a chamada, não depois. */}
                     {partner && (

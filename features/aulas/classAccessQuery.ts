@@ -15,7 +15,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { resolveClassAccess, exceedsDailyCap, type AccessDecision } from '@/lib/utils/accessRules'
 import { getActivePlan } from '@/lib/billing/planEligibility'
 import { getQuotaSnapshot } from './quotaUsage'
-import { isQuotaEnforced, getOrgMaxClassesPerDay } from './quotaSettings'
+import { isQuotaEnforced, getOrgMaxClassesPerDay, isPayLaterAllowed } from './quotaSettings'
 import { getDebtGraceDays } from '@/features/financeiro/debtQueries'
 import { summarizeDebts } from '@/lib/utils/debtRules'
 import {
@@ -109,6 +109,8 @@ export async function resolveStudentClassAccess(
 
   const quotaEnforced = await isQuotaEnforced(adminClient, orgId)
   const orgDailyCap = await getOrgMaxClassesPerDay(adminClient, orgId)
+  // A volta à aula fixa já foi paga pela matrícula: nunca pede plano ou crédito.
+  const payLaterAllowed = skipCostAxes || (await isPayLaterAllowed(adminClient, orgId))
 
   // Só paga o custo das queries da cota quando a academia ligou a regra e a cota
   // ainda importa para esta reserva.
@@ -208,6 +210,7 @@ export async function resolveStudentClassAccess(
     bookingsOnDate: snapshot?.bookingsOnDate ?? 0,
     maxClassesPerDay: skipCostAxes ? 0 : dailyCap,
     preferCredit,
+    payLaterAllowed,
   })
 
   return {

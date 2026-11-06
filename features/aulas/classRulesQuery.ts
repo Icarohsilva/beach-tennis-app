@@ -7,7 +7,7 @@ import type { createAdminClient } from '@/lib/supabase/server'
 import { buildClassRules, type RuleSection } from '@/lib/aulas/classRules'
 import type { PlanQuota } from '@/lib/utils/classQuota'
 import { getOrgClassSettings } from './orgClassSettings'
-import { getOrgMaxClassesPerDay } from './quotaSettings'
+import { getOrgMaxClassesPerDay, isPayLaterAllowed } from './quotaSettings'
 import { listGuardianDependents } from './guardianQueries'
 
 type AdminClient = ReturnType<typeof createAdminClient>
@@ -30,6 +30,7 @@ export async function getClassRules(
     dependents,
     ligaRow,
     genderRestrictedCount,
+    payLaterAllowed,
   ] = await Promise.all([
     getOrgClassSettings(client, ctx.orgId),
     getOrgMaxClassesPerDay(client, ctx.orgId),
@@ -46,6 +47,7 @@ export async function getClassRules(
       .eq('organization_id', ctx.orgId)
       .eq('is_active', true)
       .not('gender_restriction', 'is', null),
+    isPayLaterAllowed(client, ctx.orgId),
   ])
 
   const ligaEnabled = (ligaRow.data as { value: string } | null)?.value === 'true'
@@ -68,5 +70,6 @@ export async function getClassRules(
     ligaEnabled,
     hasDependents: dependents.length > 0,
     hasGenderRestrictedClasses: (genderRestrictedCount.count ?? 0) > 0,
+    payLaterAllowed,
   })
 }

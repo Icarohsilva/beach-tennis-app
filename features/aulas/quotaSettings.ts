@@ -40,3 +40,16 @@ export async function getOrgMaxClassesPerDay(
   const n = Number(raw)
   return Number.isInteger(n) && n >= 0 ? n : DEFAULT_MAX_PER_DAY
 }
+
+/** Chave de "sem plano e sem crédito pode agendar e pagar depois". */
+export const PAY_LATER_SETTING = 'pay_later_booking_enabled'
+
+/**
+ * A academia deixa quem não tem plano nem crédito agendar e pagar depois?
+ * Ausência da chave = sim: é o comportamento de antes da chave existir, e
+ * desligar por padrão travaria o agendamento de toda academia que cobra a
+ * avulsa depois da aula.
+ */
+export async function isPayLaterAllowed(client: AdminClient, orgId: string): Promise<boolean> {
+  return (await readSetting(client, orgId, PAY_LATER_SETTING)) !== 'false'
+}

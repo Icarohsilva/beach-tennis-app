@@ -227,9 +227,25 @@ export default async function SessionDetailPage({ params }: Props) {
     ]),
   )
 
+  // Quem veio pela aula experimental: tag na chamada, e sem o aviso de "sem
+  // plano/crédito", porque esta aula é grátis (a experimental declara o
+  // pagamento zero, e a presença não vira avulsa em aberto).
+  const { data: trialRows } =
+    studentIds.length > 0
+      ? await adminClient
+          .from('trial_bookings')
+          .select('student_id')
+          .eq('session_id', params.sessionId)
+          .eq('organization_id', orgId)
+          .neq('status', 'cancelled')
+          .in('student_id', studentIds)
+      : { data: [] }
+  const trialIds = new Set(((trialRows ?? []) as { student_id: string }[]).map((t) => t.student_id))
+
   const students = (profiles ?? [])
     .map((p: Pick<Profile, 'id' | 'full_name'>) => {
       const mem = memById.get(p.id)
+      const trial = trialIds.has(p.id)
       return {
         student: {
           id: p.id,
@@ -238,11 +254,12 @@ export default async function SessionDetailPage({ params }: Props) {
           payment_type: mem?.payment_type ?? ('per_class' as Membership['payment_type']),
         },
         attendance: attendanceByStudent.get(p.id) ?? null,
-        wouldOweDebt: !hasAccess(p.id),
+        wouldOweDebt: !trial && !hasAccess(p.id),
         partner: mem?.partner ?? null,
         checkedInToday: checkedInIds.has(p.id),
         openMissedCheckins: openMissedByStudent.get(p.id) ?? 0,
         selfCheckin: selfCheckinByStudent.get(p.id) ?? null,
+        trial,
       }
     })
     .sort((a, b) => a.student.full_name.localeCompare(b.student.full_name, 'pt-BR'))

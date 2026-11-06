@@ -92,7 +92,7 @@ Academy/school management app for any activity with classes and students — bea
 | `app/(dashboard)/` | Authenticated (cookie) + server-side user check | Student-facing UI with `BottomNav` |
 | `app/(admin)/` | Authenticated + role=admin check | Admin panel with sidebar |
 | `app/(super-admin)/` | Authenticated + `profiles.is_platform_admin` | Painel da PLATAFORMA (dona do SaaS) — ver abaixo |
-| `app/experimental/` | Public | Trial class booking (no login needed) |
+| `app/experimental/` | Public | Legacy redirect to `/arenas` (a experimental é marcada na vitrine da arena e cria conta) |
 
 **Two-tier route protection:** [middleware.ts](middleware.ts) is Edge Runtime — it checks for a `sb-*-auth-token` cookie only (no Supabase import, no async). Real auth validation happens in each layout Server Component via `createClient()`. Admin role check uses `createAdminClient()` (service role key, bypasses RLS).
 
@@ -331,6 +331,36 @@ All types are in [types/index.ts](types/index.ts). Key invariants:
   diário, dívida, pendência de check-in, férias, cadastro inativo. Usada em três momentos que
   têm de concordar: reservar, entrar na fila e ser promovido pela fila. A regra em si continua
   pura em `resolveClassAccess` ([lib/utils/accessRules.ts](lib/utils/accessRules.ts)).
+- **Sem plano e sem crédito: pagar depois é escolha da academia**
+  (`system_settings.pay_later_booking_enabled`, em Configurações › Cobrança; `isPayLaterAllowed`
+  em `features/aulas/quotaSettings.ts`). O último degrau de `resolveClassAccess` é
+  `grant: 'debt'` (entra e a avulsa nasce na presença); com a chave em `false` ele vira
+  `denied: 'needs_plan_or_credit'` (`NEEDS_PLAN_OR_CREDIT_MESSAGE`). Chave **ausente = ligada**:
+  todo aluno novo nasce `payment_type = per_class` e há academia que vive de cobrar a avulsa
+  depois, então desligar por padrão travaria o agendamento delas. Desligada, as aulas seguem
+  no calendário para todos, só o "entrar" pede plano ou crédito. Não vale para a volta à aula
+  fixa (`skipCostAxes`, já paga pela matrícula) nem para o admin adicionando aluno
+  (`addStudentToSession` chama `resolveClassAccess` sem a chave). `buildClassRules` diz a regra
+  ao aluno sem plano nos dois casos.
+- **Aula experimental cria acesso e vale uma por CPF** (vitrine `/arenas/[slug]`, action
+  `createTrialBooking` em `app/arenas/[slug]/actions.ts`, regras puras em
+  [lib/arenas/trialForm.ts](lib/arenas/trialForm.ts) e [lib/arenas/trialSchedule.ts](lib/arenas/trialSchedule.ts)).
+  A grade mostrada é a das `class_sessions` já geradas (14 dias, `getTrialSchedule`), por dia,
+  no horário DAQUELA data (`resolveSession`) e com a aula lotada **na lista**, marcada "Lotado":
+  esconder fazia a grade do visitante parecer outra. Visitante cria a conta no próprio
+  formulário (nome, e-mail, WhatsApp, sexo, CPF, senha; `admin.createUser` com
+  `email_confirm: true` e login na hora); logado só informa o CPF. Ganha membership `student`
+  **sem plano** (atleta vira aluno) e a aula vira reserva normal (`book_session_atomic`), com
+  `payments` `type: 'trial'` de R$ 0, a mesma pré-declaração da experimental do admin, que é
+  o que impede a presença de virar avulsa em aberto. `trial_bookings` ganhou `cpf` e
+  `student_id`: índices únicos parciais (org, cpf) e (org, student_id), cancelada fora,
+  seguram a corrida, e a linha é gravada ANTES da reserva por isso. A checagem também pega
+  e-mail (as experimentais antigas só têm e-mail) e recusa quem já tem reserva na academia.
+  A chamada mostra a tag **EXPERIMENTAL** para quem tem `trial_bookings` daquela sessão, sem
+  o aviso de "sem plano/crédito"; a experimental posta pelo admin (`reason: 'experimental'`)
+  grava a mesma linha. "Excluir" no painel cancela a reserva, apaga a aula grátis e libera o
+  CPF; a conta fica. Linha antiga (`student_id` nulo) não tem reserva e ocupa vaga por fora:
+  por isso a contagem da vitrine e o teto passado à RPC descontam só essas.
 - Students with `memberships.partner: 'wellhub' | 'totalpass'` get check-ins via webhook (not manual). O eixo parceiro saiu de `payment_type` na migração `20260715000000_membership_partner_axis.sql` — `payment_type` hoje só distingue `subscriber` de `per_class`
 - **Check-in Wellhub pelo app, com print** ([lib/checkin/appCheckin.ts](lib/checkin/appCheckin.ts)).
   Para a arena SEM a integração do Wellhub: o check-in do aluno nunca chegava ao sistema. Vale

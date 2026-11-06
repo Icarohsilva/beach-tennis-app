@@ -6,13 +6,19 @@ import { Input } from '@/components/ui/Input'
 import { updateSystemSettings } from '@/features/financeiro/actions'
 
 interface Props {
-  settings: { pix_key: string; pix_key_owner: string; debt_block_grace_days: number }
+  settings: {
+    pix_key: string
+    pix_key_owner: string
+    debt_block_grace_days: number
+    pay_later_booking_enabled: boolean
+  }
 }
 
 export function CobrancaForm({ settings }: Props) {
   const [pixKey, setPixKey] = useState(settings.pix_key)
   const [pixOwner, setPixOwner] = useState(settings.pix_key_owner)
   const [graceDays, setGraceDays] = useState(String(settings.debt_block_grace_days))
+  const [payLater, setPayLater] = useState(settings.pay_later_booking_enabled)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pending, start] = useTransition()
@@ -26,6 +32,7 @@ export function CobrancaForm({ settings }: Props) {
         pix_key: pixKey.trim(),
         pix_key_owner: pixOwner.trim(),
         debt_block_grace_days: Number(graceDays),
+        pay_later_booking_enabled: payLater,
       })
       if (r.error) setError(r.error)
       else setSuccess('Cobrança salva.')
@@ -37,6 +44,23 @@ export function CobrancaForm({ settings }: Props) {
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">{error}</p>}
         {success && <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">{success}</p>}
+
+        <label className="flex items-start gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={payLater}
+            onChange={(e) => setPayLater(e.target.checked)}
+            className="mt-1 w-4 h-4 accent-brand-500"
+          />
+          <span>
+            Aluno sem plano e sem crédito pode agendar e pagar depois
+            <span className="block text-xs text-slate-500">
+              Ligado, a aula entra como avulsa e fica em aberto para o aluno pagar. Desligado, ele
+              continua vendo as aulas no calendário, mas para agendar precisa comprar um plano ou
+              créditos. Quem entra pela aula experimental cai nesta regra depois da experimental.
+            </span>
+          </span>
+        </label>
 
         <div className="space-y-1">
           <label className="text-sm text-slate-300 font-medium">Chave PIX</label>

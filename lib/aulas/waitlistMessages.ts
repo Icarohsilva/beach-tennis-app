@@ -73,6 +73,8 @@ function motivo(denial: AccessDenial, debtTotal: number): string {
       return 'as aulas do seu plano neste ciclo já foram usadas'
     case 'daily_cap':
       return 'você já atingiu o limite de aulas para esse dia'
+    case 'needs_plan_or_credit':
+      return 'você não tem plano nem crédito para essa aula'
     default:
       return 'não foi possível confirmar sua vaga'
   }

@@ -1012,6 +1012,32 @@ export async function addStudentToSession(
     }
   }
 
+  // Experimental posta pelo professor ganha a mesma linha da que a pessoa marca
+  // pela vitrine: é ela que põe a tag na chamada e conta como a experimental da
+  // pessoa nesta academia. Se ela já teve uma, o índice único recusa (23505) e
+  // a aula segue: quem decidiu dar outra foi a academia.
+  if (reason === 'experimental') {
+    const { data: who } = await adminClient
+      .from('profiles')
+      .select('full_name, phone')
+      .eq('id', studentId)
+      .maybeSingle()
+    const w = who as { full_name: string | null; phone: string | null } | null
+    const { error: trialErr } = await adminClient.from('trial_bookings').insert({
+      organization_id: orgId,
+      name: w?.full_name ?? '',
+      email: '',
+      phone: w?.phone ?? '',
+      session_id: sessionId,
+      status: 'pending',
+      must_pay_next: false,
+      student_id: studentId,
+    })
+    if (trialErr && trialErr.code !== '23505') {
+      console.error('[addStudentToSession] registro da experimental falhou', { sessionId, studentId, error: trialErr.message })
+    }
+  }
+
   revalidatePath(`/admin/grade/${sessionId}`)
   return {}
 }

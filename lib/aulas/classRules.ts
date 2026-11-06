@@ -57,6 +57,11 @@ export interface ClassRulesInput {
   hasDependents: boolean
   /** A academia tem pelo menos uma turma ativa restrita por sexo (Feminino/Masculino). */
   hasGenderRestrictedClasses: boolean
+  /**
+   * system_settings.pay_later_booking_enabled: quem não tem plano nem crédito pode
+   * agendar e pagar depois. Ausente = sim (o comportamento de antes da chave).
+   */
+  payLaterAllowed?: boolean
 }
 
 /** "nesta semana" / "neste mês", conforme o ciclo do plano. */
@@ -141,6 +146,23 @@ export function buildClassRules(input: ClassRulesInput): RuleSection[] {
       text: `Até ${aulas(teto)} por dia`,
       detail: 'Usando crédito avulso, esse limite não se aplica.',
     })
+  }
+
+  // Sem plano e sem parceiro: o último degrau de resolveClassAccess. Dito aqui
+  // porque o calendário mostra as aulas para todo mundo, e quem entrou pela aula
+  // experimental só descobriria a regra ao tocar em "entrar".
+  if (!input.isPartner && !input.plan) {
+    suasAulas.push(
+      input.payLaterAllowed === false
+        ? {
+            text: 'Sem plano, você agenda com crédito',
+            detail: 'As aulas aparecem no calendário, mas para entrar numa delas é preciso ter um plano ou crédito avulso. Os dois estão em Financeiro.',
+          }
+        : {
+            text: 'Sem plano nem crédito, a aula entra como avulsa',
+            detail: 'Você faz a aula e paga depois, em Financeiro. Com valor em aberto além do prazo, novos agendamentos ficam bloqueados.',
+          },
+    )
   }
 
   if (suasAulas.length > 0) {
